@@ -1,0 +1,112 @@
+{
+  "name": "Test Room",
+  "tile_size": 16,
+  "player_id": "player",
+  "tile_definitions": {
+    "floor": {
+      "sprite": {
+        "path": "assets/tiles/basic_tiles.png",
+        "frame_width": 16,
+        "frame_height": 16,
+        "frame": 0
+      }
+    },
+    "wall": {
+      "sprite": {
+        "path": "assets/tiles/basic_tiles.png",
+        "frame_width": 16,
+        "frame_height": 16,
+        "frame": 1
+      }
+    },
+    "painting": {
+      "sprite": {
+        "path": "assets/tiles/basic_tiles.png",
+        "frame_width": 16,
+        "frame_height": 16,
+        "frame": 2
+      }
+    }
+  },
+  "tile_layers": [
+    {
+      "name": "layer_1",
+      "grid": [
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
+        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"]
+      ]
+    },
+    {
+      "name": "layer_2",
+      "grid": [
+        ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"],
+        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
+        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
+        ["wall", null, null, null, null, null, "wall", null, null, null, null, "wall"],
+        ["wall", null, null, null, null, null, "wall", null, null, null, null, "wall"],
+        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
+        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
+        ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"]
+      ]
+    },
+    {
+      "name": "layer_3",
+      "draw_above_entities": true,
+      "grid": [
+        [null, null, null, null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, "painting", null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null, null, null, null, null]
+      ]
+    }
+  ],
+  "cell_flags": [
+    [false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false],
+    [false, true, true, true, true, true, false, true, true, true, true, false],
+    [false, true, true, true, true, true, false, true, true, true, true, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false]
+  ],
+  "entities": [
+    {
+      "id": "player",
+      "template": "player",
+      "x": 2,
+      "y": 2
+    },
+    {
+      "id": "block_1",
+      "template": "block",
+      "x": 4,
+      "y": 5
+    },
+    {
+      "id": "lever_1",
+      "template": "lever",
+      "x": 4,
+      "y": 2,
+      "parameters": {
+        "target_gate": "gate_1"
+      }
+    },
+    {
+      "id": "gate_1",
+      "template": "gate",
+      "x": 8,
+      "y": 4
+    }
+  ]
+}

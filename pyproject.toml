@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-puzzle-engine"
+version = "0.1.0"
+description = "A command-driven puzzle game framework built with pygame-ce."
+readme = "architecture.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pygame-ce>=2.5.2,<3.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["puzzle_dungeon*"]

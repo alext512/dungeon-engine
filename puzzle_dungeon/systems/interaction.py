@@ -1,0 +1,28 @@
+"""Interaction helpers for facing-based object activation."""
+
+from __future__ import annotations
+
+from puzzle_dungeon.world.entity import DIRECTION_VECTORS, Entity
+from puzzle_dungeon.world.world import World
+
+
+class InteractionSystem:
+    """Resolve which entity, if any, the actor is trying to interact with."""
+
+    def __init__(self, world: World) -> None:
+        self.world = world
+
+    def get_facing_target(self, actor_entity_id: str) -> Entity | None:
+        """Return the first enabled entity in front of the actor."""
+        actor = self.world.get_entity(actor_entity_id)
+        if actor is None:
+            raise KeyError(f"Cannot resolve interaction target for '{actor_entity_id}'.")
+
+        delta_x, delta_y = DIRECTION_VECTORS[actor.facing]
+        target_x = actor.grid_x + delta_x
+        target_y = actor.grid_y + delta_y
+        return self.world.get_first_enabled_entity_at(
+            target_x,
+            target_y,
+            exclude_entity_id=actor.entity_id,
+        )

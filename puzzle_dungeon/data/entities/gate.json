@@ -1,0 +1,10 @@
+{
+  "kind": "gate",
+  "solid": true,
+  "sprite": {
+    "path": "assets/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [2]
+  }
+}
