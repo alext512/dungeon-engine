@@ -40,9 +40,9 @@ class Game:
         self.focused_window_id = self.display_window.id
 
         self.area_path = Path(config.AREAS_DIR / "test_room.json")
-        editor_area, editor_world = load_area(self.area_path)
-        self.editor = LevelEditor(self.area_path, editor_area, editor_world)
         self.asset_manager = AssetManager()
+        editor_area, editor_world = load_area(self.area_path, asset_manager=self.asset_manager)
+        self.editor = LevelEditor(self.area_path, editor_area, editor_world, asset_manager=self.asset_manager)
         self.renderer = Renderer(self.display_surface, self.asset_manager)
         self.mode = "play"
         self.browser_window: EditorBrowserWindow | None = None
@@ -148,7 +148,9 @@ class Game:
     def _activate_play_mode(self) -> None:
         """Build a fresh playtest runtime from the current editable document."""
         document_data = serialize_area(self.editor.area, self.editor.world)
-        self.area, self.world = load_area_from_data(document_data, source_name=str(self.area_path))
+        self.area, self.world = load_area_from_data(
+            document_data, source_name=str(self.area_path), asset_manager=self.asset_manager
+        )
         self.camera = Camera(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT, self.area)
         self.camera.update(self.world.get_player())
 

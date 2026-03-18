@@ -1,4 +1,11 @@
-"""Serialization helpers for saving and cloning editable area data."""
+"""Serialization helpers for saving and cloning editable area data.
+
+Writes areas back to the GID-based JSON format: tilesets array, integer grids,
+cell flags, and entity instances.
+
+Depends on: area, world
+Used by: editor (save)
+"""
 
 from __future__ import annotations
 
@@ -14,7 +21,10 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
         "name": area.name,
         "tile_size": area.tile_size,
         "player_id": world.player_id,
-        "tile_definitions": area.tile_definitions,
+        "tilesets": [
+            _serialize_tileset(ts)
+            for ts in area.tilesets
+        ],
         "tile_layers": [
             {
                 "name": layer.name,
@@ -37,6 +47,20 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
                 key=world.entity_sort_key,
             )
         ],
+    }
+
+
+def _serialize_tileset(tileset: Any) -> dict[str, Any]:
+    """Serialize a Tileset to its JSON representation.
+
+    Only stores the fields needed to reconstruct the tileset; columns and
+    tile_count are recomputed on load from the actual image.
+    """
+    return {
+        "firstgid": tileset.firstgid,
+        "path": tileset.path,
+        "tile_width": tileset.tile_width,
+        "tile_height": tileset.tile_height,
     }
 
 

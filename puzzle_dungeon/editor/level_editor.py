@@ -1,16 +1,24 @@
-"""A more visual in-app editor for layered tiles, flags, and entity stacks."""
+"""A more visual in-app editor for layered tiles, flags, and entity stacks.
+
+Works with the GID-based tilemap system. The editor discovers available tileset
+PNGs, lets the user pick frames visually, and paints GIDs onto the grid.
+
+Depends on: config, area, entity, world, loader
+Used by: game, browser_window, renderer
+"""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pygame
 
 from puzzle_dungeon import config
 from puzzle_dungeon.engine.camera import Camera
-from puzzle_dungeon.world.area import Area, TileLayer
+from puzzle_dungeon.world.area import Area, TileLayer, Tileset
 from puzzle_dungeon.world.entity import Entity
 from puzzle_dungeon.world.loader import instantiate_entity, list_entity_template_ids, load_area
 from puzzle_dungeon.world.serializer import serialize_area
@@ -35,6 +43,16 @@ class EditorUiItem:
     active: bool = False
 
 
+def list_tileset_paths() -> list[str]:
+    """Scan the tiles directory for all PNG files, return paths relative to DATA_DIR."""
+    if not config.TILES_DIR.exists():
+        return []
+    return sorted(
+        str(path.relative_to(config.DATA_DIR)).replace("\\", "/")
+        for path in config.TILES_DIR.glob("*.png")
+    )
+
+
 @dataclass(slots=True)
 class LevelEditor:
     """Edit the authoritative room document separately from playtest state."""
@@ -42,17 +60,24 @@ class LevelEditor:
     area_path: Path
     area: Area
     world: World
+    asset_manager: Any = None
     mode: str = "tile"
     selected_layer_index: int = 0
-    selected_tile_index: int = 0
+
+    # GID-based tile selection (replaces old tile_ids / selected_tile_index)
+    selected_gid: int = 1
+    available_tileset_paths: list[str] = field(default_factory=list)
+    selected_tileset_index: int = 0
+
+    # Entity selection
     selected_template_index: int = 0
+    template_ids: list[str] = field(default_factory=list)
+
     hovered_cell: tuple[int, int] | None = None
     selected_cell: tuple[int, int] | None = None
     selected_entity_id: str | None = None
     status_message: str = "Editor ready"
     dirty: bool = False
-    tile_ids: list[str] = field(default_factory=list)
-    template_ids: list[str] = field(default_factory=list)
     last_drag_cell: tuple[int, int] | None = None
     walk_brush_walkable: bool = True
     middle_pan_active: bool = False
@@ -85,12 +110,21 @@ class LevelEditor:
         return pygame.Rect(0, config.INTERNAL_HEIGHT, 0, 0)
 
     def refresh_catalogs(self) -> None:
-        """Refresh tile and template lists when content definitions change."""
-        self.tile_ids = list(self.area.tile_definitions.keys())
+        """Refresh tileset and template lists when content definitions change."""
+        self.available_tileset_paths = list_tileset_paths()
         self.template_ids = list_entity_template_ids()
-        self.selected_tile_index %= max(1, len(self.tile_ids))
         self.selected_template_index %= max(1, len(self.template_ids))
         self.selected_layer_index %= max(1, len(self.area.tile_layers))
+
+        # Clamp selected_tileset_index
+        if self.available_tileset_paths:
+            self.selected_tileset_index %= len(self.available_tileset_paths)
+        else:
+            self.selected_tileset_index = 0
+
+        # Ensure selected_gid is valid (at least 1 if we have tilesets)
+        if self.selected_gid <= 0 and self.area.tilesets:
+            self.selected_gid = self.area.tilesets[0].firstgid
 
     @property
     def current_layer(self):
@@ -103,9 +137,23 @@ class LevelEditor:
         return self.current_layer.name
 
     @property
-    def current_tile_id(self) -> str:
-        """Return the currently selected tile id."""
-        return self.tile_ids[self.selected_tile_index] if self.tile_ids else ""
+    def current_tileset_path(self) -> str:
+        """Return the path of the currently browsed tileset."""
+        if not self.available_tileset_paths:
+            return ""
+        return self.available_tileset_paths[self.selected_tileset_index]
+
+    @property
+    def current_gid_label(self) -> str:
+        """Return a readable label for the selected GID (for HUD display)."""
+        if self.selected_gid <= 0:
+            return "none"
+        resolved = self.area.resolve_gid(self.selected_gid)
+        if resolved is None:
+            return f"gid:{self.selected_gid}"
+        path, _, _, frame = resolved
+        stem = Path(path).stem
+        return f"{stem}:{frame}"
 
     @property
     def current_template_id(self) -> str:
@@ -167,17 +215,60 @@ class LevelEditor:
         self.mode = mode
         self._apply_mode_defaults()
         if mode == "tile":
-            self.status_message = f"Tile {self.current_tile_id} on {self.current_layer.name}"
+            self.status_message = f"Tile {self.current_gid_label} on {self.current_layer.name}"
         elif mode == "walkability":
             self.status_message = f"Walk brush {self.current_walk_brush_label}"
         else:
             self.status_message = f"Entity {self.current_template_id}"
 
+    def select_tileset_frame(self, tileset_index: int, local_frame: int) -> None:
+        """Select a tile from a tileset for painting.
+
+        If the tileset is not yet in the area, adds it automatically. Sets the
+        computed GID as the current brush.
+        """
+        # Find or add the tileset in the area
+        tileset_path = self.available_tileset_paths[tileset_index]
+        area_ts_index = self._find_or_add_tileset(tileset_path)
+
+        # Compute the GID
+        gid = self.area.gid_for_tileset_frame(area_ts_index, local_frame)
+        self.selected_gid = gid
+        self.status_message = f"Tile {self.current_gid_label}"
+
+    def _find_or_add_tileset(self, tileset_path: str) -> int:
+        """Return the area tileset index for the given path, adding it if needed."""
+        for idx, ts in enumerate(self.area.tilesets):
+            if ts.path == tileset_path:
+                return idx
+
+        # Auto-add the tileset
+        firstgid = self.area.next_available_firstgid()
+        tile_width = self.area.tile_size
+        tile_height = self.area.tile_size
+
+        ts = Tileset(
+            firstgid=firstgid,
+            path=tileset_path,
+            tile_width=tile_width,
+            tile_height=tile_height,
+        )
+
+        # Compute columns and tile_count from the image if we have an asset_manager
+        if self.asset_manager is not None:
+            ts.columns = self.asset_manager.get_columns(tileset_path, tile_width)
+            ts.tile_count = self.asset_manager.get_frame_count(tileset_path, tile_width, tile_height)
+
+        self.area.tilesets.append(ts)
+        self.area.build_gid_lookup()
+        self._mark_dirty(f"Added tileset {Path(tileset_path).stem}")
+        return len(self.area.tilesets) - 1
+
     def selection_lines(self) -> list[str]:
         """Return compact mode-specific HUD lines for the editor."""
         lines = [f"Mode {self.mode_label}  Sel {self.selected_cell_label}  Dirty {self.dirty_label}"]
         if self.mode == "tile":
-            lines.append(f"Layer {self.current_layer.name}  Brush {self.current_tile_id or '-'}")
+            lines.append(f"Layer {self.current_layer.name}  Brush {self.current_gid_label}")
         elif self.mode == "walkability":
             lines.append(f"Walk {self.cell_walk_label}")
         else:
@@ -205,8 +296,16 @@ class LevelEditor:
         grid_x, grid_y = self.selected_cell
         parts: list[str] = []
         for layer in self.area.tile_layers:
-            tile_id = layer.grid[grid_y][grid_x] or "-"
-            parts.append(f"{layer.name}: {tile_id}")
+            gid = layer.grid[grid_y][grid_x]
+            if gid <= 0:
+                parts.append(f"{layer.name}: -")
+            else:
+                resolved = self.area.resolve_gid(gid)
+                if resolved:
+                    _, _, _, frame = resolved
+                    parts.append(f"{layer.name}: {frame}")
+                else:
+                    parts.append(f"{layer.name}: gid:{gid}")
         return parts
 
     def build_preview_entity(self) -> Entity | None:
@@ -234,7 +333,7 @@ class LevelEditor:
 
     def reload_from_disk(self) -> None:
         """Discard unsaved changes and reload the document from its JSON file."""
-        self.area, self.world = load_area(self.area_path)
+        self.area, self.world = load_area(self.area_path, asset_manager=self.asset_manager)
         self._normalize_all_stack_orders()
         self.refresh_catalogs()
         player = self.world.get_player()
@@ -250,7 +349,7 @@ class LevelEditor:
         layer_name = (name or "").strip() or self._generate_layer_name()
         width = self.area.width
         height = self.area.height
-        grid = [[None for _ in range(width)] for _ in range(height)]
+        grid = [[0 for _ in range(width)] for _ in range(height)]
         self.area.tile_layers.append(
             TileLayer(
                 name=layer_name,
@@ -259,7 +358,6 @@ class LevelEditor:
             )
         )
         self.selected_layer_index = len(self.area.tile_layers) - 1
-        self._choose_default_tile_for_layer()
         self._mark_dirty(f"Added {layer_name}")
 
     def remove_selected_layer(self) -> None:
@@ -271,7 +369,6 @@ class LevelEditor:
         removed_name = self.current_layer.name
         del self.area.tile_layers[self.selected_layer_index]
         self.selected_layer_index = min(self.selected_layer_index, len(self.area.tile_layers) - 1)
-        self._choose_default_tile_for_layer()
         self._mark_dirty(f"Removed {removed_name}")
 
     def rename_selected_layer(self, new_name: str) -> None:
@@ -285,6 +382,66 @@ class LevelEditor:
             return
         self.current_layer.name = normalized
         self._mark_dirty(f"Renamed to {normalized}")
+
+    # --- Entity property inspector ---
+
+    def selected_entity_properties(self) -> list[tuple[str, str, str]]:
+        """Return editable properties for the selected entity.
+
+        Returns a list of (field_name, display_label, current_value_as_string).
+        """
+        if self.selected_entity_id is None:
+            return []
+        entity = self.world.get_entity(self.selected_entity_id)
+        if entity is None:
+            return []
+
+        props: list[tuple[str, str, str]] = []
+        props.append(("template_id", "Template", entity.template_id or "(inline)"))
+        props.append(("kind", "Kind", entity.kind))
+        props.append(("facing", "Facing", entity.facing))
+        props.append(("solid", "Solid", str(entity.solid).lower()))
+        props.append(("pushable", "Pushable", str(entity.pushable).lower()))
+        props.append(("enabled", "Enabled", str(entity.enabled).lower()))
+        props.append(("visible", "Visible", str(entity.visible).lower()))
+
+        # Template parameters (the most useful for game design)
+        for key, value in entity.template_parameters.items():
+            props.append((f"param:{key}", key, str(value)))
+
+        return props
+
+    def set_entity_property(self, entity_id: str, field_name: str, value_str: str) -> None:
+        """Apply a property change to an entity from the inspector."""
+        entity = self.world.get_entity(entity_id)
+        if entity is None:
+            self.status_message = f"Entity {entity_id} not found"
+            return
+
+        if field_name.startswith("param:"):
+            param_key = field_name[6:]
+            entity.template_parameters[param_key] = value_str
+            self._mark_dirty(f"Set {param_key}={value_str}")
+            return
+
+        bool_fields = {"solid", "pushable", "enabled", "visible"}
+        if field_name in bool_fields:
+            bool_val = value_str.lower() in ("true", "1", "yes")
+            setattr(entity, field_name, bool_val)
+            self._mark_dirty(f"Set {field_name}={bool_val}")
+            return
+
+        if field_name == "facing":
+            if value_str in ("up", "down", "left", "right"):
+                entity.facing = value_str
+                self._mark_dirty(f"Facing {value_str}")
+            else:
+                self.status_message = "Facing must be up/down/left/right"
+            return
+
+        self.status_message = f"Cannot edit {field_name}"
+
+    # --- Event handling ---
 
     def handle_events(self, events: list[pygame.event.Event], camera: Camera) -> list[EditorAction]:
         """Process editor input and return any game-level actions."""
@@ -375,9 +532,6 @@ class LevelEditor:
                     self._handle_wheel(event.button)
                     continue
 
-                if self._handle_ui_click(internal_pos, event.button, actions):
-                    continue
-
                 if self.hovered_cell is None:
                     continue
 
@@ -415,188 +569,14 @@ class LevelEditor:
         if delta_x or delta_y:
             camera.pan(delta_x, delta_y)
 
-    def toolbar_items(self) -> list[EditorUiItem]:
-        """Return action buttons and browser tabs for the asset panel."""
-        panel = self.right_panel_rect
-        padding = 4
-        gap = 2
-        button_height = 14
-        usable_width = panel.width - (padding * 2)
-        button_width = (usable_width - (gap * 2)) // 3
-        x0 = panel.x + padding
-        y0 = panel.y + 14
-
-        items = [
-            EditorUiItem("action:play", "Play", pygame.Rect(x0, y0, button_width, button_height)),
-            EditorUiItem(
-                "action:save",
-                "Save",
-                pygame.Rect(x0 + button_width + gap, y0, button_width, button_height),
-            ),
-            EditorUiItem(
-                "action:load",
-                "Load",
-                pygame.Rect(x0 + ((button_width + gap) * 2), y0, button_width, button_height),
-            ),
-        ]
-        y1 = y0 + button_height + gap
-        items.extend(
-            [
-                EditorUiItem(
-                    "mode:tile",
-                    "Tiles",
-                    pygame.Rect(x0, y1, button_width, button_height),
-                    active=self.mode == "tile",
-                ),
-                EditorUiItem(
-                    "mode:walkability",
-                    "Flags",
-                    pygame.Rect(x0 + button_width + gap, y1, button_width, button_height),
-                    active=self.mode == "walkability",
-                ),
-                EditorUiItem(
-                    "mode:entity",
-                    "Objs",
-                    pygame.Rect(x0 + ((button_width + gap) * 2), y1, button_width, button_height),
-                    active=self.mode == "entity",
-                ),
-            ]
-        )
-        return items
-
-    def layer_items(self) -> list[EditorUiItem]:
-        """Return clickable layer chips for choosing the active visual layer."""
-        panel = self.right_panel_rect
-        padding = 4
-        row_height = 12
-        gap = 2
-        start_y = panel.y + 60
-        width = (panel.width - (padding * 2) - (gap * 2)) // 3
-        items: list[EditorUiItem] = []
-        for index, layer in enumerate(self.area.tile_layers):
-            label = {"ground": "Gnd", "structure": "Str", "overlay": "Ovr"}.get(layer.name, layer.name[:3].title())
-            items.append(
-                EditorUiItem(
-                    key=f"layer:{index}",
-                    label=label,
-                    rect=pygame.Rect(
-                        panel.x + padding + (index * (width + gap)),
-                        start_y,
-                        width,
-                        row_height,
-                    ),
-                    active=index == self.selected_layer_index,
-                )
-            )
-        return items
-
-    def palette_items(self) -> list[EditorUiItem]:
-        """Return the active tile, walkability, or entity palette rows."""
-        panel = self.right_panel_rect
-        padding = 4
-        row_height = 18
-        gap = 2
-        start_y = panel.y + 84
-        width = panel.width - (padding * 2)
-        items: list[EditorUiItem] = []
-
-        if self.mode == "tile":
-            for index, tile_id in enumerate(self.tile_ids):
-                items.append(
-                    EditorUiItem(
-                        key=f"palette:tile:{tile_id}",
-                        label=tile_id,
-                        rect=pygame.Rect(panel.x + padding, start_y + (index * (row_height + gap)), width, row_height),
-                        active=tile_id == self.current_tile_id,
-                    )
-                )
-        elif self.mode == "walkability":
-            items.extend(
-                [
-                    EditorUiItem(
-                        key="palette:walk:walk",
-                        label="Walkable",
-                        rect=pygame.Rect(panel.x + padding, start_y, width, row_height),
-                        active=self.walk_brush_walkable,
-                    ),
-                    EditorUiItem(
-                        key="palette:walk:block",
-                        label="Blocked",
-                        rect=pygame.Rect(panel.x + padding, start_y + row_height + gap, width, row_height),
-                        active=not self.walk_brush_walkable,
-                    ),
-                ]
-            )
-        elif self.mode == "entity":
-            for index, template_id in enumerate(self.template_ids):
-                items.append(
-                    EditorUiItem(
-                        key=f"palette:template:{template_id}",
-                        label=template_id,
-                        rect=pygame.Rect(panel.x + padding, start_y + (index * (row_height + gap)), width, row_height),
-                        active=template_id == self.current_template_id,
-                    )
-                )
-        return items
-
-    def inspector_entity_items(self) -> list[EditorUiItem]:
-        """Return one row per stacked entity in the selected cell."""
-        panel = self.bottom_panel_rect
-        row_height = 10
-        gap = 2
-        start_x = panel.x + 92
-        start_y = panel.y + 24
-        width = panel.width - 96
-        items: list[EditorUiItem] = []
-        for index, entity in enumerate(self.entities_for_selected_cell()[:3]):
-            items.append(
-                EditorUiItem(
-                    key=f"cell-entity:{entity.entity_id}",
-                    label=f"{index + 1} {entity.entity_id}",
-                    rect=pygame.Rect(start_x, start_y + (index * (row_height + gap)), width, row_height),
-                    active=entity.entity_id == self.selected_entity_id,
-                )
-            )
-        return items
-
-    def stack_action_items(self) -> list[EditorUiItem]:
-        """Return buttons for managing the selected entity stack entry."""
-        if self.selected_entity_id is None:
-            return []
-        panel = self.bottom_panel_rect
-        gap = 2
-        button_width = 26
-        height = 12
-        start_x = panel.right - ((button_width * 3) + (gap * 2)) - 4
-        y = panel.bottom - height - 4
-        items = [
-            EditorUiItem(
-                key="cell-entity-up",
-                label="Up",
-                rect=pygame.Rect(start_x, y, button_width, height),
-            ),
-            EditorUiItem(
-                key="cell-entity-down",
-                label="Dn",
-                rect=pygame.Rect(start_x + button_width + gap, y, button_width, height),
-            ),
-        ]
-        if self.selected_entity_id != self.world.player_id:
-            items.append(
-                EditorUiItem(
-                    key="cell-entity-remove",
-                    label="Del",
-                    rect=pygame.Rect(start_x + ((button_width + gap) * 2), y, button_width, height),
-                )
-            )
-        return items
-
     def entities_for_selected_cell(self) -> list[Entity]:
         """Return a stable, visible entity stack for the selected cell."""
         if self.selected_cell is None:
             return []
         grid_x, grid_y = self.selected_cell
         return list(self.world.get_entities_at(grid_x, grid_y, include_hidden=True))
+
+    # --- Internal helpers ---
 
     def _handle_wheel(self, button: int) -> None:
         """Handle scroll wheel selection changes."""
@@ -606,124 +586,51 @@ class LevelEditor:
             return
         self._cycle_selection(direction)
 
-    def _handle_ui_click(
-        self,
-        internal_pos: tuple[int, int],
-        button: int,
-        actions: list[EditorAction],
-    ) -> bool:
-        """Handle mouse clicks in the toolbar, palette, or inspector."""
-        if button != 1:
-            return False
-
-        for item in self.toolbar_items():
-            if item.rect.collidepoint(internal_pos):
-                self._apply_ui_item(item, actions)
-                return True
-
-        for item in self.layer_items():
-            if item.rect.collidepoint(internal_pos):
-                self._apply_ui_item(item, actions)
-                return True
-
-        for item in self.palette_items():
-            if item.rect.collidepoint(internal_pos):
-                self._apply_ui_item(item, actions)
-                return True
-
-        for item in self.inspector_entity_items():
-            if item.rect.collidepoint(internal_pos):
-                self._apply_ui_item(item, actions)
-                return True
-
-        for item in self.stack_action_items():
-            if item.rect.collidepoint(internal_pos):
-                self._apply_ui_item(item, actions)
-                return True
-
-        return False
-
-    def _apply_ui_item(self, item: EditorUiItem, actions: list[EditorAction]) -> None:
-        """Apply a clicked UI item."""
-        key = item.key
-        if key == "action:play":
-            actions.append(EditorAction("toggle_play"))
-            return
-        if key == "action:save":
-            self.save()
-            actions.append(EditorAction("saved", self.status_message))
-            return
-        if key == "action:load":
-            actions.append(EditorAction("reload_document"))
-            return
-        if key.startswith("mode:"):
-            self.set_mode(key.split(":", 1)[1])
-            return
-        if key.startswith("layer:"):
-            self.selected_layer_index = int(key.split(":", 1)[1])
-            if self.mode == "tile":
-                self._choose_default_tile_for_layer()
-            self.status_message = f"Layer {self.current_layer.name}"
-            return
-        if key.startswith("palette:tile:"):
-            tile_id = key.split(":", 2)[2]
-            if tile_id in self.tile_ids:
-                self.selected_tile_index = self.tile_ids.index(tile_id)
-                if self.mode != "tile":
-                    self.set_mode("tile")
-                else:
-                    self.status_message = f"Brush {self.current_tile_id}"
-            return
-        if key.startswith("palette:template:"):
-            template_id = key.split(":", 2)[2]
-            if template_id in self.template_ids:
-                self.selected_template_index = self.template_ids.index(template_id)
-                if self.mode != "entity":
-                    self.set_mode("entity")
-                else:
-                    self.status_message = f"Template {self.current_template_id}"
-            return
-        if key == "palette:walk:walk":
-            self.walk_brush_walkable = True
-            if self.mode != "walkability":
-                self.set_mode("walkability")
-            else:
-                self.status_message = "Walk brush walk"
-            return
-        if key == "palette:walk:block":
-            self.walk_brush_walkable = False
-            if self.mode != "walkability":
-                self.set_mode("walkability")
-            else:
-                self.status_message = "Walk brush block"
-            return
-        if key.startswith("cell-entity:"):
-            self.selected_entity_id = key.split(":", 1)[1]
-            self.status_message = f"Selected {self.selected_entity_id}"
-            return
-        if key == "cell-entity-up":
-            self._move_selected_entity(-1)
-            return
-        if key == "cell-entity-down":
-            self._move_selected_entity(1)
-            return
-        if key == "cell-entity-remove":
-            self._remove_selected_entity()
-
     def _cycle_selection(self, direction: int) -> None:
-        """Cycle the active selection for the current editor mode."""
-        if self.mode == "tile" and self.tile_ids:
-            self.selected_tile_index = (self.selected_tile_index + direction) % len(self.tile_ids)
-            self.status_message = f"Brush {self.current_tile_id}"
+        """Cycle the active selection for the current editor mode.
+
+        In tile mode, cycles through frames of the currently viewed tileset.
+        """
+        if self.mode == "tile":
+            self._cycle_tileset_frame(direction)
         elif self.mode == "entity" and self.template_ids:
             self.selected_template_index = (self.selected_template_index + direction) % len(self.template_ids)
             self.status_message = f"Template {self.current_template_id}"
 
+    def _cycle_tileset_frame(self, direction: int) -> None:
+        """Cycle through frames in the current tileset."""
+        if not self.available_tileset_paths:
+            return
+
+        tileset_path = self.current_tileset_path
+        # Find this tileset in the area (or get its frame count)
+        area_ts = None
+        for ts in self.area.tilesets:
+            if ts.path == tileset_path:
+                area_ts = ts
+                break
+
+        if area_ts is not None and area_ts.tile_count > 0:
+            current_frame = self.selected_gid - area_ts.firstgid
+            new_frame = (current_frame + direction) % area_ts.tile_count
+            self.selected_gid = area_ts.firstgid + new_frame
+        elif self.asset_manager is not None:
+            # Tileset not in area yet, compute frame count
+            frame_count = self.asset_manager.get_frame_count(
+                tileset_path, self.area.tile_size, self.area.tile_size
+            )
+            if frame_count > 0:
+                # Use a temporary frame index
+                current_frame = max(0, self.selected_gid - 1) if self.area.tilesets else 0
+                new_frame = (current_frame + direction) % frame_count
+                self.select_tileset_frame(self.selected_tileset_index, new_frame)
+                return
+
+        self.status_message = f"Tile {self.current_gid_label}"
+
     def _step_layer(self, direction: int) -> None:
         """Cycle the active tile layer selection."""
         self.selected_layer_index = (self.selected_layer_index + direction) % len(self.area.tile_layers)
-        if self.mode == "tile":
-            self._choose_default_tile_for_layer()
         self.status_message = f"Layer {self.current_layer.name}"
 
     def _window_to_internal(self, mouse_pos: tuple[int, int]) -> tuple[int, int]:
@@ -766,13 +673,6 @@ class LevelEditor:
         chosen = removable[-1] if removable else entities[-1]
         self.selected_entity_id = chosen.entity_id
 
-    def _set_selected_walkability(self, walkable: bool) -> None:
-        """Change the selected cell walkability from the inspector buttons."""
-        if self.selected_cell is None:
-            return
-        grid_x, grid_y = self.selected_cell
-        self._set_cell_walkability(grid_x, grid_y, walkable)
-
     def _set_cell_walkability(self, grid_x: int, grid_y: int, walkable: bool) -> None:
         """Write walkability to a specific cell independently from tile art."""
         current = bool(self.area.cell_flags[grid_y][grid_x].get("walkable", True))
@@ -782,29 +682,17 @@ class LevelEditor:
         self.area.cell_flags[grid_y][grid_x]["walkable"] = walkable
         self._mark_dirty("Set walkable" if walkable else "Set blocked")
 
-    def _pick_tile_from_selected_cell_layer(self) -> None:
-        """Pick the tile currently present on the selected cell for the active layer."""
-        if self.selected_cell is None:
-            self._choose_default_tile_for_layer()
-            return
-        grid_x, grid_y = self.selected_cell
-        tile_id = self.current_layer.grid[grid_y][grid_x]
-        if tile_id and tile_id in self.tile_ids:
-            self.selected_tile_index = self.tile_ids.index(tile_id)
-            return
-        self._choose_default_tile_for_layer()
-
     def _apply_primary(self) -> None:
         """Apply the left-click editor action at the selected cell."""
         if self.selected_cell is None:
             return
         grid_x, grid_y = self.selected_cell
         if self.mode == "tile":
-            if self.current_layer.grid[grid_y][grid_x] == self.current_tile_id:
-                self.status_message = f"Already {self.current_tile_id}"
+            if self.current_layer.grid[grid_y][grid_x] == self.selected_gid:
+                self.status_message = f"Already {self.current_gid_label}"
                 return
-            self.current_layer.grid[grid_y][grid_x] = self.current_tile_id
-            self._mark_dirty(f"Painted {self.current_tile_id}")
+            self.current_layer.grid[grid_y][grid_x] = self.selected_gid
+            self._mark_dirty(f"Painted {self.current_gid_label}")
             return
         if self.mode == "walkability":
             self._set_cell_walkability(grid_x, grid_y, self.walk_brush_walkable)
@@ -818,7 +706,8 @@ class LevelEditor:
             return
         grid_x, grid_y = self.selected_cell
         if self.mode == "tile":
-            replacement = self.tile_ids[0] if self.selected_layer_index == 0 and self.tile_ids else None
+            # Erase: set to first GID on layer 0, or 0 (empty) on other layers
+            replacement = self.area.tilesets[0].firstgid if self.selected_layer_index == 0 and self.area.tilesets else 0
             if self.current_layer.grid[grid_y][grid_x] == replacement:
                 self.status_message = "Nothing to erase"
                 return
@@ -968,29 +857,13 @@ class LevelEditor:
     def _apply_mode_defaults(self) -> None:
         """Pick immediately useful defaults for the active mode."""
         if self.mode == "tile":
-            self._choose_default_tile_for_layer()
+            # Default to first GID if nothing selected
+            if self.selected_gid <= 0 and self.area.tilesets:
+                self.selected_gid = self.area.tilesets[0].firstgid
             return
 
         if self.mode == "entity":
             self._select_preferred_template(["block", "lever", "gate", "player"])
-
-    def _choose_default_tile_for_layer(self) -> None:
-        """Select a visible brush without assuming layer semantics."""
-        if self.selected_cell is not None:
-            grid_x, grid_y = self.selected_cell
-            tile_id = self.current_layer.grid[grid_y][grid_x]
-            if tile_id and tile_id in self.tile_ids:
-                self.selected_tile_index = self.tile_ids.index(tile_id)
-                return
-        if self.tile_ids:
-            self.selected_tile_index %= len(self.tile_ids)
-
-    def _select_preferred_tile(self, tile_ids: list[str]) -> None:
-        """Select the first available tile id from a preferred list."""
-        for tile_id in tile_ids:
-            if tile_id in self.tile_ids:
-                self.selected_tile_index = self.tile_ids.index(tile_id)
-                return
 
     def _select_preferred_template(self, template_ids: list[str]) -> None:
         """Select the first available entity template from a preferred list."""
