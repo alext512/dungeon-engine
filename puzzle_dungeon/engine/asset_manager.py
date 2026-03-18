@@ -36,6 +36,32 @@ class AssetManager:
         asset_path = config.DATA_DIR / relative_path
         return self._load_image(asset_path)
 
+    def get_image_size(self, relative_path: str) -> tuple[int, int]:
+        """Return (width, height) in pixels for a tileset or sprite image."""
+        image = self.get_image(relative_path)
+        return (image.get_width(), image.get_height())
+
+    def get_frame_count(
+        self,
+        relative_path: str,
+        frame_width: int,
+        frame_height: int,
+    ) -> int:
+        """Return the total number of frames in a sprite sheet."""
+        img_w, img_h = self.get_image_size(relative_path)
+        columns = max(1, img_w // frame_width)
+        rows = max(1, img_h // frame_height)
+        return columns * rows
+
+    def get_columns(
+        self,
+        relative_path: str,
+        frame_width: int,
+    ) -> int:
+        """Return how many tile columns the image has."""
+        img_w, _ = self.get_image_size(relative_path)
+        return max(1, img_w // frame_width)
+
     def _get_frames(
         self,
         asset_path: Path,

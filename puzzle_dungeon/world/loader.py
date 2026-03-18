@@ -1,4 +1,13 @@
-"""JSON loading helpers for areas, reusable entity templates, and starter assets."""
+"""JSON loading helpers for areas, reusable entity templates, and starter assets.
+
+Parses area JSON files into runtime Area + World objects. Handles:
+- GID-based tileset resolution (computing tile_count and columns from images)
+- Entity template loading and parameter substitution
+- Cell flags parsing (booleans or rich metadata dicts)
+
+Depends on: config, area, entity, world, asset_manager (for tileset image queries)
+Used by: game, editor
+"""
 
 from __future__ import annotations
 
@@ -8,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from puzzle_dungeon import config
-from puzzle_dungeon.world.area import Area, TileLayer
+from puzzle_dungeon.world.area import Area, TileLayer, Tileset
 from puzzle_dungeon.world.entity import Entity
 from puzzle_dungeon.world.world import World
 
@@ -16,18 +25,25 @@ from puzzle_dungeon.world.world import World
 _TEMPLATE_CACHE: dict[str, dict[str, Any]] = {}
 
 
-def load_area(area_path: Path) -> tuple[Area, World]:
-    """Load an area JSON file and build a runtime world for it."""
+def load_area(area_path: Path, asset_manager: Any = None) -> tuple[Area, World]:
+    """Load an area JSON file and build a runtime world for it.
+
+    If ``asset_manager`` is provided, tileset tile_counts and columns are
+    computed from the actual image dimensions. Otherwise they default to 0
+    (the area will still work, but GID bounds won't be validated).
+    """
     raw_data = json.loads(area_path.read_text(encoding="utf-8"))
-    return load_area_from_data(raw_data, source_name=str(area_path))
+    return load_area_from_data(raw_data, source_name=str(area_path), asset_manager=asset_manager)
 
 
 def load_area_from_data(
     raw_data: dict[str, Any],
     *,
     source_name: str = "<memory>",
+    asset_manager: Any = None,
 ) -> tuple[Area, World]:
     """Build a runtime area and world from already-loaded JSON-like data."""
+    tilesets = _parse_tilesets(raw_data, asset_manager)
     tile_layers = _parse_tile_layers(raw_data)
     _validate_tile_layers(tile_layers, source_name)
     width = len(tile_layers[0].grid[0]) if tile_layers and tile_layers[0].grid else 0
@@ -37,10 +53,11 @@ def load_area_from_data(
     area = Area(
         name=raw_data.get("name", "untitled_area"),
         tile_size=int(raw_data.get("tile_size", config.DEFAULT_TILE_SIZE)),
-        tile_definitions=dict(raw_data.get("tile_definitions", {})),
+        tilesets=tilesets,
         tile_layers=tile_layers,
         cell_flags=cell_flags,
     )
+    area.build_gid_lookup()
 
     world = World(player_id=raw_data.get("player_id", "player"))
     for entity_instance in raw_data.get("entities", []):
@@ -96,15 +113,39 @@ def load_entity_template(template_id: str) -> dict[str, Any]:
     return _load_entity_template(template_id)
 
 
+def _parse_tilesets(raw_data: dict[str, Any], asset_manager: Any) -> list[Tileset]:
+    """Parse the tilesets array from area JSON.
+
+    Computes columns and tile_count from the actual image if an asset_manager
+    is available; otherwise leaves them at 0.
+    """
+    raw_tilesets = raw_data.get("tilesets", [])
+    tilesets: list[Tileset] = []
+    for raw_ts in raw_tilesets:
+        ts = Tileset(
+            firstgid=int(raw_ts["firstgid"]),
+            path=str(raw_ts["path"]),
+            tile_width=int(raw_ts.get("tile_width", raw_data.get("tile_size", config.DEFAULT_TILE_SIZE))),
+            tile_height=int(raw_ts.get("tile_height", raw_data.get("tile_size", config.DEFAULT_TILE_SIZE))),
+        )
+        if asset_manager is not None:
+            ts.columns = asset_manager.get_columns(ts.path, ts.tile_width)
+            ts.tile_count = asset_manager.get_frame_count(ts.path, ts.tile_width, ts.tile_height)
+        tilesets.append(ts)
+    return tilesets
+
+
 def _parse_tile_layers(raw_data: dict[str, Any]) -> list[TileLayer]:
-    """Parse new layered tile data or convert the legacy single-grid format."""
+    """Parse tile layers with integer GID grids."""
     raw_layers = raw_data.get("tile_layers")
     if raw_layers is None:
-        legacy_tiles = raw_data["tiles"]
+        # Legacy single-grid format (string tiles) — shouldn't occur with GID format
+        # but kept for safety during migration
+        legacy_tiles = raw_data.get("tiles", [])
         return [
             TileLayer(
                 name="ground",
-                grid=[[tile for tile in row] for row in legacy_tiles],
+                grid=[[0 for _ in row] for row in legacy_tiles],
                 draw_above_entities=False,
             )
         ]
@@ -115,7 +156,7 @@ def _parse_tile_layers(raw_data: dict[str, Any]) -> list[TileLayer]:
             TileLayer(
                 name=str(raw_layer["name"]),
                 grid=[
-                    [tile if tile is None else str(tile) for tile in row]
+                    [int(tile) if tile is not None else 0 for tile in row]
                     for row in raw_layer["grid"]
                 ],
                 draw_above_entities=bool(raw_layer.get("draw_above_entities", False)),
@@ -167,11 +208,8 @@ def _parse_cell_flags(
             parsed_flags.append(parsed_row)
         return parsed_flags
 
-    legacy_tiles = raw_data["tiles"]
-    return [
-        [{"walkable": tile != "#"} for tile in row]
-        for row in legacy_tiles
-    ]
+    # Fallback: all walkable
+    return [[{"walkable": True} for _ in range(width)] for _ in range(height)]
 
 
 def _resolve_entity_instance(instance_data: dict[str, Any]) -> dict[str, Any]:

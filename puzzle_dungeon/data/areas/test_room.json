@@ -2,71 +2,53 @@
   "name": "Test Room",
   "tile_size": 16,
   "player_id": "player",
-  "tile_definitions": {
-    "floor": {
-      "sprite": {
-        "path": "assets/tiles/basic_tiles.png",
-        "frame_width": 16,
-        "frame_height": 16,
-        "frame": 0
-      }
-    },
-    "wall": {
-      "sprite": {
-        "path": "assets/tiles/basic_tiles.png",
-        "frame_width": 16,
-        "frame_height": 16,
-        "frame": 1
-      }
-    },
-    "painting": {
-      "sprite": {
-        "path": "assets/tiles/basic_tiles.png",
-        "frame_width": 16,
-        "frame_height": 16,
-        "frame": 2
-      }
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/tiles/basic_tiles.png",
+      "tile_width": 16,
+      "tile_height": 16
     }
-  },
+  ],
   "tile_layers": [
     {
       "name": "layer_1",
       "grid": [
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"],
-        ["floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor"]
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
       ]
     },
     {
       "name": "layer_2",
       "grid": [
-        ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"],
-        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
-        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
-        ["wall", null, null, null, null, null, "wall", null, null, null, null, "wall"],
-        ["wall", null, null, null, null, null, "wall", null, null, null, null, "wall"],
-        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
-        ["wall", null, null, null, null, null, null, null, null, null, null, "wall"],
-        ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"]
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+        [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+        [2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2],
+        [2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2],
+        [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+        [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
       ]
     },
     {
       "name": "layer_3",
       "draw_above_entities": true,
       "grid": [
-        [null, null, null, null, null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, "painting", null, null, null, null, null],
-        [null, null, null, null, null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null, null, null, null, null]
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ]
     }
   ],

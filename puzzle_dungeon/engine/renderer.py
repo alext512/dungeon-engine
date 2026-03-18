@@ -1,4 +1,11 @@
-"""Simple pixel-art style rendering for the starter room prototype."""
+"""Simple pixel-art style rendering for the starter room prototype.
+
+Renders GID-based tile layers, entities, and editor overlays. Uses the Area's
+resolve_gid() method to map integer tile IDs to tileset frames.
+
+Depends on: config, asset_manager, camera, text, area, world, editor
+Used by: game
+"""
 
 from __future__ import annotations
 
@@ -11,7 +18,6 @@ from puzzle_dungeon.engine.asset_manager import AssetManager
 from puzzle_dungeon.engine.camera import Camera
 from puzzle_dungeon.engine.text import TextRenderer
 from puzzle_dungeon.world.area import Area
-from puzzle_dungeon.world.loader import load_entity_template
 from puzzle_dungeon.world.world import World
 
 
@@ -81,39 +87,28 @@ class Renderer:
         *,
         draw_above_entities: bool,
     ) -> None:
-        """Draw all tile layers for the requested render phase."""
+        """Draw all tile layers for the requested render phase using GID resolution."""
         tile_size = area.tile_size
         for layer in area.iter_tile_layers(draw_above_entities=draw_above_entities):
             for grid_y, row in enumerate(layer.grid):
-                for grid_x, tile_id in enumerate(row):
-                    if tile_id is None:
+                for grid_x, gid in enumerate(row):
+                    if gid <= 0:
                         continue
 
+                    resolved = area.resolve_gid(gid)
+                    if resolved is None:
+                        continue
+
+                    tileset_path, tile_w, tile_h, local_frame = resolved
                     screen_x, screen_y = self._world_to_screen(
                         grid_x * tile_size,
                         grid_y * tile_size,
                         camera,
                     )
-                    rect = pygame.Rect(screen_x, screen_y, tile_size, tile_size)
-                    tile_definition = area.tile_definition(tile_id)
-                    sprite_data = tile_definition.get("sprite")
-                    if sprite_data:
-                        frame_surface = self.asset_manager.get_frame(
-                            str(sprite_data["path"]),
-                            int(sprite_data.get("frame_width", tile_size)),
-                            int(sprite_data.get("frame_height", tile_size)),
-                            int(sprite_data.get("frame", 0)),
-                        )
-                        self.internal_surface.blit(frame_surface, rect.topleft)
-                    else:
-                        fallback_color = config.COLOR_WALL if not area.is_walkable(grid_x, grid_y) else config.COLOR_FLOOR
-                        pygame.draw.rect(self.internal_surface, fallback_color, rect)
-                        pygame.draw.rect(
-                            self.internal_surface,
-                            config.COLOR_GRID_ACCENT,
-                            rect,
-                            width=1,
-                        )
+                    frame_surface = self.asset_manager.get_frame(
+                        tileset_path, tile_w, tile_h, local_frame
+                    )
+                    self.internal_surface.blit(frame_surface, (screen_x, screen_y))
 
     def _draw_entities(self, area: Area, world: World, camera: Camera) -> None:
         tile_size = area.tile_size
@@ -286,15 +281,12 @@ class Renderer:
         )
         draw_position = (screen_x, screen_y)
 
-        if editor.mode == "tile" and editor.current_tile_id:
-            tile_definition = area.tile_definition(editor.current_tile_id)
-            sprite_data = tile_definition.get("sprite")
-            if sprite_data:
+        if editor.mode == "tile" and editor.selected_gid > 0:
+            resolved = area.resolve_gid(editor.selected_gid)
+            if resolved is not None:
+                tileset_path, tile_w, tile_h, local_frame = resolved
                 preview_surface = self.asset_manager.get_frame(
-                    str(sprite_data["path"]),
-                    int(sprite_data.get("frame_width", area.tile_size)),
-                    int(sprite_data.get("frame_height", area.tile_size)),
-                    int(sprite_data.get("frame", 0)),
+                    tileset_path, tile_w, tile_h, local_frame
                 ).copy()
                 preview_surface.set_alpha(150)
                 self.internal_surface.blit(preview_surface, draw_position)
@@ -350,198 +342,6 @@ class Renderer:
                 (badge_rect.x + 2, badge_rect.y + 1),
                 config.COLOR_TEXT,
             )
-
-    def _draw_editor_panels(self, area: Area, world: World, editor: Any) -> None:
-        """Draw the browser and selected-cell windows around the map canvas."""
-        self._draw_panel(editor.right_panel_rect, "Browser")
-        self._draw_panel(editor.bottom_panel_rect, "Cell")
-
-        for item in editor.toolbar_items():
-            self._draw_ui_button(item)
-
-        self._draw_panel_text("Layer", (editor.right_panel_rect.x + 4, 50))
-        for item in editor.layer_items():
-            self._draw_ui_button(item)
-
-        self._draw_panel_text(editor.palette_title, (editor.right_panel_rect.x + 4, 74))
-        for item in editor.palette_items():
-            self._draw_palette_item(area, item)
-
-        browser_bottom = editor.right_panel_rect.bottom
-        self._draw_panel_text(editor.status_message[:17], (editor.right_panel_rect.x + 4, browser_bottom - 28))
-        self._draw_panel_text(editor.workflow_hint(), (editor.right_panel_rect.x + 4, browser_bottom - 18))
-        self._draw_inspector(area, world, editor)
-
-    def _draw_inspector(self, area: Area, world: World, editor: Any) -> None:
-        """Draw selected-cell data with separate layer and entity sections."""
-        panel = editor.bottom_panel_rect
-        self._draw_panel_text(f"Cell {editor.selected_cell_label}", (panel.x + 4, panel.y + 14))
-        self._draw_panel_text(f"Walk {editor.cell_walk_label}", (panel.x + 4, panel.y + 24))
-        self._draw_panel_text("Layers", (panel.x + 4, panel.y + 36))
-        for index, line in enumerate(editor.selected_layer_lines()):
-            self._draw_panel_text(line, (panel.x + 4, panel.y + 46 + (index * 10)))
-
-        self._draw_panel_text("Entities", (panel.x + 92, panel.y + 14))
-        for item in editor.inspector_entity_items():
-            self._draw_entity_row(world, item)
-
-        if not editor.inspector_entity_items():
-            self._draw_panel_text("none", (panel.x + 92, panel.y + 24))
-
-        for item in editor.stack_action_items():
-            self._draw_ui_button(item)
-
-    def _draw_ui_button(self, item: Any) -> None:
-        """Draw a simple rectangular button or chip."""
-        self._draw_ui_frame(item)
-        text_width, text_height = self.text_renderer.measure_text(item.label)
-        text_x = item.rect.x + max(2, (item.rect.width - text_width) // 2)
-        text_y = item.rect.y + max(2, (item.rect.height - text_height) // 2)
-        self.text_renderer.render_text(
-            self.internal_surface,
-            item.label,
-            (text_x, text_y),
-            config.COLOR_TEXT,
-        )
-
-    def _draw_ui_frame(self, item: Any) -> None:
-        """Draw just the background and border for a UI item."""
-        fill_color = (38, 55, 79) if item.active else (22, 28, 38)
-        border_color = (110, 150, 210) if item.active else (74, 90, 112)
-        pygame.draw.rect(self.internal_surface, fill_color, item.rect)
-        pygame.draw.rect(self.internal_surface, border_color, item.rect, width=1)
-
-    def _draw_palette_item(self, area: Area, item: Any) -> None:
-        """Draw a palette row with icon plus label."""
-        self._draw_ui_frame(item)
-        text_x = item.rect.x + 20
-        if item.key.startswith("palette:tile:"):
-            tile_id = item.key.split(":", 2)[2]
-            self._draw_tile_icon(area, tile_id, (item.rect.x + 2, item.rect.y + 1))
-        elif item.key.startswith("palette:template:"):
-            template_id = item.key.split(":", 2)[2]
-            self._draw_template_icon(area.tile_size, template_id, (item.rect.x + 2, item.rect.y + 1))
-        else:
-            text_x = item.rect.x + 4
-        self.text_renderer.render_text(
-            self.internal_surface,
-            item.label,
-            (text_x, item.rect.y + 5),
-            config.COLOR_TEXT,
-        )
-
-    def _draw_entity_row(self, world: World, item: Any) -> None:
-        """Draw one stacked-entity row in the inspector."""
-        self._draw_ui_frame(item)
-        entity = world.get_entity(item.key.split(":", 1)[1])
-        if entity is not None:
-            self._draw_entity_icon(entity, (item.rect.x + 2, item.rect.y))
-        self.text_renderer.render_text(
-            self.internal_surface,
-            item.label,
-            (item.rect.x + 18, item.rect.y + 2),
-            config.COLOR_TEXT,
-        )
-
-    def _draw_tile_icon(self, area: Area, tile_id: str, position: tuple[int, int]) -> None:
-        """Draw a 16x16 tile preview icon."""
-        tile_definition = area.tile_definition(tile_id)
-        sprite_data = tile_definition.get("sprite")
-        if sprite_data:
-            frame_surface = self.asset_manager.get_frame(
-                str(sprite_data["path"]),
-                int(sprite_data.get("frame_width", area.tile_size)),
-                int(sprite_data.get("frame_height", area.tile_size)),
-                int(sprite_data.get("frame", 0)),
-            )
-            self.internal_surface.blit(frame_surface, position)
-            return
-
-        fallback = pygame.Surface((area.tile_size, area.tile_size), pygame.SRCALPHA)
-        fallback.fill(config.COLOR_GRID_ACCENT)
-        self.internal_surface.blit(fallback, position)
-
-    def _draw_template_icon(self, tile_size: int, template_id: str, position: tuple[int, int]) -> None:
-        """Draw a template preview icon for the palette."""
-        template = load_entity_template(template_id)
-        sprite_data = dict(template.get("sprite", {}))
-        if sprite_data.get("path"):
-            frame_surface = self.asset_manager.get_frame(
-                str(sprite_data["path"]),
-                int(sprite_data.get("frame_width", tile_size)),
-                int(sprite_data.get("frame_height", tile_size)),
-                int(sprite_data.get("frames", [0])[0]),
-            )
-            self.internal_surface.blit(frame_surface, position)
-            return
-
-        color = tuple(template.get("color", [255, 255, 255]))
-        preview_surface = pygame.Surface((tile_size, tile_size), pygame.SRCALPHA)
-        preview_surface.fill((*color, 255))
-        self.internal_surface.blit(preview_surface, position)
-
-    def _draw_entity_icon(self, entity: Any, position: tuple[int, int]) -> None:
-        """Draw an entity preview icon for the selected-cell stack."""
-        if entity.sprite_path:
-            sprite_surface = self.asset_manager.get_frame(
-                entity.sprite_path,
-                entity.sprite_frame_width,
-                entity.sprite_frame_height,
-                entity.current_frame,
-            )
-            sprite_surface = self._apply_tint(sprite_surface, entity.color)
-            self.internal_surface.blit(sprite_surface, position)
-            return
-
-        preview_surface = pygame.Surface((16, 16), pygame.SRCALPHA)
-        preview_surface.fill((*entity.color, 255))
-        self.internal_surface.blit(preview_surface, position)
-
-    def _draw_panel(self, rect: pygame.Rect, title: str, *, fill: bool = True) -> None:
-        """Draw a framed editor window with a tiny title strip."""
-        if fill:
-            pygame.draw.rect(self.internal_surface, (10, 14, 20), rect)
-        pygame.draw.rect(self.internal_surface, (82, 98, 124), rect, width=1)
-        if not title:
-            return
-
-        title_rect = pygame.Rect(rect.x + 1, rect.y + 1, rect.width - 2, 10)
-        pygame.draw.rect(self.internal_surface, (20, 27, 38), title_rect)
-        self._draw_panel_text(title, (rect.x + 4, rect.y + 2))
-
-    def _draw_panel_text(self, text: str, position: tuple[int, int]) -> None:
-        """Draw a short panel label using the shared bitmap font."""
-        self.text_renderer.render_text(
-            self.internal_surface,
-            text,
-            position,
-            config.COLOR_TEXT,
-        )
-
-    def _draw_wrapped_status(self, text: str, panel_rect: pygame.Rect) -> None:
-        """Draw a short wrapped status message near the bottom of the toolbox."""
-        lines = self._wrap_text(text, panel_rect.width - 8)
-        base_y = panel_rect.bottom - (len(lines) * self.text_renderer.line_height()) - 6
-        for index, line in enumerate(lines[:3]):
-            self._draw_panel_text(line, (panel_rect.x + 4, base_y + (index * self.text_renderer.line_height())))
-
-    def _wrap_text(self, text: str, max_width: int) -> list[str]:
-        """Wrap a short status string to fit a narrow panel."""
-        words = text.split()
-        if not words:
-            return [""]
-
-        lines: list[str] = []
-        current = words[0]
-        for word in words[1:]:
-            candidate = f"{current} {word}"
-            if self.text_renderer.measure_text(candidate)[0] <= max_width:
-                current = candidate
-            else:
-                lines.append(current)
-                current = word
-        lines.append(current)
-        return lines
 
     def _draw_text_panel(
         self,
