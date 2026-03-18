@@ -57,6 +57,7 @@ class EditorBrowserWindow:
             hidden=True,
             resizable=True,
         )
+        self.window.minimum_size = (200, 200)
         self.visible = False
         self.last_mouse_pos = (0, 0)
 
@@ -66,6 +67,7 @@ class EditorBrowserWindow:
         self.entity_template_scroll = 0
         self.entity_stack_scroll = 0
         self.inspector_scroll = 0
+        self.window_scroll_y = 0
 
         # Text editing state
         self.layer_name_buffer = ""
@@ -208,7 +210,13 @@ class EditorBrowserWindow:
     ) -> list[EditorAction]:
         """Handle all clickable regions inside the browser window."""
         actions: list[EditorAction] = []
-        layout = self._layout(self.window.get_surface().get_size(), editor.mode)
+        # Convert window mouse pos to virtual canvas coordinates
+        mouse_pos = self._to_virtual_pos(mouse_pos)
+        window_surface = self.window.get_surface()
+        window_w, window_h = window_surface.get_size()
+        min_content_h = self._content_height(editor.mode)
+        virtual_h = max(window_h, min_content_h)
+        layout = self._layout((window_w, virtual_h), editor.mode)
 
         # Action buttons
         for button in self._action_buttons(layout):
@@ -352,45 +360,101 @@ class EditorBrowserWindow:
                 editor.status_message = "Walk brush block"
         return actions
 
+    def _to_virtual_pos(self, window_pos: tuple[int, int]) -> tuple[int, int]:
+        """Convert window mouse coordinates to virtual canvas coordinates."""
+        return (window_pos[0], window_pos[1] + self.window_scroll_y)
+
     def _handle_wheel(self, editor: "LevelEditor", event: pygame.event.Event) -> None:
         """Scroll the list or palette under the mouse cursor."""
-        layout = self._layout(self.window.get_surface().get_size(), editor.mode)
+        window_surface = self.window.get_surface()
+        window_w, window_h = window_surface.get_size()
+        min_content_h = self._content_height(editor.mode)
+        virtual_h = max(window_h, min_content_h)
+        layout = self._layout((window_w, virtual_h), editor.mode)
+        virtual_pos = self._to_virtual_pos(self.last_mouse_pos)
 
-        if layout["layers_list"].collidepoint(self.last_mouse_pos):
+        if layout["layers_list"].collidepoint(virtual_pos):
             max_scroll = max(0, len(editor.area.tile_layers) - self._visible_list_rows(layout["layers_list"]))
             self.layer_scroll = min(max(self.layer_scroll - event.y, 0), max_scroll)
             return
 
         if editor.mode == "tile":
             tileset_rect = layout.get("tileset_image")
-            if tileset_rect is not None and tileset_rect.collidepoint(self.last_mouse_pos):
-                # Scroll the tileset view
+            if tileset_rect is not None and tileset_rect.collidepoint(virtual_pos):
                 max_scroll = self._tileset_max_scroll(editor, tileset_rect)
                 self.tileset_scroll_y = min(max(self.tileset_scroll_y - event.y * 32, 0), max_scroll)
                 return
 
         if editor.mode == "entity":
             entity_list = layout.get("entity_list")
-            if entity_list is not None and entity_list.collidepoint(self.last_mouse_pos):
+            if entity_list is not None and entity_list.collidepoint(virtual_pos):
                 visible_rows = self._visible_list_rows(entity_list)
                 max_scroll = max(0, len(editor.entities_for_selected_cell()) - visible_rows)
                 self.entity_stack_scroll = min(max(self.entity_stack_scroll - event.y, 0), max_scroll)
                 return
 
             templates_rect = layout.get("entity_templates")
-            if templates_rect is not None and templates_rect.collidepoint(self.last_mouse_pos):
+            if templates_rect is not None and templates_rect.collidepoint(virtual_pos):
                 visible_rows = self._visible_list_rows(templates_rect)
                 max_scroll = max(0, len(editor.template_ids) - visible_rows)
                 self.entity_template_scroll = min(max(self.entity_template_scroll - event.y, 0), max_scroll)
                 return
 
+            inspector_rect = layout.get("inspector")
+            if inspector_rect is not None and inspector_rect.collidepoint(virtual_pos):
+                props = editor.selected_entity_properties()
+                visible_rows = self._visible_list_rows(inspector_rect)
+                max_scroll = max(0, len(props) - visible_rows)
+                self.inspector_scroll = min(max(self.inspector_scroll - event.y, 0), max_scroll)
+                return
+
+        # Global window scroll fallback
+        if min_content_h > window_h:
+            max_scroll = min_content_h - window_h
+            self.window_scroll_y = min(max(self.window_scroll_y - event.y * 24, 0), max_scroll)
+
     # --- Rendering ---
 
+    def _content_height(self, mode: str) -> int:
+        """Return the minimum height needed to display all panels without clipping."""
+        pad = self.PADDING
+        gap = self.GAP
+        # Fixed panels: actions(40) + modes(40) + layers(150) + gaps + padding + status(20)
+        fixed = pad + 40 + gap + 40 + gap + 150 + gap
+        status = 20 + pad
+
+        if mode == "tile":
+            # tileset_selector(22) + gap + tileset_image(300 minimum)
+            content = 22 + gap + 300
+        elif mode == "entity":
+            # templates(180) + gap + stack(140) + gap + inspector(160)
+            content = 180 + gap + 140 + gap + 160
+        elif mode == "walkability":
+            content = 120
+        else:
+            content = 100
+
+        return fixed + content + gap + status
+
     def _render(self, editor: "LevelEditor") -> None:
-        """Draw the whole browser window."""
-        surface = self.window.get_surface()
+        """Draw the whole browser window, scrolling if content overflows."""
+        window_surface = self.window.get_surface()
+        window_w, window_h = window_surface.get_size()
+        min_content_h = self._content_height(editor.mode)
+
+        needs_global_scroll = min_content_h > window_h
+        if needs_global_scroll:
+            virtual_h = min_content_h
+            max_scroll = virtual_h - window_h
+            self.window_scroll_y = min(max(self.window_scroll_y, 0), max_scroll)
+            surface = pygame.Surface((window_w, virtual_h))
+        else:
+            virtual_h = window_h
+            self.window_scroll_y = 0
+            surface = window_surface
+
         surface.fill((20, 24, 31))
-        layout = self._layout(surface.get_size(), editor.mode)
+        layout = self._layout((window_w, virtual_h), editor.mode)
 
         # Common panels
         self._draw_panel(surface, layout["actions"], "Actions")
@@ -413,6 +477,12 @@ class EditorBrowserWindow:
             self._draw_walk_mode(surface, editor, layout)
 
         self._draw_status(surface, editor, layout)
+
+        if needs_global_scroll:
+            window_surface.blit(surface, (0, -self.window_scroll_y))
+            scrollbar_rect = pygame.Rect(0, 0, window_w, window_h)
+            self._draw_scrollbar(window_surface, scrollbar_rect, self.window_scroll_y, virtual_h, window_h)
+
         self.window.flip()
 
     def _draw_tile_mode(self, surface: pygame.Surface, editor: "LevelEditor", layout: dict[str, pygame.Rect]) -> None:
@@ -483,6 +553,9 @@ class EditorBrowserWindow:
 
         surface.set_clip(old_clip)
 
+        # Scrollbar for tileset view
+        self._draw_scrollbar(surface, tileset_rect, self.tileset_scroll_y, scaled_h, tileset_rect.height)
+
     def _draw_entity_mode(self, surface: pygame.Surface, editor: "LevelEditor", layout: dict[str, pygame.Rect]) -> None:
         """Draw entity template palette, entity stack, and property inspector."""
         # Template palette
@@ -548,6 +621,9 @@ class EditorBrowserWindow:
             surface.blit(icon, (row_rect.x + 2, row_rect.y + 2))
             self._draw_text(surface, template_id, (row_rect.x + 20, row_rect.y + 4))
 
+        content_h = len(editor.template_ids) * self.ROW_HEIGHT
+        self._draw_scrollbar(surface, rect, self.entity_template_scroll * self.ROW_HEIGHT, content_h, rect.height)
+
     def _draw_entity_stack(self, surface: pygame.Surface, editor: "LevelEditor", list_rect: pygame.Rect) -> None:
         """Draw the current stacked entities with icons."""
         pygame.draw.rect(surface, (14, 17, 23), list_rect)
@@ -565,6 +641,9 @@ class EditorBrowserWindow:
             surface.blit(icon, (row_rect.x + 2, row_rect.y + 2))
             self._draw_text(surface, entity.entity_id, (row_rect.x + 20, row_rect.y + 4))
 
+        content_h = len(entities) * self.ROW_HEIGHT
+        self._draw_scrollbar(surface, list_rect, self.entity_stack_scroll * self.ROW_HEIGHT, content_h, list_rect.height)
+
     def _draw_inspector(self, surface: pygame.Surface, editor: "LevelEditor", rect: pygame.Rect) -> None:
         """Draw the property inspector for the selected entity."""
         pygame.draw.rect(surface, (14, 17, 23), rect)
@@ -575,8 +654,13 @@ class EditorBrowserWindow:
             self._draw_text(surface, "No entity selected", (rect.x + 4, rect.y + 4))
             return
 
+        old_clip = surface.get_clip()
+        surface.set_clip(rect)
+
+        start_row = self.inspector_scroll
+        visible_props = props[start_row:]
         row_y = rect.y + 4
-        for field_name, label, value in props:
+        for field_name, label, value in visible_props:
             if row_y + self.ROW_HEIGHT > rect.bottom:
                 break
 
@@ -602,6 +686,11 @@ class EditorBrowserWindow:
 
             row_y += self.ROW_HEIGHT
 
+        surface.set_clip(old_clip)
+
+        content_h = len(props) * self.ROW_HEIGHT
+        self._draw_scrollbar(surface, rect, self.inspector_scroll * self.ROW_HEIGHT, content_h, rect.height)
+
     def _draw_layers(self, surface: pygame.Surface, editor: "LevelEditor", layout: dict[str, pygame.Rect]) -> None:
         """Draw the layer list plus controls."""
         list_rect = layout["layers_list"]
@@ -618,6 +707,9 @@ class EditorBrowserWindow:
             pygame.draw.rect(surface, (38, 55, 79) if active else (20, 24, 31), row_rect)
             pygame.draw.rect(surface, (110, 150, 210) if active else (74, 90, 112), row_rect, width=1)
             self._draw_text(surface, layer.name, (row_rect.x + 4, row_rect.y + 4))
+
+        content_h = len(editor.area.tile_layers) * self.ROW_HEIGHT
+        self._draw_scrollbar(surface, list_rect, self.layer_scroll * self.ROW_HEIGHT, content_h, list_rect.height)
 
         for button in self._layer_action_buttons(layout):
             active = button.key == "layer:name" and self.active_text_field == "layer_name"
@@ -649,6 +741,41 @@ class EditorBrowserWindow:
         """Render bitmap text in the browser window."""
         self.text_renderer.render_text(surface, text, position, config.COLOR_TEXT)
 
+    def _draw_scrollbar(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        scroll_offset: float,
+        content_height: float,
+        view_height: float,
+    ) -> None:
+        """Draw a thin scrollbar on the right edge of a scrollable area.
+
+        Only draws when content overflows the view. The thumb size and position
+        are proportional to the visible portion of the content.
+        """
+        if content_height <= view_height or rect.height <= 0:
+            return
+
+        bar_width = 6
+        track = pygame.Rect(rect.right - bar_width, rect.y, bar_width, rect.height)
+
+        # Semi-transparent track
+        track_surface = pygame.Surface((track.width, track.height), pygame.SRCALPHA)
+        track_surface.fill((0, 0, 0, 60))
+        surface.blit(track_surface, track.topleft)
+
+        # Thumb: size proportional to visible fraction, position proportional to scroll
+        visible_fraction = min(1.0, view_height / content_height)
+        thumb_height = max(12, int(track.height * visible_fraction))
+        max_scroll = content_height - view_height
+        scroll_fraction = min(1.0, scroll_offset / max_scroll) if max_scroll > 0 else 0.0
+        thumb_y = track.y + int((track.height - thumb_height) * scroll_fraction)
+
+        thumb_rect = pygame.Rect(track.x, thumb_y, bar_width, thumb_height)
+        pygame.draw.rect(surface, (110, 130, 160), thumb_rect)
+        pygame.draw.rect(surface, (140, 160, 190), thumb_rect, width=1)
+
     # --- Layout ---
 
     def _layout(self, size: tuple[int, int], mode: str) -> dict[str, pygame.Rect]:
@@ -678,34 +805,35 @@ class EditorBrowserWindow:
         }
 
         if mode == "tile":
-            ts_panel = pygame.Rect(pad, content_top, actions.width, content_bottom - content_top)
+            ts_panel_h = max(60, content_bottom - content_top)
+            ts_panel = pygame.Rect(pad, content_top, actions.width, ts_panel_h)
             result["tileset_panel"] = ts_panel
             result["tileset_selector"] = pygame.Rect(ts_panel.x + 6, ts_panel.y + 20, ts_panel.width - 12, 22)
-            result["tileset_image"] = pygame.Rect(ts_panel.x + 6, ts_panel.y + 46, ts_panel.width - 12, ts_panel.height - 52)
+            result["tileset_image"] = pygame.Rect(ts_panel.x + 6, ts_panel.y + 46, ts_panel.width - 12, max(10, ts_panel.height - 52))
 
         elif mode == "walkability":
             walk_panel = pygame.Rect(pad, content_top, actions.width, 120)
             result["walk_panel"] = walk_panel
-            result["walk_palette"] = pygame.Rect(walk_panel.x + 6, walk_panel.y + 16, walk_panel.width - 12, walk_panel.height - 22)
+            result["walk_palette"] = pygame.Rect(walk_panel.x + 6, walk_panel.y + 16, walk_panel.width - 12, max(10, walk_panel.height - 22))
 
         elif mode == "entity":
-            remaining = content_bottom - content_top
-            templates_h = min(180, remaining // 3)
-            stack_h = min(140, remaining // 3)
-            inspector_h = remaining - templates_h - stack_h - gap * 2
+            remaining = max(60, content_bottom - content_top)
+            templates_h = min(180, max(30, remaining // 3))
+            stack_h = min(140, max(30, remaining // 3))
+            inspector_h = max(30, remaining - templates_h - stack_h - gap * 2)
 
             templates_panel = pygame.Rect(pad, content_top, actions.width, templates_h)
             result["templates_panel"] = templates_panel
-            result["entity_templates"] = pygame.Rect(templates_panel.x + 6, templates_panel.y + 20, templates_panel.width - 12, templates_panel.height - 26)
+            result["entity_templates"] = pygame.Rect(templates_panel.x + 6, templates_panel.y + 20, templates_panel.width - 12, max(10, templates_panel.height - 26))
 
             stack_panel = pygame.Rect(pad, templates_panel.bottom + gap, actions.width, stack_h)
             result["stack_panel"] = stack_panel
-            result["entity_list"] = pygame.Rect(stack_panel.x + 6, stack_panel.y + 20, stack_panel.width - 12, max(30, stack_panel.height - 46))
+            result["entity_list"] = pygame.Rect(stack_panel.x + 6, stack_panel.y + 20, stack_panel.width - 12, max(10, stack_panel.height - 46))
             result["entity_buttons"] = pygame.Rect(stack_panel.x + 6, stack_panel.bottom - 22, stack_panel.width - 12, 18)
 
             inspector_panel = pygame.Rect(pad, stack_panel.bottom + gap, actions.width, inspector_h)
             result["inspector_panel"] = inspector_panel
-            result["inspector"] = pygame.Rect(inspector_panel.x + 6, inspector_panel.y + 20, inspector_panel.width - 12, inspector_panel.height - 26)
+            result["inspector"] = pygame.Rect(inspector_panel.x + 6, inspector_panel.y + 20, inspector_panel.width - 12, max(10, inspector_panel.height - 26))
 
         return result
 
@@ -869,10 +997,11 @@ class EditorBrowserWindow:
 
         local_y = mouse_pos[1] - rect.y - 4
         row = local_y // self.ROW_HEIGHT
-        if row < 0 or row >= len(props):
+        absolute_row = row + self.inspector_scroll
+        if row < 0 or absolute_row >= len(props):
             return None
 
-        field_name, _, value = props[row]
+        field_name, _, value = props[absolute_row]
         # Don't allow editing read-only fields
         if field_name in ("template_id", "kind"):
             return None
