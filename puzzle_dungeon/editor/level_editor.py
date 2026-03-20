@@ -4,7 +4,7 @@ Works with the GID-based tilemap system. The editor discovers available tileset
 PNGs, lets the user pick frames visually, and paints GIDs onto the grid.
 
 Depends on: config, area, entity, world, loader
-Used by: game, browser_window, renderer
+Used by: game, editor_ui, renderer
 """
 
 from __future__ import annotations
@@ -61,7 +61,8 @@ class LevelEditor:
     area: Area
     world: World
     asset_manager: Any = None
-    mode: str = "tile"
+    mode: str = "paint"
+    paint_submode: str = "tile"
     selected_layer_index: int = 0
 
     # GID-based tile selection (replaces old tile_ids / selected_tile_index)
@@ -81,6 +82,8 @@ class LevelEditor:
     last_drag_cell: tuple[int, int] | None = None
     walk_brush_walkable: bool = True
     middle_pan_active: bool = False
+    move_pending_entity_id: str | None = None
+    show_walk_overlay: bool = False
 
     UI_GAP: int = 4
     RIGHT_PANEL_WIDTH: int = 0
@@ -92,7 +95,7 @@ class LevelEditor:
         player = self.world.get_player()
         self.selected_cell = (player.grid_x, player.grid_y)
         self._sync_selected_entity_to_cell()
-        self.set_mode(self.mode)
+        self._apply_mode_defaults()
 
     @property
     def map_viewport_rect(self) -> pygame.Rect:
@@ -182,20 +185,16 @@ class LevelEditor:
     @property
     def mode_label(self) -> str:
         """Return a short mode label for HUD text."""
-        return {
-            "tile": "tile",
-            "walkability": "walk",
-            "entity": "entity",
-        }.get(self.mode, self.mode)
+        if self.paint_submode == "walk":
+            return "walk"
+        return "tile"
 
     @property
     def palette_title(self) -> str:
         """Return the active palette title for the right-side panel."""
-        if self.mode == "tile":
-            return "Tiles"
-        if self.mode == "entity":
-            return "Objects"
-        return "Flags"
+        if self.paint_submode == "walk":
+            return "Flags"
+        return "Tiles"
 
     @property
     def current_walk_brush_label(self) -> str:
@@ -214,12 +213,32 @@ class LevelEditor:
         """Switch editor mode and choose a useful default selection."""
         self.mode = mode
         self._apply_mode_defaults()
-        if mode == "tile":
+        if self.paint_submode == "tile":
             self.status_message = f"Tile {self.current_gid_label} on {self.current_layer.name}"
-        elif mode == "walkability":
+        else:
+            self.status_message = f"Walk brush {self.current_walk_brush_label}"
+
+    def toggle_paint_submode(self) -> None:
+        """Toggle between tile and walkability painting sub-modes."""
+        if self.paint_submode == "tile":
+            self.paint_submode = "walk"
+            self.show_walk_overlay = True
             self.status_message = f"Walk brush {self.current_walk_brush_label}"
         else:
-            self.status_message = f"Entity {self.current_template_id}"
+            self.paint_submode = "tile"
+            self.status_message = f"Tile {self.current_gid_label} on {self.current_layer.name}"
+
+    def move_entity_to(self, entity_id: str, grid_x: int, grid_y: int) -> None:
+        """Move an entity to a new cell position."""
+        entity = self.world.get_entity(entity_id)
+        if entity is None:
+            self.status_message = f"Entity {entity_id} not found"
+            return
+        entity.grid_x = grid_x
+        entity.grid_y = grid_y
+        entity.sync_pixel_position(self.area.tile_size)
+        entity.stack_order = self._next_stack_order(grid_x, grid_y)
+        self._mark_dirty(f"Moved {entity_id} to ({grid_x},{grid_y})")
 
     def select_tileset_frame(self, tileset_index: int, local_frame: int) -> None:
         """Select a tile from a tileset for painting.
@@ -267,22 +286,20 @@ class LevelEditor:
     def selection_lines(self) -> list[str]:
         """Return compact mode-specific HUD lines for the editor."""
         lines = [f"Mode {self.mode_label}  Sel {self.selected_cell_label}  Dirty {self.dirty_label}"]
-        if self.mode == "tile":
+        if self.paint_submode == "tile":
             lines.append(f"Layer {self.current_layer.name}  Brush {self.current_gid_label}")
-        elif self.mode == "walkability":
-            lines.append(f"Walk {self.cell_walk_label}")
         else:
-            lines.append(f"Template {self.current_template_id or '-'}")
+            lines.append(f"Walk {self.cell_walk_label}")
         lines.append(self.status_message)
         return lines
 
     def workflow_hint(self) -> str:
         """Return a short plain-language hint for the current workflow."""
-        if self.mode == "tile":
-            return "L paint  R erase  MMB pan"
-        if self.mode == "walkability":
+        if self.move_pending_entity_id:
+            return f"Click to move {self.move_pending_entity_id}"
+        if self.paint_submode == "walk":
             return "L brush  R inverse  MMB pan"
-        return "L place  R remove  MMB pan"
+        return "L paint  R erase  MMB pan"
 
     def selected_layer_summary(self) -> str:
         """Return a short summary of all layer contents on the selected cell."""
@@ -309,15 +326,19 @@ class LevelEditor:
         return parts
 
     def build_preview_entity(self) -> Entity | None:
-        """Build a temporary entity preview for the hovered cell."""
-        if self.mode != "entity" or self.hovered_cell is None or not self.current_template_id:
+        """Build a temporary entity preview for the hovered cell (move-pending ghost)."""
+        if self.move_pending_entity_id is None or self.hovered_cell is None:
+            return None
+        source = self.world.get_entity(self.move_pending_entity_id)
+        if source is None:
             return None
 
         grid_x, grid_y = self.hovered_cell
+        template_id = source.template_id or source.kind
         return instantiate_entity(
             {
                 "id": "__preview__",
-                "template": self.current_template_id,
+                "template": template_id,
                 "x": grid_x,
                 "y": grid_y,
             },
@@ -458,15 +479,6 @@ class LevelEditor:
                 if event.key == pygame.K_F1:
                     actions.append(EditorAction("toggle_play"))
                     continue
-                if event.key == pygame.K_F2:
-                    self.set_mode("tile")
-                    continue
-                if event.key == pygame.K_F3:
-                    self.set_mode("walkability")
-                    continue
-                if event.key == pygame.K_F4:
-                    self.set_mode("entity")
-                    continue
                 if event.key == pygame.K_TAB:
                     self._step_layer(1)
                     continue
@@ -478,9 +490,6 @@ class LevelEditor:
                     continue
                 if event.key == pygame.K_r:
                     actions.append(EditorAction("reload_document"))
-                    continue
-                if event.key == pygame.K_DELETE:
-                    self._remove_selected_entity()
                     continue
                 if event.key == pygame.K_s and (event.mod & pygame.KMOD_CTRL):
                     self.save()
@@ -494,7 +503,6 @@ class LevelEditor:
                 self.hovered_cell = self._mouse_to_cell(internal_pos, camera)
                 if (
                     not self.middle_pan_active
-                    and self.mode in {"tile", "walkability"}
                     and self.hovered_cell is not None
                     and self.hovered_cell != self.last_drag_cell
                 ):
@@ -535,11 +543,6 @@ class LevelEditor:
                 if self.hovered_cell is None:
                     continue
 
-                if self.mode == "entity" and self.selected_cell != self.hovered_cell:
-                    self._select_cell(*self.hovered_cell)
-                    self.status_message = f"Cell {self.selected_cell_label} selected"
-                    continue
-
                 self._select_cell(*self.hovered_cell)
                 if event.button == 1:
                     self._apply_primary()
@@ -552,19 +555,19 @@ class LevelEditor:
         return actions
 
     def update(self, dt: float, camera: Camera) -> None:
-        """Handle continuous camera panning while editing."""
+        """Handle continuous camera panning while editing (arrow keys only)."""
         _ = dt
         key_state = pygame.key.get_pressed()
         delta_x = 0.0
         delta_y = 0.0
         pan_step = config.EDITOR_CAMERA_PAN_SPEED / config.FPS
-        if key_state[pygame.K_LEFT] or key_state[pygame.K_a]:
+        if key_state[pygame.K_LEFT]:
             delta_x -= pan_step
-        if key_state[pygame.K_RIGHT] or key_state[pygame.K_d]:
+        if key_state[pygame.K_RIGHT]:
             delta_x += pan_step
-        if key_state[pygame.K_UP] or key_state[pygame.K_w]:
+        if key_state[pygame.K_UP]:
             delta_y -= pan_step
-        if key_state[pygame.K_DOWN] or key_state[pygame.K_s]:
+        if key_state[pygame.K_DOWN]:
             delta_y += pan_step
         if delta_x or delta_y:
             camera.pan(delta_x, delta_y)
@@ -581,7 +584,7 @@ class LevelEditor:
     def _handle_wheel(self, button: int) -> None:
         """Handle scroll wheel selection changes."""
         direction = -1 if button == 4 else 1
-        if self.mode == "tile" and (pygame.key.get_mods() & pygame.KMOD_SHIFT):
+        if pygame.key.get_mods() & pygame.KMOD_SHIFT:
             self._step_layer(direction)
             return
         self._cycle_selection(direction)
@@ -591,11 +594,8 @@ class LevelEditor:
 
         In tile mode, cycles through frames of the currently viewed tileset.
         """
-        if self.mode == "tile":
+        if self.paint_submode == "tile":
             self._cycle_tileset_frame(direction)
-        elif self.mode == "entity" and self.template_ids:
-            self.selected_template_index = (self.selected_template_index + direction) % len(self.template_ids)
-            self.status_message = f"Template {self.current_template_id}"
 
     def _cycle_tileset_frame(self, direction: int) -> None:
         """Cycle through frames in the current tileset."""
@@ -687,25 +687,22 @@ class LevelEditor:
         if self.selected_cell is None:
             return
         grid_x, grid_y = self.selected_cell
-        if self.mode == "tile":
+        if self.paint_submode == "tile":
             if self.current_layer.grid[grid_y][grid_x] == self.selected_gid:
                 self.status_message = f"Already {self.current_gid_label}"
                 return
             self.current_layer.grid[grid_y][grid_x] = self.selected_gid
             self._mark_dirty(f"Painted {self.current_gid_label}")
             return
-        if self.mode == "walkability":
+        if self.paint_submode == "walk":
             self._set_cell_walkability(grid_x, grid_y, self.walk_brush_walkable)
-            return
-        if self.mode == "entity":
-            self._place_entity(grid_x, grid_y)
 
     def _apply_secondary(self) -> None:
         """Apply the right-click editor action at the selected cell."""
         if self.selected_cell is None:
             return
         grid_x, grid_y = self.selected_cell
-        if self.mode == "tile":
+        if self.paint_submode == "tile":
             # Erase: set to first GID on layer 0, or 0 (empty) on other layers
             replacement = self.area.tilesets[0].firstgid if self.selected_layer_index == 0 and self.area.tilesets else 0
             if self.current_layer.grid[grid_y][grid_x] == replacement:
@@ -714,11 +711,8 @@ class LevelEditor:
             self.current_layer.grid[grid_y][grid_x] = replacement
             self._mark_dirty(f"Erased {self.current_layer.name}")
             return
-        if self.mode == "walkability":
+        if self.paint_submode == "walk":
             self._set_cell_walkability(grid_x, grid_y, not self.walk_brush_walkable)
-            return
-        if self.mode == "entity":
-            self._remove_entity(grid_x, grid_y)
 
     def _place_entity(self, grid_x: int, grid_y: int) -> None:
         """Place a template-based entity at the requested cell."""
@@ -856,14 +850,11 @@ class LevelEditor:
 
     def _apply_mode_defaults(self) -> None:
         """Pick immediately useful defaults for the active mode."""
-        if self.mode == "tile":
-            # Default to first GID if nothing selected
-            if self.selected_gid <= 0 and self.area.tilesets:
-                self.selected_gid = self.area.tilesets[0].firstgid
-            return
-
-        if self.mode == "entity":
-            self._select_preferred_template(["block", "lever", "gate", "player"])
+        # Default to first GID if nothing selected
+        if self.selected_gid <= 0 and self.area.tilesets:
+            self.selected_gid = self.area.tilesets[0].firstgid
+        # Pre-select a useful entity template
+        self._select_preferred_template(["block", "lever", "gate", "player"])
 
     def _select_preferred_template(self, template_ids: list[str]) -> None:
         """Select the first available entity template from a preferred list."""

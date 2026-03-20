@@ -1,3 +1,5 @@
+> **Status: Completed**
+
 # Editor Overhaul: GID-Based Tilemap + Full Tileset View + Entity Inspector
 
 ## Context

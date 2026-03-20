@@ -11,7 +11,7 @@ from puzzle_dungeon import config
 from puzzle_dungeon.commands.builtin import register_builtin_commands
 from puzzle_dungeon.commands.registry import CommandRegistry
 from puzzle_dungeon.commands.runner import CommandContext, CommandRunner
-from puzzle_dungeon.editor.browser_window import EditorBrowserWindow
+from puzzle_dungeon.editor.editor_ui import EditorUI
 from puzzle_dungeon.editor.level_editor import EditorAction, LevelEditor
 from puzzle_dungeon.engine.asset_manager import AssetManager
 from puzzle_dungeon.engine.camera import Camera
@@ -44,7 +44,7 @@ class Game:
         self.display_window = pygame.Window.from_display_module()
         self.clock = pygame.time.Clock()
         self.headless = pygame.display.get_driver() == "dummy"
-        self.focused_window_id = self.display_window.id
+        self.focused_window_id: int | None = getattr(self.display_window, 'id', None)
 
         self.area_path = Path(config.AREAS_DIR / "test_room.json")
         self.asset_manager = AssetManager()
@@ -53,7 +53,7 @@ class Game:
         self.editor = LevelEditor(self.area_path, editor_area, editor_world, asset_manager=self.asset_manager)
         self.renderer = Renderer(self.display_surface, self.asset_manager)
         self.mode = "play"
-        self.browser_window: EditorBrowserWindow | None = None
+        self.editor_ui = EditorUI(self.asset_manager)
 
         self.area = editor_area
         self.world = editor_world
@@ -92,8 +92,7 @@ class Game:
             if self.mode == "play":
                 running = self._run_play_frame(dt, events)
             else:
-                map_events, browser_events = self._split_editor_events(events)
-                running = self._run_editor_frame(dt, map_events, browser_events)
+                running = self._run_editor_frame(dt, events)
 
             frame_count += 1
             if max_frames is not None and frame_count >= max_frames:
@@ -101,8 +100,6 @@ class Game:
 
         self.persistence_runtime.flush()
         pygame.quit()
-        if self.browser_window is not None:
-            self.browser_window.destroy()
 
     def _run_play_frame(self, dt: float, events: list[pygame.event.Event]) -> bool:
         """Advance the playtest state for one frame."""
@@ -132,17 +129,16 @@ class Game:
         self.persistence_runtime.flush()
         return True
 
-    def _run_editor_frame(
-        self,
-        dt: float,
-        map_events: list[pygame.event.Event],
-        browser_events: list[pygame.event.Event],
-    ) -> bool:
+    def _run_editor_frame(self, dt: float, events: list[pygame.event.Event]) -> bool:
         """Advance the editor state for one frame."""
-        actions = self.editor.handle_events(map_events, self.editor_camera)
-        browser = self._ensure_browser_window()
-        if browser is not None:
-            actions.extend(browser.process(self.editor, browser_events))
+        # EditorUI gets first crack at events (toolbar, popups, move-pending)
+        unconsumed: list[pygame.event.Event] = []
+        for event in events:
+            if not self.editor_ui.handle_event(event, self.editor, self.editor_camera):
+                unconsumed.append(event)
+
+        # Check if toolbar Play button was pressed (F1 handled by editor)
+        actions = self.editor.handle_events(unconsumed, self.editor_camera)
         for action in actions:
             if action.kind == "quit":
                 return False
@@ -158,7 +154,9 @@ class Game:
         self.area = self.editor.area
         self.world = self.editor.world
         self.editor.update(dt, self.editor_camera)
-        self.renderer.render_with_editor(self.area, self.world, self.editor_camera, self.editor)
+        self.renderer.render_with_editor(
+            self.area, self.world, self.editor_camera, self.editor, self.editor_ui
+        )
         return True
 
     def _activate_play_mode(self) -> None:
@@ -183,8 +181,6 @@ class Game:
         )
         self._install_play_runtime()
         self.mode = "play"
-        if self.browser_window is not None:
-            self.browser_window.hide()
 
     def _install_play_runtime(self) -> None:
         """Rebuild runtime systems around the current play world."""
@@ -214,73 +210,14 @@ class Game:
         self.world = self.editor.world
         self.editor_camera.set_area(self.area)
         self.editor_camera.set_position(self.camera.x, self.camera.y)
-        browser = self._ensure_browser_window()
-        if browser is not None:
-            browser.show(self.editor)
 
     def _contains_keydown(self, events: list[pygame.event.Event], key: int) -> bool:
         """Return True when a keydown event for the requested key exists in this frame."""
         return any(event.type == pygame.KEYDOWN and event.key == key for event in events)
 
-    def _ensure_browser_window(self) -> EditorBrowserWindow | None:
-        """Create the dedicated editor browser window when GUI mode is available."""
-        if self.headless:
-            return None
-        if self.browser_window is None:
-            self.browser_window = EditorBrowserWindow(self.asset_manager)
-        return self.browser_window
-
     def _update_focus_tracking(self, events: list[pygame.event.Event]) -> None:
-        """Track the most recently focused window for routing generic mouse/key events."""
-        for event in events:
-            if event.type == pygame.WINDOWFOCUSGAINED:
-                window_id = self._event_window_id(event)
-                if window_id is not None:
-                    self.focused_window_id = window_id
-
-    def _split_editor_events(
-        self,
-        events: list[pygame.event.Event],
-    ) -> tuple[list[pygame.event.Event], list[pygame.event.Event]]:
-        """Split multi-window editor events between the map and browser windows."""
-        browser = self._ensure_browser_window()
-        if browser is None or not browser.visible:
-            return (events, [])
-
-        map_events: list[pygame.event.Event] = []
-        browser_events: list[pygame.event.Event] = []
-        for event in events:
-            target_id = self._event_window_id(event)
-            if target_id is None and event.type in {
-                pygame.MOUSEBUTTONDOWN,
-                pygame.MOUSEBUTTONUP,
-                pygame.MOUSEMOTION,
-                pygame.MOUSEWHEEL,
-                pygame.KEYDOWN,
-                pygame.KEYUP,
-                pygame.TEXTINPUT,
-            }:
-                target_id = self.focused_window_id
-
-            if target_id == browser.id:
-                browser_events.append(event)
-            else:
-                map_events.append(event)
-        return (map_events, browser_events)
-
-    def _event_window_id(self, event: pygame.event.Event) -> int | None:
-        """Extract a best-effort SDL window id from a pygame event."""
-        window_attr = getattr(event, "window", None)
-        if window_attr is not None:
-            if hasattr(window_attr, "id"):
-                return int(window_attr.id)
-            if isinstance(window_attr, int):
-                return window_attr
-
-        window_id = getattr(event, "windowID", None)
-        if window_id is not None:
-            return int(window_id)
-        return None
+        """Track window focus events (kept for compatibility)."""
+        pass
 
     def _apply_pending_reset_if_idle(self) -> None:
         """Apply queued immediate reset requests once the command lane is idle."""
