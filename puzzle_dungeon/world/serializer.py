@@ -9,18 +9,22 @@ Used by: editor (save)
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from puzzle_dungeon.world.area import Area
+from puzzle_dungeon.world.loader import instantiate_entity
 from puzzle_dungeon.world.world import World
 
 
 def serialize_area(area: Area, world: World) -> dict[str, Any]:
     """Convert the editable area and world state into JSON-serializable data."""
     return {
+        "area_id": area.area_id,
         "name": area.name,
         "tile_size": area.tile_size,
         "player_id": world.player_id,
+        "variables": copy.deepcopy(world.variables),
         "tilesets": [
             _serialize_tileset(ts)
             for ts in area.tilesets
@@ -41,7 +45,7 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
             for row in area.cell_flags
         ],
         "entities": [
-            _serialize_entity(entity)
+            _serialize_entity(entity, area.tile_size)
             for entity in sorted(
                 world.iter_entities(),
                 key=world.entity_sort_key,
@@ -71,7 +75,7 @@ def _serialize_cell_flags(cell_flags: dict[str, Any]) -> bool | dict[str, Any]:
     return dict(cell_flags)
 
 
-def _serialize_entity(entity: Any) -> dict[str, Any]:
+def _serialize_entity(entity: Any, tile_size: int) -> dict[str, Any]:
     """Persist either a template instance or a fully inline entity definition."""
     data: dict[str, Any] = {
         "id": entity.entity_id,
@@ -82,36 +86,80 @@ def _serialize_entity(entity: Any) -> dict[str, Any]:
     if entity.template_id:
         data["template"] = entity.template_id
         if entity.template_parameters:
-            data["parameters"] = dict(entity.template_parameters)
-        if entity.facing != "down":
-            data["facing"] = entity.facing
-        if entity.stack_order != 0:
-            data["stack_order"] = entity.stack_order
+            data["parameters"] = copy.deepcopy(entity.template_parameters)
+        data.update(_serialize_template_entity_overrides(entity, tile_size))
         return data
 
-    data.update(
+    data.update(_serialize_runtime_entity_fields(entity))
+
+    sprite_data = _serialize_sprite_data(entity)
+    if sprite_data is not None:
+        data["sprite"] = sprite_data
+    return data
+
+
+def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[str, Any]:
+    """Persist only the authored differences from the resolved template baseline."""
+    reference_entity = instantiate_entity(
         {
-            "kind": entity.kind,
-            "facing": entity.facing,
-            "solid": entity.solid,
-            "pushable": entity.pushable,
-            "enabled": entity.enabled,
-            "visible": entity.visible,
-            "layer": entity.layer,
-            "stack_order": entity.stack_order,
-            "color": list(entity.color),
-            "interact_commands": list(entity.interact_commands),
-            "variables": dict(entity.variables),
-        }
+            "id": entity.entity_id,
+            "template": entity.template_id,
+            "x": entity.grid_x,
+            "y": entity.grid_y,
+            "parameters": copy.deepcopy(entity.template_parameters),
+        },
+        tile_size,
     )
 
-    if entity.sprite_path:
-        data["sprite"] = {
-            "path": entity.sprite_path,
+    overrides: dict[str, Any] = {}
+    runtime_fields = _serialize_runtime_entity_fields(entity)
+    reference_fields = _serialize_runtime_entity_fields(reference_entity)
+    for key, value in runtime_fields.items():
+        if value != reference_fields.get(key):
+            overrides[key] = value
+
+    sprite_data = _serialize_sprite_data(entity)
+    reference_sprite_data = _serialize_sprite_data(reference_entity)
+    if sprite_data != reference_sprite_data:
+        overrides["sprite"] = sprite_data or {
+            "path": "",
             "frame_width": entity.sprite_frame_width,
             "frame_height": entity.sprite_frame_height,
             "frames": list(entity.animation_frames),
             "animation_fps": entity.animation_fps,
             "animate_when_moving": entity.animate_when_moving,
         }
-    return data
+
+    return overrides
+
+
+def _serialize_runtime_entity_fields(entity: Any) -> dict[str, Any]:
+    """Return the stable authored/runtime fields that should round-trip through JSON."""
+    return {
+        "kind": entity.kind,
+        "facing": entity.facing,
+        "solid": entity.solid,
+        "pushable": entity.pushable,
+        "enabled": entity.enabled,
+        "visible": entity.visible,
+        "layer": entity.layer,
+        "stack_order": entity.stack_order,
+        "color": list(entity.color),
+        "tags": copy.deepcopy(entity.tags),
+        "interact_commands": copy.deepcopy(entity.interact_commands),
+        "variables": copy.deepcopy(entity.variables),
+    }
+
+
+def _serialize_sprite_data(entity: Any) -> dict[str, Any] | None:
+    """Serialize sprite data when an entity uses sprite rendering."""
+    if not entity.sprite_path:
+        return None
+    return {
+        "path": entity.sprite_path,
+        "frame_width": entity.sprite_frame_width,
+        "frame_height": entity.sprite_frame_height,
+        "frames": list(entity.animation_frames),
+        "animation_fps": entity.animation_fps,
+        "animate_when_moving": entity.animate_when_moving,
+    }

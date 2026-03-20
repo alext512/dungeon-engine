@@ -32,6 +32,15 @@ Run it with:
 - simple player sprite animation while moving
 - UI/editor text rendered through the custom `pixelbet` bitmap font atlas
 - persistent rotating error log in `logs/error.log`
+- variable system with `set_var`, `increment_var`, and `check_var` commands (entity and world scopes)
+- `check_var` supports conditional branching with `then`/`else` command lists
+- world-level variables storage (serialized in area JSON)
+- `lever_toggle` entity template demonstrating toggle behavior via variables
+- persistent save-slot state layered over authored room data
+- stable `area_id` support for room-level persistence
+- persistent command updates for entity fields and variables
+- transient and persistent room reset commands
+- authored entity tags for grouping and reset targeting
 
 ## Current Test Room
 
@@ -39,7 +48,7 @@ The starter room currently includes:
 
 - player
 - one pushable block
-- one lever
+- one toggle lever (can be toggled on and off via variables)
 - one gate
 - a wall tile with a painting overlay tile on top of it
 
@@ -47,7 +56,8 @@ Expected behavior:
 
 - move with arrows or `WASD`
 - interact with `Space`
-- face the lever and press `Space` to open the gate
+- face the lever and press `Space` to toggle the gate open/closed
+- lever/gate state now persists through play re-entry via the save slot
 - the player uses a tiny 2-frame walk animation while moving
 - the room uses layered tiles instead of a single character grid
 - press `F1` to switch between play mode and editor mode
@@ -98,6 +108,7 @@ Expected behavior:
 - The current assets are intentionally simple generated test art, not final art.
 - Pixel-perfect behavior is currently handled as a renderer/camera policy, not a level-data rule.
 - The editor keeps an authoritative document state and launches playtest as a fresh clone, so play interactions do not corrupt what you are editing.
+- Play mode now also layers a separate save-slot state on top of the authored room clone, so persistent gameplay changes survive play re-entry without modifying the editor document.
 - Runtime interaction now resolves the topmost enabled entity on a tile based on the current stack order, not just insertion order.
 - Uncaught runtime errors, thread exceptions, and Tk/browser-window callback failures are logged to `logs/error.log`.
 - Entity parameter editing is still minimal. Template placement works, but rich per-instance parameter editing will need a follow-up pass.
@@ -105,6 +116,5 @@ Expected behavior:
 ## Suggested Next Steps
 
 - add dialogue UI and dialogue commands
-- add variables and requirement checks
 - add inventory and usable-item commands
-- improve the editor with parameter editing, room creation, and tile thumbnails inside the separate browser window
+- improve the editor with parameter editing and room creation

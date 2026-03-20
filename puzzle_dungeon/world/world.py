@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from puzzle_dungeon.world.entity import Entity
 
@@ -13,6 +14,7 @@ class World:
 
     entities: dict[str, Entity] = field(default_factory=dict)
     player_id: str = "player"
+    variables: dict[str, Any] = field(default_factory=dict)
 
     def add_entity(self, entity: Entity) -> None:
         """Insert or replace an entity by its stable identifier."""

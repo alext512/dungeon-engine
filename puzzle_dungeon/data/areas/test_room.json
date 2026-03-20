@@ -77,7 +77,7 @@
     },
     {
       "id": "lever_1",
-      "template": "lever",
+      "template": "lever_toggle",
       "x": 4,
       "y": 2,
       "parameters": {

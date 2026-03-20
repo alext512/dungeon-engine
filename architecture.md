@@ -146,6 +146,7 @@ Typical state buckets:
 - position and facing
 - sprite and animation state
 - collision and pushability
+- authored tags used for grouping, selection, and reset targeting
 - interaction command chains
 - trigger command chains
 - inventory or item container state
@@ -215,7 +216,7 @@ Expected early command categories:
 - variables: set, increment, compare, copy
 - inventory: add item, remove item, check item, consume item, use item
 - stats: modify stat, check stat
-- level/world: change area, warp, set spawn, persist state
+- level/world: change area, warp, set spawn, persist state, reset transient state, reset persistent state
 - camera: follow, move, shake, lock
 - audio: play sound, play music, stop audio
 
@@ -353,6 +354,141 @@ Persistence should support:
 - puzzle state changes
 
 Keep the first persistence model simple and explicit. The goal is reliable restore behavior, not clever serialization.
+
+### Persistent State Model
+
+The project should treat persistence as a layered system, not as a second full copy
+of every room or entity definition.
+
+Use these layers:
+
+- authored content: the original area JSON plus entity templates
+- transient runtime state: changes that only matter until the area is reloaded or the game closes
+- persistent runtime state: changes that should survive area transitions and save/load
+- save slots: serialized snapshots of the persistent runtime state
+
+The intended load flow for an area should be:
+
+1. load the authored area JSON
+2. instantiate entities from templates plus per-instance authored overrides
+3. apply persistent overrides for that area and entity ids
+4. begin play with transient state starting fresh
+
+This keeps the original room files as the source of truth for designed starting state
+while allowing playthrough-specific changes to be layered on top.
+
+### What Belongs Where
+
+Authored room data should describe how a room starts before the player changes it:
+
+- placed entities
+- template parameters
+- authored per-instance overrides
+- default local variables
+
+Persistent state should describe what changed during this playthrough:
+
+- opened or closed gates
+- consumed chests or pickups
+- puzzle progress that should survive leaving the area
+- entity visibility, enabled state, and relevant variables
+- global progress flags such as bosses defeated or quests advanced
+
+Transient state should describe short-lived runtime details that do not need to survive
+an area change:
+
+- in-progress movement or animation state
+- temporary combat or interaction state
+- one-room-only changes that should reset when the room reloads
+
+### Prefer Overrides Over Full Entity Copies
+
+For persistence, prefer storing per-area and per-entity override data keyed by stable ids
+instead of writing full duplicate JSON copies of every entity.
+
+Example shape:
+
+```json
+{
+  "globals": {
+    "boss_dead": true
+  },
+  "areas": {
+    "test_room": {
+      "entities": {
+        "gate_1": {
+          "visible": false,
+          "solid": false
+        },
+        "lever_1": {
+          "variables": {
+            "toggled": true
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+This keeps save data compact and readable, avoids duplication, and makes it clear
+which changes came from the player's playthrough instead of the original room design.
+
+### Reset Behavior
+
+Two reset concepts are useful and should stay separate:
+
+- reset transient state: restore an entity to its authored state plus any persistent overrides that still apply
+- reset persistent state: clear the saved overrides for an entity or a specific field so future loads fall back to authored room data
+
+This distinction matters for puzzle design. Some effects should reset when the room reloads,
+while others should remain solved across area transitions.
+
+Persistent reset should support room-level filtering without hardcoding every entity id.
+Authored entity tags are a good fit for this.
+
+A useful conceptual model is:
+
+- entities may declare optional authored tags
+- a reset command may accept `include_tags` and `exclude_tags`
+- if no filters are supplied, the whole room is reset
+- matching should only consider authored tags, not ad-hoc runtime mutation
+
+This allows content such as:
+
+- reset only puzzle objects
+- reset everything except story-critical entities
+- reset only entities that were meant to respawn
+
+Reset timing should also be explicit:
+
+- immediate: clear the selected persistent overrides and rebuild the room now
+- on_reentry: clear the selected persistent overrides, but only rebuild when the room is next loaded
+
+`on_reentry` is useful when an in-place rebuild would create awkward runtime edge cases,
+while `immediate` is useful for visible room-reset mechanics such as time loops or magical resets.
+
+### Naming Guidance
+
+Avoid using the word "parameter" for every kind of changeable value. In this project,
+it is useful to distinguish between:
+
+- template parameters: authored inputs used to specialize a template instance
+- variables/state: mutable runtime values used by gameplay and persistence
+- persistent overrides: saved differences layered over authored data
+
+Keeping those names separate will make both the editor UX and the save model easier
+to understand.
+
+### Current Caveats To Keep In Mind
+
+The current implementation should eventually align with this model. Two discovered issues
+are especially relevant:
+
+- template-based entities must serialize all intended authored per-instance overrides, not only a narrow subset such as template parameters
+- commands that move structured data such as dicts or lists into runtime variables should copy that data rather than aliasing the original command payload
+
+Those are implementation problems, not arguments against the layered persistence model itself.
 
 ## Deferred Expansion Hooks
 
