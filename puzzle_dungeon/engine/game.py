@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 import pygame
@@ -21,6 +22,12 @@ from puzzle_dungeon.systems.collision import CollisionSystem
 from puzzle_dungeon.systems.interaction import InteractionSystem
 from puzzle_dungeon.systems.movement import MovementSystem
 from puzzle_dungeon.world.loader import load_area, load_area_from_data
+from puzzle_dungeon.world.persistence import (
+    PersistenceRuntime,
+    ResetRequest,
+    get_persistent_area_state,
+    select_entity_ids_by_tags,
+)
 from puzzle_dungeon.world.serializer import serialize_area
 
 
@@ -41,6 +48,7 @@ class Game:
 
         self.area_path = Path(config.AREAS_DIR / "test_room.json")
         self.asset_manager = AssetManager()
+        self.persistence_runtime = PersistenceRuntime(config.DEFAULT_SAVE_SLOT_PATH)
         editor_area, editor_world = load_area(self.area_path, asset_manager=self.asset_manager)
         self.editor = LevelEditor(self.area_path, editor_area, editor_world, asset_manager=self.asset_manager)
         self.renderer = Renderer(self.display_surface, self.asset_manager)
@@ -59,6 +67,9 @@ class Game:
         self.animation_system: AnimationSystem | None = None
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
+        self.play_document_data: dict[str, object] | None = None
+        self.play_authored_area = editor_area
+        self.play_authored_world = editor_world
         self.editor_camera = Camera(
             self.editor.map_viewport_rect.width,
             self.editor.map_viewport_rect.height,
@@ -88,6 +99,7 @@ class Game:
             if max_frames is not None and frame_count >= max_frames:
                 running = False
 
+        self.persistence_runtime.flush()
         pygame.quit()
         if self.browser_window is not None:
             self.browser_window.destroy()
@@ -104,16 +116,20 @@ class Game:
         assert self.animation_system is not None
 
         if self.input_handler.handle_events(events):
+            self.persistence_runtime.flush()
             return False
 
         self.command_runner.update(0.0)
         self.movement_system.update(dt)
         self.animation_system.update(dt)
         self.command_runner.update(dt)
+        self._apply_pending_reset_if_idle()
         self.input_handler.enqueue_held_movement_if_idle()
         self.command_runner.update(0.0)
+        self._apply_pending_reset_if_idle()
         self.camera.update(self.world.get_player())
         self.renderer.render(self.area, self.world, self.camera)
+        self.persistence_runtime.flush()
         return True
 
     def _run_editor_frame(
@@ -148,9 +164,30 @@ class Game:
     def _activate_play_mode(self) -> None:
         """Build a fresh playtest runtime from the current editable document."""
         document_data = serialize_area(self.editor.area, self.editor.world)
-        self.area, self.world = load_area_from_data(
-            document_data, source_name=str(self.area_path), asset_manager=self.asset_manager
+        self.play_document_data = copy.deepcopy(document_data)
+        self.play_authored_area, self.play_authored_world = load_area_from_data(
+            copy.deepcopy(document_data),
+            source_name=str(self.area_path),
+            asset_manager=self.asset_manager,
         )
+        self.persistence_runtime.bind_area(self.play_authored_area.area_id)
+        self._apply_reentry_resets()
+        self.area, self.world = load_area_from_data(
+            copy.deepcopy(document_data),
+            source_name=str(self.area_path),
+            asset_manager=self.asset_manager,
+            persistent_area_state=get_persistent_area_state(
+                self.persistence_runtime.save_data,
+                self.play_authored_area.area_id,
+            ),
+        )
+        self._install_play_runtime()
+        self.mode = "play"
+        if self.browser_window is not None:
+            self.browser_window.hide()
+
+    def _install_play_runtime(self) -> None:
+        """Rebuild runtime systems around the current play world."""
         self.camera = Camera(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT, self.area)
         self.camera.update(self.world.get_player())
 
@@ -164,15 +201,14 @@ class Game:
             collision_system=self.collision_system,
             movement_system=self.movement_system,
             interaction_system=self.interaction_system,
+            persistence_runtime=self.persistence_runtime,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
         self.input_handler = InputHandler(self.command_runner, self.world.player_id)
-        self.mode = "play"
-        if self.browser_window is not None:
-            self.browser_window.hide()
 
     def _activate_editor_mode(self) -> None:
         """Return to the authoritative editor document without carrying playtest mutations back."""
+        self.persistence_runtime.flush()
         self.mode = "editor"
         self.area = self.editor.area
         self.world = self.editor.world
@@ -245,3 +281,79 @@ class Game:
         if window_id is not None:
             return int(window_id)
         return None
+
+    def _apply_pending_reset_if_idle(self) -> None:
+        """Apply queued immediate reset requests once the command lane is idle."""
+        if self.command_runner is None or self.command_runner.has_pending_work():
+            return
+
+        request = self.persistence_runtime.consume_immediate_reset()
+        if request is None:
+            return
+
+        if request.kind == "persistent":
+            self.persistence_runtime.clear_persistent_area_state(
+                self.play_authored_area.area_id,
+                self.play_authored_world,
+                include_tags=request.include_tags,
+                exclude_tags=request.exclude_tags,
+            )
+
+        self._apply_runtime_reset(request)
+
+    def _apply_reentry_resets(self) -> None:
+        """Apply scheduled on-reentry resets before constructing the play world."""
+        for request in self.persistence_runtime.consume_reentry_resets(self.play_authored_area.area_id):
+            if request.kind != "persistent":
+                continue
+            self.persistence_runtime.clear_persistent_area_state(
+                self.play_authored_area.area_id,
+                self.play_authored_world,
+                include_tags=request.include_tags,
+                exclude_tags=request.exclude_tags,
+            )
+
+    def _apply_runtime_reset(self, request: ResetRequest) -> None:
+        """Reset the whole room or matching entities against authored+persistent state."""
+        selected_ids = select_entity_ids_by_tags(
+            self.play_authored_world,
+            include_tags=request.include_tags,
+            exclude_tags=request.exclude_tags,
+        )
+        if not request.include_tags and not request.exclude_tags:
+            self._rebuild_play_world(preserve_player=True)
+            return
+        if not selected_ids:
+            return
+
+        reference_area, reference_world = self._build_current_play_reference()
+        _ = reference_area
+        for entity_id in selected_ids:
+            current_entity = self.world.get_entity(entity_id)
+            reference_entity = reference_world.get_entity(entity_id)
+            if reference_entity is None:
+                if current_entity is not None:
+                    self.world.remove_entity(entity_id)
+                continue
+            self.world.add_entity(copy.deepcopy(reference_entity))
+
+    def _build_current_play_reference(self):
+        """Build a fresh play world from authored data plus current persistent overrides."""
+        assert self.play_document_data is not None
+        return load_area_from_data(
+            copy.deepcopy(self.play_document_data),
+            source_name=str(self.area_path),
+            asset_manager=self.asset_manager,
+            persistent_area_state=get_persistent_area_state(
+                self.persistence_runtime.save_data,
+                self.play_authored_area.area_id,
+            ),
+        )
+
+    def _rebuild_play_world(self, *, preserve_player: bool) -> None:
+        """Rebuild the current play world from authored data plus persistent overrides."""
+        preserved_player = copy.deepcopy(self.world.get_player()) if preserve_player else None
+        self.area, self.world = self._build_current_play_reference()
+        if preserved_player is not None:
+            self.world.add_entity(preserved_player)
+        self._install_play_runtime()

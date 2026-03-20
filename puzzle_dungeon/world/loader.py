@@ -19,13 +19,18 @@ from typing import Any
 from puzzle_dungeon import config
 from puzzle_dungeon.world.area import Area, TileLayer, Tileset
 from puzzle_dungeon.world.entity import Entity
+from puzzle_dungeon.world.persistence import PersistentAreaState, apply_persistent_area_state
 from puzzle_dungeon.world.world import World
 
 
 _TEMPLATE_CACHE: dict[str, dict[str, Any]] = {}
 
 
-def load_area(area_path: Path, asset_manager: Any = None) -> tuple[Area, World]:
+def load_area(
+    area_path: Path,
+    asset_manager: Any = None,
+    persistent_area_state: PersistentAreaState | None = None,
+) -> tuple[Area, World]:
     """Load an area JSON file and build a runtime world for it.
 
     If ``asset_manager`` is provided, tileset tile_counts and columns are
@@ -33,7 +38,12 @@ def load_area(area_path: Path, asset_manager: Any = None) -> tuple[Area, World]:
     (the area will still work, but GID bounds won't be validated).
     """
     raw_data = json.loads(area_path.read_text(encoding="utf-8"))
-    return load_area_from_data(raw_data, source_name=str(area_path), asset_manager=asset_manager)
+    return load_area_from_data(
+        raw_data,
+        source_name=str(area_path),
+        asset_manager=asset_manager,
+        persistent_area_state=persistent_area_state,
+    )
 
 
 def load_area_from_data(
@@ -41,6 +51,7 @@ def load_area_from_data(
     *,
     source_name: str = "<memory>",
     asset_manager: Any = None,
+    persistent_area_state: PersistentAreaState | None = None,
 ) -> tuple[Area, World]:
     """Build a runtime area and world from already-loaded JSON-like data."""
     tilesets = _parse_tilesets(raw_data, asset_manager)
@@ -51,6 +62,7 @@ def load_area_from_data(
     cell_flags = _parse_cell_flags(raw_data, width, height)
 
     area = Area(
+        area_id=str(raw_data.get("area_id", _derive_area_id(raw_data, source_name))),
         name=raw_data.get("name", "untitled_area"),
         tile_size=int(raw_data.get("tile_size", config.DEFAULT_TILE_SIZE)),
         tilesets=tilesets,
@@ -60,9 +72,13 @@ def load_area_from_data(
     area.build_gid_lookup()
 
     world = World(player_id=raw_data.get("player_id", "player"))
+    world.variables = copy.deepcopy(raw_data.get("variables", {}))
     for entity_instance in raw_data.get("entities", []):
         entity = instantiate_entity(entity_instance, area.tile_size)
         world.add_entity(entity)
+
+    if persistent_area_state is not None:
+        apply_persistent_area_state(area, world, persistent_area_state)
 
     return area, world
 
@@ -88,7 +104,8 @@ def instantiate_entity(entity_instance: dict[str, Any], tile_size: int) -> Entit
         stack_order=int(entity_data.get("stack_order", 0)),
         color=_parse_color(entity_data.get("color"), sprite_data),
         template_id=entity_instance.get("template"),
-        template_parameters=dict(entity_instance.get("parameters", {})),
+        template_parameters=copy.deepcopy(entity_instance.get("parameters", {})),
+        tags=[str(tag) for tag in entity_data.get("tags", [])],
         sprite_path=str(sprite_data.get("path", "")),
         sprite_frame_width=int(sprite_data.get("frame_width", tile_size)),
         sprite_frame_height=int(sprite_data.get("frame_height", tile_size)),
@@ -96,8 +113,8 @@ def instantiate_entity(entity_instance: dict[str, Any], tile_size: int) -> Entit
         animation_fps=float(sprite_data.get("animation_fps", 0.0)),
         animate_when_moving=bool(sprite_data.get("animate_when_moving", False)),
         current_frame=int(animation_frames[0]),
-        interact_commands=list(entity_data.get("interact_commands", [])),
-        variables=dict(entity_data.get("variables", {})),
+        interact_commands=copy.deepcopy(entity_data.get("interact_commands", [])),
+        variables=copy.deepcopy(entity_data.get("variables", {})),
     )
     entity.sync_pixel_position(tile_size)
     return entity
@@ -281,3 +298,19 @@ def _parse_color(
     if raw_color is None:
         return (255, 255, 255)
     return (int(raw_color[0]), int(raw_color[1]), int(raw_color[2]))
+
+
+def _derive_area_id(raw_data: dict[str, Any], source_name: str) -> str:
+    """Return a stable area id from authored JSON or the source path."""
+    if source_name not in {"", "<memory>"}:
+        return Path(source_name).stem
+
+    name = str(raw_data.get("name", "untitled_area")).strip().lower()
+    slug_chars = [
+        char if char.isalnum() else "_"
+        for char in name
+    ]
+    slug = "".join(slug_chars).strip("_")
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug or "untitled_area"

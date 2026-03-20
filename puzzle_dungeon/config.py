@@ -14,6 +14,8 @@ TILES_DIR = ASSETS_DIR / "tiles"
 FONTS_DIR = DATA_DIR / "fonts"
 LOGS_DIR = PROJECT_ROOT / "logs"
 ERROR_LOG_PATH = LOGS_DIR / "error.log"
+SAVES_DIR = PROJECT_ROOT / "saves"
+DEFAULT_SAVE_SLOT_PATH = SAVES_DIR / "slot_1.json"
 
 WINDOW_TITLE = "Python Puzzle Engine"
 INTERNAL_WIDTH = 320

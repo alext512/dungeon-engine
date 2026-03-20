@@ -19,6 +19,22 @@ If implementation exposes a better approach, change the plan and update the docs
 4. Favor vertical slices over huge architecture dumps.
 5. If a phase reveals a bad assumption, refactor early instead of protecting the document.
 
+## Runtime Portability Note
+
+The current project should continue as a Python + `pygame-ce` project until the command model, JSON schemas, and editor workflow feel stable.
+
+If wider platform support becomes important later, the first replatforming candidate should be a code-first runtime such as MonoGame.
+
+Important constraints for that future path:
+
+- do not start a full engine port while the command/data/editor model is still changing quickly
+- if a port happens, port the runtime first and keep the current Python editor as an external authoring tool
+- keep JSON content as the source of truth so the editor and any future runtime can share the same data
+- avoid baking `pygame-ce` assumptions into room data, entity data, command data, or save data unless they are truly engine-agnostic concepts
+- prefer engine-independent gameplay concepts over editor- or renderer-specific shortcuts
+
+A reasonable point to revisit replatforming is after a fuller vertical slice exists with movement, interaction, dialogue, inventory, save/load, and a more settled editor workflow.
+
 ## Phase 1: Core Shell and Grid Room
 
 ### Goal
@@ -151,13 +167,17 @@ Support short scripted sequences and a multi-room world that remembers state.
 - cinematic mode with input lock
 - area transitions
 - save/load of inventory and room state
+- persistent override storage layered on top of authored area data
+- stable per-area/per-entity ids for restoring changed room state
+- reset behavior for transient state versus persistent state
+- tag-filtered room reset commands with explicit apply timing such as immediate or on_reentry
 
 ### Exit criteria
 
 - entering a trigger can start a short cutscene
 - a cutscene can move entities, show dialogue, and wait
 - moving to another area works
-- revisiting an area restores its changed state
+- revisiting an area restores its changed state from saved overrides rather than replacing authored room data
 
 ## Phase 7: Content Pipeline and Quality Pass
 

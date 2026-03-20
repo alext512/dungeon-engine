@@ -50,6 +50,7 @@ class Entity:
     color: tuple[int, int, int] = (255, 255, 255)
     template_id: str | None = None
     template_parameters: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
     sprite_path: str = ""
     sprite_frame_width: int = 16
     sprite_frame_height: int = 16

@@ -22,6 +22,7 @@ class CommandContext:
     collision_system: CollisionSystem
     movement_system: MovementSystem
     interaction_system: InteractionSystem
+    persistence_runtime: Any | None = None
 
 
 class CommandHandle:

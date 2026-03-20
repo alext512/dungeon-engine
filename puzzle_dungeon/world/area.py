@@ -65,6 +65,7 @@ class Area:
     to look up the tileset and local frame for any GID.
     """
 
+    area_id: str
     name: str
     tile_size: int
     tilesets: list[Tileset]
