@@ -4,6 +4,18 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Template Entity Save Hygiene
+
+- Rebuild template instances in the editor after parameter edits so generated fields stay in sync with the current parameter values
+- Stop serializing generated data such as resolved `interact_commands` back into room JSON for normal template entities
+- Cleaned the starter room's stale lever override so the second lever again resolves its target gate from template parameters
+
+## Manual Save Flow
+
+- Changed play-mode persistence so live persistent changes stay in memory instead of auto-writing `saves/slot_1.json`
+- Added explicit play-mode save/load controls: `F5` writes the current persistent state to disk and `F9` reloads the current save slot
+- Updated the play HUD to show live-state/save-file status and manual save feedback
+
 ## Persistence Foundation
 
 - Added stable `area_id` support and a save-slot JSON format for persistent room overrides

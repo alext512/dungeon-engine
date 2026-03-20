@@ -1,15 +1,13 @@
-"""Simple pixel-art style rendering for the starter room prototype.
+"""Simple pixel-art style rendering for play mode.
 
-Renders GID-based tile layers, entities, and editor overlays. Uses the Area's
-resolve_gid() method to map integer tile IDs to tileset frames.
+Renders GID-based tile layers and entities. Uses the Area's resolve_gid()
+method to map integer tile IDs to tileset frames.
 
-Depends on: config, asset_manager, camera, text, area, world, editor
+Depends on: config, asset_manager, camera, text, area, world
 Used by: game
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 import pygame
 
@@ -36,13 +34,27 @@ class Renderer:
         )
         self.text_renderer = TextRenderer(asset_manager)
 
-    def render(self, area: Area, world: World, camera: Camera) -> None:
+    def render(
+        self,
+        area: Area,
+        world: World,
+        camera: Camera,
+        *,
+        status_message: str = "",
+        has_save_file: bool = False,
+        persistent_state_dirty: bool = False,
+    ) -> None:
         """Render the current area and all visible entities."""
         self.internal_surface.fill(config.COLOR_BACKGROUND)
         self._draw_tile_layers(area, camera, draw_above_entities=False)
         self._draw_entities(area, world, camera)
         self._draw_tile_layers(area, camera, draw_above_entities=True)
-        self._draw_play_overlay(world)
+        self._draw_play_overlay(
+            world,
+            status_message=status_message,
+            has_save_file=has_save_file,
+            persistent_state_dirty=persistent_state_dirty,
+        )
 
         scaled_surface = pygame.transform.scale(
             self.internal_surface,
@@ -52,35 +64,6 @@ class Renderer:
             ),
         )
         self.display_surface.blit(scaled_surface, (0, 0))
-        pygame.display.flip()
-
-    def render_with_editor(
-        self,
-        area: Area,
-        world: World,
-        camera: Camera,
-        editor: Any,
-        editor_ui: Any = None,
-    ) -> None:
-        """Render the current room plus the visual editor interface."""
-        self.internal_surface.fill(config.COLOR_BACKGROUND)
-        self.internal_surface.set_clip(editor.map_viewport_rect)
-        self._draw_tile_layers(area, camera, draw_above_entities=False)
-        self._draw_entities(area, world, camera)
-        self._draw_tile_layers(area, camera, draw_above_entities=True)
-        self._draw_editor_overlay(area, world, camera, editor)
-        self.internal_surface.set_clip(None)
-
-        scaled_surface = pygame.transform.scale(
-            self.internal_surface,
-            (
-                config.INTERNAL_WIDTH * config.SCALE,
-                config.INTERNAL_HEIGHT * config.SCALE,
-            ),
-        )
-        self.display_surface.blit(scaled_surface, (0, 0))
-        if editor_ui is not None:
-            editor_ui.render(self.display_surface, editor)
         pygame.display.flip()
 
     def _draw_tile_layers(
@@ -182,152 +165,28 @@ class Renderer:
         tinted.fill((*tint, 255), special_flags=pygame.BLEND_RGBA_MULT)
         return tinted
 
-    def _draw_play_overlay(self, world: World) -> None:
+    def _draw_play_overlay(
+        self,
+        world: World,
+        *,
+        status_message: str,
+        has_save_file: bool,
+        persistent_state_dirty: bool,
+    ) -> None:
         """Draw a compact play-mode HUD that fits the internal surface."""
         player = world.get_player()
+        live_state = "dirty" if persistent_state_dirty else "clean"
+        save_state = "yes" if has_save_file else "no"
         lines = [
-            "PLAY  F1 editor  ESC quit",
+            "PLAY  ESC quit",
             "Move WASD/arrows",
-            "SPC act",
+            "SPC act  F5 save  F9 load",
+            f"Live {live_state}  Disk save {save_state}",
             f"P ({player.grid_x},{player.grid_y})  Face {player.facing}",
         ]
+        if status_message:
+            lines.append(status_message)
         self._draw_text_panel(lines, x=6, y=6)
-
-    def _draw_editor_overlay(
-        self,
-        area: Area,
-        world: World,
-        camera: Camera,
-        editor: Any,
-    ) -> None:
-        """Draw editor viewport overlays plus the surrounding UI panels."""
-        if editor.paint_submode == "walk" or getattr(editor, 'show_walk_overlay', False):
-            overlay_surface = pygame.Surface(
-                (config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT),
-                pygame.SRCALPHA,
-            )
-            for grid_y, row in enumerate(area.cell_flags):
-                for grid_x, flags in enumerate(row):
-                    screen_x, screen_y = self._world_to_screen(
-                        grid_x * area.tile_size,
-                        grid_y * area.tile_size,
-                        camera,
-                    )
-                    color = (48, 180, 96, 70) if flags.get("walkable", True) else (200, 64, 64, 90)
-                    pygame.draw.rect(
-                        overlay_surface,
-                        color,
-                        pygame.Rect(screen_x, screen_y, area.tile_size, area.tile_size),
-                    )
-            self.internal_surface.blit(overlay_surface, (0, 0))
-
-        self._draw_stack_badges(area, world, camera, editor)
-        self._draw_editor_preview(area, camera, editor)
-
-        if editor.selected_cell is not None:
-            grid_x, grid_y = editor.selected_cell
-            screen_x, screen_y = self._world_to_screen(
-                grid_x * area.tile_size,
-                grid_y * area.tile_size,
-                camera,
-            )
-            pygame.draw.rect(
-                self.internal_surface,
-                (248, 218, 94),
-                pygame.Rect(screen_x, screen_y, area.tile_size, area.tile_size),
-                width=2,
-            )
-
-        if editor.hovered_cell is not None:
-            grid_x, grid_y = editor.hovered_cell
-            screen_x, screen_y = self._world_to_screen(
-                grid_x * area.tile_size,
-                grid_y * area.tile_size,
-                camera,
-            )
-            pygame.draw.rect(
-                self.internal_surface,
-                (255, 255, 255),
-                pygame.Rect(screen_x, screen_y, area.tile_size, area.tile_size),
-                width=1,
-            )
-
-        self.internal_surface.set_clip(None)
-
-    def _draw_editor_preview(self, area: Area, camera: Camera, editor: Any) -> None:
-        """Preview the currently selected tile or entity under the cursor."""
-        if editor.hovered_cell is None:
-            return
-
-        grid_x, grid_y = editor.hovered_cell
-        screen_x, screen_y = self._world_to_screen(
-            grid_x * area.tile_size,
-            grid_y * area.tile_size,
-            camera,
-        )
-        draw_position = (screen_x, screen_y)
-
-        if editor.paint_submode == "tile" and editor.selected_gid > 0:
-            resolved = area.resolve_gid(editor.selected_gid)
-            if resolved is not None:
-                tileset_path, tile_w, tile_h, local_frame = resolved
-                preview_surface = self.asset_manager.get_frame(
-                    tileset_path, tile_w, tile_h, local_frame
-                ).copy()
-                preview_surface.set_alpha(150)
-                self.internal_surface.blit(preview_surface, draw_position)
-            else:
-                preview_surface = pygame.Surface((area.tile_size, area.tile_size), pygame.SRCALPHA)
-                preview_surface.fill((*config.COLOR_TEXT, 120))
-                self.internal_surface.blit(preview_surface, draw_position)
-            return
-
-        preview_entity = editor.build_preview_entity()
-        if preview_entity is None:
-            return
-
-        if preview_entity.sprite_path:
-            preview_surface = self.asset_manager.get_frame(
-                preview_entity.sprite_path,
-                preview_entity.sprite_frame_width,
-                preview_entity.sprite_frame_height,
-                preview_entity.current_frame,
-            )
-            preview_surface = self._apply_tint(preview_surface, preview_entity.color).copy()
-            preview_surface.set_alpha(160)
-            self.internal_surface.blit(preview_surface, draw_position)
-            return
-
-        preview_surface = pygame.Surface((area.tile_size, area.tile_size), pygame.SRCALPHA)
-        preview_surface.fill((*preview_entity.color, 140))
-        self.internal_surface.blit(preview_surface, draw_position)
-
-    def _draw_stack_badges(self, area: Area, world: World, camera: Camera, editor: Any) -> None:
-        """Draw a small count badge on cells with stacked non-player entities."""
-        counts: dict[tuple[int, int], int] = {}
-        for entity in world.iter_entities():
-            if not entity.visible or entity.entity_id == world.player_id:
-                continue
-            key = (entity.grid_x, entity.grid_y)
-            counts[key] = counts.get(key, 0) + 1
-
-        for (grid_x, grid_y), count in counts.items():
-            if count < 2:
-                continue
-            screen_x, screen_y = self._world_to_screen(
-                grid_x * area.tile_size,
-                grid_y * area.tile_size,
-                camera,
-            )
-            badge_rect = pygame.Rect(screen_x + area.tile_size - 9, screen_y, 9, 8)
-            pygame.draw.rect(self.internal_surface, (12, 14, 20), badge_rect)
-            pygame.draw.rect(self.internal_surface, (219, 226, 240), badge_rect, width=1)
-            self.text_renderer.render_text(
-                self.internal_surface,
-                str(count),
-                (badge_rect.x + 2, badge_rect.y + 1),
-                config.COLOR_TEXT,
-            )
 
     def _draw_text_panel(
         self,

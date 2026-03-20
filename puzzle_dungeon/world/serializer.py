@@ -99,7 +99,12 @@ def _serialize_entity(entity: Any, tile_size: int) -> dict[str, Any]:
 
 
 def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[str, Any]:
-    """Persist only the authored differences from the resolved template baseline."""
+    """Persist only explicit authored overrides for a template instance.
+
+    Generated data like resolved command chains should not leak back into room
+    JSON during normal editor saves. Those belong to the template plus
+    parameters, not the authored room instance.
+    """
     reference_entity = instantiate_entity(
         {
             "id": entity.entity_id,
@@ -112,8 +117,8 @@ def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[st
     )
 
     overrides: dict[str, Any] = {}
-    runtime_fields = _serialize_runtime_entity_fields(entity)
-    reference_fields = _serialize_runtime_entity_fields(reference_entity)
+    runtime_fields = _serialize_template_override_fields(entity)
+    reference_fields = _serialize_template_override_fields(reference_entity)
     for key, value in runtime_fields.items():
         if value != reference_fields.get(key):
             overrides[key] = value
@@ -131,6 +136,21 @@ def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[st
         }
 
     return overrides
+
+
+def _serialize_template_override_fields(entity: Any) -> dict[str, Any]:
+    """Return only the safe authored override fields for template instances."""
+    return {
+        "facing": entity.facing,
+        "solid": entity.solid,
+        "pushable": entity.pushable,
+        "enabled": entity.enabled,
+        "visible": entity.visible,
+        "layer": entity.layer,
+        "stack_order": entity.stack_order,
+        "color": list(entity.color),
+        "tags": copy.deepcopy(entity.tags),
+    }
 
 
 def _serialize_runtime_entity_fields(entity: Any) -> dict[str, Any]:
