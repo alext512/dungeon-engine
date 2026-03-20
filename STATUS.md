@@ -17,6 +17,7 @@ Run it with:
 - generated test asset sheets for tiles and sprites
 - layered tilemaps with separate walkability cell flags
 - reusable entity templates with per-instance parameters
+- template entity saves that keep generated command data in the template instead of writing resolved `interact_commands` into room JSON
 - pixel-art rendering mode with snapped camera/draw positions
 - early in-app editor with document/playtest separation
 - editor map window plus separate pygame browser window
@@ -37,6 +38,7 @@ Run it with:
 - world-level variables storage (serialized in area JSON)
 - `lever_toggle` entity template demonstrating toggle behavior via variables
 - persistent save-slot state layered over authored room data
+- in-memory live persistent state that tracks gameplay changes without auto-writing a save file
 - stable `area_id` support for room-level persistence
 - persistent command updates for entity fields and variables
 - transient and persistent room reset commands
@@ -57,7 +59,10 @@ Expected behavior:
 - move with arrows or `WASD`
 - interact with `Space`
 - face the lever and press `Space` to toggle the gate open/closed
-- lever/gate state now persists through play re-entry via the save slot
+- live lever/gate state persists for the current play session in memory
+- if `saves/slot_1.json` exists when play starts, its overrides are loaded on top of the room JSON
+- press `F5` in play mode to write the current persistent state to `saves/slot_1.json`
+- press `F9` in play mode to reload persistent overrides from `saves/slot_1.json`
 - the player uses a tiny 2-frame walk animation while moving
 - the room uses layered tiles instead of a single character grid
 - press `F1` to switch between play mode and editor mode
@@ -102,13 +107,15 @@ Expected behavior:
 - Levels now define tiles through tile-definition data rather than hardcoded wall logic.
 - Visual tile layers and walkability are now separate concepts.
 - Reusable object definitions live in `puzzle_dungeon/data/entities/`.
+- For template entities, room JSON should normally store authored inputs such as `template`, `parameters`, and simple explicit overrides. Generated command chains are rebuilt from the template at load time instead of being written back during a normal save.
 - Fonts now live in `puzzle_dungeon/data/fonts/` as named JSON definitions plus atlas PNGs.
 - The current UI font is `pixelbet`, which auto-measures per-glyph widths from the atlas so narrow letters do not consume the same width as wide ones.
 - Future systems like dialogue can choose fonts by `font_id` through the shared text renderer instead of using hardcoded font objects.
 - The current assets are intentionally simple generated test art, not final art.
 - Pixel-perfect behavior is currently handled as a renderer/camera policy, not a level-data rule.
 - The editor keeps an authoritative document state and launches playtest as a fresh clone, so play interactions do not corrupt what you are editing.
-- Play mode now also layers a separate save-slot state on top of the authored room clone, so persistent gameplay changes survive play re-entry without modifying the editor document.
+- Play mode layers any existing save-slot state on top of the authored room clone without modifying the editor document.
+- The live persistent layer is kept in memory during play; it is only written to disk when you press `F5`.
 - Runtime interaction now resolves the topmost enabled entity on a tile based on the current stack order, not just insertion order.
 - Uncaught runtime errors, thread exceptions, and Tk/browser-window callback failures are logged to `logs/error.log`.
 - Entity parameter editing is still minimal. Template placement works, but rich per-instance parameter editing will need a follow-up pass.

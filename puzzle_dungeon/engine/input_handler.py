@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pygame
 
 from puzzle_dungeon.commands.runner import CommandRunner
@@ -25,6 +27,15 @@ ACTION_KEYS = {
 }
 
 
+@dataclass(slots=True)
+class InputFrameResult:
+    """High-level play actions requested during one input frame."""
+
+    should_quit: bool = False
+    save_requested: bool = False
+    load_requested: bool = False
+
+
 class InputHandler:
     """Translate raw events and held input into command runner requests."""
 
@@ -39,17 +50,25 @@ class InputHandler:
         }
         self.direction_priority = ["up", "down", "left", "right"]
 
-    def handle_events(self, events: list[pygame.event.Event]) -> bool:
-        """Update held input state and return True when the user wants to quit."""
-        should_quit = False
+    def handle_events(self, events: list[pygame.event.Event]) -> InputFrameResult:
+        """Update held input state and report high-level play actions."""
+        result = InputFrameResult()
         for event in events:
             if event.type == pygame.QUIT:
-                should_quit = True
+                result.should_quit = True
                 continue
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    should_quit = True
+                    result.should_quit = True
+                    continue
+
+                if event.key == pygame.K_F5:
+                    result.save_requested = True
+                    continue
+
+                if event.key == pygame.K_F9:
+                    result.load_requested = True
                     continue
 
                 if event.key in ACTION_KEYS:
@@ -70,7 +89,7 @@ class InputHandler:
                 if direction is not None:
                     self.held_directions[direction] = False
 
-        return should_quit
+        return result
 
     def enqueue_held_movement_if_idle(self) -> None:
         """Start the next movement command as soon as the runner becomes idle."""

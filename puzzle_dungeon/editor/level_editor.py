@@ -1,14 +1,15 @@
-"""A more visual in-app editor for layered tiles, flags, and entity stacks.
+"""Data model and operations for the level editor.
 
 Works with the GID-based tilemap system. The editor discovers available tileset
 PNGs, lets the user pick frames visually, and paints GIDs onto the grid.
 
 Depends on: config, area, entity, world, loader
-Used by: game, editor_ui, renderer
+Used by: editor_app
 """
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,7 +21,12 @@ from puzzle_dungeon import config
 from puzzle_dungeon.engine.camera import Camera
 from puzzle_dungeon.world.area import Area, TileLayer, Tileset
 from puzzle_dungeon.world.entity import Entity
-from puzzle_dungeon.world.loader import instantiate_entity, list_entity_template_ids, load_area
+from puzzle_dungeon.world.loader import (
+    extract_template_parameter_names,
+    instantiate_entity,
+    list_entity_template_ids,
+    load_area,
+)
 from puzzle_dungeon.world.serializer import serialize_area
 from puzzle_dungeon.world.world import World
 
@@ -44,7 +50,15 @@ class EditorUiItem:
 
 
 def list_tileset_paths() -> list[str]:
-    """Scan the tiles directory for all PNG files, return paths relative to DATA_DIR."""
+    """Scan the tiles directory for all PNG files, return paths relative to DATA_DIR.
+
+    Uses the active project context from the loader module if available.
+    """
+    from puzzle_dungeon.world.loader import _active_project
+
+    if _active_project is not None:
+        return _active_project.list_tileset_paths()
+
     if not config.TILES_DIR.exists():
         return []
     return sorted(
@@ -234,10 +248,12 @@ class LevelEditor:
         if entity is None:
             self.status_message = f"Entity {entity_id} not found"
             return
+        # Compute stack order at destination BEFORE moving the entity there
+        new_order = self._next_stack_order(grid_x, grid_y)
         entity.grid_x = grid_x
         entity.grid_y = grid_y
         entity.sync_pixel_position(self.area.tile_size)
-        entity.stack_order = self._next_stack_order(grid_x, grid_y)
+        entity.stack_order = new_order
         self._mark_dirty(f"Moved {entity_id} to ({grid_x},{grid_y})")
 
     def select_tileset_frame(self, tileset_index: int, local_frame: int) -> None:
@@ -441,7 +457,9 @@ class LevelEditor:
 
         if field_name.startswith("param:"):
             param_key = field_name[6:]
+            previous_parameters = copy.deepcopy(entity.template_parameters)
             entity.template_parameters[param_key] = value_str
+            self._refresh_template_entity(entity, previous_parameters=previous_parameters)
             self._mark_dirty(f"Set {param_key}={value_str}")
             return
 
@@ -730,6 +748,11 @@ class LevelEditor:
             return
 
         entity_id = self.world.generate_entity_id(template_id)
+
+        # Seed parameters from the template so the editor exposes them
+        param_names = extract_template_parameter_names(template_id)
+        parameters = {name: "" for name in param_names}
+
         entity = instantiate_entity(
             {
                 "id": entity_id,
@@ -737,12 +760,93 @@ class LevelEditor:
                 "x": grid_x,
                 "y": grid_y,
                 "stack_order": self._next_stack_order(grid_x, grid_y),
+                "parameters": parameters,
             },
             self.area.tile_size,
         )
         self.world.add_entity(entity)
         self.selected_entity_id = entity_id
         self._mark_dirty(f"Placed {entity_id}")
+
+    def _refresh_template_entity(
+        self,
+        entity: Entity,
+        *,
+        previous_parameters: dict[str, Any],
+    ) -> None:
+        """Rebuild template-derived fields after a parameter edit.
+
+        Template parameters are authored inputs, so changing them should
+        regenerate command chains, variables, and any other data resolved from
+        the template. We preserve only per-instance overrides that the current
+        editor meaningfully owns, such as placement and a few basic booleans.
+        """
+        if entity.template_id is None:
+            return
+
+        instance_base = {
+            "id": entity.entity_id,
+            "template": entity.template_id,
+            "x": entity.grid_x,
+            "y": entity.grid_y,
+        }
+        old_entity = instantiate_entity(
+            {
+                **instance_base,
+                "parameters": copy.deepcopy(previous_parameters),
+            },
+            self.area.tile_size,
+        )
+        rebuilt_entity = instantiate_entity(
+            {
+                **instance_base,
+                "parameters": copy.deepcopy(entity.template_parameters),
+            },
+            self.area.tile_size,
+        )
+
+        # Keep placement/editor-managed overrides when they intentionally differ
+        # from the previously resolved template state.
+        override_fields = (
+            "facing",
+            "solid",
+            "pushable",
+            "enabled",
+            "visible",
+            "layer",
+            "stack_order",
+        )
+        for field_name in override_fields:
+            current_value = getattr(entity, field_name)
+            old_value = getattr(old_entity, field_name)
+            if current_value != old_value:
+                setattr(rebuilt_entity, field_name, copy.deepcopy(current_value))
+
+        if entity.color != old_entity.color:
+            rebuilt_entity.color = tuple(entity.color)
+
+        sprite_overridden = any(
+            (
+                entity.sprite_path != old_entity.sprite_path,
+                entity.sprite_frame_width != old_entity.sprite_frame_width,
+                entity.sprite_frame_height != old_entity.sprite_frame_height,
+                entity.animation_frames != old_entity.animation_frames,
+                entity.animation_fps != old_entity.animation_fps,
+                entity.animate_when_moving != old_entity.animate_when_moving,
+            )
+        )
+        if sprite_overridden:
+            rebuilt_entity.sprite_path = entity.sprite_path
+            rebuilt_entity.sprite_frame_width = entity.sprite_frame_width
+            rebuilt_entity.sprite_frame_height = entity.sprite_frame_height
+            rebuilt_entity.animation_frames = list(entity.animation_frames)
+            rebuilt_entity.animation_fps = entity.animation_fps
+            rebuilt_entity.animate_when_moving = entity.animate_when_moving
+            rebuilt_entity.current_frame = entity.current_frame
+
+        rebuilt_entity.stack_order = entity.stack_order
+        rebuilt_entity.sync_pixel_position(self.area.tile_size)
+        self.world.add_entity(rebuilt_entity)
 
     def _next_stack_order(self, grid_x: int, grid_y: int) -> int:
         """Return the next stack slot for a new entity on the given cell."""

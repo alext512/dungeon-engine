@@ -71,12 +71,24 @@ class PersistenceRuntime:
         """Set the currently active area id for mutation commands."""
         self.current_area_id = area_id
 
-    def flush(self) -> None:
-        """Write the current save data to disk when it changed."""
-        if not self.dirty:
-            return
+    def flush(self, *, force: bool = False) -> bool:
+        """Write the current in-memory persistent state to disk when requested."""
+        if not force and not self.dirty:
+            return False
         save_save_data(self.save_path, self.save_data)
         self.dirty = False
+        return True
+
+    def has_save_file(self) -> bool:
+        """Return True when a save slot file currently exists on disk."""
+        return self.save_path.exists()
+
+    def reload_from_disk(self) -> bool:
+        """Replace in-memory persistent state with the current save slot file."""
+        save_exists = self.save_path.exists()
+        self.save_data = load_save_data(self.save_path)
+        self.dirty = False
+        return save_exists
 
     def current_area_state(self) -> PersistentAreaState | None:
         """Return the currently bound area's persistent state."""
