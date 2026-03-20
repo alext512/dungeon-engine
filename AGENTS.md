@@ -20,9 +20,11 @@ Or double-click `Run_Python_Puzzle.cmd`.
 | File | What It Tells You |
 |---|---|
 | `STATUS.md` | What's implemented, editor controls, current test room, known issues |
+| `functionality.md` | Plain-language feature list by priority tier |
 | `architecture.md` | Design philosophy, tech stack, command system, entity/component model |
 | `CONTRIBUTING.md` | Working rules and project direction |
 | `roadmap.md` | Planned features and phases |
+| `CHANGELOG.md` | Reverse-chronological history of functionality changes |
 | `plans/` folder | Detailed implementation plans for specific tasks |
 
 ## Project Structure
@@ -31,6 +33,7 @@ Or double-click `Run_Python_Puzzle.cmd`.
 main.py                          # Entry point
 puzzle_dungeon/
     config.py                    # Paths, constants, window sizes
+    logging_utils.py             # Rotating error log setup
     engine/
         game.py                  # Main game loop, mode switching (editor/play)
         renderer.py              # All rendering (tiles, entities, editor overlays)
@@ -58,7 +61,7 @@ puzzle_dungeon/
         builtin.py               # Built-in command implementations
     data/
         areas/test_room.json     # The current test level
-        entities/*.json          # Entity templates (player, block, lever, gate)
+        entities/*.json          # Entity templates (player, block, lever, lever_toggle, gate)
         assets/tiles/            # Tileset PNGs
         assets/sprites/          # Sprite sheet PNGs
         fonts/                   # Bitmap font atlases
@@ -74,7 +77,7 @@ puzzle_dungeon/
 
 ## Common Tasks
 
-**Adding a new command type**: Register it in `commands/registry.py`, implement in `commands/builtin.py`.
+**Adding a new command type**: Implement it in `commands/builtin.py` inside `register_builtin_commands()` using the `@registry.register("name")` decorator. Follow the pattern of existing commands (accept `CommandContext`, return `ImmediateHandle()` for instant commands or a `CommandHandle` subclass for async ones).
 
 **Adding a new entity template**: Create a JSON file in `data/entities/`, place it in a room via the editor.
 

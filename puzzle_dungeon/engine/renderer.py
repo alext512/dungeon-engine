@@ -60,6 +60,7 @@ class Renderer:
         world: World,
         camera: Camera,
         editor: Any,
+        editor_ui: Any = None,
     ) -> None:
         """Render the current room plus the visual editor interface."""
         self.internal_surface.fill(config.COLOR_BACKGROUND)
@@ -78,6 +79,8 @@ class Renderer:
             ),
         )
         self.display_surface.blit(scaled_surface, (0, 0))
+        if editor_ui is not None:
+            editor_ui.render(self.display_surface, editor)
         pygame.display.flip()
 
     def _draw_tile_layers(
@@ -198,7 +201,7 @@ class Renderer:
         editor: Any,
     ) -> None:
         """Draw editor viewport overlays plus the surrounding UI panels."""
-        if editor.mode == "walkability":
+        if editor.paint_submode == "walk" or getattr(editor, 'show_walk_overlay', False):
             overlay_surface = pygame.Surface(
                 (config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT),
                 pygame.SRCALPHA,
@@ -250,23 +253,6 @@ class Renderer:
             )
 
         self.internal_surface.set_clip(None)
-        palette_line = "Palette tiles"
-        if editor.mode == "walkability":
-            palette_line = f"Flags {editor.current_walk_brush_label}"
-        elif editor.mode == "entity":
-            palette_line = "Palette entities"
-        self._draw_text_panel(
-            [
-                "EDITOR  F1 play",
-                f"Mode {editor.mode_label}",
-                f"Layer {editor.current_layer_name}",
-                palette_line,
-                f"Sel {editor.selected_cell_label}",
-                editor.workflow_hint(),
-            ],
-            x=6,
-            y=6,
-        )
 
     def _draw_editor_preview(self, area: Area, camera: Camera, editor: Any) -> None:
         """Preview the currently selected tile or entity under the cursor."""
@@ -281,7 +267,7 @@ class Renderer:
         )
         draw_position = (screen_x, screen_y)
 
-        if editor.mode == "tile" and editor.selected_gid > 0:
+        if editor.paint_submode == "tile" and editor.selected_gid > 0:
             resolved = area.resolve_gid(editor.selected_gid)
             if resolved is not None:
                 tileset_path, tile_w, tile_h, local_frame = resolved
