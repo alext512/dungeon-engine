@@ -10,6 +10,7 @@ Used by: editor (save)
 from __future__ import annotations
 
 import copy
+import math
 from typing import Any
 
 from puzzle_dungeon.world.area import Area
@@ -47,7 +48,7 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
         "entities": [
             _serialize_entity(entity, area.tile_size)
             for entity in sorted(
-                world.iter_entities(),
+                world.iter_entities(include_absent=True),
                 key=world.entity_sort_key,
             )
         ],
@@ -82,6 +83,7 @@ def _serialize_entity(entity: Any, tile_size: int) -> dict[str, Any]:
         "x": entity.grid_x,
         "y": entity.grid_y,
     }
+    data.update(_serialize_pixel_position_fields(entity, tile_size))
 
     if entity.template_id:
         data["template"] = entity.template_id
@@ -90,7 +92,7 @@ def _serialize_entity(entity: Any, tile_size: int) -> dict[str, Any]:
         data.update(_serialize_template_entity_overrides(entity, tile_size))
         return data
 
-    data.update(_serialize_runtime_entity_fields(entity))
+    data.update(_serialize_runtime_entity_fields(entity, tile_size))
 
     sprite_data = _serialize_sprite_data(entity)
     if sprite_data is not None:
@@ -117,8 +119,8 @@ def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[st
     )
 
     overrides: dict[str, Any] = {}
-    runtime_fields = _serialize_template_override_fields(entity)
-    reference_fields = _serialize_template_override_fields(reference_entity)
+    runtime_fields = _serialize_template_override_fields(entity, tile_size)
+    reference_fields = _serialize_template_override_fields(reference_entity, tile_size)
     for key, value in runtime_fields.items():
         if value != reference_fields.get(key):
             overrides[key] = value
@@ -138,37 +140,67 @@ def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[st
     return overrides
 
 
-def _serialize_template_override_fields(entity: Any) -> dict[str, Any]:
+def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str, Any]:
     """Return only the safe authored override fields for template instances."""
-    return {
+    data = {
         "facing": entity.facing,
         "solid": entity.solid,
         "pushable": entity.pushable,
-        "enabled": entity.enabled,
+        "present": entity.present,
         "visible": entity.visible,
+        "events_enabled": entity.events_enabled,
         "layer": entity.layer,
         "stack_order": entity.stack_order,
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),
     }
+    data.update(_serialize_pixel_position_fields(entity, tile_size))
+    events = _serialize_events(entity)
+    if events:
+        data["events"] = events
+    return data
 
 
-def _serialize_runtime_entity_fields(entity: Any) -> dict[str, Any]:
+def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, Any]:
     """Return the stable authored/runtime fields that should round-trip through JSON."""
-    return {
+    data = {
         "kind": entity.kind,
         "facing": entity.facing,
         "solid": entity.solid,
         "pushable": entity.pushable,
-        "enabled": entity.enabled,
+        "present": entity.present,
         "visible": entity.visible,
+        "events_enabled": entity.events_enabled,
         "layer": entity.layer,
         "stack_order": entity.stack_order,
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),
-        "interact_commands": copy.deepcopy(entity.interact_commands),
         "variables": copy.deepcopy(entity.variables),
     }
+    data.update(_serialize_pixel_position_fields(entity, tile_size))
+    events = _serialize_events(entity)
+    if events:
+        data["events"] = events
+    return data
+
+
+def _serialize_pixel_position_fields(entity: Any, tile_size: int) -> dict[str, Any]:
+    """Serialize pixel position only when it differs from the tile-derived default."""
+    default_pixel_x = float(entity.grid_x * tile_size)
+    default_pixel_y = float(entity.grid_y * tile_size)
+    data: dict[str, Any] = {}
+    if not math.isclose(entity.pixel_x, default_pixel_x, abs_tol=0.001):
+        data["pixel_x"] = _serialize_number(entity.pixel_x)
+    if not math.isclose(entity.pixel_y, default_pixel_y, abs_tol=0.001):
+        data["pixel_y"] = _serialize_number(entity.pixel_y)
+    return data
+
+
+def _serialize_number(value: float) -> int | float:
+    """Preserve integer-looking values while allowing fractional positions."""
+    if math.isclose(value, round(value), abs_tol=0.001):
+        return int(round(value))
+    return float(value)
 
 
 def _serialize_sprite_data(entity: Any) -> dict[str, Any] | None:
@@ -183,3 +215,14 @@ def _serialize_sprite_data(entity: Any) -> dict[str, Any] | None:
         "animation_fps": entity.animation_fps,
         "animate_when_moving": entity.animate_when_moving,
     }
+
+
+def _serialize_events(entity: Any) -> dict[str, Any]:
+    """Serialize named entity events in a stable JSON-friendly form."""
+    serialized: dict[str, Any] = {}
+    for event_id, event in entity.events.items():
+        serialized[str(event_id)] = {
+            "enabled": bool(event.enabled),
+            "commands": copy.deepcopy(event.commands),
+        }
+    return serialized

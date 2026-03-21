@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -115,6 +116,14 @@ class PersistenceRuntime:
         entity_state.removed = False
         variables = entity_state.overrides.setdefault("variables", {})
         variables[name] = copy.deepcopy(value)
+        self.dirty = True
+
+    def set_entity_event_enabled(self, entity_id: str, event_id: str, enabled: bool) -> None:
+        """Persist an entity event enabled-state override."""
+        entity_state = self._ensure_entity_state(entity_id)
+        entity_state.removed = False
+        event_states = entity_state.overrides.setdefault("event_states", {})
+        event_states[str(event_id)] = bool(enabled)
         self.dirty = True
 
     def remove_entity(self, entity_id: str) -> None:
@@ -286,7 +295,7 @@ def select_entity_ids_by_tags(
     include = set(include_tags)
     exclude = set(exclude_tags)
     matched_ids: set[str] = set()
-    for entity in authored_world.iter_entities():
+    for entity in authored_world.iter_entities(include_absent=True):
         if entity.entity_id == authored_world.player_id:
             continue
 
@@ -331,7 +340,7 @@ def capture_persistent_area_state(
     if variable_overrides:
         area_state.variables = variable_overrides
 
-    for authored_entity in authored_world.iter_entities():
+    for authored_entity in authored_world.iter_entities(include_absent=True):
         if authored_entity.entity_id == authored_world.player_id:
             continue
 
@@ -375,24 +384,33 @@ def _persistent_entity_state_to_dict(entity_state: PersistentEntityState) -> dic
 
 def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any]) -> None:
     """Apply persistent override fields to one entity instance."""
-    position_changed = False
+    grid_position_changed = False
+    pixel_position_changed = False
     for key, value in overrides.items():
         if key == "x":
             entity.grid_x = int(value)
-            position_changed = True
+            grid_position_changed = True
         elif key == "y":
             entity.grid_y = int(value)
-            position_changed = True
+            grid_position_changed = True
+        elif key == "pixel_x":
+            entity.pixel_x = float(value)
+            pixel_position_changed = True
+        elif key == "pixel_y":
+            entity.pixel_y = float(value)
+            pixel_position_changed = True
         elif key == "facing":
             entity.facing = str(value)
         elif key == "solid":
             entity.solid = bool(value)
         elif key == "pushable":
             entity.pushable = bool(value)
-        elif key == "enabled":
-            entity.enabled = bool(value)
+        elif key == "present":
+            entity.present = bool(value)
         elif key == "visible":
             entity.visible = bool(value)
+        elif key == "events_enabled":
+            entity.events_enabled = bool(value)
         elif key == "layer":
             entity.layer = int(value)
         elif key == "stack_order":
@@ -401,6 +419,12 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.color = (int(value[0]), int(value[1]), int(value[2]))
         elif key == "variables":
             entity.variables.update(copy.deepcopy(value))
+        elif key == "event_states":
+            for event_id, event_enabled in value.items():
+                event = entity.get_event(str(event_id))
+                if event is None:
+                    continue
+                event.enabled = bool(event_enabled)
         elif key == "interact_commands":
             entity.interact_commands = copy.deepcopy(value)
         elif key == "sprite":
@@ -408,7 +432,7 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
         else:
             raise ValueError(f"Unknown persistent entity override field '{key}'.")
 
-    if position_changed:
+    if grid_position_changed and not pixel_position_changed:
         entity.sync_pixel_position(area.tile_size)
 
 
@@ -436,16 +460,22 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["x"] = current_entity.grid_x
     if current_entity.grid_y != authored_entity.grid_y:
         overrides["y"] = current_entity.grid_y
+    if not math.isclose(current_entity.pixel_x, authored_entity.pixel_x, abs_tol=0.001):
+        overrides["pixel_x"] = current_entity.pixel_x
+    if not math.isclose(current_entity.pixel_y, authored_entity.pixel_y, abs_tol=0.001):
+        overrides["pixel_y"] = current_entity.pixel_y
     if current_entity.facing != authored_entity.facing:
         overrides["facing"] = current_entity.facing
     if current_entity.solid != authored_entity.solid:
         overrides["solid"] = current_entity.solid
     if current_entity.pushable != authored_entity.pushable:
         overrides["pushable"] = current_entity.pushable
-    if current_entity.enabled != authored_entity.enabled:
-        overrides["enabled"] = current_entity.enabled
+    if current_entity.present != authored_entity.present:
+        overrides["present"] = current_entity.present
     if current_entity.visible != authored_entity.visible:
         overrides["visible"] = current_entity.visible
+    if current_entity.events_enabled != authored_entity.events_enabled:
+        overrides["events_enabled"] = current_entity.events_enabled
     if current_entity.layer != authored_entity.layer:
         overrides["layer"] = current_entity.layer
     if current_entity.stack_order != authored_entity.stack_order:
@@ -460,6 +490,10 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
     if variable_overrides:
         overrides["variables"] = variable_overrides
 
+    event_state_overrides = _capture_event_state_overrides(authored_entity, current_entity)
+    if event_state_overrides:
+        overrides["event_states"] = event_state_overrides
+
     return overrides
 
 
@@ -472,4 +506,21 @@ def _capture_variable_overrides(
     for key, value in current_variables.items():
         if authored_variables.get(key) != value:
             overrides[key] = copy.deepcopy(value)
+    return overrides
+
+
+def _capture_event_state_overrides(
+    authored_entity: Entity,
+    current_entity: Entity,
+) -> dict[str, bool]:
+    """Capture event enabled-state changes as persistent overrides."""
+    overrides: dict[str, bool] = {}
+    event_ids = set(authored_entity.events.keys()) | set(current_entity.events.keys())
+    for event_id in event_ids:
+        authored_event = authored_entity.get_event(event_id)
+        current_event = current_entity.get_event(event_id)
+        if authored_event is None or current_event is None:
+            continue
+        if current_event.enabled != authored_event.enabled:
+            overrides[event_id] = current_event.enabled
     return overrides

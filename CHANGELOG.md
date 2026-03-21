@@ -4,6 +4,13 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Standalone Editor + Project Manifests
+
+- Split the old combined workflow into standalone `run_game.py` and `run_editor.py` entry points plus `Run_Game.cmd` and `Run_Editor.cmd`
+- Replaced the browser-window editor UI with the native-resolution standalone `editor_app.py` editor
+- Added `project.json`-driven project contexts so areas, entities, and assets can be resolved from configurable search paths
+- Updated asset loading and tileset discovery to work across the active project's asset roots
+
 ## Template Entity Save Hygiene
 
 - Rebuild template instances in the editor after parameter edits so generated fields stay in sync with the current parameter values
@@ -34,10 +41,10 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 ## Editor Overhaul: GID-Based Tilemap
 
 - Migrated from named string-based tile definitions to industry-standard GID-based tilemaps
-- Browser window now shows full tileset PNG with clickable frame selection
+- Editor tileset browsing now shows full clickable tileset frames
 - Tilesets auto-added to area when a frame is selected from a new tileset
 - Tileset cycling with `[`/`]` keyboard shortcuts
-- Entity stack management in the browser window
+- Entity stack management in the editor UI
 
 ## Interaction Core (partial)
 
@@ -52,7 +59,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 - Editor mode with document/playtest separation (F1 toggle)
 - Tile painting, walkability editing, entity placement/removal
-- Separate browser window for layers, palettes, entity stack management
+- Earlier browser-window-based editor for layers, palettes, and entity stack management
 - Middle-mouse drag panning with free editor camera
 - Hover preview of selected tile/entity before placement
 - Save (Ctrl+S) and reload (R) support

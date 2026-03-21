@@ -1,4 +1,6 @@
 > **Status: Completed**
+>
+> **Historical note:** this plan describes the intermediate browser-window editor that landed before the later standalone-editor redesign. References here to `browser_window.py`, `F1`, and in-game editor flow are historical, not the current architecture.
 
 # Editor Overhaul: GID-Based Tilemap + Full Tileset View + Entity Inspector
 

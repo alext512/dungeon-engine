@@ -3,7 +3,7 @@
 Renders GID-based tile layers and entities. Uses the Area's resolve_gid()
 method to map integer tile IDs to tileset frames.
 
-Depends on: config, asset_manager, camera, text, area, world
+Depends on: config, asset_manager, camera, area, world
 Used by: game
 """
 
@@ -14,13 +14,12 @@ import pygame
 from puzzle_dungeon import config
 from puzzle_dungeon.engine.asset_manager import AssetManager
 from puzzle_dungeon.engine.camera import Camera
-from puzzle_dungeon.engine.text import TextRenderer
 from puzzle_dungeon.world.area import Area
 from puzzle_dungeon.world.world import World
 
 
 class Renderer:
-    """Draw tile data, entities, and a small debug HUD."""
+    """Draw tile data and entities."""
 
     def __init__(
         self,
@@ -32,29 +31,18 @@ class Renderer:
         self.internal_surface = pygame.Surface(
             (config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
         )
-        self.text_renderer = TextRenderer(asset_manager)
 
     def render(
         self,
         area: Area,
         world: World,
         camera: Camera,
-        *,
-        status_message: str = "",
-        has_save_file: bool = False,
-        persistent_state_dirty: bool = False,
     ) -> None:
         """Render the current area and all visible entities."""
         self.internal_surface.fill(config.COLOR_BACKGROUND)
         self._draw_tile_layers(area, camera, draw_above_entities=False)
         self._draw_entities(area, world, camera)
         self._draw_tile_layers(area, camera, draw_above_entities=True)
-        self._draw_play_overlay(
-            world,
-            status_message=status_message,
-            has_save_file=has_save_file,
-            persistent_state_dirty=persistent_state_dirty,
-        )
 
         scaled_surface = pygame.transform.scale(
             self.internal_surface,
@@ -164,53 +152,3 @@ class Renderer:
         tinted = surface.copy()
         tinted.fill((*tint, 255), special_flags=pygame.BLEND_RGBA_MULT)
         return tinted
-
-    def _draw_play_overlay(
-        self,
-        world: World,
-        *,
-        status_message: str,
-        has_save_file: bool,
-        persistent_state_dirty: bool,
-    ) -> None:
-        """Draw a compact play-mode HUD that fits the internal surface."""
-        player = world.get_player()
-        live_state = "dirty" if persistent_state_dirty else "clean"
-        save_state = "yes" if has_save_file else "no"
-        lines = [
-            "PLAY  ESC quit",
-            "Move WASD/arrows",
-            "SPC act  F5 save  F9 load",
-            f"Live {live_state}  Disk save {save_state}",
-            f"P ({player.grid_x},{player.grid_y})  Face {player.facing}",
-        ]
-        if status_message:
-            lines.append(status_message)
-        self._draw_text_panel(lines, x=6, y=6)
-
-    def _draw_text_panel(
-        self,
-        lines: list[str],
-        *,
-        x: int,
-        y: int,
-        font_id: str = config.DEFAULT_UI_FONT_ID,
-    ) -> None:
-        """Draw a translucent text panel with consistent line spacing."""
-        if not lines:
-            return
-
-        line_height = self.text_renderer.line_height(font_id=font_id)
-        width = max(self.text_renderer.measure_text(line, font_id=font_id)[0] for line in lines) + 8
-        height = len(lines) * line_height + 8
-        panel_surface = pygame.Surface((width, height), pygame.SRCALPHA)
-        panel_surface.fill((8, 10, 16, 220))
-        self.internal_surface.blit(panel_surface, (x, y))
-        for index, text in enumerate(lines):
-            self.text_renderer.render_text(
-                self.internal_surface,
-                text,
-                (x + 4, y + 4 + (index * line_height)),
-                config.COLOR_TEXT,
-                font_id=font_id,
-            )

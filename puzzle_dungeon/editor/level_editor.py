@@ -1,4 +1,4 @@
-"""Data model and operations for the level editor.
+"""Standalone editor document model and editing operations.
 
 Works with the GID-based tilemap system. The editor discovers available tileset
 PNGs, lets the user pick frames visually, and paints GIDs onto the grid.
@@ -15,10 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import pygame
-
 from puzzle_dungeon import config
-from puzzle_dungeon.engine.camera import Camera
 from puzzle_dungeon.world.area import Area, TileLayer, Tileset
 from puzzle_dungeon.world.entity import Entity
 from puzzle_dungeon.world.loader import (
@@ -31,26 +28,8 @@ from puzzle_dungeon.world.serializer import serialize_area
 from puzzle_dungeon.world.world import World
 
 
-@dataclass(slots=True)
-class EditorAction:
-    """A small event emitted by the editor for the game loop to react to."""
-
-    kind: str
-    message: str = ""
-
-
-@dataclass(slots=True)
-class EditorUiItem:
-    """A simple clickable UI item used by the editor panels."""
-
-    key: str
-    label: str
-    rect: pygame.Rect
-    active: bool = False
-
-
 def list_tileset_paths() -> list[str]:
-    """Scan the tiles directory for all PNG files, return paths relative to DATA_DIR.
+    """Scan the asset directory recursively for PNG files.
 
     Uses the active project context from the loader module if available.
     """
@@ -59,17 +38,17 @@ def list_tileset_paths() -> list[str]:
     if _active_project is not None:
         return _active_project.list_tileset_paths()
 
-    if not config.TILES_DIR.exists():
+    if not config.ASSETS_DIR.exists():
         return []
     return sorted(
         str(path.relative_to(config.DATA_DIR)).replace("\\", "/")
-        for path in config.TILES_DIR.glob("*.png")
+        for path in config.ASSETS_DIR.rglob("*.png")
     )
 
 
 @dataclass(slots=True)
 class LevelEditor:
-    """Edit the authoritative room document separately from playtest state."""
+    """Edit the authoritative room document used by the standalone editor."""
 
     area_path: Path
     area: Area
@@ -95,13 +74,8 @@ class LevelEditor:
     dirty: bool = False
     last_drag_cell: tuple[int, int] | None = None
     walk_brush_walkable: bool = True
-    middle_pan_active: bool = False
     move_pending_entity_id: str | None = None
     show_walk_overlay: bool = False
-
-    UI_GAP: int = 4
-    RIGHT_PANEL_WIDTH: int = 0
-    BOTTOM_PANEL_HEIGHT: int = 0
 
     def __post_init__(self) -> None:
         self._normalize_all_stack_orders()
@@ -111,31 +85,20 @@ class LevelEditor:
         self._sync_selected_entity_to_cell()
         self._apply_mode_defaults()
 
-    @property
-    def map_viewport_rect(self) -> pygame.Rect:
-        """Return the world-view rectangle reserved for the map canvas."""
-        return pygame.Rect(0, 0, config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
-
-    @property
-    def right_panel_rect(self) -> pygame.Rect:
-        """Return the right-side toolbox panel rectangle."""
-        return pygame.Rect(config.INTERNAL_WIDTH, 0, 0, 0)
-
-    @property
-    def bottom_panel_rect(self) -> pygame.Rect:
-        """Return the bottom inspector panel rectangle."""
-        return pygame.Rect(0, config.INTERNAL_HEIGHT, 0, 0)
-
     def refresh_catalogs(self) -> None:
         """Refresh tileset and template lists when content definitions change."""
+        current_tileset_path = self.current_tileset_path if self.available_tileset_paths else None
         self.available_tileset_paths = list_tileset_paths()
         self.template_ids = list_entity_template_ids()
         self.selected_template_index %= max(1, len(self.template_ids))
         self.selected_layer_index %= max(1, len(self.area.tile_layers))
 
-        # Clamp selected_tileset_index
+        preferred_tileset_path = current_tileset_path or self._preferred_tileset_path()
         if self.available_tileset_paths:
-            self.selected_tileset_index %= len(self.available_tileset_paths)
+            if preferred_tileset_path in self.available_tileset_paths:
+                self.selected_tileset_index = self.available_tileset_paths.index(preferred_tileset_path)
+            else:
+                self.selected_tileset_index = self._fallback_tileset_index()
         else:
             self.selected_tileset_index = 0
 
@@ -439,8 +402,9 @@ class LevelEditor:
         props.append(("facing", "Facing", entity.facing))
         props.append(("solid", "Solid", str(entity.solid).lower()))
         props.append(("pushable", "Pushable", str(entity.pushable).lower()))
-        props.append(("enabled", "Enabled", str(entity.enabled).lower()))
+        props.append(("present", "Present", str(entity.present).lower()))
         props.append(("visible", "Visible", str(entity.visible).lower()))
+        props.append(("events_enabled", "Events Enabled", str(entity.events_enabled).lower()))
 
         # Template parameters (the most useful for game design)
         for key, value in entity.template_parameters.items():
@@ -463,10 +427,13 @@ class LevelEditor:
             self._mark_dirty(f"Set {param_key}={value_str}")
             return
 
-        bool_fields = {"solid", "pushable", "enabled", "visible"}
+        bool_fields = {"solid", "pushable", "present", "visible", "events_enabled"}
         if field_name in bool_fields:
             bool_val = value_str.lower() in ("true", "1", "yes")
-            setattr(entity, field_name, bool_val)
+            if field_name == "present":
+                entity.set_present(bool_val)
+            else:
+                setattr(entity, field_name, bool_val)
             self._mark_dirty(f"Set {field_name}={bool_val}")
             return
 
@@ -480,132 +447,14 @@ class LevelEditor:
 
         self.status_message = f"Cannot edit {field_name}"
 
-    # --- Event handling ---
-
-    def handle_events(self, events: list[pygame.event.Event], camera: Camera) -> list[EditorAction]:
-        """Process editor input and return any game-level actions."""
-        actions: list[EditorAction] = []
-        for event in events:
-            if event.type == pygame.QUIT:
-                actions.append(EditorAction("quit"))
-                continue
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    actions.append(EditorAction("quit"))
-                    continue
-                if event.key == pygame.K_F1:
-                    actions.append(EditorAction("toggle_play"))
-                    continue
-                if event.key == pygame.K_TAB:
-                    self._step_layer(1)
-                    continue
-                if event.key == pygame.K_q:
-                    self._cycle_selection(-1)
-                    continue
-                if event.key == pygame.K_e:
-                    self._cycle_selection(1)
-                    continue
-                if event.key == pygame.K_r:
-                    actions.append(EditorAction("reload_document"))
-                    continue
-                if event.key == pygame.K_s and (event.mod & pygame.KMOD_CTRL):
-                    self.save()
-                    actions.append(EditorAction("saved", self.status_message))
-                    continue
-
-            if event.type == pygame.MOUSEMOTION:
-                internal_pos = self._window_to_internal(event.pos)
-                if self.middle_pan_active and event.buttons[1]:
-                    camera.pan(-(event.rel[0] / config.SCALE), -(event.rel[1] / config.SCALE))
-                self.hovered_cell = self._mouse_to_cell(internal_pos, camera)
-                if (
-                    not self.middle_pan_active
-                    and self.hovered_cell is not None
-                    and self.hovered_cell != self.last_drag_cell
-                ):
-                    if event.buttons[0]:
-                        self._select_cell(*self.hovered_cell)
-                        self._apply_primary()
-                        self.last_drag_cell = self.hovered_cell
-                    elif event.buttons[2]:
-                        self._select_cell(*self.hovered_cell)
-                        self._apply_secondary()
-                        self.last_drag_cell = self.hovered_cell
-                    else:
-                        self.last_drag_cell = None
-                elif not (event.buttons[0] or event.buttons[2]):
-                    self.last_drag_cell = None
-                continue
-
-            if event.type == pygame.MOUSEBUTTONUP:
-                if event.button in (1, 3):
-                    self.last_drag_cell = None
-                if event.button == 2:
-                    self.middle_pan_active = False
-                continue
-
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                internal_pos = self._window_to_internal(event.pos)
-                self.hovered_cell = self._mouse_to_cell(internal_pos, camera)
-
-                if event.button == 2 and self.map_viewport_rect.collidepoint(internal_pos):
-                    self.middle_pan_active = True
-                    self.status_message = "Panning map"
-                    continue
-
-                if event.button in (4, 5):
-                    self._handle_wheel(event.button)
-                    continue
-
-                if self.hovered_cell is None:
-                    continue
-
-                self._select_cell(*self.hovered_cell)
-                if event.button == 1:
-                    self._apply_primary()
-                    self.last_drag_cell = self.hovered_cell
-                elif event.button == 3:
-                    self._apply_secondary()
-                    self.last_drag_cell = self.hovered_cell
-                continue
-
-        return actions
-
-    def update(self, dt: float, camera: Camera) -> None:
-        """Handle continuous camera panning while editing (arrow keys only)."""
-        _ = dt
-        key_state = pygame.key.get_pressed()
-        delta_x = 0.0
-        delta_y = 0.0
-        pan_step = config.EDITOR_CAMERA_PAN_SPEED / config.FPS
-        if key_state[pygame.K_LEFT]:
-            delta_x -= pan_step
-        if key_state[pygame.K_RIGHT]:
-            delta_x += pan_step
-        if key_state[pygame.K_UP]:
-            delta_y -= pan_step
-        if key_state[pygame.K_DOWN]:
-            delta_y += pan_step
-        if delta_x or delta_y:
-            camera.pan(delta_x, delta_y)
-
     def entities_for_selected_cell(self) -> list[Entity]:
         """Return a stable, visible entity stack for the selected cell."""
         if self.selected_cell is None:
             return []
         grid_x, grid_y = self.selected_cell
-        return list(self.world.get_entities_at(grid_x, grid_y, include_hidden=True))
+        return list(self.world.get_entities_at(grid_x, grid_y, include_hidden=True, include_absent=True))
 
     # --- Internal helpers ---
-
-    def _handle_wheel(self, button: int) -> None:
-        """Handle scroll wheel selection changes."""
-        direction = -1 if button == 4 else 1
-        if pygame.key.get_mods() & pygame.KMOD_SHIFT:
-            self._step_layer(direction)
-            return
-        self._cycle_selection(direction)
 
     def _cycle_selection(self, direction: int) -> None:
         """Cycle the active selection for the current editor mode.
@@ -650,27 +499,6 @@ class LevelEditor:
         """Cycle the active tile layer selection."""
         self.selected_layer_index = (self.selected_layer_index + direction) % len(self.area.tile_layers)
         self.status_message = f"Layer {self.current_layer.name}"
-
-    def _window_to_internal(self, mouse_pos: tuple[int, int]) -> tuple[int, int]:
-        """Convert a scaled window mouse position to internal render coordinates."""
-        return (int(mouse_pos[0] / config.SCALE), int(mouse_pos[1] / config.SCALE))
-
-    def _mouse_to_cell(
-        self,
-        internal_pos: tuple[int, int],
-        camera: Camera,
-    ) -> tuple[int, int] | None:
-        """Convert an internal mouse position to a tile coordinate inside the map viewport."""
-        if not self.map_viewport_rect.collidepoint(internal_pos):
-            return None
-
-        world_x = internal_pos[0] + camera.render_x
-        world_y = internal_pos[1] + camera.render_y
-        grid_x = int(world_x // self.area.tile_size)
-        grid_y = int(world_y // self.area.tile_size)
-        if not self.area.in_bounds(grid_x, grid_y):
-            return None
-        return (grid_x, grid_y)
 
     def _select_cell(self, grid_x: int, grid_y: int) -> None:
         """Select a tile and synchronize the selected entity stack entry."""
@@ -811,7 +639,7 @@ class LevelEditor:
             "facing",
             "solid",
             "pushable",
-            "enabled",
+            "present",
             "visible",
             "layer",
             "stack_order",
@@ -850,7 +678,7 @@ class LevelEditor:
 
     def _next_stack_order(self, grid_x: int, grid_y: int) -> int:
         """Return the next stack slot for a new entity on the given cell."""
-        stack = self.world.get_entities_at(grid_x, grid_y, include_hidden=True)
+        stack = self.world.get_entities_at(grid_x, grid_y, include_hidden=True, include_absent=True)
         if not stack:
             return 0
         return max(entity.stack_order for entity in stack) + 1
@@ -945,7 +773,7 @@ class LevelEditor:
     def _normalize_all_stack_orders(self) -> None:
         """Normalize stack orders so every cell has a clear persistent sequence."""
         cells: dict[tuple[int, int], list[Entity]] = {}
-        for entity in self.world.iter_entities():
+        for entity in self.world.iter_entities(include_absent=True):
             cells.setdefault((entity.grid_x, entity.grid_y), []).append(entity)
 
         for stack in cells.values():
@@ -966,6 +794,26 @@ class LevelEditor:
             if template_id in self.template_ids:
                 self.selected_template_index = self.template_ids.index(template_id)
                 return
+
+    def _preferred_tileset_path(self) -> str | None:
+        """Return the best tileset/image path to focus when the catalog refreshes."""
+        if self.selected_gid > 0:
+            resolved = self.area.resolve_gid(self.selected_gid)
+            if resolved is not None:
+                return resolved[0]
+
+        if self.area.tilesets:
+            return self.area.tilesets[0].path
+
+        return None
+
+    def _fallback_tileset_index(self) -> int:
+        """Pick a sensible default catalog entry when there is no current match."""
+        for index, path in enumerate(self.available_tileset_paths):
+            normalized = path.replace("\\", "/")
+            if "/tiles/" in normalized:
+                return index
+        return 0
 
     def _generate_layer_name(self) -> str:
         """Generate a stable generic layer name without semantic assumptions."""

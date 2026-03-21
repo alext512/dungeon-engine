@@ -44,7 +44,9 @@ class Game:
         self.clock = pygame.time.Clock()
         self.headless = pygame.display.get_driver() == "dummy"
 
-        self.area_path = area_path or Path(config.AREAS_DIR / "test_room.json")
+        if area_path is None:
+            raise ValueError("Game requires an explicit area path. Use run_game.py or Run_Game.cmd.")
+        self.area_path = area_path
         self.asset_manager = AssetManager(project=project)
         self.persistence_runtime = PersistenceRuntime(config.DEFAULT_SAVE_SLOT_PATH)
 
@@ -68,8 +70,6 @@ class Game:
         self.animation_system: AnimationSystem | None = None
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
-        self.play_status_message: str = ""
-        self.play_status_timer: float = 0.0
 
         self.area = self.play_authored_area
         self.world = self.play_authored_world
@@ -127,14 +127,10 @@ class Game:
         self.command_runner.update(0.0)
         self._apply_pending_reset_if_idle()
         self.camera.update(self.world.get_player())
-        self._update_play_status(dt)
         self.renderer.render(
             self.area,
             self.world,
             self.camera,
-            status_message=self.play_status_message,
-            has_save_file=self.persistence_runtime.has_save_file(),
-            persistent_state_dirty=self.persistence_runtime.dirty,
         )
         return True
 
@@ -153,6 +149,7 @@ class Game:
             collision_system=self.collision_system,
             movement_system=self.movement_system,
             interaction_system=self.interaction_system,
+            animation_system=self.animation_system,
             persistence_runtime=self.persistence_runtime,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
@@ -237,34 +234,11 @@ class Game:
     def _save_persistent_state_to_disk(self) -> None:
         """Write the current in-memory persistent state to the save slot."""
         self.persistence_runtime.flush(force=True)
-        self._set_play_status(
-            f"Saved persistent state to {self.persistence_runtime.save_path.name}"
-        )
 
     def _reload_persistent_state_from_disk(self) -> None:
         """Reload persistent state from disk and rebuild the current room."""
         if self.command_runner is not None and self.command_runner.has_pending_work():
-            self._set_play_status("Finish the current action before loading")
             return
 
-        save_exists = self.persistence_runtime.reload_from_disk()
+        self.persistence_runtime.reload_from_disk()
         self._rebuild_play_world(preserve_player=True)
-        if save_exists:
-            self._set_play_status(
-                f"Reloaded persistent state from {self.persistence_runtime.save_path.name}"
-            )
-        else:
-            self._set_play_status("No save file found; using room JSON only")
-
-    def _set_play_status(self, message: str, *, duration: float = 2.5) -> None:
-        """Show a short play-mode status message in the HUD."""
-        self.play_status_message = message
-        self.play_status_timer = duration
-
-    def _update_play_status(self, dt: float) -> None:
-        """Expire transient play-mode status messages over time."""
-        if self.play_status_timer <= 0.0:
-            return
-        self.play_status_timer = max(0.0, self.play_status_timer - dt)
-        if self.play_status_timer == 0.0:
-            self.play_status_message = ""

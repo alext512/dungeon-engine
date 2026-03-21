@@ -35,9 +35,15 @@ class World:
             raise KeyError(f"Player entity '{self.player_id}' was not found in the world.")
         return player
 
-    def iter_entities(self) -> list[Entity]:
-        """Return all entities as a list for simple iteration."""
-        return list(self.entities.values())
+    def iter_entities(self, *, include_absent: bool = False) -> list[Entity]:
+        """Return entities as a list, optionally including non-present ones."""
+        if include_absent:
+            return list(self.entities.values())
+        return [
+            entity
+            for entity in self.entities.values()
+            if entity.present
+        ]
 
     def entity_sort_key(self, entity: Entity) -> tuple[int, int, str]:
         """Return a stable per-cell stacking key for editor and runtime queries."""
@@ -50,12 +56,13 @@ class World:
         *,
         exclude_entity_id: str | None = None,
         include_hidden: bool = False,
+        include_absent: bool = False,
     ) -> list[Entity]:
         """Return entities that currently occupy the requested grid tile."""
         return sorted(
             [
                 entity
-                for entity in self.entities.values()
+                for entity in self.iter_entities(include_absent=include_absent)
                 if (include_hidden or entity.visible)
                 and entity.entity_id != exclude_entity_id
                 and entity.grid_x == grid_x
@@ -71,7 +78,7 @@ class World:
         *,
         exclude_entity_id: str | None = None,
     ) -> Entity | None:
-        """Return the first enabled visible entity at the given tile, if any."""
+        """Return the first present visible entity at the given tile, if any."""
         for entity in reversed(
             self.get_entities_at(
                 grid_x,
@@ -79,7 +86,7 @@ class World:
                 exclude_entity_id=exclude_entity_id,
             )
         ):
-            if entity.enabled:
+            if entity.present:
                 return entity
         return None
 
