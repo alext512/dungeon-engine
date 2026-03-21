@@ -67,9 +67,17 @@ Input should request top-level commands.
 
 Example:
 
-- pressing Up does not directly move the player
-- it queues a `run_event` request for the player's `move_up` event
+- pressing Up does not directly move an entity
+- it queues a `run_event` request for the active entity's configured `move_up` event
 - that event can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
+
+Control routing is layered:
+
+- the project defines default input event names
+- the project can also define a default active entity id
+- an area may override the active entity id
+- runtime commands may still switch the active entity or remap input event names temporarily
+- the project may enable or disable debug inspection controls such as zoom/pause/step through `project.json`
 
 This keeps player input, AI behavior, and cinematics aligned around the same action model.
 
@@ -170,6 +178,13 @@ Systems should provide reusable services such as:
 
 Systems should not become giant one-off gameplay scripts. If a behavior is content-specific, it should usually be represented as commands.
 
+The camera should be command-addressable too:
+
+- it can follow the active entity by default
+- commands can retarget it to a specific entity
+- commands can clear follow mode for manual framing
+- commands can move or teleport it independently for cutscenes and inspection
+
 ## Command Architecture
 
 ### Command runner
@@ -193,6 +208,7 @@ Every command should have access to a runtime context such as:
 - direction
 - selected choice
 - item being used
+- active input target
 - temporary local variables
 
 This matters because the same command type may be used by:
@@ -233,7 +249,7 @@ Movement should follow the same spirit.
 
 Example movement chain:
 
-1. receive `run_event(entity_id=player, event_id=move_right)`
+1. receive `run_event(entity_id=active_entity, event_id=configured_move_right_event)`
 2. start any project-authored walk animation
 3. call `move_entity_one_tile(direction=right)`
 4. if blocked by pushable object, try push chain

@@ -25,12 +25,23 @@ class Renderer:
         self,
         display_surface: pygame.Surface,
         asset_manager: AssetManager,
+        *,
+        output_scale: int = config.SCALE,
     ) -> None:
         self.display_surface = display_surface
         self.asset_manager = asset_manager
+        self.output_scale = max(1, int(output_scale))
         self.internal_surface = pygame.Surface(
             (config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
         )
+
+    def set_display_surface(self, display_surface: pygame.Surface) -> None:
+        """Swap the window surface after the game recreates the display."""
+        self.display_surface = display_surface
+
+    def set_output_scale(self, output_scale: int) -> None:
+        """Change the integer window magnification used for rendering."""
+        self.output_scale = max(1, int(output_scale))
 
     def render(
         self,
@@ -47,8 +58,8 @@ class Renderer:
         scaled_surface = pygame.transform.scale(
             self.internal_surface,
             (
-                config.INTERNAL_WIDTH * config.SCALE,
-                config.INTERNAL_HEIGHT * config.SCALE,
+                config.INTERNAL_WIDTH * self.output_scale,
+                config.INTERNAL_HEIGHT * self.output_scale,
             ),
         )
         self.display_surface.blit(scaled_surface, (0, 0))

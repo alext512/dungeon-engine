@@ -64,7 +64,7 @@ class MovementSystem:
         target_y = entity.grid_y + delta_y
         target_pixel_x = target_x * self.area.tile_size
         target_pixel_y = target_y * self.area.tile_size
-        move_duration = self._resolve_duration(
+        total_ticks = self._resolve_total_ticks(
             float(self.area.tile_size),
             duration=duration,
             frames_needed=frames_needed,
@@ -86,7 +86,7 @@ class MovementSystem:
                     entity,
                     target_pixel_x=target_pixel_x,
                     target_pixel_y=target_pixel_y,
-                    duration=move_duration,
+                    total_ticks=total_ticks,
                     grid_sync=grid_sync,
                     target_grid_x=target_x,
                     target_grid_y=target_y,
@@ -106,7 +106,7 @@ class MovementSystem:
                     blocking_entity,
                     target_pixel_x=push_target_x * self.area.tile_size,
                     target_pixel_y=push_target_y * self.area.tile_size,
-                    duration=move_duration,
+                    total_ticks=total_ticks,
                     grid_sync=grid_sync,
                     target_grid_x=push_target_x,
                     target_grid_y=push_target_y,
@@ -115,7 +115,7 @@ class MovementSystem:
                     entity,
                     target_pixel_x=target_pixel_x,
                     target_pixel_y=target_pixel_y,
-                    duration=move_duration,
+                    total_ticks=total_ticks,
                     grid_sync=grid_sync,
                     target_grid_x=target_x,
                     target_grid_y=target_y,
@@ -157,7 +157,7 @@ class MovementSystem:
             target_grid_x, target_grid_y = inferred_grid
 
         distance = math.hypot(target_pixel_x - entity.pixel_x, target_pixel_y - entity.pixel_y)
-        resolved_duration = self._resolve_duration(
+        total_ticks = self._resolve_total_ticks(
             distance,
             duration=duration,
             frames_needed=frames_needed,
@@ -187,7 +187,7 @@ class MovementSystem:
             entity,
             target_pixel_x=target_pixel_x,
             target_pixel_y=target_pixel_y,
-            duration=resolved_duration,
+            total_ticks=total_ticks,
             grid_sync=grid_sync,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
@@ -318,16 +318,22 @@ class MovementSystem:
         )
 
     def update(self, dt: float) -> None:
-        """Advance all active movement interpolations."""
+        """Backward-compatible wrapper that advances one fixed movement tick."""
+        _ = dt
+        self.update_tick()
+
+    def update_tick(self) -> None:
+        """Advance all active movement interpolations by one simulation tick."""
         for entity in self.world.iter_entities():
             movement = entity.movement
             if not movement.active:
                 continue
 
-            movement.elapsed = min(movement.elapsed + dt, movement.duration)
-            progress = 1.0
-            if movement.duration > 0:
-                progress = movement.elapsed / movement.duration
+            if movement.total_ticks <= 0:
+                progress = 1.0
+            else:
+                movement.elapsed_ticks = min(movement.elapsed_ticks + 1, movement.total_ticks)
+                progress = movement.elapsed_ticks / movement.total_ticks
 
             entity.pixel_x = movement.start_pixel_x + (
                 (movement.target_pixel_x - movement.start_pixel_x) * progress
@@ -336,7 +342,7 @@ class MovementSystem:
                 (movement.target_pixel_y - movement.start_pixel_y) * progress
             )
 
-            if progress >= 1.0:
+            if movement.total_ticks <= 0 or movement.elapsed_ticks >= movement.total_ticks:
                 movement.active = False
                 entity.pixel_x = movement.target_pixel_x
                 entity.pixel_y = movement.target_pixel_y
@@ -361,7 +367,7 @@ class MovementSystem:
         *,
         target_pixel_x: float,
         target_pixel_y: float,
-        duration: float,
+        total_ticks: int,
         grid_sync: GridSyncPolicy,
         target_grid_x: int | None,
         target_grid_y: int | None,
@@ -380,8 +386,8 @@ class MovementSystem:
         movement.start_pixel_y = entity.pixel_y
         movement.target_pixel_x = target_pixel_x
         movement.target_pixel_y = target_pixel_y
-        movement.elapsed = 0.0
-        movement.duration = duration
+        movement.elapsed_ticks = 0
+        movement.total_ticks = max(0, int(total_ticks))
         movement.grid_sync = grid_sync
 
         self._apply_grid_sync(
@@ -412,15 +418,15 @@ class MovementSystem:
             entity.grid_x = target_grid_x
             entity.grid_y = target_grid_y
 
-    def _resolve_duration(
+    def _resolve_total_ticks(
         self,
         distance_in_pixels: float,
         *,
         duration: float | None,
         frames_needed: int | None,
         speed_px_per_second: float | None,
-    ) -> float:
-        """Resolve a movement duration from either an explicit duration or a speed."""
+    ) -> int:
+        """Resolve a movement length in simulation ticks."""
         if duration is not None and duration < 0:
             raise ValueError("Movement duration cannot be negative.")
         if frames_needed is not None and frames_needed < 0:
@@ -428,15 +434,21 @@ class MovementSystem:
         if speed_px_per_second is not None and speed_px_per_second <= 0:
             raise ValueError("Movement speed must be positive.")
 
-        if duration is not None:
-            return duration
         if frames_needed is not None:
-            return frames_needed / config.FPS if config.FPS > 0 else 0.0
+            return int(frames_needed)
+        if duration is not None:
+            return self._seconds_to_ticks(duration)
         if speed_px_per_second is not None:
             if distance_in_pixels <= 0:
-                return 0.0
-            return distance_in_pixels / speed_px_per_second
-        return config.MOVE_DURATION_SECONDS
+                return 0
+            return self._seconds_to_ticks(distance_in_pixels / speed_px_per_second)
+        return self._seconds_to_ticks(config.MOVE_DURATION_SECONDS)
+
+    def _seconds_to_ticks(self, seconds: float) -> int:
+        """Convert seconds into a whole-number simulation tick count."""
+        if seconds <= 0 or config.FPS <= 0:
+            return 0
+        return max(1, round(seconds * config.FPS))
 
     def _infer_grid_target(
         self,

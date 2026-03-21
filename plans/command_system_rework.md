@@ -56,12 +56,27 @@ Implemented in the first movement-foundation slice:
   - `run_event`
   - `set_event_enabled`
   - `set_events_enabled`
+- Built-in input/control primitives now include:
+  - `set_active_entity`
+  - `set_input_event_name`
 - Built-in entity lifecycle primitives now include:
   - `set_present`
   - `spawn_entity`
   - `destroy_entity`
 - Input now drives project-authored player movement events instead of a
   hardcoded engine movement command.
+- The world now tracks `active_entity_id`, so inputs are routed to the current
+  active entity rather than being inherently player-specific.
+- Project manifests now define the default `active_entity_id` and default
+  `input_events`, while areas may still override `active_entity_id`.
+- The play loop now runs gameplay on a fixed simulation timestep of
+  `1 / FPS` seconds instead of advancing movement directly from variable render
+  `dt`.
+- Movement interpolation is now tick-counted:
+  - movement state stores `elapsed_ticks` / `total_ticks`
+  - a 16 px move over 16 ticks advances by exactly 1 px per simulation tick
+- Command-driven animation playback is now advanced by simulation ticks as
+  well, matching the old project's `_physics_process` style more closely.
 - `test_project/entities/player.json` now owns the first project-authored move
   recipes through `move_up`, `move_down`, `move_left`, and `move_right`.
 

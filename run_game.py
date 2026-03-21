@@ -41,11 +41,15 @@ def main() -> int:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
     from puzzle_dungeon import config
+    from puzzle_dungeon.display_setup import configure_process_dpi_awareness
     from puzzle_dungeon.engine.game import Game
     from puzzle_dungeon.launcher_state import load_launcher_state, update_launcher_state
     from puzzle_dungeon.logging_utils import install_exception_logging
     from puzzle_dungeon.project import load_project
     from puzzle_dungeon.world.loader import set_active_project
+
+    if not args.headless:
+        configure_process_dpi_awareness()
 
     logger = install_exception_logging()
     launcher_state = load_launcher_state()

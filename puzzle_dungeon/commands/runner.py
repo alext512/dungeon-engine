@@ -24,6 +24,8 @@ class CommandContext:
     movement_system: MovementSystem
     interaction_system: InteractionSystem
     animation_system: AnimationSystem
+    camera: Any | None = None
+    input_handler: Any | None = None
     persistence_runtime: Any | None = None
 
 

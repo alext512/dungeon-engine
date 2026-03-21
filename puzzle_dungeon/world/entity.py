@@ -31,8 +31,8 @@ class MovementState:
     start_pixel_y: float = 0.0
     target_pixel_x: float = 0.0
     target_pixel_y: float = 0.0
-    elapsed: float = 0.0
-    duration: float = 0.0
+    elapsed_ticks: int = 0
+    total_ticks: int = 0
     grid_sync: GridSyncPolicy = "immediate"
 
 
