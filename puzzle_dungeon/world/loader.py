@@ -84,7 +84,14 @@ def load_area_from_data(
     )
     area.build_gid_lookup()
 
-    world = World(player_id=raw_data.get("player_id", "player"))
+    configured_player_id = str(raw_data.get("player_id", "player"))
+    default_active_entity_id = configured_player_id
+    if _active_project is not None:
+        default_active_entity_id = str(_active_project.active_entity_id or configured_player_id)
+    world = World(
+        player_id=configured_player_id,
+        active_entity_id=str(raw_data.get("active_entity_id", default_active_entity_id)),
+    )
     world.variables = copy.deepcopy(raw_data.get("variables", {}))
     for entity_instance in raw_data.get("entities", []):
         entity = instantiate_entity(entity_instance, area.tile_size)

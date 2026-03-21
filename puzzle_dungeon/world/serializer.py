@@ -25,6 +25,7 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
         "name": area.name,
         "tile_size": area.tile_size,
         "player_id": world.player_id,
+        "active_entity_id": world.active_entity_id,
         "variables": copy.deepcopy(world.variables),
         "tilesets": [
             _serialize_tileset(ts)

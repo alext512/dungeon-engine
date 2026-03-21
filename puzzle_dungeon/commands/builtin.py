@@ -52,6 +52,20 @@ class AnimationCommandHandle(CommandHandle):
         )
 
 
+class CameraCommandHandle(CommandHandle):
+    """Wait until an interpolated camera move finishes."""
+
+    def __init__(self, context: CommandContext) -> None:
+        super().__init__()
+        self.context = context
+        self.update(0.0)
+
+    def update(self, dt: float) -> None:
+        """Mark the command complete when the camera stops moving."""
+        camera = self.context.camera
+        self.complete = camera is None or not camera.is_moving()
+
+
 def _resolve_entity_id(
     entity_id: str,
     *,
@@ -603,15 +617,25 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity.current_frame = int(frame)
         return ImmediateHandle()
 
-    @registry.register("player_interact")
-    def player_interact(
+    @registry.register("interact_facing")
+    def interact_facing(
         context: CommandContext,
         *,
         entity_id: str,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
-        """Activate the first enabled entity in front of the actor."""
-        target_entity = context.interaction_system.get_facing_target(entity_id)
+        """Activate the first enabled interact target in front of an actor."""
+        resolved_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_id:
+            logger.warning("interact_facing: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        target_entity = context.interaction_system.get_facing_target(resolved_id)
         if target_entity is None:
             return ImmediateHandle()
         interact_event = target_entity.get_event("interact")
@@ -627,7 +651,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             interact_event.commands,
             base_params={
                 "source_entity_id": target_entity.entity_id,
-                "actor_entity_id": entity_id,
+                "actor_entity_id": resolved_id,
             },
         )
 
@@ -735,6 +759,161 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 field_name="events_enabled",
                 value=enabled,
             )
+        return ImmediateHandle()
+
+    @registry.register("set_active_entity")
+    def set_active_entity(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Switch which entity currently receives direct input."""
+        resolved_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_id:
+            logger.warning("set_active_entity: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        context.world.set_active_entity(resolved_id)
+        return ImmediateHandle()
+
+    @registry.register("set_input_event_name")
+    def set_input_event_name(
+        context: CommandContext,
+        *,
+        action: str,
+        event_name: str,
+        **_: Any,
+    ) -> CommandHandle:
+        """Change which event name the engine looks up for an input action."""
+        if context.input_handler is None:
+            raise ValueError("Cannot change input event names without an input handler.")
+        context.input_handler.set_action_event_name(str(action), str(event_name))
+        return ImmediateHandle()
+
+    @registry.register("set_camera_follow_entity")
+    def set_camera_follow_entity(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Make the camera follow a specific entity."""
+        if context.camera is None:
+            raise ValueError("Cannot change camera follow without an active camera.")
+        resolved_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_id:
+            logger.warning("set_camera_follow_entity: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        if context.world.get_entity(resolved_id) is None:
+            raise KeyError(f"Cannot follow missing entity '{resolved_id}'.")
+        context.camera.follow_entity(resolved_id)
+        context.camera.update(context.world, advance_tick=False)
+        return ImmediateHandle()
+
+    @registry.register("set_camera_follow_active_entity")
+    def set_camera_follow_active_entity(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Make the camera follow whichever entity currently receives direct input."""
+        if context.camera is None:
+            raise ValueError("Cannot change camera follow without an active camera.")
+        context.camera.follow_active_entity()
+        context.camera.update(context.world, advance_tick=False)
+        return ImmediateHandle()
+
+    @registry.register("clear_camera_follow")
+    def clear_camera_follow(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Stop automatically following any entity."""
+        if context.camera is None:
+            raise ValueError("Cannot clear camera follow without an active camera.")
+        context.camera.clear_follow()
+        return ImmediateHandle()
+
+    @registry.register("move_camera")
+    def move_camera(
+        context: CommandContext,
+        *,
+        x: int | float,
+        y: int | float,
+        space: str = "pixel",
+        mode: str = "absolute",
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Move the camera in pixel or grid space, absolute or relative."""
+        if context.camera is None:
+            raise ValueError("Cannot move camera without an active camera.")
+        if space not in {"pixel", "grid"}:
+            raise ValueError(f"Unknown camera movement space '{space}'.")
+        if mode not in {"absolute", "relative"}:
+            raise ValueError(f"Unknown camera movement mode '{mode}'.")
+
+        target_x = float(x)
+        target_y = float(y)
+        if space == "grid":
+            target_x *= context.area.tile_size
+            target_y *= context.area.tile_size
+        if mode == "relative":
+            target_x += context.camera.x
+            target_y += context.camera.y
+
+        context.camera.start_move_to(
+            target_x,
+            target_y,
+            duration=duration,
+            frames_needed=frames_needed,
+            speed_px_per_second=speed_px_per_second,
+        )
+        if not context.camera.is_moving():
+            return ImmediateHandle()
+        return CameraCommandHandle(context)
+
+    @registry.register("teleport_camera")
+    def teleport_camera(
+        context: CommandContext,
+        *,
+        x: int | float,
+        y: int | float,
+        space: str = "pixel",
+        mode: str = "absolute",
+        **_: Any,
+    ) -> CommandHandle:
+        """Move the camera instantly in pixel or grid space."""
+        if context.camera is None:
+            raise ValueError("Cannot teleport camera without an active camera.")
+        if space not in {"pixel", "grid"}:
+            raise ValueError(f"Unknown camera teleport space '{space}'.")
+        if mode not in {"absolute", "relative"}:
+            raise ValueError(f"Unknown camera teleport mode '{mode}'.")
+
+        target_x = float(x)
+        target_y = float(y)
+        if space == "grid":
+            target_x *= context.area.tile_size
+            target_y *= context.area.tile_size
+        if mode == "relative":
+            target_x += context.camera.x
+            target_y += context.camera.y
+
+        context.camera.teleport_to(target_x, target_y)
         return ImmediateHandle()
 
     @registry.register("set_visible")

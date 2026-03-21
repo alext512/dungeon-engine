@@ -14,6 +14,7 @@ class World:
 
     entities: dict[str, Entity] = field(default_factory=dict)
     player_id: str = "player"
+    active_entity_id: str = "player"
     variables: dict[str, Any] = field(default_factory=dict)
 
     def add_entity(self, entity: Entity) -> None:
@@ -34,6 +35,20 @@ class World:
         if player is None:
             raise KeyError(f"Player entity '{self.player_id}' was not found in the world.")
         return player
+
+    def get_active_entity(self) -> Entity:
+        """Return the entity currently receiving direct input."""
+        active_entity = self.get_entity(self.active_entity_id)
+        if active_entity is not None:
+            return active_entity
+        return self.get_player()
+
+    def set_active_entity(self, entity_id: str) -> None:
+        """Set which entity currently receives direct input."""
+        entity = self.get_entity(entity_id)
+        if entity is None:
+            raise KeyError(f"Active entity '{entity_id}' was not found in the world.")
+        self.active_entity_id = entity.entity_id
 
     def iter_entities(self, *, include_absent: bool = False) -> list[Entity]:
         """Return entities as a list, optionally including non-present ones."""

@@ -71,7 +71,11 @@ class AnimationSystem:
         return entity.animation_playback.active
 
     def update(self, dt: float) -> None:
-        """Update the visible sprite frame for each entity."""
+        """Backward-compatible wrapper that advances one fixed animation tick."""
+        self.update_tick(dt)
+
+    def update_tick(self, dt: float) -> None:
+        """Update the visible sprite frame for each entity for one simulation tick."""
         for entity in self.world.iter_entities():
             if self._update_command_playback(entity, dt):
                 continue
@@ -105,34 +109,30 @@ class AnimationSystem:
             playback.active = False
             return False
 
-        tick_duration = 1.0 / config.FPS if config.FPS > 0 else 0.0
         entity.current_frame = playback.frame_sequence[
             min(playback.current_sequence_index, len(playback.frame_sequence) - 1)
         ]
 
-        if tick_duration <= 0:
+        if config.FPS <= 0:
             playback.active = False
             return True
 
-        playback.time_accumulator += dt
-        while playback.active and playback.time_accumulator >= tick_duration:
-            playback.time_accumulator -= tick_duration
-            playback.ticks_on_current_frame += 1
+        playback.ticks_on_current_frame += 1
 
-            if playback.ticks_on_current_frame < playback.frames_per_sprite_change:
-                continue
+        if playback.ticks_on_current_frame < playback.frames_per_sprite_change:
+            return True
 
-            playback.ticks_on_current_frame = 0
-            playback.current_sequence_index += 1
-            if playback.current_sequence_index >= len(playback.frame_sequence):
-                playback.active = False
-                playback.current_sequence_index = len(playback.frame_sequence) - 1
-                if playback.hold_last_frame:
-                    entity.current_frame = playback.frame_sequence[-1]
-                elif entity.animation_frames:
-                    entity.current_frame = entity.animation_frames[0]
-                break
+        playback.ticks_on_current_frame = 0
+        playback.current_sequence_index += 1
+        if playback.current_sequence_index >= len(playback.frame_sequence):
+            playback.active = False
+            playback.current_sequence_index = len(playback.frame_sequence) - 1
+            if playback.hold_last_frame:
+                entity.current_frame = playback.frame_sequence[-1]
+            elif entity.animation_frames:
+                entity.current_frame = entity.animation_frames[0]
+            return True
 
-            entity.current_frame = playback.frame_sequence[playback.current_sequence_index]
+        entity.current_frame = playback.frame_sequence[playback.current_sequence_index]
 
         return True

@@ -34,6 +34,7 @@ The launchers remember the last selected project and the last area opened in gam
 - configurable bitmap-font system with JSON font definitions
 - command runner foundation
 - command-driven grid movement
+- fixed-timestep simulation for movement/command playback
 - wall collision
 - pushable block behavior
 - held movement that starts the next step as soon as the previous move fully finishes
@@ -73,6 +74,7 @@ Expected behavior:
 - if `saves/slot_1.json` exists when play starts, its overrides are loaded on top of the room JSON
 - press `F5` in play mode to write the current persistent state to `saves/slot_1.json`
 - press `F9` in play mode to reload persistent overrides from `saves/slot_1.json`
+- if the active project's `project.json` enables `debug_inspection_enabled`, `F6` pauses/resumes simulation, `F7` advances one simulation tick, and `[` / `]` zoom the output window out or in
 - the player uses a tiny 2-frame walk animation while moving
 - the room uses layered tiles instead of a single character grid
 

@@ -9,7 +9,16 @@ Example ``project.json``::
     {
         "entity_paths": ["entities/"],
         "asset_paths": ["assets/"],
-        "area_paths": ["areas/"]
+        "area_paths": ["areas/"],
+        "active_entity_id": "player",
+        "debug_inspection_enabled": true,
+        "input_events": {
+            "move_up": "move_up",
+            "move_down": "move_down",
+            "move_left": "move_left",
+            "move_right": "move_right",
+            "interact": "interact"
+        }
     }
 
 If any section is omitted the engine falls back to conventional folders inside
@@ -27,6 +36,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+
+DEFAULT_INPUT_EVENT_NAMES: dict[str, str] = {
+    "move_up": "move_up",
+    "move_down": "move_down",
+    "move_left": "move_left",
+    "move_right": "move_right",
+    "interact": "interact",
+}
+
 @dataclass
 class ProjectContext:
     """Resolved search paths for a single project."""
@@ -35,6 +53,11 @@ class ProjectContext:
     entity_paths: list[Path] = field(default_factory=list)
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
+    active_entity_id: str = "player"
+    debug_inspection_enabled: bool = False
+    input_event_names: dict[str, str] = field(
+        default_factory=lambda: dict(DEFAULT_INPUT_EVENT_NAMES)
+    )
 
     # ------------------------------------------------------------------
     # Entity template discovery
@@ -152,6 +175,9 @@ def load_project(project_path: Path) -> ProjectContext:
         entity_paths=_resolve_paths("entity_paths", "entities"),
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
+        active_entity_id=str(raw.get("active_entity_id", "player")),
+        debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
+        input_event_names=_resolve_input_events(raw.get("input_events")),
     )
 
 
@@ -167,4 +193,17 @@ def default_project(project_root: Path | None = None) -> ProjectContext:
         entity_paths=_optional_dir(root / "entities"),
         asset_paths=_optional_dir(root / "assets"),
         area_paths=_optional_dir(root / "areas"),
+        active_entity_id="player",
+        debug_inspection_enabled=False,
+        input_event_names=dict(DEFAULT_INPUT_EVENT_NAMES),
     )
+
+
+def _resolve_input_events(raw_input_events: Any) -> dict[str, str]:
+    """Merge authored input-event names with engine defaults."""
+    resolved = dict(DEFAULT_INPUT_EVENT_NAMES)
+    if not isinstance(raw_input_events, dict):
+        return resolved
+    for action, event_name in raw_input_events.items():
+        resolved[str(action)] = str(event_name)
+    return resolved
