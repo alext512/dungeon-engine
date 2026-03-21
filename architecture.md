@@ -9,7 +9,7 @@ The spirit should still come from the old Godot project:
 - gameplay is driven by reusable commands
 - objects do not hard-code bespoke one-off behavior
 - the same command ideas should be usable by the player, interactable objects, usable items, dialogue choices, and cinematics
-- testing content creation should be possible early through an in-app editor
+- testing content creation should be possible early through an editor
 
 This is not meant to be a totally generic engine. It is a focused, data-driven puzzle/RPG framework with room to grow.
 
@@ -68,8 +68,8 @@ Input should request top-level commands.
 Example:
 
 - pressing Up does not directly move the player
-- it queues a `player_step` command with `direction=up`
-- that command can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
+- it queues a `run_event` request for the player's `move_up` event
+- that event can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
 
 This keeps player input, AI behavior, and cinematics aligned around the same action model.
 
@@ -95,7 +95,7 @@ The early editor only needs to be strong enough to:
 - place entities
 - edit a few important properties
 - save and load data
-- jump into play-test mode quickly
+- save and launch the room in the standalone game quickly
 
 ### 5. Data should describe content, not replace code entirely
 
@@ -151,7 +151,7 @@ Typical state buckets:
 - trigger command chains
 - inventory or item container state
 - stats and custom variables
-- visibility and enabled state
+- visibility, presence, and event enabled state
 
 ### Systems
 
@@ -233,12 +233,12 @@ Movement should follow the same spirit.
 
 Example movement chain:
 
-1. receive `player_step(direction)`
-2. update facing
-3. check target tile
+1. receive `run_event(entity_id=player, event_id=move_right)`
+2. start any project-authored walk animation
+3. call `move_entity_one_tile(direction=right)`
 4. if blocked by pushable object, try push chain
 5. if passable, animate and move
-6. fire leave and enter triggers
+6. run any `on_complete` cleanup such as restoring the idle frame
 7. finish
 
 ## World Data
@@ -247,10 +247,10 @@ The source of truth for content should be JSON files.
 
 Expected content groups:
 
-- `data/areas/`
-- `data/entities/`
-- `data/items/`
-- `data/dialogue/` if dialogue is split out
+- `areas/`
+- `entities/`
+- `items/`
+- `dialogue/` if dialogue is split out
 
 The editor should read and write these files.
 
@@ -296,7 +296,7 @@ Early editor scope:
 - select an entity
 - edit a small set of important properties
 - save and load
-- switch into play-test mode and back
+- save and launch the same room in the game quickly
 
 The first editor version does not need a full visual command-chain authoring UI. A simple property inspector plus raw JSON editing for advanced fields is acceptable early on.
 

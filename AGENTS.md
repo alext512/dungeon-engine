@@ -4,22 +4,34 @@ This file is the starting point for any AI agent working on this project. Read t
 
 ## What Is This?
 
-A top-down RPG/puzzle game engine built with Python and `pygame-ce`. It has an in-app level editor with a dual-window layout (map window + browser/tools window). The game is command-driven and data-driven — gameplay logic lives in JSON command chains, not hardcoded Python scripts.
+A top-down RPG/puzzle game engine built with Python and `pygame-ce`.
+
+The project now has two standalone applications:
+
+- `run_game.py` / `Run_Game.cmd` for play mode
+- `run_editor.py` / `Run_Editor.cmd` for the standalone level editor
+
+Both apps share the same JSON area/entity data model. Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
+
+Project content now lives outside the app package. The engine/editor are under `python_puzzle_engine/`, while project folders such as `../test_project/` contain `project.json`, areas, entities, assets, and fonts.
 
 ## How to Run
 
-```
+```text
 cd python_puzzle_engine
-.venv/Scripts/python main.py
+.venv/Scripts/python run_game.py
+.venv/Scripts/python run_editor.py
 ```
 
-Or double-click `Run_Python_Puzzle.cmd`.
+Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
+
+`main.py` still exists as a thin legacy entry point that forwards into `run_game.py`, but the standalone launchers are the preferred workflow.
 
 ## Read These Files (In Order)
 
 | File | What It Tells You |
 |---|---|
-| `STATUS.md` | What's implemented, editor controls, current test room, known issues |
+| `STATUS.md` | What's implemented, current controls, current test room, known gaps |
 | `functionality.md` | Plain-language feature list by priority tier |
 | `architecture.md` | Design philosophy, tech stack, command system, entity/component model |
 | `CONTRIBUTING.md` | Working rules and project direction |
@@ -29,21 +41,26 @@ Or double-click `Run_Python_Puzzle.cmd`.
 
 ## Project Structure
 
-```
-main.py                          # Entry point
+```text
+main.py                          # Legacy quick-launch game entry point
+run_game.py                      # Preferred standalone game entry point
+run_editor.py                    # Preferred standalone editor entry point
+Run_Game.cmd                     # Windows launcher for the game
+Run_Editor.cmd                   # Windows launcher for the editor
 puzzle_dungeon/
     config.py                    # Paths, constants, window sizes
     logging_utils.py             # Rotating error log setup
+    project.py                   # project.json loading and search-path resolution
     engine/
-        game.py                  # Main game loop, mode switching (editor/play)
-        renderer.py              # All rendering (tiles, entities, editor overlays)
+        game.py                  # Play-mode runtime loop
+        renderer.py              # Play-mode rendering
         asset_manager.py         # PNG loading, frame slicing, caching
         camera.py                # Camera positioning and snapping
-        input_handler.py         # Input polling
+        input_handler.py         # Play-mode input polling
         text.py                  # Bitmap font rendering
     editor/
-        level_editor.py          # Editor state, tools, tile/entity operations
-        browser_window.py        # Second pygame window (tileset view, layers, entities, properties)
+        editor_app.py            # Standalone resizable editor UI
+        level_editor.py          # Editor document model, tile/entity operations
     world/
         area.py                  # Area data model (tilesets, tile layers, walkability, entity grid)
         entity.py                # Entity data model
@@ -59,36 +76,35 @@ puzzle_dungeon/
         registry.py              # Command type registry
         runner.py                # Command chain executor
         builtin.py               # Built-in command implementations
-    data/
-        areas/test_room.json     # The current test level
-        entities/*.json          # Entity templates (player, block, lever, lever_toggle, gate)
-        assets/tiles/            # Tileset PNGs
-        assets/sprites/          # Sprite sheet PNGs
-        fonts/                   # Bitmap font atlases
 ```
 
 ## Key Technical Decisions
 
-- **GID-based tilemaps**: Tile grids store integers, not strings. GID 0 = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. This matches the industry standard (Tiled, Godot, RPG Maker). See `area.py` for `resolve_gid()`.
-- **Command pattern**: All gameplay (movement, interaction, triggers) goes through the command runner. Input queues commands; it never mutates game state directly.
-- **Editor document model**: The editor keeps an authoritative copy of the area. Play-testing clones it, so play never corrupts the editor state.
-- **Dual-window editor**: Main window shows the map. A second pygame window (`browser_window.py`) shows tools, tileset images, layers, entity palettes, and property inspectors. The browser layout changes based on the active mode (tile/walkability/entity).
-- **Entity templates**: Entities are defined in `data/entities/*.json` as templates. Placed instances can override parameters using `$variable` substitution.
+- **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
+- **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
+- **Shared data model across apps**: The standalone game and standalone editor both read the same area/entity JSON format.
+- **Project manifests**: `project.json` defines `entity_paths`, `asset_paths`, and `area_paths`, so all project content lives outside the app package.
+- **Tileset discovery**: The editor browses PNG assets recursively from the active project's asset paths, but a room only stores the tilesets it actually uses.
+- **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
 
 ## Common Tasks
 
-**Adding a new command type**: Implement it in `commands/builtin.py` inside `register_builtin_commands()` using the `@registry.register("name")` decorator. Follow the pattern of existing commands (accept `CommandContext`, return `ImmediateHandle()` for instant commands or a `CommandHandle` subclass for async ones).
+**Adding a new command type**: Implement it in `commands/builtin.py` inside `register_builtin_commands()` using the `@registry.register("name")` decorator. Follow the pattern of existing commands.
 
-**Adding a new entity template**: Create a JSON file in `data/entities/`, place it in a room via the editor.
+**Adding a new entity template**: Create a JSON file in the active project's `entities/` folder (or another configured entity path), then place it through the editor.
 
-**Editing the editor UI**: Browser window layout is in `browser_window.py`. Editor logic/state is in `level_editor.py`. Rendering of editor overlays (hover preview, grid, selection) is in `renderer.py`.
+**Editing the editor UI**: Layout and input flow live in `editor/editor_app.py`. Editor data/document operations live in `editor/level_editor.py`.
 
-**Changing how tiles/areas work**: Core data model is `area.py`. Loading is `loader.py`, saving is `serializer.py`.
+**Changing how tiles/areas work**: Core data model is `world/area.py`. Loading is `world/loader.py`. Saving is `world/serializer.py`.
+
+**Changing project asset/content lookup**: Project search-path behavior lives in `project.py` plus `world/loader.py` and `engine/asset_manager.py`.
 
 ## Gotchas
 
-- The project uses `pygame-ce` (Community Edition), not vanilla `pygame`. Install with `pip install pygame-ce`.
-- Two separate pygame display windows are active simultaneously. The browser window runs on a separate surface.
-- Tile layers and walkability are independent systems — a tile can exist without a walk flag and vice versa.
+- The project uses `pygame-ce` (Community Edition), not vanilla `pygame`.
+- The game and editor are separate applications now. There is no longer an in-game F1 editor toggle.
+- Each app opens its own single pygame window. The old browser-window-based editor has been replaced by `editor_app.py`.
+- Tilesets are discovered recursively through the active project's `asset_paths`; folders under `assets/` are organizational, not restrictive.
+- Tile layers and walkability are independent systems. A tile can exist without a walk flag and vice versa.
 - Entity stacking: multiple entities can occupy the same grid cell, ordered by `stack_order`.
-- The `asset_manager` is passed around to many constructors — it's the central cache for all loaded images and frames.
+- The `asset_manager` is passed around widely. It is the central cache for loaded images and sliced frames.

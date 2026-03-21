@@ -12,7 +12,7 @@ This file is the plain-language feature list for the project. It is meant to be 
 - The player can interact with nearby objects and trigger command chains.
 - Rooms can contain levers, gates, doors, switches, buttons, triggers, pickups, NPCs, and similar entities.
 - Dialogue supports text reveal, advancing, and branching choices.
-- Rooms can be created and edited early through an in-app editor.
+- Rooms can be created and edited early through a standalone editor that shares the same data model as play mode.
 - Inventory exists early and supports item checks as interaction requirements.
 - Usable items can trigger command chains.
 - Cinematics exist early as sequenced command chains with temporary input lock.

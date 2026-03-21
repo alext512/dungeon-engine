@@ -3,18 +3,37 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pygame
 
 from puzzle_dungeon import config
 
+if TYPE_CHECKING:
+    from puzzle_dungeon.project import ProjectContext
+
 
 class AssetManager:
-    """Cache loaded images and sliced frames for the prototype asset pipeline."""
+    """Cache loaded images and sliced frames for the prototype asset pipeline.
 
-    def __init__(self) -> None:
+    When a :class:`~puzzle_dungeon.project.ProjectContext` is provided, asset
+    paths are resolved across the project's asset search paths. Otherwise the
+    legacy package-relative fallback is used.
+    """
+
+    def __init__(self, project: ProjectContext | None = None) -> None:
+        self._project = project
         self._image_cache: dict[Path, pygame.Surface] = {}
         self._frame_cache: dict[tuple[Path, int, int], list[pygame.Surface]] = {}
+
+    def _resolve(self, relative_path: str) -> Path:
+        """Turn a relative asset path into an absolute filesystem path."""
+        if self._project is not None:
+            resolved = self._project.resolve_asset(relative_path)
+            if resolved is not None:
+                return resolved
+        # Fallback for compatibility when no project context is provided.
+        return config.DATA_DIR / relative_path
 
     def get_frame(
         self,
@@ -24,7 +43,7 @@ class AssetManager:
         frame_index: int,
     ) -> pygame.Surface:
         """Return a single frame from a sheet or standalone image."""
-        asset_path = config.DATA_DIR / relative_path
+        asset_path = self._resolve(relative_path)
         frames = self._get_frames(asset_path, frame_width, frame_height)
         if not frames:
             raise ValueError(f"No frames available in asset '{asset_path}'.")
@@ -33,7 +52,7 @@ class AssetManager:
 
     def get_image(self, relative_path: str) -> pygame.Surface:
         """Return a cached full image surface by path relative to the data folder."""
-        asset_path = config.DATA_DIR / relative_path
+        asset_path = self._resolve(relative_path)
         return self._load_image(asset_path)
 
     def get_image_size(self, relative_path: str) -> tuple[int, int]:

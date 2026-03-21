@@ -12,6 +12,8 @@ ENTITIES_DIR = DATA_DIR / "entities"
 ASSETS_DIR = DATA_DIR / "assets"
 TILES_DIR = ASSETS_DIR / "tiles"
 FONTS_DIR = DATA_DIR / "fonts"
+SETTINGS_DIR = PROJECT_ROOT / "settings"
+LAUNCHER_STATE_PATH = SETTINGS_DIR / "launcher_state.json"
 LOGS_DIR = PROJECT_ROOT / "logs"
 ERROR_LOG_PATH = LOGS_DIR / "error.log"
 SAVES_DIR = PROJECT_ROOT / "saves"
@@ -34,3 +36,7 @@ COLOR_FLOOR = (74, 85, 104)
 COLOR_WALL = (41, 48, 62)
 COLOR_GRID_ACCENT = (108, 122, 143)
 COLOR_TEXT = (238, 242, 248)
+
+# Standalone editor window
+EDITOR_WIDTH = 1400
+EDITOR_HEIGHT = 800

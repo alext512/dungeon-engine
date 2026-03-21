@@ -90,25 +90,25 @@ Make the room interactive through command chains.
 
 ### Goal
 
-Create and test rooms from inside the app instead of relying on manual JSON editing.
+Create and test rooms through the standalone editor/game workflow instead of relying on manual JSON editing.
 
 ### Deliverables
 
-- editor mode
+- standalone editor application
 - tile painting
 - walkability editing
 - entity placement and removal
 - entity selection
 - basic property inspection and editing
 - save/load room data
-- quick play-test toggle
+- quick handoff from editor-authored data into the standalone game
 
 ### Exit criteria
 
 - create a new room in the editor
 - place player spawn and puzzle objects
 - save and reload the room
-- switch into play mode and test it immediately
+- launch the same room in the game and test it immediately
 
 ## Phase 4: Dialogue
 

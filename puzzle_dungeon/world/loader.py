@@ -18,12 +18,25 @@ from typing import Any
 
 from puzzle_dungeon import config
 from puzzle_dungeon.world.area import Area, TileLayer, Tileset
-from puzzle_dungeon.world.entity import Entity
+from puzzle_dungeon.world.entity import Entity, EntityEvent
 from puzzle_dungeon.world.persistence import PersistentAreaState, apply_persistent_area_state
 from puzzle_dungeon.world.world import World
 
 
+from puzzle_dungeon.project import ProjectContext
+
 _TEMPLATE_CACHE: dict[str, dict[str, Any]] = {}
+
+# Module-level project context: set before loading so internal helpers
+# (e.g. _load_entity_template) can resolve paths without threading the
+# parameter through every call.
+_active_project: ProjectContext | None = None
+
+
+def set_active_project(project: ProjectContext | None) -> None:
+    """Set the project context used for template and asset resolution."""
+    global _active_project
+    _active_project = project
 
 
 def load_area(
@@ -88,18 +101,23 @@ def instantiate_entity(entity_instance: dict[str, Any], tile_size: int) -> Entit
     entity_data = _resolve_entity_instance(entity_instance)
     sprite_data = dict(entity_data.get("sprite", {}))
     animation_frames = [int(frame) for frame in sprite_data.get("frames", [0])]
+    grid_x = int(entity_data["x"])
+    grid_y = int(entity_data["y"])
+    default_pixel_x = float(grid_x * tile_size)
+    default_pixel_y = float(grid_y * tile_size)
     entity = Entity(
         entity_id=entity_data["id"],
         kind=entity_data["kind"],
-        grid_x=int(entity_data["x"]),
-        grid_y=int(entity_data["y"]),
-        pixel_x=float(int(entity_data["x"]) * tile_size),
-        pixel_y=float(int(entity_data["y"]) * tile_size),
+        grid_x=grid_x,
+        grid_y=grid_y,
+        pixel_x=float(entity_data.get("pixel_x", default_pixel_x)),
+        pixel_y=float(entity_data.get("pixel_y", default_pixel_y)),
         facing=entity_data.get("facing", "down"),
         solid=bool(entity_data.get("solid", True)),
         pushable=bool(entity_data.get("pushable", False)),
-        enabled=bool(entity_data.get("enabled", True)),
+        present=bool(entity_data.get("present", True)),
         visible=bool(entity_data.get("visible", True)),
+        events_enabled=bool(entity_data.get("events_enabled", True)),
         layer=int(entity_data.get("layer", 1)),
         stack_order=int(entity_data.get("stack_order", 0)),
         color=_parse_color(entity_data.get("color"), sprite_data),
@@ -113,15 +131,16 @@ def instantiate_entity(entity_instance: dict[str, Any], tile_size: int) -> Entit
         animation_fps=float(sprite_data.get("animation_fps", 0.0)),
         animate_when_moving=bool(sprite_data.get("animate_when_moving", False)),
         current_frame=int(animation_frames[0]),
-        interact_commands=copy.deepcopy(entity_data.get("interact_commands", [])),
+        events=_parse_entity_events(entity_data),
         variables=copy.deepcopy(entity_data.get("variables", {})),
     )
-    entity.sync_pixel_position(tile_size)
     return entity
 
 
 def list_entity_template_ids() -> list[str]:
     """Return all available entity template ids in a stable order."""
+    if _active_project is not None:
+        return _active_project.list_entity_template_ids()
     return sorted(path.stem for path in config.ENTITIES_DIR.glob("*.json"))
 
 
@@ -249,7 +268,13 @@ def _load_entity_template(template_id: str) -> dict[str, Any]:
     if cached is not None:
         return copy.deepcopy(cached)
 
-    template_path = config.ENTITIES_DIR / f"{template_id}.json"
+    template_path: Path | None = None
+    if _active_project is not None:
+        template_path = _active_project.find_entity_template(template_id)
+
+    if template_path is None:
+        template_path = config.ENTITIES_DIR / f"{template_id}.json"
+
     if not template_path.exists():
         raise FileNotFoundError(f"Missing entity template '{template_id}' at '{template_path}'.")
 
@@ -267,6 +292,37 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = copy.deepcopy(value)
     return merged
+
+
+def extract_template_parameter_names(template_id: str) -> list[str]:
+    """Return the parameter placeholder names used by a template.
+
+    Scans the template JSON for ``$name`` and ``${name}`` tokens and returns
+    a sorted list of unique parameter names.  Useful for seeding the editor
+    property inspector with empty values.
+    """
+    try:
+        data = _load_entity_template(template_id)
+    except FileNotFoundError:
+        return []
+    found: set[str] = set()
+    _collect_parameter_tokens(data, found)
+    return sorted(found)
+
+
+def _collect_parameter_tokens(value: Any, found: set[str]) -> None:
+    """Recursively find ``$name`` / ``${name}`` tokens in a data tree."""
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_parameter_tokens(item, found)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_parameter_tokens(item, found)
+    elif isinstance(value, str):
+        if value.startswith("${") and value.endswith("}"):
+            found.add(value[2:-1])
+        elif value.startswith("$"):
+            found.add(value[1:])
 
 
 def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
@@ -298,6 +354,38 @@ def _parse_color(
     if raw_color is None:
         return (255, 255, 255)
     return (int(raw_color[0]), int(raw_color[1]), int(raw_color[2]))
+
+
+def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
+    """Parse named entity events, wrapping legacy interact_commands when needed."""
+    parsed_events: dict[str, EntityEvent] = {}
+
+    raw_events = entity_data.get("events", {})
+    if isinstance(raw_events, dict):
+        for event_id, raw_event in raw_events.items():
+            if isinstance(raw_event, list):
+                parsed_events[str(event_id)] = EntityEvent(
+                    enabled=True,
+                    commands=copy.deepcopy(raw_event),
+                )
+                continue
+
+            if not isinstance(raw_event, dict):
+                raise ValueError("Entity events must be objects or command lists.")
+
+            parsed_events[str(event_id)] = EntityEvent(
+                enabled=bool(raw_event.get("enabled", True)),
+                commands=copy.deepcopy(raw_event.get("commands", [])),
+            )
+
+    legacy_interact_commands = entity_data.get("interact_commands", [])
+    if legacy_interact_commands and "interact" not in parsed_events:
+        parsed_events["interact"] = EntityEvent(
+            enabled=True,
+            commands=copy.deepcopy(legacy_interact_commands),
+        )
+
+    return parsed_events
 
 
 def _derive_area_id(raw_data: dict[str, Any], source_name: str) -> str:

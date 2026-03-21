@@ -1,6 +1,6 @@
 # Standalone Tiled-Like Editor + Game/Editor Separation
 
-> **Status: Planned**
+> **Status: Implemented**
 
 ## Context
 

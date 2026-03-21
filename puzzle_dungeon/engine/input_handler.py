@@ -101,8 +101,9 @@ class InputHandler:
                 continue
 
             self.command_runner.enqueue(
-                "player_step",
+                "run_event",
                 entity_id=self.player_id,
-                direction=direction,
+                event_id=f"move_{direction}",
+                actor_entity_id=self.player_id,
             )
             return
