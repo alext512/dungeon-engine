@@ -51,20 +51,15 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_sprite_flip_x",
+          "type": "run_event",
           "entity_id": "self",
-          "flip_x": false
-        },
-        {
-          "type": "run_named_command",
-          "command_id": "attempt_move_one_tile",
+          "event_id": "move",
           "direction": "up",
+          "flip_x": false,
           "push_event_id": "push_from_down",
           "phase_a_frames": [5, 2],
           "phase_b_frames": [8, 2],
-          "idle_frame": 2,
-          "frames_per_sprite_change": 8,
-          "frames_needed": 16
+          "idle_frame": 2
         }
       ]
     },
@@ -72,20 +67,15 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_sprite_flip_x",
+          "type": "run_event",
           "entity_id": "self",
-          "flip_x": false
-        },
-        {
-          "type": "run_named_command",
-          "command_id": "attempt_move_one_tile",
+          "event_id": "move",
           "direction": "down",
+          "flip_x": false,
           "push_event_id": "push_from_up",
           "phase_a_frames": [3, 0],
           "phase_b_frames": [6, 0],
-          "idle_frame": 0,
-          "frames_per_sprite_change": 8,
-          "frames_needed": 16
+          "idle_frame": 0
         }
       ]
     },
@@ -93,20 +83,15 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_sprite_flip_x",
+          "type": "run_event",
           "entity_id": "self",
-          "flip_x": false
-        },
-        {
-          "type": "run_named_command",
-          "command_id": "attempt_move_one_tile",
+          "event_id": "move",
           "direction": "left",
+          "flip_x": false,
           "push_event_id": "push_from_right",
           "phase_a_frames": [4, 1],
           "phase_b_frames": [7, 1],
-          "idle_frame": 1,
-          "frames_per_sprite_change": 8,
-          "frames_needed": 16
+          "idle_frame": 1
         }
       ]
     },
@@ -114,20 +99,36 @@
       "enabled": true,
       "commands": [
         {
+          "type": "run_event",
+          "entity_id": "self",
+          "event_id": "move",
+          "direction": "right",
+          "flip_x": true,
+          "push_event_id": "push_from_left",
+          "phase_a_frames": [4, 1],
+          "phase_b_frames": [7, 1],
+          "idle_frame": 1
+        }
+      ]
+    },
+    "move": {
+      "enabled": true,
+      "commands": [
+        {
           "type": "set_sprite_flip_x",
           "entity_id": "self",
-          "flip_x": true
+          "flip_x": "$flip_x"
         },
         {
           "type": "run_named_command",
           "command_id": "attempt_move_one_tile",
-          "direction": "right",
-          "push_event_id": "push_from_left",
-          "phase_a_frames": [4, 1],
-          "phase_b_frames": [7, 1],
-          "idle_frame": 1,
-          "frames_per_sprite_change": 8,
-          "frames_needed": 16
+          "direction": "$direction",
+          "push_event_id": "$push_event_id",
+          "phase_a_frames": "$phase_a_frames",
+          "phase_b_frames": "$phase_b_frames",
+          "idle_frame": "$idle_frame",
+          "frames_per_sprite_change": "$half:project.movement.frames_needed",
+          "frames_needed": "$project.movement.frames_needed"
         }
       ]
     }

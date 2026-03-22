@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -169,6 +170,113 @@ def _describe_command(name: str, params: dict[str, Any]) -> str:
     return name
 
 
+def _lookup_nested_value(value: Any, path_parts: list[str]) -> Any:
+    """Resolve a nested dict/list path against a Python value."""
+    current = value
+    for part in path_parts:
+        if isinstance(current, dict):
+            if part not in current:
+                raise KeyError(f"Unknown key '{part}'.")
+            current = current[part]
+            continue
+        if isinstance(current, list):
+            try:
+                index = int(part)
+            except ValueError as exc:
+                raise KeyError(f"Expected list index, got '{part}'.") from exc
+            try:
+                current = current[index]
+            except IndexError as exc:
+                raise KeyError(f"List index '{index}' is out of range.") from exc
+            continue
+        raise KeyError(f"Cannot descend into '{part}'.")
+    return current
+
+
+def _resolve_runtime_token(
+    token: str,
+    context: CommandContext,
+    runtime_params: dict[str, Any],
+) -> Any:
+    """Resolve a $token against event params, project values, or runtime variables."""
+    if token.startswith("half:"):
+        base_value = _resolve_runtime_token(token[5:], context, runtime_params)
+        if not isinstance(base_value, (int, float)):
+            raise TypeError(f"$half: expects a numeric value, got {type(base_value).__name__}.")
+        if isinstance(base_value, int):
+            return max(1, base_value // 2)
+        return base_value / 2
+
+    if token in runtime_params:
+        return copy.deepcopy(runtime_params[token])
+
+    parts = [part for part in token.split(".") if part]
+    if not parts:
+        raise KeyError("Empty runtime token.")
+
+    head, tail = parts[0], parts[1:]
+    if head in runtime_params:
+        return copy.deepcopy(_lookup_nested_value(runtime_params[head], tail))
+
+    if head == "project":
+        if context.project is None:
+            raise KeyError("No active project context for $project lookup.")
+        return copy.deepcopy(context.project.resolve_shared_variable(tail))
+
+    if head == "world":
+        return copy.deepcopy(_lookup_nested_value(context.world.variables, tail))
+
+    if head in {"self", "source"}:
+        entity_id = runtime_params.get("source_entity_id")
+        if not entity_id:
+            raise KeyError(f"Token '${token}' requires a source entity context.")
+        entity = context.world.get_entity(str(entity_id))
+        if entity is None:
+            raise KeyError(f"Token '${token}' references missing source entity '{entity_id}'.")
+        return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
+
+    if head == "actor":
+        entity_id = runtime_params.get("actor_entity_id")
+        if not entity_id:
+            raise KeyError(f"Token '${token}' requires an actor entity context.")
+        entity = context.world.get_entity(str(entity_id))
+        if entity is None:
+            raise KeyError(f"Token '${token}' references missing actor entity '{entity_id}'.")
+        return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
+
+    raise KeyError(f"Unknown runtime token '${token}'.")
+
+
+def _resolve_runtime_values(
+    value: Any,
+    context: CommandContext,
+    runtime_params: dict[str, Any],
+) -> Any:
+    """Resolve $tokens recursively inside a command spec before execution."""
+    if isinstance(value, dict):
+        return {
+            key: _resolve_runtime_values(item, context, runtime_params)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            _resolve_runtime_values(item, context, runtime_params)
+            for item in value
+        ]
+
+    if isinstance(value, str):
+        token = None
+        if value.startswith("${") and value.endswith("}"):
+            token = value[2:-1]
+        elif value.startswith("$"):
+            token = value[1:]
+        if token is not None:
+            return _resolve_runtime_token(token, context, runtime_params)
+
+    return value
+
+
 def execute_registered_command(
     registry: Any,
     context: CommandContext,
@@ -214,9 +322,10 @@ def execute_command_spec(
     base_params: dict[str, Any] | None = None,
 ) -> CommandHandle:
     """Execute a single command spec with optional inherited base parameters."""
-    spec = dict(command_spec)
+    inherited_params = dict(base_params or {})
+    spec = _resolve_runtime_values(dict(command_spec), context, inherited_params)
     command_name = str(spec.pop("type"))
-    params = dict(base_params or {})
+    params = dict(inherited_params)
     params.update(spec)
     return execute_registered_command(
         registry,

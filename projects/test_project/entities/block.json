@@ -13,32 +13,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "query_facing_state",
+          "type": "run_event",
           "entity_id": "self",
-          "direction": "right",
-          "store_state_var": "push_attempt_state"
-        },
-        {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
-          "name": "push_attempt_state",
-          "op": "eq",
-          "value": "free",
-          "then": [
-            {
-              "type": "play_audio",
-              "path": "assets/project/sfx/push.wav"
-            },
-            {
-              "type": "move_entity_one_tile",
-              "entity_id": "self",
-              "direction": "right",
-              "frames_needed": 16,
-              "allow_push": false,
-              "wait": false
-            }
-          ]
+          "event_id": "push",
+          "direction": "right"
         }
       ]
     },
@@ -46,32 +24,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "query_facing_state",
+          "type": "run_event",
           "entity_id": "self",
-          "direction": "left",
-          "store_state_var": "push_attempt_state"
-        },
-        {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
-          "name": "push_attempt_state",
-          "op": "eq",
-          "value": "free",
-          "then": [
-            {
-              "type": "play_audio",
-              "path": "assets/project/sfx/push.wav"
-            },
-            {
-              "type": "move_entity_one_tile",
-              "entity_id": "self",
-              "direction": "left",
-              "frames_needed": 16,
-              "allow_push": false,
-              "wait": false
-            }
-          ]
+          "event_id": "push",
+          "direction": "left"
         }
       ]
     },
@@ -79,32 +35,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "query_facing_state",
+          "type": "run_event",
           "entity_id": "self",
-          "direction": "down",
-          "store_state_var": "push_attempt_state"
-        },
-        {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
-          "name": "push_attempt_state",
-          "op": "eq",
-          "value": "free",
-          "then": [
-            {
-              "type": "play_audio",
-              "path": "assets/project/sfx/push.wav"
-            },
-            {
-              "type": "move_entity_one_tile",
-              "entity_id": "self",
-              "direction": "down",
-              "frames_needed": 16,
-              "allow_push": false,
-              "wait": false
-            }
-          ]
+          "event_id": "push",
+          "direction": "down"
         }
       ]
     },
@@ -112,32 +46,21 @@
       "enabled": true,
       "commands": [
         {
-          "type": "query_facing_state",
+          "type": "run_event",
           "entity_id": "self",
-          "direction": "up",
-          "store_state_var": "push_attempt_state"
-        },
+          "event_id": "push",
+          "direction": "up"
+        }
+      ]
+    },
+    "push": {
+      "enabled": true,
+      "commands": [
         {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
-          "name": "push_attempt_state",
-          "op": "eq",
-          "value": "free",
-          "then": [
-            {
-              "type": "play_audio",
-              "path": "assets/project/sfx/push.wav"
-            },
-            {
-              "type": "move_entity_one_tile",
-              "entity_id": "self",
-              "direction": "up",
-              "frames_needed": 16,
-              "allow_push": false,
-              "wait": false
-            }
-          ]
+          "type": "run_named_command",
+          "command_id": "push_one_tile",
+          "direction": "$direction",
+          "frames_needed": "$project.movement.frames_needed"
         }
       ]
     }

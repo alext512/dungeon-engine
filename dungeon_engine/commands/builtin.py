@@ -982,7 +982,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         event_id: str,
         source_entity_id: str | None = None,
         actor_entity_id: str | None = None,
-        **_: Any,
+        **event_parameters: Any,
     ) -> CommandHandle:
         """Execute a named event on a target entity when it is enabled."""
         resolved_id = _resolve_entity_id(
@@ -1002,7 +1002,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if not entity.has_enabled_event(event_id) or event is None or not event.commands:
             return ImmediateHandle()
 
-        base_params: dict[str, Any] = {}
+        base_params: dict[str, Any] = dict(event_parameters)
         base_params["source_entity_id"] = resolved_id
         if actor_entity_id is not None:
             base_params["actor_entity_id"] = actor_entity_id
