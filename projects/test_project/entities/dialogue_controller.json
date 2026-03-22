@@ -1,0 +1,100 @@
+{
+  "kind": "system",
+  "solid": false,
+  "visible": false,
+  "events": {
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "move_up",
+          "enabled": false
+        },
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "move_down",
+          "enabled": false
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/active_move_up"
+        },
+        {
+          "type": "run_detached_commands",
+          "commands": [
+            {
+              "type": "wait_for_direction_release",
+              "directions": ["up", "down"]
+            },
+            {
+              "type": "set_event_enabled",
+              "entity_id": "dialogue_controller",
+              "event_id": "move_up",
+              "enabled": true
+            },
+            {
+              "type": "set_event_enabled",
+              "entity_id": "dialogue_controller",
+              "event_id": "move_down",
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "move_up",
+          "enabled": false
+        },
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "move_down",
+          "enabled": false
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/active_move_down"
+        },
+        {
+          "type": "run_detached_commands",
+          "commands": [
+            {
+              "type": "wait_for_direction_release",
+              "directions": ["up", "down"]
+            },
+            {
+              "type": "set_event_enabled",
+              "entity_id": "dialogue_controller",
+              "event_id": "move_up",
+              "enabled": true
+            },
+            {
+              "type": "set_event_enabled",
+              "entity_id": "dialogue_controller",
+              "event_id": "move_down",
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    },
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/active_interact"
+        }
+      ]
+    }
+  }
+}

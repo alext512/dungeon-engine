@@ -30,6 +30,8 @@ class CommandContext:
     interaction_system: InteractionSystem
     animation_system: AnimationSystem
     project: Any | None = None
+    asset_manager: Any | None = None
+    text_renderer: Any | None = None
     camera: Any | None = None
     audio_player: Any | None = None
     screen_manager: Any | None = None

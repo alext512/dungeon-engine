@@ -1,0 +1,111 @@
+{
+  "id": "dialogue/blue_guide_confirm",
+  "commands": [
+    {
+      "type": "set_var",
+      "scope": "world",
+      "name": "dialogue_menu",
+      "value": ""
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_0"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_1"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_2"
+    },
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "op": "eq",
+      "value": 0,
+      "then": [
+        {
+          "type": "run_dialogue",
+          "element_id": "dialogue_text",
+          "dialogue_id": "npcs/blue_guide_lever",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": "$project.dialogue.portrait_box.y",
+          "max_width": "$project.dialogue.portrait_box.width",
+          "max_lines": "$project.dialogue.max_lines",
+          "layer": 101
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "op": "eq",
+      "value": 1,
+      "then": [
+        {
+          "type": "run_dialogue",
+          "element_id": "dialogue_text",
+          "dialogue_id": "npcs/blue_guide_blocks",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": "$project.dialogue.portrait_box.y",
+          "max_width": "$project.dialogue.portrait_box.width",
+          "max_lines": "$project.dialogue.max_lines",
+          "layer": 101
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "op": "eq",
+      "value": 2,
+      "then": [
+        {
+          "type": "run_dialogue",
+          "element_id": "dialogue_text",
+          "dialogue_id": "npcs/blue_guide_bye",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": "$project.dialogue.portrait_box.y",
+          "max_width": "$project.dialogue.portrait_box.width",
+          "max_lines": "$project.dialogue.max_lines",
+          "layer": 101
+        }
+      ]
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_text"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_portrait"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_panel"
+    },
+    {
+      "type": "set_active_entity",
+      "entity_id": "$world.dialogue_return_entity"
+    },
+    {
+      "type": "set_camera_follow_active_entity"
+    },
+    {
+      "type": "set_var",
+      "scope": "world",
+      "name": "dialogue_return_entity",
+      "value": ""
+    },
+    {
+      "type": "set_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "value": 0
+    }
+  ]
+}

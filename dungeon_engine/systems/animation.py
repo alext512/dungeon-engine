@@ -36,7 +36,9 @@ class AnimationSystem:
         playback.frame_sequence = [int(frame) for frame in frame_sequence]
         playback.frames_per_sprite_change = int(frames_per_sprite_change)
         playback.current_sequence_index = 0
-        playback.ticks_on_current_frame = 0
+        # Start at -1 so the first update tick displays the opening frame
+        # without immediately consuming one of its visible ticks.
+        playback.ticks_on_current_frame = -1
         playback.time_accumulator = 0.0
         playback.hold_last_frame = hold_last_frame
         entity.current_frame = playback.frame_sequence[0]
