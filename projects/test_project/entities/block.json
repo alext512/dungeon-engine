@@ -1,0 +1,61 @@
+{
+  "kind": "block",
+  "solid": true,
+  "pushable": true,
+  "sprite": {
+      "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [0]
+  },
+  "events": {
+    "push_from_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "move_entity_one_tile",
+          "entity_id": "self",
+          "direction": "right",
+          "frames_needed": 16,
+          "allow_push": false
+        }
+      ]
+    },
+    "push_from_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "move_entity_one_tile",
+          "entity_id": "self",
+          "direction": "left",
+          "frames_needed": 16,
+          "allow_push": false
+        }
+      ]
+    },
+    "push_from_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "move_entity_one_tile",
+          "entity_id": "self",
+          "direction": "down",
+          "frames_needed": 16,
+          "allow_push": false
+        }
+      ]
+    },
+    "push_from_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "move_entity_one_tile",
+          "entity_id": "self",
+          "direction": "up",
+          "frames_needed": 16,
+          "allow_push": false
+        }
+      ]
+    }
+  }
+}

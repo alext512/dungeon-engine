@@ -1,4 +1,4 @@
-# Python Puzzle Engine Architecture
+# Python Dungeon Engine Architecture
 
 ## Purpose
 
@@ -113,6 +113,13 @@ The intended split is:
 
 - data defines content, command chains, entities, items, dialogue, and room setup
 - code defines the runtime, command execution, rendering, collision, UI, persistence, and editor behavior
+
+Project content may live inside this repo for version control, for example under `projects/test_project/`, but that does not make it engine data. The real boundary is:
+
+- engine code lives under `dungeon_engine/`
+- project content lives in a project folder selected through `project.json`
+
+That means a repo-local project is just a convenient versioned project, not a special built-in one.
 
 ## High-Level Runtime Model
 
@@ -275,7 +282,15 @@ The first versions can keep the schemas simple. They do not need to predict ever
 ## Suggested Project Structure
 
 ```text
-puzzle_dungeon/
+projects/
+    test_project/                # Versioned sample project content (optional location)
+        project.json
+        areas/
+        entities/
+        assets/
+        commands/
+
+dungeon_engine/
     main.py
     config.py
 
@@ -296,7 +311,13 @@ Suggested responsibilities:
 - `commands/`: command runner, registry, command implementations
 - `ui/`: dialogue boxes, choices, inventory UI, debug overlays
 - `editor/`: editor state, tools, inspector, save/load helpers
-- `data/`: JSON content
+- `data/`: engine-owned internal support data only, if still needed
+
+Important boundary:
+
+- `dungeon_engine/` is the engine/editor package
+- `projects/<name>/` is one possible place to keep project content under version control
+- the engine must not assume any specific project exists there
 
 ## Editor Architecture
 
@@ -536,3 +557,4 @@ The architecture is on the right track if we can quickly build a small room wher
 - the room can be created and tested from the editor
 
 If the architecture makes that awkward, it should be changed.
+

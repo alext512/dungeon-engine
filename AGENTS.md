@@ -13,7 +13,7 @@ The project now has two standalone applications:
 
 Both apps share the same JSON area/entity data model. Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
-Project content now lives outside the app package. The engine/editor are under `python_puzzle_engine/`, while project folders such as `../test_project/` contain `project.json`, areas, entities, assets, and fonts.
+Project content lives outside the engine package. The engine/editor code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/test_project/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
 ## How to Run
 
@@ -47,7 +47,7 @@ run_game.py                      # Preferred standalone game entry point
 run_editor.py                    # Preferred standalone editor entry point
 Run_Game.cmd                     # Windows launcher for the game
 Run_Editor.cmd                   # Windows launcher for the editor
-puzzle_dungeon/
+dungeon_engine/
     config.py                    # Paths, constants, window sizes
     logging_utils.py             # Rotating error log setup
     project.py                   # project.json loading and search-path resolution
@@ -83,7 +83,7 @@ puzzle_dungeon/
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
 - **Shared data model across apps**: The standalone game and standalone editor both read the same area/entity JSON format.
-- **Project manifests**: `project.json` defines `entity_paths`, `asset_paths`, and `area_paths`, so all project content lives outside the app package.
+- **Project manifests**: `project.json` defines `entity_paths`, `asset_paths`, and `area_paths`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
 - **Tileset discovery**: The editor browses PNG assets recursively from the active project's asset paths, but a room only stores the tilesets it actually uses.
 - **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
 
@@ -108,3 +108,4 @@ puzzle_dungeon/
 - Tile layers and walkability are independent systems. A tile can exist without a walk flag and vice versa.
 - Entity stacking: multiple entities can occupy the same grid cell, ordered by `stack_order`.
 - The `asset_manager` is passed around widely. It is the central cache for loaded images and sliced frames.
+

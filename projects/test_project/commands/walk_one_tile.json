@@ -1,0 +1,72 @@
+{
+  "id": "walk_one_tile",
+  "params": [
+    "direction",
+    "phase_a_frames",
+    "phase_b_frames",
+    "idle_frame",
+    "frames_per_sprite_change",
+    "frames_needed"
+  ],
+  "commands": [
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "walk_phase",
+      "op": "eq",
+      "value": 1,
+      "then": [
+        {
+          "type": "play_animation",
+          "entity_id": "self",
+          "frame_sequence": "$phase_b_frames",
+          "frames_per_sprite_change": "$frames_per_sprite_change",
+          "wait": false
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "walk_phase",
+          "value": 0
+        }
+      ],
+      "else": [
+        {
+          "type": "play_animation",
+          "entity_id": "self",
+          "frame_sequence": "$phase_a_frames",
+          "frames_per_sprite_change": "$frames_per_sprite_change",
+          "wait": false
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "walk_phase",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "type": "move_entity_one_tile",
+      "entity_id": "self",
+      "direction": "$direction",
+      "frames_needed": "$frames_needed",
+      "allow_push": false,
+      "on_complete": [
+        {
+          "type": "stop_animation",
+          "entity_id": "self",
+          "reset_to_default": false
+        },
+        {
+          "type": "set_sprite_frame",
+          "entity_id": "self",
+          "frame": "$idle_frame"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,303 @@
+"""Project-level reusable JSON command definitions."""
+
+from __future__ import annotations
+
+import copy
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from dungeon_engine.logging_utils import get_logger
+
+if TYPE_CHECKING:
+    from dungeon_engine.project import ProjectContext
+
+
+logger = get_logger(__name__)
+
+
+@dataclass(slots=True)
+class NamedCommandDefinition:
+    """A reusable JSON-authored command chain."""
+
+    command_id: str
+    params: list[str]
+    commands: list[dict[str, Any]]
+    source_path: Path
+
+
+_COMMAND_CACHE: dict[Path, dict[str, Any]] = {}
+
+
+class NamedCommandValidationError(ValueError):
+    """Raised when project command-library content fails startup validation."""
+
+    def __init__(self, project_root: Path, issues: list[str]) -> None:
+        self.project_root = project_root
+        self.issues = list(issues)
+        super().__init__(
+            f"Named-command validation failed for '{project_root}' with {len(self.issues)} issue(s)."
+        )
+
+    def format_user_message(self, *, max_issues: int = 8) -> str:
+        """Return a short user-facing validation summary."""
+        shown_issues = self.issues[:max_issues]
+        lines = [
+            f"Project command validation failed with {len(self.issues)} issue(s).",
+            "See logs/error.log for full details.",
+            "",
+            "First issues:",
+        ]
+        lines.extend(f"- {issue}" for issue in shown_issues)
+        hidden_count = len(self.issues) - len(shown_issues)
+        if hidden_count > 0:
+            lines.append(f"- ...and {hidden_count} more")
+        return "\n".join(lines)
+
+
+def load_named_command_definition(
+    project: ProjectContext,
+    command_id: str,
+) -> NamedCommandDefinition:
+    """Load and validate a project-level named command definition."""
+    command_path = project.find_command_definition(command_id)
+    if command_path is None:
+        raise FileNotFoundError(
+            f"Missing command definition '{command_id}' in project '{project.project_root}'."
+        )
+
+    cached = _COMMAND_CACHE.get(command_path)
+    if cached is None:
+        cached = json.loads(command_path.read_text(encoding="utf-8"))
+        _COMMAND_CACHE[command_path] = cached
+    raw = copy.deepcopy(cached)
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"Command definition '{command_id}' must be a JSON object.")
+
+    expected_id = project.command_definition_id(command_path)
+    raw_id = raw.get("id", expected_id)
+    resolved_id = str(raw_id).strip()
+    if not resolved_id:
+        raise ValueError(f"Command definition '{expected_id}' must use a non-empty string for 'id'.")
+    if resolved_id != expected_id:
+        raise ValueError(
+            f"Command definition '{expected_id}' declares id '{resolved_id}', but command ids are path-based. "
+            f"Use '{expected_id}' or omit the 'id' field."
+        )
+
+    raw_params = raw.get("params", [])
+    if raw_params is None:
+        raw_params = []
+    if not isinstance(raw_params, list):
+        raise ValueError(f"Command definition '{resolved_id}' must use a list for 'params'.")
+    for param in raw_params:
+        if not isinstance(param, str) or not param.strip():
+            raise ValueError(
+                f"Command definition '{resolved_id}' must use non-empty strings inside 'params'."
+            )
+
+    raw_commands = raw.get("commands")
+    if not isinstance(raw_commands, list):
+        raise ValueError(f"Command definition '{resolved_id}' must use a list for 'commands'.")
+    for command in raw_commands:
+        if not isinstance(command, dict):
+            raise ValueError(
+                f"Command definition '{resolved_id}' must use JSON objects inside 'commands'."
+            )
+
+    return NamedCommandDefinition(
+        command_id=resolved_id,
+        params=[str(param) for param in raw_params],
+        commands=[dict(command) for command in raw_commands],
+        source_path=command_path,
+    )
+
+
+def instantiate_named_command_commands(
+    definition: NamedCommandDefinition,
+    parameters: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return a fully substituted command list for one named-command invocation."""
+    missing = [param for param in definition.params if param not in parameters]
+    if missing:
+        missing_list = ", ".join(missing)
+        raise ValueError(
+            f"Named command '{definition.command_id}' is missing required parameters: {missing_list}."
+        )
+
+    instantiated = _substitute_parameters(definition.commands, parameters)
+    return [dict(command) for command in instantiated]
+
+
+def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
+    """Replace '$name' or '${name}' strings with provided invocation parameters."""
+    if isinstance(value, dict):
+        return {key: _substitute_parameters(item, parameters) for key, item in value.items()}
+
+    if isinstance(value, list):
+        return [_substitute_parameters(item, parameters) for item in value]
+
+    if isinstance(value, str):
+        token = None
+        if value.startswith("${") and value.endswith("}"):
+            token = value[2:-1]
+        elif value.startswith("$"):
+            token = value[1:]
+
+        if token is not None and token in parameters:
+            return copy.deepcopy(parameters[token])
+
+    return value
+
+
+def validate_project_named_commands(project: ProjectContext) -> None:
+    """Validate command-library files and literal named-command references for a project."""
+    issues: list[str] = []
+    valid_command_ids, discovered_command_ids = _validate_command_definition_files(project, issues)
+    _validate_literal_named_command_references(
+        project,
+        valid_command_ids,
+        discovered_command_ids,
+        issues,
+    )
+    if issues:
+        raise NamedCommandValidationError(project.project_root, issues)
+
+
+def log_named_command_validation_error(error: NamedCommandValidationError) -> None:
+    """Write a full startup-validation failure report to the persistent log."""
+    logger.error(
+        "Named-command validation failed for %s with %d issue(s):\n%s",
+        error.project_root,
+        len(error.issues),
+        "\n".join(f"- {issue}" for issue in error.issues),
+    )
+
+
+def _validate_command_definition_files(
+    project: ProjectContext,
+    issues: list[str],
+) -> tuple[set[str], set[str]]:
+    """Scan command-definition files and return the set of valid known ids."""
+    known_ids: dict[str, list[Path]] = {}
+    for command_path in project.list_command_definition_files():
+        command_id = project.command_definition_id(command_path)
+        known_ids.setdefault(command_id, []).append(command_path)
+
+    discovered_ids = set(known_ids.keys())
+    valid_ids: set[str] = set()
+    for command_id, paths in sorted(known_ids.items()):
+        if len(paths) > 1:
+            formatted_paths = ", ".join(str(path) for path in paths)
+            issues.append(f"Duplicate command id '{command_id}' found in: {formatted_paths}")
+            continue
+        command_path = paths[0]
+        try:
+            load_named_command_definition(project, command_id)
+            valid_ids.add(command_id)
+        except json.JSONDecodeError as exc:
+            issues.append(f"{command_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno}).")
+        except Exception as exc:
+            issues.append(f"{command_path}: {exc}")
+    return valid_ids, discovered_ids
+
+
+def _validate_literal_named_command_references(
+    project: ProjectContext,
+    valid_command_ids: set[str],
+    discovered_command_ids: set[str],
+    issues: list[str],
+) -> None:
+    """Check literal run_named_command references that can be resolved statically."""
+    seen_missing_refs: set[tuple[Path, str, str]] = set()
+    for source_path in _iter_named_command_reference_files(project):
+        try:
+            raw = json.loads(source_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            if source_path.suffix.lower() == ".json" and not _path_is_under_roots(source_path, project.command_paths):
+                issues.append(
+                    f"{source_path}: invalid JSON while validating named-command references "
+                    f"({exc.msg} at line {exc.lineno}, column {exc.colno})."
+                )
+            continue
+
+        for command_id, location in _find_literal_named_command_references(raw):
+            normalized_id = str(command_id).replace("\\", "/").strip()
+            if not normalized_id or normalized_id.startswith("$"):
+                continue
+            if normalized_id in valid_command_ids or normalized_id in discovered_command_ids:
+                continue
+            key = (source_path.resolve(), location, normalized_id)
+            if key in seen_missing_refs:
+                continue
+            seen_missing_refs.add(key)
+            issues.append(
+                f"{source_path} ({location}): missing named command '{normalized_id}'."
+            )
+
+
+def _iter_named_command_reference_files(project: ProjectContext) -> list[Path]:
+    """Return JSON files that may contain literal run_named_command references."""
+    files: list[Path] = []
+    seen: set[Path] = set()
+
+    def _add_files(root: Path) -> None:
+        if not root.is_dir():
+            return
+        for file_path in sorted(root.rglob("*.json")):
+            resolved = file_path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            files.append(file_path)
+
+    for root in project.command_paths:
+        _add_files(root)
+    for root in project.entity_paths:
+        _add_files(root)
+    for root in project.area_paths:
+        _add_files(root)
+    return files
+
+
+def _path_is_under_roots(path: Path, roots: list[Path]) -> bool:
+    """Return True when *path* is inside one of the given roots."""
+    resolved = path.resolve()
+    for root in roots:
+        try:
+            resolved.relative_to(root.resolve())
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _find_literal_named_command_references(
+    value: Any,
+    *,
+    location: str = "$",
+) -> list[tuple[str, str]]:
+    """Return literal run_named_command references with a human-readable JSON path."""
+    references: list[tuple[str, str]] = []
+
+    if isinstance(value, dict):
+        command_type = value.get("type")
+        command_id = value.get("command_id")
+        if command_type == "run_named_command" and isinstance(command_id, str):
+            references.append((command_id, location))
+
+        for key, item in value.items():
+            child_location = f"{location}.{key}" if location != "$" else f"$.{key}"
+            references.extend(_find_literal_named_command_references(item, location=child_location))
+        return references
+
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            child_location = f"{location}[{index}]"
+            references.extend(_find_literal_named_command_references(item, location=child_location))
+        return references
+
+    return references
+

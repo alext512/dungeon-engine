@@ -1,0 +1,102 @@
+{
+  "id": "attempt_move_one_tile",
+  "params": [
+    "direction",
+    "push_event_id",
+    "phase_a_frames",
+    "phase_b_frames",
+    "idle_frame",
+    "frames_per_sprite_change",
+    "frames_needed"
+  ],
+  "commands": [
+    {
+      "type": "set_facing",
+      "entity_id": "self",
+      "direction": "$direction"
+    },
+    {
+      "type": "query_facing_state",
+      "entity_id": "self",
+      "movable_event_id": "$push_event_id",
+      "store_state_var": "move_attempt_state"
+    },
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "move_attempt_state",
+      "op": "eq",
+      "value": "free",
+      "then": [
+        {
+          "type": "run_named_command",
+          "command_id": "walk_one_tile",
+          "direction": "$direction",
+          "phase_a_frames": "$phase_a_frames",
+          "phase_b_frames": "$phase_b_frames",
+          "idle_frame": "$idle_frame",
+          "frames_per_sprite_change": "$frames_per_sprite_change",
+          "frames_needed": "$frames_needed"
+        }
+      ],
+      "else": [
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "move_attempt_state",
+          "op": "eq",
+          "value": "movable",
+          "then": [
+            {
+              "type": "run_facing_event",
+              "entity_id": "self",
+              "event_id": "$push_event_id"
+            },
+            {
+              "type": "query_facing_state",
+              "entity_id": "self",
+              "movable_event_id": "$push_event_id",
+              "store_state_var": "move_attempt_state"
+            },
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "move_attempt_state",
+              "op": "eq",
+              "value": "free",
+              "then": [
+                {
+                  "type": "run_named_command",
+                  "command_id": "walk_one_tile",
+                  "direction": "$direction",
+                  "phase_a_frames": "$phase_a_frames",
+                  "phase_b_frames": "$phase_b_frames",
+                  "idle_frame": "$idle_frame",
+                  "frames_per_sprite_change": "$frames_per_sprite_change",
+                  "frames_needed": "$frames_needed"
+                }
+              ],
+              "else": [
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "self",
+                  "frame": "$idle_frame"
+                }
+              ]
+            }
+          ],
+          "else": [
+            {
+              "type": "set_sprite_frame",
+              "entity_id": "self",
+              "frame": "$idle_frame"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

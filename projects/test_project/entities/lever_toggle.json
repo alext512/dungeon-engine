@@ -1,0 +1,40 @@
+{
+  "kind": "lever_toggle",
+  "solid": true,
+  "variables": {
+    "toggled": false
+  },
+  "sprite": {
+      "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [1]
+  },
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "toggled",
+          "op": "eq",
+          "value": false,
+          "then": [
+            {"type": "set_var", "scope": "entity", "entity_id": "self", "name": "toggled", "value": true, "persistent": true},
+            {"type": "set_visible", "entity_id": "$target_gate", "visible": false, "persistent": true},
+            {"type": "set_solid", "entity_id": "$target_gate", "solid": false, "persistent": true},
+            {"type": "set_color", "entity_id": "self", "color": [150, 150, 150], "persistent": true}
+          ],
+          "else": [
+            {"type": "set_var", "scope": "entity", "entity_id": "self", "name": "toggled", "value": false, "persistent": true},
+            {"type": "set_visible", "entity_id": "$target_gate", "visible": true, "persistent": true},
+            {"type": "set_solid", "entity_id": "$target_gate", "solid": true, "persistent": true},
+            {"type": "set_color", "entity_id": "self", "color": [255, 255, 255], "persistent": true}
+          ]
+        }
+      ]
+    }
+  }
+}

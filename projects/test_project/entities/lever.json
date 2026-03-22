@@ -1,0 +1,38 @@
+{
+  "kind": "lever",
+  "solid": true,
+  "sprite": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [1]
+  },
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_visible",
+          "entity_id": "$target_gate",
+          "visible": false
+        },
+        {
+          "type": "set_solid",
+          "entity_id": "$target_gate",
+          "solid": false
+        },
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "interact",
+          "enabled": false
+        },
+        {
+          "type": "set_color",
+          "entity_id": "self",
+          "color": [150, 150, 150]
+        }
+      ]
+    }
+  }
+}

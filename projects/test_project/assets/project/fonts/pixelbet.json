@@ -1,0 +1,13 @@
+{
+  "kind": "bitmap",
+  "atlas": "project/fonts/pixelbet.png",
+  "cell_width": 6,
+  "cell_height": 16,
+  "columns": 69,
+  "line_height": 10,
+  "letter_spacing": 1,
+  "space_width": 4,
+  "minimum_advance": 1,
+  "fallback_character": "?",
+  "glyph_order": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.!?\":1234567890,'-/+()=;_[]%#"
+}
