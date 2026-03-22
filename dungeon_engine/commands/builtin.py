@@ -6,6 +6,7 @@ import copy
 import logging
 from typing import Any
 
+from dungeon_engine import config
 from dungeon_engine.commands.library import (
     instantiate_named_command_commands,
     load_named_command_definition,
@@ -70,6 +71,42 @@ class CameraCommandHandle(CommandHandle):
         """Mark the command complete when the camera stops moving."""
         camera = self.context.camera
         self.complete = camera is None or not camera.is_moving()
+
+
+class ScreenAnimationCommandHandle(CommandHandle):
+    """Wait until a screen-space animation finishes playback."""
+
+    def __init__(self, context: CommandContext, element_id: str) -> None:
+        super().__init__()
+        self.context = context
+        self.element_id = element_id
+        self.update(0.0)
+
+    def update(self, dt: float) -> None:
+        """Mark the command complete when the screen element stops animating."""
+        screen_manager = self.context.screen_manager
+        self.complete = screen_manager is None or not screen_manager.is_animating(self.element_id)
+
+
+class ActionPressCommandHandle(CommandHandle):
+    """Wait for the next action-button press after the handle starts."""
+
+    def __init__(self, context: CommandContext) -> None:
+        super().__init__()
+        self.context = context
+        input_handler = context.input_handler
+        self.start_press_count = (
+            input_handler.get_action_press_count() if input_handler is not None else 0
+        )
+        self.update(0.0)
+
+    def update(self, dt: float) -> None:
+        """Complete only after a later action-button press occurs."""
+        input_handler = self.context.input_handler
+        if input_handler is None:
+            self.complete = True
+            return
+        self.complete = input_handler.get_action_press_count() > self.start_press_count
 
 
 class NamedCommandHandle(CommandHandle):
@@ -902,6 +939,154 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.audio_player.play_audio(str(path))
         return ImmediateHandle()
 
+    @registry.register("show_screen_image")
+    def show_screen_image(
+        context: CommandContext,
+        *,
+        element_id: str,
+        path: str,
+        x: int | float,
+        y: int | float,
+        frame_width: int | None = None,
+        frame_height: int | None = None,
+        frame: int = 0,
+        layer: int = 0,
+        anchor: str = "topleft",
+        flip_x: bool = False,
+        tint: tuple[int, int, int] = (255, 255, 255),
+        visible: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        """Create or replace a screen-space image element."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot show a screen image without a screen manager.")
+        context.screen_manager.show_image(
+            element_id=str(element_id),
+            asset_path=str(path),
+            x=float(x),
+            y=float(y),
+            frame_width=int(frame_width) if frame_width is not None else None,
+            frame_height=int(frame_height) if frame_height is not None else None,
+            frame=int(frame),
+            layer=int(layer),
+            anchor=str(anchor),  # type: ignore[arg-type]
+            flip_x=bool(flip_x),
+            tint=tuple(int(channel) for channel in tint),
+            visible=bool(visible),
+        )
+        return ImmediateHandle()
+
+    @registry.register("show_screen_text")
+    def show_screen_text(
+        context: CommandContext,
+        *,
+        element_id: str,
+        text: str,
+        x: int | float,
+        y: int | float,
+        layer: int = 0,
+        anchor: str = "topleft",
+        color: tuple[int, int, int] = config.COLOR_TEXT,
+        font_id: str = config.DEFAULT_UI_FONT_ID,
+        max_width: int | None = None,
+        visible: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        """Create or replace a screen-space text element."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot show screen text without a screen manager.")
+        context.screen_manager.show_text(
+            element_id=str(element_id),
+            text=str(text),
+            x=float(x),
+            y=float(y),
+            layer=int(layer),
+            anchor=str(anchor),  # type: ignore[arg-type]
+            color=tuple(int(channel) for channel in color),
+            font_id=str(font_id),
+            max_width=int(max_width) if max_width is not None else None,
+            visible=bool(visible),
+        )
+        return ImmediateHandle()
+
+    @registry.register("set_screen_text")
+    def set_screen_text(
+        context: CommandContext,
+        *,
+        element_id: str,
+        text: str,
+        **_: Any,
+    ) -> CommandHandle:
+        """Replace the text content of an existing screen-space text element."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot set screen text without a screen manager.")
+        context.screen_manager.set_text(str(element_id), str(text))
+        return ImmediateHandle()
+
+    @registry.register("remove_screen_element")
+    def remove_screen_element(
+        context: CommandContext,
+        *,
+        element_id: str,
+        **_: Any,
+    ) -> CommandHandle:
+        """Remove one screen-space element."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot remove a screen element without a screen manager.")
+        context.screen_manager.remove(str(element_id))
+        return ImmediateHandle()
+
+    @registry.register("clear_screen_elements")
+    def clear_screen_elements(
+        context: CommandContext,
+        *,
+        layer: int | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Clear all screen-space elements, optionally only one layer."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot clear screen elements without a screen manager.")
+        context.screen_manager.clear(layer=layer)
+        return ImmediateHandle()
+
+    @registry.register("play_screen_animation")
+    def play_screen_animation(
+        context: CommandContext,
+        *,
+        element_id: str,
+        frame_sequence: list[int],
+        ticks_per_frame: int = 1,
+        hold_last_frame: bool = True,
+        wait: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        """Start a one-shot frame animation on an existing screen image."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot play a screen animation without a screen manager.")
+        context.screen_manager.start_animation(
+            element_id=str(element_id),
+            frame_sequence=[int(frame) for frame in frame_sequence],
+            ticks_per_frame=int(ticks_per_frame),
+            hold_last_frame=bool(hold_last_frame),
+        )
+        if not wait:
+            return ImmediateHandle()
+        return ScreenAnimationCommandHandle(context, str(element_id))
+
+    @registry.register("wait_for_screen_animation")
+    def wait_for_screen_animation(
+        context: CommandContext,
+        *,
+        element_id: str,
+        **_: Any,
+    ) -> CommandHandle:
+        """Block until the requested screen-space animation finishes."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot wait for a screen animation without a screen manager.")
+        if not context.screen_manager.is_animating(str(element_id)):
+            return ImmediateHandle()
+        return ScreenAnimationCommandHandle(context, str(element_id))
+
     @registry.register("wait_frames")
     def wait_frames(
         context: CommandContext,
@@ -911,6 +1096,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Pause the current command lane for a fixed number of simulation ticks."""
         return WaitFramesHandle(int(frames))
+
+    @registry.register("wait_for_action_press")
+    def wait_for_action_press(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Pause until the next Space/Enter-style action press occurs."""
+        return ActionPressCommandHandle(context)
 
     @registry.register("run_detached_commands")
     def run_detached_commands(

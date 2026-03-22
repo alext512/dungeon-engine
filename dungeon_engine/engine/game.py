@@ -16,6 +16,7 @@ from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.camera import Camera
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
+from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
@@ -38,6 +39,16 @@ class Game:
 
         pygame.init()
 
+        self.internal_width = (
+            max(1, int(project.internal_width))
+            if project is not None
+            else config.INTERNAL_WIDTH
+        )
+        self.internal_height = (
+            max(1, int(project.internal_height))
+            if project is not None
+            else config.INTERNAL_HEIGHT
+        )
         self.output_scale = config.SCALE
         self.display_surface = pygame.display.set_mode(
             self._window_size_for_scale(self.output_scale)
@@ -57,6 +68,7 @@ class Game:
         self.project = project
         self.asset_manager = AssetManager(project=project)
         self.audio_player = AudioPlayer(self.asset_manager, enabled=not self.headless)
+        self.screen_manager = ScreenElementManager()
         self.persistence_runtime = PersistenceRuntime(config.DEFAULT_SAVE_SLOT_PATH)
 
         document_area, document_world = load_area(self.area_path, asset_manager=self.asset_manager)
@@ -71,9 +83,15 @@ class Game:
         self.renderer = Renderer(
             self.display_surface,
             self.asset_manager,
+            internal_width=self.internal_width,
+            internal_height=self.internal_height,
             output_scale=self.output_scale,
         )
-        self.camera = Camera(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT, self.play_authored_area)
+        self.camera = Camera(
+            self.internal_width,
+            self.internal_height,
+            self.play_authored_area,
+        )
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
 
@@ -161,6 +179,7 @@ class Game:
             self.area,
             self.world,
             self.camera,
+            self.screen_manager,
         )
         self._update_window_caption()
         return True
@@ -176,6 +195,7 @@ class Game:
         self.command_runner.update(0.0)
         self.movement_system.update_tick()
         self.animation_system.update_tick(dt)
+        self.screen_manager.update_tick()
         self.camera.update(self.world, advance_tick=True)
         self.command_runner.update(dt)
         self._apply_pending_reset_if_idle()
@@ -185,9 +205,10 @@ class Game:
 
     def _install_play_runtime(self) -> None:
         """Rebuild runtime systems around the current play world."""
-        self.camera = Camera(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT, self.area)
+        self.camera = Camera(self.internal_width, self.internal_height, self.area)
         self.camera.follow_active_entity()
         self.camera.update(self.world, advance_tick=False)
+        self.screen_manager.clear()
 
         self.collision_system = CollisionSystem(self.area, self.world)
         self.interaction_system = InteractionSystem(self.world)
@@ -203,6 +224,7 @@ class Game:
             project=self.project,
             camera=self.camera,
             audio_player=self.audio_player,
+            screen_manager=self.screen_manager,
             command_runner=None,
             input_handler=None,
             persistence_runtime=self.persistence_runtime,
@@ -221,8 +243,8 @@ class Game:
         """Return the integer-scaled output size for the current internal surface."""
         zoom = max(config.MIN_SCALE, int(scale))
         return (
-            config.INTERNAL_WIDTH * zoom,
-            config.INTERNAL_HEIGHT * zoom,
+            self.internal_width * zoom,
+            self.internal_height * zoom,
         )
 
     def _adjust_output_scale(self, delta: int) -> None:

@@ -11,6 +11,7 @@ Example ``project.json``::
         "asset_paths": ["assets/"],
         "area_paths": ["areas/"],
         "command_paths": ["commands/"],
+        "variables_path": "variables.json",
         "startup_area": "areas/test_room.json",
         "active_entity_id": "player",
         "debug_inspection_enabled": true,
@@ -61,6 +62,8 @@ class ProjectContext:
     active_entity_id: str = "player"
     debug_inspection_enabled: bool = False
     shared_variables: dict[str, Any] = field(default_factory=dict)
+    internal_width: int = 320
+    internal_height: int = 240
     input_event_names: dict[str, str] = field(
         default_factory=lambda: dict(DEFAULT_INPUT_EVENT_NAMES)
     )
@@ -280,6 +283,7 @@ def load_project(project_path: Path) -> ProjectContext:
         raw.get("variables_path"),
         fallback_name="variables.json",
     )
+    shared_variables = _load_shared_variables(variables_path)
 
     return ProjectContext(
         project_root=project_root,
@@ -291,7 +295,9 @@ def load_project(project_path: Path) -> ProjectContext:
         startup_area=_optional_manifest_str(raw.get("startup_area")),
         active_entity_id=str(raw.get("active_entity_id", "player")),
         debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
-        shared_variables=_load_shared_variables(variables_path),
+        shared_variables=shared_variables,
+        internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
+        internal_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
         input_event_names=_resolve_input_events(raw.get("input_events")),
     )
 
@@ -303,6 +309,7 @@ def default_project(project_root: Path | None = None) -> ProjectContext:
     def _optional_dir(path: Path) -> list[Path]:
         return [path] if path.is_dir() else []
 
+    shared_variables = _load_shared_variables((root / "variables.json") if (root / "variables.json").is_file() else None)
     return ProjectContext(
         project_root=root,
         entity_paths=_optional_dir(root / "entities"),
@@ -313,7 +320,9 @@ def default_project(project_root: Path | None = None) -> ProjectContext:
         startup_area=None,
         active_entity_id="player",
         debug_inspection_enabled=False,
-        shared_variables=_load_shared_variables((root / "variables.json") if (root / "variables.json").is_file() else None),
+        shared_variables=shared_variables,
+        internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
+        internal_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
         input_event_names=dict(DEFAULT_INPUT_EVENT_NAMES),
     )
 
@@ -336,6 +345,18 @@ def _load_shared_variables(variables_path: Path | None) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"Project variables file '{variables_path}' must contain a JSON object.")
     return raw
+
+
+def _resolve_project_dimension(shared_variables: dict[str, Any], key: str, default: int) -> int:
+    """Read a display dimension from shared project variables with a sane fallback."""
+    display = shared_variables.get("display", {})
+    if not isinstance(display, dict):
+        return int(default)
+    raw_value = display.get(key, default)
+    try:
+        return max(1, int(raw_value))
+    except (TypeError, ValueError):
+        return int(default)
 
 
 def _resolve_input_events(raw_input_events: Any) -> dict[str, str]:

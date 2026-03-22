@@ -68,6 +68,7 @@ class InputHandler:
             "right": False,
         }
         self.direction_priority = ["up", "down", "left", "right"]
+        self.action_press_count = 0
 
     def handle_events(self, events: list[pygame.event.Event]) -> InputFrameResult:
         """Update held input state and report high-level play actions."""
@@ -107,6 +108,7 @@ class InputHandler:
                     continue
 
                 if event.key in ACTION_KEYS:
+                    self.action_press_count += 1
                     if not self.command_runner.has_pending_work():
                         active_entity_id = self.world.active_entity_id
                         interact_event_name = self.action_event_names.get("interact", "").strip()
@@ -159,4 +161,8 @@ class InputHandler:
         if action not in self.action_event_names:
             raise KeyError(f"Unknown input action '{action}'.")
         self.action_event_names[action] = str(event_name)
+
+    def get_action_press_count(self) -> int:
+        """Return how many action-button keydown events have occurred."""
+        return int(self.action_press_count)
 

@@ -164,6 +164,51 @@ class TextRenderer:
         """Draw text with the named font onto the provided surface."""
         self.get_font(font_id).render_text(target_surface, text, position, color)
 
+    def wrap_text(
+        self,
+        text: str,
+        max_width: int,
+        *,
+        font_id: str = config.DEFAULT_UI_FONT_ID,
+    ) -> str:
+        """Wrap text to fit within a maximum pixel width."""
+        if max_width <= 0 or not text:
+            return text
+
+        wrapped_lines: list[str] = []
+        for source_line in text.split("\n"):
+            if source_line == "":
+                wrapped_lines.append("")
+                continue
+
+            current_line = ""
+            for word in source_line.split(" "):
+                candidate = word if current_line == "" else f"{current_line} {word}"
+                if current_line and self.measure_text(candidate, font_id=font_id)[0] > max_width:
+                    wrapped_lines.append(current_line)
+                    current_line = self._wrap_long_word(
+                        word,
+                        max_width,
+                        font_id=font_id,
+                        output=wrapped_lines,
+                    )
+                    continue
+
+                if self.measure_text(candidate, font_id=font_id)[0] > max_width:
+                    current_line = self._wrap_long_word(
+                        word,
+                        max_width,
+                        font_id=font_id,
+                        output=wrapped_lines,
+                    )
+                    continue
+
+                current_line = candidate
+
+            wrapped_lines.append(current_line)
+
+        return "\n".join(wrapped_lines)
+
     def get_font(self, font_id: str) -> BitmapFont:
         """Load a named font once and return it from cache afterwards."""
         cached = self._font_cache.get(font_id)
@@ -260,4 +305,23 @@ class TextRenderer:
         """Convert a glyph cell to a white alpha mask so it can be tinted later."""
         mask = pygame.mask.from_surface(source_surface)
         return mask.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0))
+
+    def _wrap_long_word(
+        self,
+        word: str,
+        max_width: int,
+        *,
+        font_id: str,
+        output: list[str],
+    ) -> str:
+        """Split a long word across multiple lines when needed."""
+        current = ""
+        for character in word:
+            candidate = f"{current}{character}"
+            if current and self.measure_text(candidate, font_id=font_id)[0] > max_width:
+                output.append(current)
+                current = character
+            else:
+                current = candidate
+        return current
 

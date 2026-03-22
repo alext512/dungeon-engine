@@ -14,6 +14,8 @@ import pygame
 from dungeon_engine import config
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.camera import Camera
+from dungeon_engine.engine.screen import ScreenElementManager
+from dungeon_engine.engine.text import TextRenderer
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.world import World
 
@@ -26,13 +28,18 @@ class Renderer:
         display_surface: pygame.Surface,
         asset_manager: AssetManager,
         *,
+        internal_width: int = config.INTERNAL_WIDTH,
+        internal_height: int = config.INTERNAL_HEIGHT,
         output_scale: int = config.SCALE,
     ) -> None:
         self.display_surface = display_surface
         self.asset_manager = asset_manager
+        self.internal_width = max(1, int(internal_width))
+        self.internal_height = max(1, int(internal_height))
         self.output_scale = max(1, int(output_scale))
+        self.text_renderer = TextRenderer(asset_manager)
         self.internal_surface = pygame.Surface(
-            (config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
+            (self.internal_width, self.internal_height)
         )
 
     def set_display_surface(self, display_surface: pygame.Surface) -> None:
@@ -48,18 +55,21 @@ class Renderer:
         area: Area,
         world: World,
         camera: Camera,
+        screen_elements: ScreenElementManager | None = None,
     ) -> None:
         """Render the current area and all visible entities."""
         self.internal_surface.fill(config.COLOR_BACKGROUND)
         self._draw_tile_layers(area, camera, draw_above_entities=False)
         self._draw_entities(area, world, camera)
         self._draw_tile_layers(area, camera, draw_above_entities=True)
+        if screen_elements is not None:
+            self._draw_screen_elements(screen_elements)
 
         scaled_surface = pygame.transform.scale(
             self.internal_surface,
             (
-                config.INTERNAL_WIDTH * self.output_scale,
-                config.INTERNAL_HEIGHT * self.output_scale,
+                self.internal_width * self.output_scale,
+                self.internal_height * self.output_scale,
             ),
         )
         self.display_surface.blit(scaled_surface, (0, 0))
@@ -152,6 +162,94 @@ class Renderer:
         if config.PIXEL_ART_MODE:
             return round(screen_x), round(screen_y)
         return int(screen_x), int(screen_y)
+
+    def _draw_screen_elements(self, screen_elements: ScreenElementManager) -> None:
+        """Draw generic screen-space elements above the world."""
+        for element in screen_elements.iter_elements():
+            if not element.visible:
+                continue
+            if element.kind == "image":
+                self._draw_screen_image(element)
+            elif element.kind == "text":
+                self._draw_screen_text(element)
+
+    def _draw_screen_image(self, element) -> None:
+        """Draw one screen-space image element."""
+        if not element.asset_path:
+            return
+        if element.frame_width is not None and element.frame_height is not None:
+            surface = self.asset_manager.get_frame(
+                element.asset_path,
+                element.frame_width,
+                element.frame_height,
+                element.frame_index,
+            )
+        else:
+            surface = self.asset_manager.get_image(element.asset_path)
+
+        if element.flip_x:
+            surface = pygame.transform.flip(surface, True, False)
+        surface = self._apply_tint(surface, element.tint)
+
+        draw_x, draw_y = self._resolve_screen_anchor(
+            element.x,
+            element.y,
+            surface.get_width(),
+            surface.get_height(),
+            element.anchor,
+        )
+        self.internal_surface.blit(surface, (draw_x, draw_y))
+
+    def _draw_screen_text(self, element) -> None:
+        """Draw one screen-space text element."""
+        text = element.text
+        if element.max_width is not None:
+            text = self.text_renderer.wrap_text(
+                text,
+                int(element.max_width),
+                font_id=element.font_id,
+            )
+        width, height = self.text_renderer.measure_text(text, font_id=element.font_id)
+        draw_x, draw_y = self._resolve_screen_anchor(
+            element.x,
+            element.y,
+            width,
+            height,
+            element.anchor,
+        )
+        self.text_renderer.render_text(
+            self.internal_surface,
+            text,
+            (draw_x, draw_y),
+            element.color,
+            font_id=element.font_id,
+        )
+
+    def _resolve_screen_anchor(
+        self,
+        x: float,
+        y: float,
+        width: int,
+        height: int,
+        anchor: str,
+    ) -> tuple[int, int]:
+        """Convert an anchored screen-space point into a draw origin."""
+        draw_x = float(x)
+        draw_y = float(y)
+
+        if anchor in {"top", "center", "bottom"}:
+            draw_x -= width / 2
+        elif anchor in {"topright", "right", "bottomright"}:
+            draw_x -= width
+
+        if anchor in {"left", "center", "right"}:
+            draw_y -= height / 2
+        elif anchor in {"bottomleft", "bottom", "bottomright"}:
+            draw_y -= height
+
+        if config.PIXEL_ART_MODE:
+            return round(draw_x), round(draw_y)
+        return int(draw_x), int(draw_y)
 
     def _apply_tint(
         self,

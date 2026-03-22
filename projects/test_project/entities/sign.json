@@ -1,0 +1,73 @@
+{
+  "kind": "sign",
+  "solid": true,
+  "sprite": {
+    "path": "assets/project/sprites/sign.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [0]
+  },
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "show_screen_image",
+          "element_id": "dialogue_panel",
+          "path": "assets/project/ui/dialogue_panel.png",
+          "x": 0,
+          "y": "$project.display.internal_height",
+          "anchor": "bottomleft",
+          "layer": 100
+        },
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_title",
+          "text": "Sign",
+          "x": 8,
+          "y": 192,
+          "layer": 101,
+          "color": [245, 232, 190]
+        },
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_text",
+          "text": "The old path is sealed. Pull the lever to open the gate.",
+          "x": 8,
+          "y": 206,
+          "max_width": 300,
+          "layer": 101
+        },
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_hint",
+          "text": "[Space]",
+          "x": 312,
+          "y": 230,
+          "anchor": "bottomright",
+          "layer": 101,
+          "color": [214, 220, 232]
+        },
+        {
+          "type": "wait_for_action_press"
+        },
+        {
+          "type": "remove_screen_element",
+          "element_id": "dialogue_hint"
+        },
+        {
+          "type": "remove_screen_element",
+          "element_id": "dialogue_text"
+        },
+        {
+          "type": "remove_screen_element",
+          "element_id": "dialogue_title"
+        },
+        {
+          "type": "remove_screen_element",
+          "element_id": "dialogue_panel"
+        }
+      ]
+    }
+  }
+}

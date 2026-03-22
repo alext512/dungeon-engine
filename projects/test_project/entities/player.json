@@ -127,8 +127,8 @@
           "phase_a_frames": "$phase_a_frames",
           "phase_b_frames": "$phase_b_frames",
           "idle_frame": "$idle_frame",
-          "frames_per_sprite_change": "$half:project.movement.frames_needed",
-          "frames_needed": "$project.movement.frames_needed"
+          "frames_per_sprite_change": "$half:project.movement.ticks_per_tile",
+          "frames_needed": "$project.movement.ticks_per_tile"
         }
       ]
     }
