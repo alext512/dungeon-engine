@@ -32,6 +32,7 @@ class CommandContext:
     project: Any | None = None
     camera: Any | None = None
     audio_player: Any | None = None
+    screen_manager: Any | None = None
     command_runner: Any | None = None
     input_handler: Any | None = None
     persistence_runtime: Any | None = None

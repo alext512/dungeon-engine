@@ -105,6 +105,15 @@ Implemented in the first movement-foundation slice:
   well, matching the old project's `_physics_process` style more closely.
 - `test_project/entities/player.json` now owns the first project-authored move
   recipes through `move_up`, `move_down`, `move_left`, and `move_right`.
+- The runtime now also has a generic screen-space element layer with command
+  primitives for:
+  - `show_screen_image`
+  - `show_screen_text`
+  - `set_screen_text`
+  - `remove_screen_element`
+  - `clear_screen_elements`
+  - `play_screen_animation`
+  - `wait_for_screen_animation`
 
 Not implemented yet in this slice:
 

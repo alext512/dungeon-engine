@@ -1,6 +1,11 @@
 {
+  "display": {
+    "_comment_internal_size": "Internal game render resolution in pixels.",
+    "internal_width": 320,
+    "internal_height": 240
+  },
   "movement": {
-    "_comment_frames_needed": "Recommended to keep this even so the sprite change lands halfway through a tile move.",
-    "frames_needed": 16
+    "_comment_ticks_per_tile": "Recommended to keep this even so the sprite change lands halfway through a tile move.",
+    "ticks_per_tile": 16
   }
 }

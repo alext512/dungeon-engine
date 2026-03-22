@@ -33,6 +33,8 @@ The repo now includes a versioned sample project at `projects/test_project/`, bu
 - recursive PNG tileset discovery across active project asset paths
 - automatic room tileset registration when painting from a newly selected tileset
 - configurable bitmap-font system with JSON font definitions
+- generic screen-space element layer for images, text, and simple frame animation
+- first blocking screen-space dialogue-style interaction via a sign entity
 - command runner foundation
 - command-driven grid movement
 - fixed-timestep simulation for movement/command playback
@@ -66,6 +68,7 @@ The starter room currently includes:
 - player
 - one pushable block
 - one toggle lever (can be toggled on and off via variables)
+- one readable sign that opens a simple dialogue panel
 - one gate
 - a wall tile with a painting overlay tile on top of it
 
@@ -74,6 +77,7 @@ Expected behavior:
 - move with arrows or `WASD`
 - interact with `Space`
 - face the lever and press `Space` to toggle the gate open/closed
+- face the sign and press `Space` to open a simple dialogue panel, then press `Space` again to close it
 - live lever/gate state persists for the current play session in memory
 - if `saves/slot_1.json` exists when play starts, its overrides are loaded on top of the room JSON
 - press `F5` in play mode to write the current persistent state to `saves/slot_1.json`
@@ -135,6 +139,7 @@ Expected behavior:
 - Fonts now live in the active project's `assets/fonts/` folder as named JSON definitions plus atlas PNGs.
 - The current UI font is `pixelbet`, which auto-measures per-glyph widths from the atlas so narrow letters do not consume the same width as wide ones.
 - Future systems like dialogue can choose fonts by `font_id` through the shared text renderer instead of using hardcoded font objects.
+- Screen-space content can now be created through commands instead of being baked directly into the renderer, which is the intended foundation for dialogue panels, title cards, and later menu-like overlays.
 - The current assets are intentionally simple generated test art, not final art.
 - Pixel-perfect behavior is currently handled as a renderer/camera policy, not a level-data rule.
 - The game and editor are separate applications now, but they still share the same area/entity JSON model.

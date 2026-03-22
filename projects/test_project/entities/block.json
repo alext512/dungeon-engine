@@ -60,7 +60,7 @@
           "type": "run_named_command",
           "command_id": "push_one_tile",
           "direction": "$direction",
-          "frames_needed": "$project.movement.frames_needed"
+          "frames_needed": "$project.movement.ticks_per_tile"
         }
       ]
     }
