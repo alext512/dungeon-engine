@@ -81,6 +81,16 @@
               ],
               "else": [
                 {
+                  "type": "run_detached_commands",
+                  "commands": [
+                    {
+                      "type": "run_event",
+                      "entity_id": "self",
+                      "event_id": "play_bump_sound"
+                    }
+                  ]
+                },
+                {
                   "type": "set_sprite_frame",
                   "entity_id": "self",
                   "frame": "$idle_frame"
@@ -89,6 +99,16 @@
             }
           ],
           "else": [
+            {
+              "type": "run_detached_commands",
+              "commands": [
+                {
+                  "type": "run_event",
+                  "entity_id": "self",
+                  "event_id": "play_bump_sound"
+                }
+              ]
+            },
             {
               "type": "set_sprite_frame",
               "entity_id": "self",

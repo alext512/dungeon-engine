@@ -30,6 +30,8 @@ class CommandContext:
     animation_system: AnimationSystem
     project: Any | None = None
     camera: Any | None = None
+    audio_player: Any | None = None
+    command_runner: Any | None = None
     input_handler: Any | None = None
     persistence_runtime: Any | None = None
     named_command_stack: list[str] = field(default_factory=list)
@@ -52,6 +54,24 @@ class ImmediateHandle(CommandHandle):
     def __init__(self) -> None:
         super().__init__()
         self.complete = True
+
+
+class WaitFramesHandle(CommandHandle):
+    """Complete after a fixed number of simulation ticks."""
+
+    def __init__(self, frames: int) -> None:
+        super().__init__()
+        self.frames_remaining = max(0, int(frames))
+        if self.frames_remaining == 0:
+            self.complete = True
+
+    def update(self, dt: float) -> None:
+        """Advance only on real simulation ticks, not zero-dt bookkeeping updates."""
+        if self.complete or dt <= 0:
+            return
+        self.frames_remaining -= 1
+        if self.frames_remaining <= 0:
+            self.complete = True
 
 
 class CommandExecutionError(RuntimeError):
@@ -262,7 +282,9 @@ class CommandRunner:
         self.context = context
         self.pending: deque[QueuedCommand] = deque()
         self.active_handle: CommandHandle | None = None
+        self.background_handles: list[CommandHandle] = []
         self.last_error_notice: str | None = None
+        self.context.command_runner = self
 
     def enqueue(self, name: str, **params: Any) -> None:
         """Add a command request to the end of the queue."""
@@ -272,9 +294,23 @@ class CommandRunner:
         """Return True when a command is queued or still running."""
         return self.active_handle is not None or bool(self.pending)
 
+    def spawn_background_handle(self, handle: CommandHandle) -> None:
+        """Run a handle in parallel with the main command lane."""
+        if handle.complete:
+            return
+        self.background_handles.append(handle)
+
     def update(self, dt: float) -> None:
         """Advance the active command and start the next queued command when possible."""
         try:
+            if self.background_handles:
+                remaining_handles: list[CommandHandle] = []
+                for handle in self.background_handles:
+                    handle.update(dt)
+                    if not handle.complete:
+                        remaining_handles.append(handle)
+                self.background_handles = remaining_handles
+
             if self.active_handle is not None:
                 self.active_handle.update(dt)
                 if self.active_handle.complete:
@@ -312,6 +348,7 @@ class CommandRunner:
             exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
         )
         self.active_handle = None
+        self.background_handles.clear()
         self.pending.clear()
         self.context.command_trace.clear()
         self.last_error_notice = "Command error: see logs/error.log"

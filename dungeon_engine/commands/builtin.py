@@ -16,6 +16,7 @@ from dungeon_engine.commands.runner import (
     CommandHandle,
     ImmediateHandle,
     SequenceCommandHandle,
+    WaitFramesHandle,
 )
 from dungeon_engine.world.entity import DIRECTION_VECTORS
 from dungeon_engine.world.loader import instantiate_entity
@@ -263,6 +264,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         speed_px_per_second: float | None = None,
         grid_sync: str = "immediate",
         allow_push: bool = True,
+        wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
         resolved_id = _resolve_entity_id(
@@ -284,6 +286,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         )
         if not moved_entity_ids:
             return ImmediateHandle()
+        if not wait:
+            return ImmediateHandle()
         return MovementCommandHandle(context, moved_entity_ids)
 
     def _move_entity_to_position(
@@ -300,6 +304,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         grid_sync: str = "none",
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
         resolved_id = _resolve_entity_id(
@@ -323,6 +328,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         )
         if not moved_entity_ids:
             return ImmediateHandle()
+        if not wait:
+            return ImmediateHandle()
         return MovementCommandHandle(context, moved_entity_ids)
 
     def _move_entity(
@@ -341,6 +348,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         grid_sync: str | None = None,
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
         resolved_id = _resolve_entity_id(
@@ -374,6 +382,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 grid_sync=effective_grid_sync,
                 target_grid_x=target_grid_x,
                 target_grid_y=target_grid_y,
+                wait=wait,
             )
 
         if space == "pixel" and mode == "relative":
@@ -390,6 +399,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
             if not moved_entity_ids:
                 return ImmediateHandle()
+            if not wait:
+                return ImmediateHandle()
             return MovementCommandHandle(context, moved_entity_ids)
 
         if space == "grid" and mode == "absolute":
@@ -404,6 +415,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
             if not moved_entity_ids:
                 return ImmediateHandle()
+            if not wait:
+                return ImmediateHandle()
             return MovementCommandHandle(context, moved_entity_ids)
 
         moved_entity_ids = context.movement_system.request_move_by_grid_offset(
@@ -416,6 +429,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             grid_sync=effective_grid_sync,  # type: ignore[arg-type]
         )
         if not moved_entity_ids:
+            return ImmediateHandle()
+        if not wait:
             return ImmediateHandle()
         return MovementCommandHandle(context, moved_entity_ids)
 
@@ -644,6 +659,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         speed_px_per_second: float | None = None,
         grid_sync: str = "immediate",
         allow_push: bool = True,
+        wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
         """Move an entity by one grid tile while keeping motion configurable."""
@@ -658,6 +674,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             speed_px_per_second=speed_px_per_second,
             grid_sync=grid_sync,
             allow_push=allow_push,
+            wait=wait,
         )
 
     @registry.register("move_entity")
@@ -677,6 +694,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         grid_sync: str | None = None,
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
         """Move an entity using pixel/grid and absolute/relative addressing."""
@@ -695,6 +713,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             grid_sync=grid_sync,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            wait=wait,
         )
 
     @registry.register("teleport_entity")
@@ -843,6 +862,78 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if entity is None:
             raise KeyError(f"Cannot set sprite frame on missing entity '{resolved_id}'.")
         entity.current_frame = int(frame)
+        return ImmediateHandle()
+
+    @registry.register("set_sprite_flip_x")
+    def set_sprite_flip_x(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        flip_x: bool,
+        **_: Any,
+    ) -> CommandHandle:
+        """Set whether an entity's sprite should be mirrored horizontally."""
+        resolved_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_id:
+            logger.warning("set_sprite_flip_x: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        entity = context.world.get_entity(resolved_id)
+        if entity is None:
+            raise KeyError(f"Cannot set sprite flip on missing entity '{resolved_id}'.")
+        entity.sprite_flip_x = bool(flip_x)
+        return ImmediateHandle()
+
+    @registry.register("play_audio")
+    def play_audio(
+        context: CommandContext,
+        *,
+        path: str,
+        **_: Any,
+    ) -> CommandHandle:
+        """Play a one-shot audio asset from the active project's assets."""
+        if context.audio_player is None:
+            return ImmediateHandle()
+        context.audio_player.play_audio(str(path))
+        return ImmediateHandle()
+
+    @registry.register("wait_frames")
+    def wait_frames(
+        context: CommandContext,
+        *,
+        frames: int,
+        **_: Any,
+    ) -> CommandHandle:
+        """Pause the current command lane for a fixed number of simulation ticks."""
+        return WaitFramesHandle(int(frames))
+
+    @registry.register("run_detached_commands")
+    def run_detached_commands(
+        context: CommandContext,
+        *,
+        commands: list[dict[str, Any]],
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Run a command list in the background without blocking the main lane."""
+        if context.command_runner is None:
+            raise ValueError("Cannot run detached commands without an active command runner.")
+        handle = SequenceCommandHandle(
+            registry,
+            context,
+            commands,
+            base_params={
+                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
+                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
+            },
+        )
+        context.command_runner.spawn_background_handle(handle)
         return ImmediateHandle()
 
     @registry.register("interact_facing")

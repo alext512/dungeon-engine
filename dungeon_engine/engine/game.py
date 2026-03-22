@@ -12,6 +12,7 @@ from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
+from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.camera import Camera
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
@@ -55,6 +56,7 @@ class Game:
         self.area_path = area_path
         self.project = project
         self.asset_manager = AssetManager(project=project)
+        self.audio_player = AudioPlayer(self.asset_manager, enabled=not self.headless)
         self.persistence_runtime = PersistenceRuntime(config.DEFAULT_SAVE_SLOT_PATH)
 
         document_area, document_world = load_area(self.area_path, asset_manager=self.asset_manager)
@@ -200,6 +202,8 @@ class Game:
             animation_system=self.animation_system,
             project=self.project,
             camera=self.camera,
+            audio_player=self.audio_player,
+            command_runner=None,
             input_handler=None,
             persistence_runtime=self.persistence_runtime,
         )
