@@ -56,9 +56,11 @@ class ProjectContext:
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
     command_paths: list[Path] = field(default_factory=list)
+    variables_path: Path | None = None
     startup_area: str | None = None
     active_entity_id: str = "player"
     debug_inspection_enabled: bool = False
+    shared_variables: dict[str, Any] = field(default_factory=dict)
     input_event_names: dict[str, str] = field(
         default_factory=lambda: dict(DEFAULT_INPUT_EVENT_NAMES)
     )
@@ -219,6 +221,33 @@ class ProjectContext:
                     files.append(f)
         return files
 
+    def resolve_shared_variable(self, path: str | list[str]) -> Any:
+        """Return a nested project-shared variable by dotted path or path-parts list."""
+        if isinstance(path, str):
+            parts = [part for part in path.split(".") if part]
+        else:
+            parts = [str(part) for part in path if str(part)]
+
+        value: Any = self.shared_variables
+        for part in parts:
+            if isinstance(value, dict):
+                if part not in value:
+                    raise KeyError(f"Unknown project variable path segment '{part}'.")
+                value = value[part]
+                continue
+            if isinstance(value, list):
+                try:
+                    index = int(part)
+                except ValueError as exc:
+                    raise KeyError(f"Expected list index at project variable segment '{part}'.") from exc
+                try:
+                    value = value[index]
+                except IndexError as exc:
+                    raise KeyError(f"List index '{index}' is out of range for project variable lookup.") from exc
+                continue
+            raise KeyError(f"Cannot descend into project variable segment '{part}'.")
+        return value
+
 
 def load_project(project_path: Path) -> ProjectContext:
     """Load a project manifest and return a resolved context.
@@ -246,15 +275,23 @@ def load_project(project_path: Path) -> ProjectContext:
             return [fallback] if fallback.is_dir() else []
         return [(project_root / p).resolve() for p in entries]
 
+    variables_path = _resolve_optional_path(
+        project_root,
+        raw.get("variables_path"),
+        fallback_name="variables.json",
+    )
+
     return ProjectContext(
         project_root=project_root,
         entity_paths=_resolve_paths("entity_paths", "entities"),
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
         command_paths=_resolve_paths("command_paths", "commands"),
+        variables_path=variables_path,
         startup_area=_optional_manifest_str(raw.get("startup_area")),
         active_entity_id=str(raw.get("active_entity_id", "player")),
         debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
+        shared_variables=_load_shared_variables(variables_path),
         input_event_names=_resolve_input_events(raw.get("input_events")),
     )
 
@@ -272,11 +309,33 @@ def default_project(project_root: Path | None = None) -> ProjectContext:
         asset_paths=_optional_dir(root / "assets"),
         area_paths=_optional_dir(root / "areas"),
         command_paths=_optional_dir(root / "commands"),
+        variables_path=(root / "variables.json") if (root / "variables.json").is_file() else None,
         startup_area=None,
         active_entity_id="player",
         debug_inspection_enabled=False,
+        shared_variables=_load_shared_variables((root / "variables.json") if (root / "variables.json").is_file() else None),
         input_event_names=dict(DEFAULT_INPUT_EVENT_NAMES),
     )
+
+
+def _resolve_optional_path(project_root: Path, raw_value: Any, *, fallback_name: str | None = None) -> Path | None:
+    """Resolve an optional manifest file path, falling back to a conventional file if present."""
+    if raw_value not in (None, ""):
+        return (project_root / str(raw_value)).resolve()
+    if fallback_name is None:
+        return None
+    fallback = (project_root / fallback_name).resolve()
+    return fallback if fallback.is_file() else None
+
+
+def _load_shared_variables(variables_path: Path | None) -> dict[str, Any]:
+    """Load project-shared variables from JSON, or return an empty mapping."""
+    if variables_path is None or not variables_path.is_file():
+        return {}
+    raw = json.loads(variables_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Project variables file '{variables_path}' must contain a JSON object.")
+    return raw
 
 
 def _resolve_input_events(raw_input_events: Any) -> dict[str, str]:

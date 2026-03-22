@@ -1,0 +1,37 @@
+{
+  "id": "push_one_tile",
+  "params": [
+    "direction",
+    "frames_needed"
+  ],
+  "commands": [
+    {
+      "type": "query_facing_state",
+      "entity_id": "self",
+      "direction": "$direction",
+      "store_state_var": "push_attempt_state"
+    },
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "push_attempt_state",
+      "op": "eq",
+      "value": "free",
+      "then": [
+        {
+          "type": "play_audio",
+          "path": "assets/project/sfx/push.wav"
+        },
+        {
+          "type": "move_entity_one_tile",
+          "entity_id": "self",
+          "direction": "$direction",
+          "frames_needed": "$frames_needed",
+          "allow_push": false,
+          "wait": false
+        }
+      ]
+    }
+  ]
+}

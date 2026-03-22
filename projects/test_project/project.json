@@ -3,6 +3,7 @@
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "command_paths": ["commands/"],
+  "variables_path": "variables.json",
   "startup_area": "areas/test_room.json",
   "active_entity_id": "player",
   "debug_inspection_enabled": true,

@@ -1,0 +1,6 @@
+{
+  "movement": {
+    "_comment_frames_needed": "Recommended to keep this even so the sprite change lands halfway through a tile move.",
+    "frames_needed": 16
+  }
+}
