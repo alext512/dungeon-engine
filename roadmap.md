@@ -1,4 +1,4 @@
-# Python Puzzle Engine Roadmap
+# Python Dungeon Engine Roadmap
 
 ## How to use this roadmap
 
@@ -190,6 +190,7 @@ Make content production smoother and improve debuggability.
 - better editor property editing
 - basic validation for room/entity/item data
 - command debugging helpers
+- final pixel-perfect movement/render feel pass on real hardware
 - audio commands
 - cleaner sample content and test areas
 

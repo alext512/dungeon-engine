@@ -19,6 +19,7 @@ Read these files in this order:
 - Keep the game runnable after each phase.
 - Treat the editor as an early requirement, not a late bonus.
 - Use data files for content.
+- Keep the boundary clear: engine code belongs under `dungeon_engine/`, while project content belongs in a project folder selected through `project.json`, even if that project is versioned inside this repo under `projects/`.
 - Keep room/entity/command data portable so a future runtime can reuse the same content pipeline.
 - Update the docs when implementation changes the plan.
 
@@ -32,3 +33,4 @@ Read these files in this order:
 ## Practical rule of thumb
 
 If a feature would be triggered by the player, an NPC, a usable item, or a cutscene, try to express it through the same command system.
+

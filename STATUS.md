@@ -11,8 +11,9 @@ Run it with:
 - or `.venv/Scripts/python run_game.py`
 - or `.venv/Scripts/python run_editor.py`
 
-The project now uses standalone game/editor applications plus external `project.json` manifests for asset, area, entity, and font search paths.
+The project now uses standalone game/editor applications plus `project.json` manifests for asset, area, entity, and font search paths.
 The launchers remember the last selected project and the last area opened in game/editor mode.
+The repo now includes a versioned sample project at `projects/test_project/`, but the engine remains independent from any specific project folder.
 
 ## Implemented
 
@@ -37,6 +38,7 @@ The launchers remember the last selected project and the last area opened in gam
 - fixed-timestep simulation for movement/command playback
 - wall collision
 - pushable block behavior
+- event-driven push delegation for pushable objects
 - held movement that starts the next step as soon as the previous move fully finishes
 - facing-based interaction input
 - interactable entity command chains
@@ -44,6 +46,8 @@ The launchers remember the last selected project and the last area opened in gam
 - simple player sprite animation while moving
 - UI/editor text rendered through the custom `pixelbet` bitmap font atlas
 - persistent rotating error log in `logs/error.log`
+- reusable project-level named command libraries loaded from `command_paths`
+- startup validation for named command libraries (duplicate ids, malformed files, and literal missing references)
 - variable system with `set_var`, `increment_var`, and `check_var` commands (entity and world scopes)
 - `check_var` supports conditional branching with `then`/`else` command lists
 - world-level variables storage (serialized in area JSON)
@@ -76,6 +80,7 @@ Expected behavior:
 - press `F9` in play mode to reload persistent overrides from `saves/slot_1.json`
 - if the active project's `project.json` enables `debug_inspection_enabled`, `F6` pauses/resumes simulation, `F7` advances one simulation tick, and `[` / `]` zoom the output window out or in
 - the player uses a tiny 2-frame walk animation while moving
+- player walking now carries a simple alternating walk phase across successful moves
 - the room uses layered tiles instead of a single character grid
 
 ## Editor Controls
@@ -121,6 +126,7 @@ Expected behavior:
 ## Important Notes
 
 - Movement is command-driven. Input requests commands rather than mutating position directly.
+- Player-style stepping now follows a more old-project-like flow: face, probe ahead, delegate push behavior to the object in front when appropriate, then re-probe before walking.
 - Interaction is now also command-driven. The player triggers a top-level interact command, which resolves a target and runs that target's command chain.
 - Levels now define tiles through tile-definition data rather than hardcoded wall logic.
 - Visual tile layers and walkability are now separate concepts.
@@ -135,9 +141,12 @@ Expected behavior:
 - Play mode layers any existing save-slot state on top of the authored room clone without modifying authored room data.
 - The live persistent layer is kept in memory during play; it is only written to disk when you press `F5`.
 - Runtime interaction now resolves the topmost enabled entity on a tile based on the current stack order, not just insertion order.
+- Named-command library errors such as malformed files, duplicate command ids, or missing literal `run_named_command` targets are now validated at project startup; launch is blocked, the full report is written to `logs/error.log`, and runtime command failures still show a short in-game hint to check the log.
 - `project.json` controls where the active project looks for areas, entities, assets, and fonts.
+- `projects/test_project/` is now the repo-local versioned sample project; it is not bundled engine data, and other projects can still live anywhere else as long as they provide a `project.json`.
 - Uncaught runtime errors and Tk/file-picker callback failures are logged to `logs/error.log`.
 - Entity parameter editing is still minimal. Template placement works, but rich per-instance parameter editing will need a follow-up pass.
+- The current movement/render feel still needs a dedicated revisit: inspect pixel-perfect output on real hardware again, tighten any remaining pacing/camera issues, and keep the debug inspection tools around until that pass is complete.
 
 ## Suggested Next Steps
 
@@ -145,3 +154,4 @@ Expected behavior:
 - add dialogue UI and dialogue commands
 - add inventory and usable-item commands
 - improve the editor with parameter editing and room creation
+- revisit movement/render feel and finish the pixel-perfect quality pass

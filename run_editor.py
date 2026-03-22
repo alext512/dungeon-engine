@@ -12,13 +12,13 @@ def parse_args() -> argparse.Namespace:
         "area",
         nargs="?",
         default=None,
-        help="Path to an area JSON file. If omitted, reopens the last area or uses a file picker.",
+        help="Path to an area JSON file. If omitted, uses the project's startup area or opens a picker.",
     )
     parser.add_argument(
         "--project",
         default=None,
         help="Path to a project folder or project.json. "
-             "If omitted, reopens the last project or uses a file picker.",
+             "If omitted, opens a picker starting from the last project location.",
     )
     return parser.parse_args()
 
@@ -26,24 +26,32 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    from puzzle_dungeon import config
-    from puzzle_dungeon.display_setup import configure_process_dpi_awareness
-    from puzzle_dungeon.launcher_state import load_launcher_state, update_launcher_state
-    from puzzle_dungeon.logging_utils import install_exception_logging
-    from puzzle_dungeon.project import load_project
-    from puzzle_dungeon.world.loader import set_active_project
+    from dungeon_engine import config
+    from dungeon_engine.display_setup import configure_process_dpi_awareness
+    from dungeon_engine.launcher_state import load_launcher_state, update_launcher_state
+    from dungeon_engine.logging_utils import install_exception_logging
+    from dungeon_engine.project import load_project
+    from dungeon_engine.startup_validation import validate_project_startup
+    from dungeon_engine.world.loader import set_active_project
 
     configure_process_dpi_awareness()
 
     logger = install_exception_logging()
     launcher_state = load_launcher_state()
 
-    project_path = _choose_project_path(args.project, launcher_state, config.PROJECT_ROOT.parent)
+    project_path = _choose_project_path(args.project, launcher_state, config.PROJECTS_DIR)
     if project_path is None:
         print("No project selected.")
         return 0
 
     project = load_project(project_path)
+    validation_error = validate_project_startup(
+        project,
+        ui_title="Cannot open project",
+        show_dialog=True,
+    )
+    if validation_error is not None:
+        return 1
     update_launcher_state(last_project=str(project_path))
     set_active_project(project)
 
@@ -58,7 +66,7 @@ def main() -> int:
     )
 
     try:
-        from puzzle_dungeon.editor.editor_app import EditorApp
+        from dungeon_engine.editor.editor_app import EditorApp
 
         app = EditorApp(area_path, project)
         app.run()
@@ -69,35 +77,29 @@ def main() -> int:
 
 
 def _choose_project_path(cli_project, launcher_state, fallback_dir) -> Path | None:
-    """Choose a project path from CLI, persisted state, or file picker."""
+    """Choose a project path from CLI or a picker rooted at the last project location."""
     if cli_project:
         return _normalize_project_path(Path(cli_project))
 
-    remembered = _existing_path(launcher_state.last_project)
-    if remembered is not None:
-        return _normalize_project_path(remembered)
-
-    picked = _pick_project_file(_default_project_dir(launcher_state, fallback_dir))
+    picked = _pick_project_file(_default_project_path(launcher_state, fallback_dir))
     if picked is None:
         return None
     return _normalize_project_path(picked)
 
 
 def _choose_area_path(cli_area, project, remembered_area) -> Path | None:
-    """Choose an area path from CLI, persisted state, or file picker."""
+    """Choose an area path from CLI, project startup area, or a picker rooted at the last area location."""
     if cli_area:
         return _resolve_area_path(project, Path(cli_area))
 
-    remembered = _resolve_remembered_area(project, remembered_area)
-    if remembered is not None:
-        return remembered
+    startup_area = _resolve_project_startup_area(project)
+    if startup_area is not None:
+        return startup_area
 
-    area_files = project.list_area_files()
-    default_dir = area_files[0].parent if area_files else project.project_root
-    return _pick_area_file(default_dir)
+    return _pick_area_file(_default_area_path(project, remembered_area))
 
 
-def _pick_project_file(default_dir) -> Path | None:
+def _pick_project_file(default_path: Path) -> Path | None:
     """Open a file dialog to pick a project.json file."""
     import tkinter as tk
     from tkinter import filedialog
@@ -107,7 +109,8 @@ def _pick_project_file(default_dir) -> Path | None:
 
     file_path = filedialog.askopenfilename(
         title="Select project.json",
-        initialdir=str(default_dir),
+        initialdir=str(default_path.parent if default_path.is_file() else default_path),
+        initialfile=default_path.name if default_path.is_file() else "",
         filetypes=[("Project file", "project.json"), ("JSON files", "*.json"), ("All files", "*.*")],
     )
     root.destroy()
@@ -117,7 +120,7 @@ def _pick_project_file(default_dir) -> Path | None:
     return Path(file_path)
 
 
-def _pick_area_file(default_dir) -> Path | None:
+def _pick_area_file(default_path: Path) -> Path | None:
     """Open a file dialog to pick an area JSON file."""
     import tkinter as tk
     from tkinter import filedialog
@@ -127,7 +130,8 @@ def _pick_area_file(default_dir) -> Path | None:
 
     file_path = filedialog.askopenfilename(
         title="Select area file",
-        initialdir=str(default_dir),
+        initialdir=str(default_path.parent if default_path.is_file() else default_path),
+        initialfile=default_path.name if default_path.is_file() else "",
         filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
     )
     root.destroy()
@@ -168,12 +172,12 @@ def _existing_path(path_str: str | None) -> Path | None:
     return None
 
 
-def _default_project_dir(launcher_state, fallback_dir) -> Path:
-    """Pick a sensible initial directory for the project picker."""
+def _default_project_path(launcher_state, fallback_dir) -> Path:
+    """Pick a sensible initial project path for the project picker."""
     remembered = _existing_path(launcher_state.last_project)
     if remembered is not None:
-        return remembered.parent
-    return Path(fallback_dir)
+        return remembered
+    return Path(fallback_dir) / "test_project" / "project.json"
 
 
 def _resolve_remembered_area(project, remembered_area: str | None) -> Path | None:
@@ -186,6 +190,34 @@ def _resolve_remembered_area(project, remembered_area: str | None) -> Path | Non
         return remembered_path.resolve()
 
     resolved = _resolve_area_path(project, remembered_path)
+    if resolved.exists() and _area_belongs_to_project(project, resolved):
+        return resolved
+    return None
+
+
+def _default_area_path(project, remembered_area: str | None) -> Path:
+    """Pick a sensible initial area path for the area picker."""
+    remembered = _resolve_remembered_area(project, remembered_area)
+    if remembered is not None:
+        return remembered
+
+    startup_area = _resolve_project_startup_area(project)
+    if startup_area is not None:
+        return startup_area
+
+    area_files = project.list_area_files()
+    if area_files:
+        return area_files[0]
+    return project.project_root
+
+
+def _resolve_project_startup_area(project) -> Path | None:
+    """Resolve the project's authored startup area, if any."""
+    startup_area = getattr(project, "startup_area", None)
+    if not startup_area:
+        return None
+
+    resolved = _resolve_area_path(project, Path(startup_area))
     if resolved.exists() and _area_belongs_to_project(project, resolved):
         return resolved
     return None
@@ -209,3 +241,4 @@ def _area_belongs_to_project(project, area_path: Path) -> bool:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

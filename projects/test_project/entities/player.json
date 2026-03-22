@@ -1,0 +1,90 @@
+{
+  "kind": "player",
+  "solid": true,
+  "variables": {
+    "walk_phase": 0
+  },
+  "sprite": {
+    "path": "assets/project/sprites/player_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [0],
+    "animation_fps": 0,
+    "animate_when_moving": false
+  },
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "interact_facing",
+          "entity_id": "self"
+        }
+      ]
+    },
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "attempt_move_one_tile",
+          "direction": "up",
+          "push_event_id": "push_from_down",
+          "phase_a_frames": [0, 1],
+          "phase_b_frames": [1, 0],
+          "idle_frame": 0,
+          "frames_per_sprite_change": 8,
+          "frames_needed": 16
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "attempt_move_one_tile",
+          "direction": "down",
+          "push_event_id": "push_from_up",
+          "phase_a_frames": [0, 1],
+          "phase_b_frames": [1, 0],
+          "idle_frame": 0,
+          "frames_per_sprite_change": 8,
+          "frames_needed": 16
+        }
+      ]
+    },
+    "move_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "attempt_move_one_tile",
+          "direction": "left",
+          "push_event_id": "push_from_right",
+          "phase_a_frames": [0, 1],
+          "phase_b_frames": [1, 0],
+          "idle_frame": 0,
+          "frames_per_sprite_change": 8,
+          "frames_needed": 16
+        }
+      ]
+    },
+    "move_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "attempt_move_one_tile",
+          "direction": "right",
+          "push_event_id": "push_from_left",
+          "phase_a_frames": [0, 1],
+          "phase_b_frames": [1, 0],
+          "idle_frame": 0,
+          "frames_per_sprite_change": 8,
+          "frames_needed": 16
+        }
+      ]
+    }
+  }
+}

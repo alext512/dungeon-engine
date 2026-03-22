@@ -69,6 +69,32 @@ Implemented in the first movement-foundation slice:
   active entity rather than being inherently player-specific.
 - Project manifests now define the default `active_entity_id` and default
   `input_events`, while areas may still override `active_entity_id`.
+- Project manifests now also define `command_paths`, and `run_named_command`
+  loads reusable JSON command definitions from there on demand.
+- Command ids are now path-based relative to `command_paths`, so nested command
+  folders stay unambiguous.
+- Named-command validation now runs at project startup for both the game and
+  editor:
+  - malformed command files
+  - duplicate command ids
+  - literal missing `run_named_command` targets in command files, entity
+    templates, and area JSON
+  are logged to `logs/error.log` and block launch early.
+- Named-command runtime failures still log full detail to `logs/error.log`, and
+  active play mode surfaces a short in-game hint to check the log.
+- Built-in movement/query primitives now also include:
+  - `set_facing`
+  - `query_facing_state`
+  - `run_facing_event`
+- `test_project` now uses:
+  - `attempt_move_one_tile` to probe ahead, delegate push behavior, and re-probe
+  - `walk_one_tile` as the actual walking half-cycle command
+- Pushing in the test project now follows the old project's spirit more closely:
+  - the actor delegates to the object in front via directional push events
+  - the object decides whether it can move itself
+  - the actor only walks after the path becomes free
+- The test player's walk recipe now carries a simple alternating `walk_phase`
+  variable across successful moves.
 - The play loop now runs gameplay on a fixed simulation timestep of
   `1 / FPS` seconds instead of advancing movement directly from variable render
   `dt`.
@@ -82,11 +108,13 @@ Implemented in the first movement-foundation slice:
 
 Not implemented yet in this slice:
 
-- JSON-loaded composite command libraries
 - richer player animation recipes such as directional frames and walk-cycle
   phase carry-over
 - persistence for dynamically spawned entities that do not exist in authored
   room data
+- a final movement/render quality pass to confirm pixel-perfect feel on real
+  hardware, especially camera behavior, frame pacing, and any remaining visual
+  jitter
 
 ## Goals
 
@@ -101,7 +129,7 @@ Not implemented yet in this slice:
 
 ### Current entity position model
 
-See [entity.py](../puzzle_dungeon/world/entity.py).
+See [entity.py](../dungeon_engine/world/entity.py).
 
 Each entity currently stores:
 
@@ -115,7 +143,7 @@ Each entity currently stores:
 
 ### Current movement behavior
 
-See [movement.py](../puzzle_dungeon/systems/movement.py).
+See [movement.py](../dungeon_engine/systems/movement.py).
 
 `MovementSystem.request_step(...)` currently:
 
@@ -134,7 +162,7 @@ Important consequence:
 
 ### Where occupancy is currently queried from
 
-See [world.py](../puzzle_dungeon/world/world.py).
+See [world.py](../dungeon_engine/world/world.py).
 
 The runtime currently derives occupancy directly from the entity state above:
 
@@ -151,7 +179,7 @@ from entity grid coordinates rather than a second map array.
 
 ### Current animation behavior
 
-See [animation.py](../puzzle_dungeon/systems/animation.py).
+See [animation.py](../dungeon_engine/systems/animation.py).
 
 Animation is already separate from movement at the system level:
 
@@ -726,9 +754,9 @@ That would be enough to prove:
 
 ### Phase 3
 
-- Add project/library loading for composite command definitions.
-- Make input bindings call project-selected composite commands instead of
-  hardcoded engine command names.
+- Broaden command-library tooling and editor awareness.
+- Keep moving project control flow onto reusable composite commands instead of
+  ad-hoc inline event chains where that improves reuse.
 
 ## Open questions
 
@@ -744,3 +772,4 @@ That would be enough to prove:
 - Whether the project should express walk half-cycle alternation with:
   - explicit command ids
   - or entity/world variables plus branching
+

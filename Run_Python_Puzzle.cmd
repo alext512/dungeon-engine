@@ -31,14 +31,14 @@ if not defined PYTHON_EXE (
 )
 
 echo Checking dependencies...
-"%PYTHON_EXE%" -c "import pygame, puzzle_dungeon" >nul 2>&1
+"%PYTHON_EXE%" -c "import pygame, dungeon_engine" >nul 2>&1
 if errorlevel 1 (
     echo Installing dependencies...
     "%PYTHON_EXE%" -m pip install -e .
     if errorlevel 1 goto :error
 )
 
-echo Launching Python Puzzle Engine...
+echo Launching Python Dungeon Engine...
 "%PYTHON_EXE%" main.py %*
 if errorlevel 1 goto :error
 
@@ -53,3 +53,4 @@ pause
 
 :end
 endlocal
+
