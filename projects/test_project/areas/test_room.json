@@ -520,6 +520,18 @@
       "template": "sign"
     },
     {
+      "id": "npc_blue_1",
+      "x": 7,
+      "y": 2,
+      "template": "npc_blue"
+    },
+    {
+      "id": "dialogue_controller",
+      "x": 2,
+      "y": 2,
+      "template": "dialogue_controller"
+    },
+    {
       "id": "player",
       "x": 2,
       "y": 2,

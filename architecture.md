@@ -362,11 +362,26 @@ Dialogue and cinematics should share the command system rather than becoming sep
 
 Dialogue needs:
 
-- text reveal
-- advance and skip behavior
-- choices
+- text wrapping and pagination
+- advance behavior
 - branching results
-- input lock while active
+- temporary input ownership while active
+
+Current practical split:
+
+- the engine owns text measurement, wrapping, and page advancement
+- projects own panel images, portraits, choice layout, and dialogue-specific input flow
+
+So the intended dialogue pattern is:
+
+1. show panel image through screen-space commands
+2. optionally show portrait image
+3. call `run_dialogue` for the text only
+4. if choices are needed, render them as normal screen text
+5. hand input to a controller entity whose events update the choice texts and branch
+
+This keeps dialogue aligned with the general command architecture instead of
+turning it into a separate hardcoded menu system.
 
 Cinematics need:
 

@@ -1,0 +1,67 @@
+{
+  "id": "dialogue/blue_guide_open",
+  "commands": [
+    {
+      "type": "set_var",
+      "scope": "world",
+      "name": "dialogue_return_entity",
+      "value": "$actor_entity_id"
+    },
+    {
+      "type": "set_var",
+      "scope": "world",
+      "name": "dialogue_menu",
+      "value": "blue_guide"
+    },
+    {
+      "type": "set_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "value": 0
+    },
+    {
+      "type": "show_screen_image",
+      "element_id": "dialogue_panel",
+      "path": "$project.dialogue.panel_path",
+      "x": 0,
+      "y": "$project.display.internal_height",
+      "anchor": "bottomleft",
+      "layer": 100
+    },
+    {
+      "type": "show_screen_image",
+      "element_id": "dialogue_portrait",
+      "path": "assets/project/portraits/npc_blue_portrait.png",
+      "x": "$project.dialogue.portrait_position.x",
+      "y": "$project.dialogue.portrait_position.y",
+      "anchor": "topleft",
+      "layer": 101
+    },
+    {
+      "type": "run_dialogue",
+      "element_id": "dialogue_text",
+      "dialogue_id": "npcs/blue_guide",
+      "x": "$project.dialogue.portrait_box.x",
+      "y": "$project.dialogue.portrait_box.y",
+      "max_width": "$project.dialogue.portrait_box.width",
+      "max_lines": "$project.dialogue.max_lines",
+      "layer": 101
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_text"
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/blue_guide_refresh_choices"
+    },
+    {
+      "type": "set_camera_follow_entity",
+      "entity_id": "$world.dialogue_return_entity"
+    },
+    {
+      "type": "set_active_entity",
+      "entity_id": "dialogue_controller"
+    }
+  ]
+}

@@ -114,6 +114,16 @@ Implemented in the first movement-foundation slice:
   - `clear_screen_elements`
   - `play_screen_animation`
   - `wait_for_screen_animation`
+- The runtime now also has a blocking text-only `run_dialogue` primitive that:
+  - uses project-authored dialogue defaults
+  - wraps text by measured pixel width
+  - paginates wrapped text by configured `max_lines`
+  - advances pages on action-button presses
+- Projects can now also store reusable dialogue content in `dialogues/` JSON
+  files and invoke them by `dialogue_id` from `run_dialogue`.
+- The sample project now handles panel images, portraits, and dialogue choices
+  outside `run_dialogue` through normal screen-space commands plus a hidden
+  `dialogue_controller` entity that receives dialogue input through events.
 
 Not implemented yet in this slice:
 

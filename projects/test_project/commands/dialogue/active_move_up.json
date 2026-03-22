@@ -1,0 +1,18 @@
+{
+  "id": "dialogue/active_move_up",
+  "commands": [
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_menu",
+      "op": "eq",
+      "value": "blue_guide",
+      "then": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/blue_guide_move_up"
+        }
+      ]
+    }
+  ]
+}

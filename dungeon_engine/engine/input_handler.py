@@ -166,3 +166,9 @@ class InputHandler:
         """Return how many action-button keydown events have occurred."""
         return int(self.action_press_count)
 
+    def is_direction_held(self, direction: str) -> bool:
+        """Return whether one logical direction is currently held."""
+        if direction not in self.held_directions:
+            raise KeyError(f"Unknown direction '{direction}'.")
+        return bool(self.held_directions[direction])
+

@@ -11,7 +11,7 @@ This file is the plain-language feature list for the project. It is meant to be 
 - The player can move, collide with walls, and push movable objects.
 - The player can interact with nearby objects and trigger command chains.
 - Rooms can contain levers, gates, doors, switches, buttons, triggers, pickups, NPCs, and similar entities.
-- Dialogue supports text reveal, advancing, and branching choices.
+- Dialogue supports paginated text, advancing, and branching choices.
 - Rooms can be created and edited early through a standalone editor that shares the same data model as play mode.
 - Inventory exists early and supports item checks as interaction requirements.
 - Usable items can trigger command chains.

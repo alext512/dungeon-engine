@@ -172,8 +172,18 @@ class TextRenderer:
         font_id: str = config.DEFAULT_UI_FONT_ID,
     ) -> str:
         """Wrap text to fit within a maximum pixel width."""
+        return "\n".join(self.wrap_lines(text, max_width, font_id=font_id))
+
+    def wrap_lines(
+        self,
+        text: str,
+        max_width: int,
+        *,
+        font_id: str = config.DEFAULT_UI_FONT_ID,
+    ) -> list[str]:
+        """Wrap text into individual lines that fit within a maximum pixel width."""
         if max_width <= 0 or not text:
-            return text
+            return text.split("\n") if text else [""]
 
         wrapped_lines: list[str] = []
         for source_line in text.split("\n"):
@@ -207,7 +217,36 @@ class TextRenderer:
 
             wrapped_lines.append(current_line)
 
-        return "\n".join(wrapped_lines)
+        return wrapped_lines
+
+    def paginate_text(
+        self,
+        text: str,
+        max_width: int,
+        max_lines: int,
+        *,
+        font_id: str = config.DEFAULT_DIALOGUE_FONT_ID,
+    ) -> list[str]:
+        """Split text into wrapped pages with at most ``max_lines`` per page."""
+        if max_lines <= 0:
+            raise ValueError("paginate_text requires max_lines > 0.")
+
+        wrapped_lines = self.wrap_lines(text, max_width, font_id=font_id)
+        if not wrapped_lines:
+            return [""]
+
+        pages: list[str] = []
+        current_page_lines: list[str] = []
+        for line in wrapped_lines:
+            current_page_lines.append(line)
+            if len(current_page_lines) >= max_lines:
+                pages.append("\n".join(current_page_lines))
+                current_page_lines = []
+
+        if current_page_lines or not pages:
+            pages.append("\n".join(current_page_lines))
+
+        return pages
 
     def get_font(self, font_id: str) -> BitmapFont:
         """Load a named font once and return it from cache afterwards."""

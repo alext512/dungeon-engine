@@ -11,6 +11,7 @@ from dungeon_engine.commands.library import (
     instantiate_named_command_commands,
     load_named_command_definition,
 )
+from dungeon_engine.dialogue_library import load_dialogue_definition
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     CommandContext,
@@ -109,6 +110,93 @@ class ActionPressCommandHandle(CommandHandle):
         self.complete = input_handler.get_action_press_count() > self.start_press_count
 
 
+class DirectionReleaseCommandHandle(CommandHandle):
+    """Wait until one or more logical directions are no longer held."""
+
+    def __init__(self, context: CommandContext, directions: list[str]) -> None:
+        super().__init__()
+        self.context = context
+        self.directions = [str(direction) for direction in directions]
+        self.update(0.0)
+
+    def update(self, dt: float) -> None:
+        """Complete when every watched direction has been released."""
+        input_handler = self.context.input_handler
+        if input_handler is None:
+            self.complete = True
+            return
+        self.complete = not any(
+            input_handler.is_direction_held(direction)
+            for direction in self.directions
+        )
+
+
+class DialogueCommandHandle(CommandHandle):
+    """Show blocking paginated dialogue text inside one existing screen-space box."""
+
+    def __init__(
+        self,
+        context: CommandContext,
+        *,
+        pages: list[str],
+        element_id: str,
+        x: float,
+        y: float,
+        layer: int,
+        anchor: str,
+        font_id: str,
+        text_color: tuple[int, int, int],
+    ) -> None:
+        super().__init__()
+        self.context = context
+        self.pages = list(pages) or [""]
+        self.element_id = str(element_id)
+        self.x = float(x)
+        self.y = float(y)
+        self.layer = int(layer)
+        self.anchor = str(anchor)
+        self.font_id = str(font_id)
+        self.text_color = text_color
+        self.current_page_index = 0
+
+        if context.screen_manager is None:
+            raise ValueError("run_dialogue requires a screen manager.")
+        self.last_action_press_count = _get_action_press_count(context)
+        self._show_current_page()
+        self.update(0.0)
+
+    def update(self, dt: float) -> None:
+        """Advance to the next dialogue page after each new action press."""
+        if self.complete:
+            return
+
+        current_press_count = _get_action_press_count(self.context)
+        if current_press_count <= self.last_action_press_count:
+            return
+
+        self.last_action_press_count = current_press_count
+        if self.current_page_index + 1 < len(self.pages):
+            self.current_page_index += 1
+            self._show_current_page()
+            return
+
+        self.complete = True
+
+    def _show_current_page(self) -> None:
+        """Show or update the current dialogue page."""
+        assert self.context.screen_manager is not None
+        self.context.screen_manager.show_text(
+            element_id=self.element_id,
+            text=self.pages[self.current_page_index],
+            x=self.x,
+            y=self.y,
+            layer=self.layer,
+            anchor=self.anchor,  # type: ignore[arg-type]
+            color=self.text_color,
+            font_id=self.font_id,
+        )
+
+
 class NamedCommandHandle(CommandHandle):
     """Run a project-level named command definition while tracking recursion."""
 
@@ -174,6 +262,44 @@ def _resolve_entity_id(
             raise ValueError("Command used 'actor' without an actor entity context.")
         return actor_entity_id
     return entity_id
+
+
+def _get_action_press_count(context: CommandContext) -> int:
+    """Return the current action-button press counter, if available."""
+    input_handler = context.input_handler
+    return input_handler.get_action_press_count() if input_handler is not None else 0
+def _get_project_dialogue_defaults(context: CommandContext) -> dict[str, Any]:
+    """Return project-authored dialogue defaults when available."""
+    if context.project is None:
+        return {}
+    try:
+        defaults = context.project.resolve_shared_variable("dialogue")
+    except KeyError:
+        return {}
+    return defaults if isinstance(defaults, dict) else {}
+
+
+def _get_dialogue_setting(
+    dialogue_defaults: dict[str, Any],
+    key: str,
+    default: Any,
+) -> Any:
+    """Return one dialogue setting, falling back cleanly when absent."""
+    return copy.deepcopy(dialogue_defaults.get(key, default))
+
+
+def _normalize_color_tuple(
+    value: Any,
+    *,
+    default: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """Convert a JSON color list/tuple into an RGB tuple."""
+    if isinstance(value, (list, tuple)) and len(value) >= 3:
+        try:
+            return (int(value[0]), int(value[1]), int(value[2]))
+        except (TypeError, ValueError):
+            return default
+    return default
 
 
 def _resolve_variables(
@@ -1104,6 +1230,123 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Pause until the next Space/Enter-style action press occurs."""
         return ActionPressCommandHandle(context)
+
+    @registry.register("wait_for_direction_release")
+    def wait_for_direction_release(
+        context: CommandContext,
+        *,
+        direction: str | None = None,
+        directions: list[str] | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Pause until the watched logical direction keys are released."""
+        watched_directions: list[str]
+        if directions is not None:
+            watched_directions = [str(item) for item in directions]
+        elif direction is not None:
+            watched_directions = [str(direction)]
+        else:
+            raise ValueError("wait_for_direction_release requires direction or directions.")
+        if not watched_directions:
+            return ImmediateHandle()
+        valid_directions = {"up", "down", "left", "right"}
+        for watched_direction in watched_directions:
+            if watched_direction not in valid_directions:
+                raise ValueError(f"Unknown direction '{watched_direction}'.")
+        return DirectionReleaseCommandHandle(context, watched_directions)
+
+    @registry.register("run_dialogue")
+    def run_dialogue(
+        context: CommandContext,
+        *,
+        dialogue_id: str | None = None,
+        text: str | None = None,
+        pages: list[str] | None = None,
+        element_id: str = "dialogue_text",
+        x: int | float = 0,
+        y: int | float = 0,
+        layer: int = 101,
+        anchor: str = "topleft",
+        font_id: str = config.DEFAULT_DIALOGUE_FONT_ID,
+        max_width: int | None = None,
+        max_lines: int | None = None,
+        text_color: list[int] | tuple[int, int, int] | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Show blocking paginated dialogue text inside a caller-defined text box."""
+        if context.screen_manager is None:
+            raise ValueError("Cannot run dialogue without a screen manager.")
+        if context.text_renderer is None:
+            raise ValueError("Cannot run dialogue without a text renderer.")
+
+        dialogue_data: dict[str, Any] = {}
+        if dialogue_id is not None:
+            if context.project is None:
+                raise ValueError("run_dialogue with dialogue_id requires an active project.")
+            dialogue_definition = load_dialogue_definition(context.project, str(dialogue_id))
+            dialogue_data = dict(dialogue_definition.raw_data)
+
+        if text is None and dialogue_data.get("text") is not None:
+            text = str(dialogue_data["text"])
+        if pages is None and dialogue_data.get("pages") is not None:
+            raw_pages = dialogue_data["pages"]
+            if isinstance(raw_pages, list):
+                pages = [str(page) for page in raw_pages]
+        if font_id == config.DEFAULT_DIALOGUE_FONT_ID and dialogue_data.get("font_id") is not None:
+            font_id = str(dialogue_data["font_id"])
+        if max_lines is None and dialogue_data.get("max_lines") is not None:
+            max_lines = int(dialogue_data["max_lines"])
+        if text_color is None and dialogue_data.get("text_color") is not None:
+            text_color = dialogue_data["text_color"]
+
+        dialogue_defaults = _get_project_dialogue_defaults(context)
+        resolved_font_id = str(font_id)
+        resolved_max_lines = int(
+            max_lines
+            if max_lines is not None
+            else _get_dialogue_setting(dialogue_defaults, "max_lines", 2)
+        )
+        if resolved_max_lines <= 0:
+            raise ValueError("run_dialogue requires max_lines > 0.")
+        resolved_max_width = int(max_width) if max_width is not None else None
+        if resolved_max_width is None or resolved_max_width <= 0:
+            raise ValueError("run_dialogue requires a positive max_width for pagination.")
+
+        resolved_pages: list[str] = []
+        if pages:
+            for page_text in pages:
+                resolved_pages.extend(
+                    context.text_renderer.paginate_text(
+                        str(page_text),
+                        resolved_max_width,
+                        resolved_max_lines,
+                        font_id=resolved_font_id,
+                    )
+                )
+        elif text is not None:
+            resolved_pages = context.text_renderer.paginate_text(
+                str(text),
+                resolved_max_width,
+                resolved_max_lines,
+                font_id=resolved_font_id,
+            )
+        else:
+            raise ValueError("run_dialogue requires text or pages.")
+
+        return DialogueCommandHandle(
+            context,
+            pages=resolved_pages,
+            element_id=str(element_id),
+            x=float(x),
+            y=float(y),
+            layer=int(layer),
+            anchor=str(anchor),
+            font_id=resolved_font_id,
+            text_color=_normalize_color_tuple(
+                text_color if text_color is not None else _get_dialogue_setting(dialogue_defaults, "text_color", None),
+                default=config.COLOR_TEXT,
+            ),
+        )
 
     @registry.register("run_detached_commands")
     def run_detached_commands(

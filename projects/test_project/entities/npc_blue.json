@@ -1,8 +1,8 @@
 {
-  "kind": "sign",
+  "kind": "npc",
   "solid": true,
   "sprite": {
-    "path": "assets/project/sprites/sign.png",
+    "path": "assets/project/sprites/npc_blue.png",
     "frame_width": 16,
     "frame_height": 16,
     "frames": [0]
@@ -13,7 +13,7 @@
       "commands": [
         {
           "type": "run_named_command",
-          "command_id": "dialogue/sign_gate_hint"
+          "command_id": "dialogue/blue_guide_open"
         }
       ]
     }

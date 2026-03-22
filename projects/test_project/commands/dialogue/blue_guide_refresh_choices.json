@@ -1,0 +1,92 @@
+{
+  "id": "dialogue/blue_guide_refresh_choices",
+  "commands": [
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "op": "eq",
+      "value": 0,
+      "then": [
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_choice_0",
+          "text": "- Tell me about the lever.",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": "$project.dialogue.portrait_box.y",
+          "layer": 101,
+          "color": [245, 232, 190]
+        }
+      ],
+      "else": [
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_choice_0",
+          "text": "Tell me about the lever.",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": "$project.dialogue.portrait_box.y",
+          "layer": 101,
+          "color": [238, 242, 248]
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "op": "eq",
+      "value": 1,
+      "then": [
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_choice_1",
+          "text": "- How do the blocks work?",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": 164,
+          "layer": 101,
+          "color": [245, 232, 190]
+        }
+      ],
+      "else": [
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_choice_1",
+          "text": "How do the blocks work?",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": 164,
+          "layer": 101,
+          "color": [238, 242, 248]
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "scope": "world",
+      "name": "dialogue_choice_index",
+      "op": "eq",
+      "value": 2,
+      "then": [
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_choice_2",
+          "text": "- Nothing right now.",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": 174,
+          "layer": 101,
+          "color": [245, 232, 190]
+        }
+      ],
+      "else": [
+        {
+          "type": "show_screen_text",
+          "element_id": "dialogue_choice_2",
+          "text": "Nothing right now.",
+          "x": "$project.dialogue.portrait_box.x",
+          "y": 174,
+          "layer": 101,
+          "color": [238, 242, 248]
+        }
+      ]
+    }
+  ]
+}

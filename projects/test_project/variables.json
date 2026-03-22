@@ -1,8 +1,33 @@
 {
   "display": {
     "_comment_internal_size": "Internal game render resolution in pixels.",
-    "internal_width": 320,
-    "internal_height": 240
+    "internal_width": 256,
+    "internal_height": 192
+  },
+  "dialogue": {
+    "_comment_max_lines": "Maximum wrapped dialogue lines shown per page before advancing to the next page.",
+    "panel_path": "assets/project/ui/dialogue_panel.png",
+    "padding_left": 8,
+    "padding_right": 8,
+    "padding_top": 6,
+    "padding_bottom": 6,
+    "portrait_gap": 6,
+    "max_lines": 3,
+    "hint_text": "",
+    "plain_box": {
+      "x": 8,
+      "y": 154,
+      "width": 240
+    },
+    "portrait_box": {
+      "x": 56,
+      "y": 154,
+      "width": 192
+    },
+    "portrait_position": {
+      "x": 8,
+      "y": 154
+    }
   },
   "movement": {
     "_comment_ticks_per_tile": "Recommended to keep this even so the sprite change lands halfway through a tile move.",

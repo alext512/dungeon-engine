@@ -222,6 +222,8 @@ class Game:
             interaction_system=self.interaction_system,
             animation_system=self.animation_system,
             project=self.project,
+            asset_manager=self.asset_manager,
+            text_renderer=self.renderer.text_renderer,
             camera=self.camera,
             audio_player=self.audio_player,
             screen_manager=self.screen_manager,
