@@ -89,7 +89,10 @@ class AnimationSystem:
                 entity.current_frame = entity.animation_frames[0]
                 continue
 
-            if len(entity.animation_frames) == 1 or entity.animation_fps <= 0:
+            if entity.animation_fps <= 0:
+                continue
+
+            if len(entity.animation_frames) == 1:
                 entity.current_frame = entity.animation_frames[0]
                 continue
 

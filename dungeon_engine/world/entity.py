@@ -82,6 +82,7 @@ class Entity:
     sprite_path: str = ""
     sprite_frame_width: int = 16
     sprite_frame_height: int = 16
+    sprite_flip_x: bool = False
     animation_frames: list[int] = field(default_factory=lambda: [0])
     animation_fps: float = 0.0
     animate_when_moving: bool = False

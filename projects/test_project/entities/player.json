@@ -5,7 +5,7 @@
     "walk_phase": 0
   },
   "sprite": {
-    "path": "assets/project/sprites/player_sheet.png",
+    "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
     "frame_width": 16,
     "frame_height": 16,
     "frames": [0],
@@ -13,6 +13,31 @@
     "animate_when_moving": false
   },
   "events": {
+    "play_bump_sound": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "play_audio",
+          "path": "assets/project/sfx/bump.wav"
+        },
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "play_bump_sound",
+          "enabled": false
+        },
+        {
+          "type": "wait_frames",
+          "frames": 16
+        },
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "play_bump_sound",
+          "enabled": true
+        }
+      ]
+    },
     "interact": {
       "enabled": true,
       "commands": [
@@ -26,13 +51,18 @@
       "enabled": true,
       "commands": [
         {
+          "type": "set_sprite_flip_x",
+          "entity_id": "self",
+          "flip_x": false
+        },
+        {
           "type": "run_named_command",
           "command_id": "attempt_move_one_tile",
           "direction": "up",
           "push_event_id": "push_from_down",
-          "phase_a_frames": [0, 1],
-          "phase_b_frames": [1, 0],
-          "idle_frame": 0,
+          "phase_a_frames": [5, 2],
+          "phase_b_frames": [8, 2],
+          "idle_frame": 2,
           "frames_per_sprite_change": 8,
           "frames_needed": 16
         }
@@ -42,12 +72,17 @@
       "enabled": true,
       "commands": [
         {
+          "type": "set_sprite_flip_x",
+          "entity_id": "self",
+          "flip_x": false
+        },
+        {
           "type": "run_named_command",
           "command_id": "attempt_move_one_tile",
           "direction": "down",
           "push_event_id": "push_from_up",
-          "phase_a_frames": [0, 1],
-          "phase_b_frames": [1, 0],
+          "phase_a_frames": [3, 0],
+          "phase_b_frames": [6, 0],
           "idle_frame": 0,
           "frames_per_sprite_change": 8,
           "frames_needed": 16
@@ -58,13 +93,18 @@
       "enabled": true,
       "commands": [
         {
+          "type": "set_sprite_flip_x",
+          "entity_id": "self",
+          "flip_x": false
+        },
+        {
           "type": "run_named_command",
           "command_id": "attempt_move_one_tile",
           "direction": "left",
           "push_event_id": "push_from_right",
-          "phase_a_frames": [0, 1],
-          "phase_b_frames": [1, 0],
-          "idle_frame": 0,
+          "phase_a_frames": [4, 1],
+          "phase_b_frames": [7, 1],
+          "idle_frame": 1,
           "frames_per_sprite_change": 8,
           "frames_needed": 16
         }
@@ -74,13 +114,18 @@
       "enabled": true,
       "commands": [
         {
+          "type": "set_sprite_flip_x",
+          "entity_id": "self",
+          "flip_x": true
+        },
+        {
           "type": "run_named_command",
           "command_id": "attempt_move_one_tile",
           "direction": "right",
           "push_event_id": "push_from_left",
-          "phase_a_frames": [0, 1],
-          "phase_b_frames": [1, 0],
-          "idle_frame": 0,
+          "phase_a_frames": [4, 1],
+          "phase_b_frames": [7, 1],
+          "idle_frame": 1,
           "frames_per_sprite_change": 8,
           "frames_needed": 16
         }

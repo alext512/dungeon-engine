@@ -25,6 +25,7 @@ class AssetManager:
         self._project = project
         self._image_cache: dict[Path, pygame.Surface] = {}
         self._frame_cache: dict[tuple[Path, int, int], list[pygame.Surface]] = {}
+        self._sound_cache: dict[Path, pygame.mixer.Sound] = {}
 
     def _resolve(self, relative_path: str) -> Path:
         """Turn a relative asset path into an absolute filesystem path."""
@@ -59,6 +60,11 @@ class AssetManager:
         """Return (width, height) in pixels for a tileset or sprite image."""
         image = self.get_image(relative_path)
         return (image.get_width(), image.get_height())
+
+    def get_sound(self, relative_path: str) -> pygame.mixer.Sound:
+        """Return a cached sound object by path relative to the active project."""
+        asset_path = self._resolve(relative_path)
+        return self._load_sound(asset_path)
 
     def get_frame_count(
         self,
@@ -124,4 +130,14 @@ class AssetManager:
         image = pygame.image.load(str(asset_path)).convert_alpha()
         self._image_cache[asset_path] = image
         return image
+
+    def _load_sound(self, asset_path: Path) -> pygame.mixer.Sound:
+        """Load a sound once and keep it in memory."""
+        cached = self._sound_cache.get(asset_path)
+        if cached is not None:
+            return cached
+
+        sound = pygame.mixer.Sound(str(asset_path))
+        self._sound_cache[asset_path] = sound
+        return sound
 

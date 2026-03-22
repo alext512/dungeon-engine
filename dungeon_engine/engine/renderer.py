@@ -111,6 +111,8 @@ class Renderer:
                     entity.sprite_frame_height,
                     entity.current_frame,
                 )
+                if entity.sprite_flip_x:
+                    sprite_surface = pygame.transform.flip(sprite_surface, True, False)
                 sprite_surface = self._apply_tint(sprite_surface, entity.color)
                 screen_x, screen_y = self._world_to_screen(
                     entity.pixel_x,

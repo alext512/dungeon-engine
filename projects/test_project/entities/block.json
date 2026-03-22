@@ -13,11 +13,32 @@
       "enabled": true,
       "commands": [
         {
-          "type": "move_entity_one_tile",
+          "type": "query_facing_state",
           "entity_id": "self",
           "direction": "right",
-          "frames_needed": 16,
-          "allow_push": false
+          "store_state_var": "push_attempt_state"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "push_attempt_state",
+          "op": "eq",
+          "value": "free",
+          "then": [
+            {
+              "type": "play_audio",
+              "path": "assets/project/sfx/push.wav"
+            },
+            {
+              "type": "move_entity_one_tile",
+              "entity_id": "self",
+              "direction": "right",
+              "frames_needed": 16,
+              "allow_push": false,
+              "wait": false
+            }
+          ]
         }
       ]
     },
@@ -25,11 +46,32 @@
       "enabled": true,
       "commands": [
         {
-          "type": "move_entity_one_tile",
+          "type": "query_facing_state",
           "entity_id": "self",
           "direction": "left",
-          "frames_needed": 16,
-          "allow_push": false
+          "store_state_var": "push_attempt_state"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "push_attempt_state",
+          "op": "eq",
+          "value": "free",
+          "then": [
+            {
+              "type": "play_audio",
+              "path": "assets/project/sfx/push.wav"
+            },
+            {
+              "type": "move_entity_one_tile",
+              "entity_id": "self",
+              "direction": "left",
+              "frames_needed": 16,
+              "allow_push": false,
+              "wait": false
+            }
+          ]
         }
       ]
     },
@@ -37,11 +79,32 @@
       "enabled": true,
       "commands": [
         {
-          "type": "move_entity_one_tile",
+          "type": "query_facing_state",
           "entity_id": "self",
           "direction": "down",
-          "frames_needed": 16,
-          "allow_push": false
+          "store_state_var": "push_attempt_state"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "push_attempt_state",
+          "op": "eq",
+          "value": "free",
+          "then": [
+            {
+              "type": "play_audio",
+              "path": "assets/project/sfx/push.wav"
+            },
+            {
+              "type": "move_entity_one_tile",
+              "entity_id": "self",
+              "direction": "down",
+              "frames_needed": 16,
+              "allow_push": false,
+              "wait": false
+            }
+          ]
         }
       ]
     },
@@ -49,11 +112,32 @@
       "enabled": true,
       "commands": [
         {
-          "type": "move_entity_one_tile",
+          "type": "query_facing_state",
           "entity_id": "self",
           "direction": "up",
-          "frames_needed": 16,
-          "allow_push": false
+          "store_state_var": "push_attempt_state"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "push_attempt_state",
+          "op": "eq",
+          "value": "free",
+          "then": [
+            {
+              "type": "play_audio",
+              "path": "assets/project/sfx/push.wav"
+            },
+            {
+              "type": "move_entity_one_tile",
+              "entity_id": "self",
+              "direction": "up",
+              "frames_needed": 16,
+              "allow_push": false,
+              "wait": false
+            }
+          ]
         }
       ]
     }
