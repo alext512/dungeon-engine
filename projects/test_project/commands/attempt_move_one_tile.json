@@ -11,9 +11,10 @@
   ],
   "commands": [
     {
-      "type": "set_facing",
+      "type": "set_entity_field",
       "entity_id": "self",
-      "direction": "$direction"
+      "field_name": "facing",
+      "value": "$direction"
     },
     {
       "type": "query_facing_state",

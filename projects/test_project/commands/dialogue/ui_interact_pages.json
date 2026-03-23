@@ -1,0 +1,30 @@
+{
+  "id": "dialogue/ui_interact_pages",
+  "commands": [
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "page_has_more",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "advance_text_session",
+          "entity_id": "self",
+          "session_id": "main"
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/ui_render_page"
+        }
+      ],
+      "else": [
+        {
+          "type": "run_named_command",
+          "command_id": "$self.after_pages_command_id"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "dialogue/ui_render_choice_slot_0",
+  "params": ["text", "marker_text", "text_color"],
+  "commands": [
+    {
+      "type": "prepare_text_session",
+      "entity_id": "self",
+      "session_id": "choice_slot_0",
+      "mode": "marquee",
+      "text": "$text",
+      "max_width": "$project.dialogue.choice_box.width"
+    },
+    {
+      "type": "read_text_session",
+      "entity_id": "self",
+      "session_id": "choice_slot_0",
+      "scope": "entity",
+      "store_entity_id": "self",
+      "store_text_var": "slot_0_text",
+      "store_has_more_var": "slot_0_has_more"
+    },
+    {
+      "type": "show_screen_text",
+      "element_id": "dialogue_choice_marker_0",
+      "text": "$marker_text",
+      "x": "$project.dialogue.choice_box.marker_x",
+      "y": "$project.dialogue.choice_rows_y.0",
+      "layer": 101,
+      "color": "$text_color"
+    },
+    {
+      "type": "show_screen_text",
+      "element_id": "dialogue_choice_0",
+      "text": "$self.slot_0_text",
+      "x": "$project.dialogue.choice_box.text_x",
+      "y": "$project.dialogue.choice_rows_y.0",
+      "layer": 101,
+      "color": "$text_color"
+    }
+  ]
+}

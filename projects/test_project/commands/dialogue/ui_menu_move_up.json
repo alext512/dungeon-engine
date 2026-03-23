@@ -1,0 +1,43 @@
+{
+  "id": "dialogue/ui_menu_move_up",
+  "commands": [
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "choice_selected_index",
+      "op": "gt",
+      "value": 0,
+      "then": [
+        {
+          "type": "increment_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_selected_index",
+          "amount": -1
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_selected_index",
+          "op": "lt",
+          "value": "$self.choice_scroll_offset",
+          "then": [
+            {
+              "type": "increment_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "choice_scroll_offset",
+              "amount": -1
+            }
+          ]
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "$self.refresh_command_id"
+        }
+      ]
+    }
+  ]
+}

@@ -12,14 +12,16 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_visible",
+          "type": "set_entity_field",
           "entity_id": "$target_gate",
-          "visible": false
+          "field_name": "visible",
+          "value": false
         },
         {
-          "type": "set_solid",
+          "type": "set_entity_field",
           "entity_id": "$target_gate",
-          "solid": false
+          "field_name": "solid",
+          "value": false
         },
         {
           "type": "set_event_enabled",
@@ -28,9 +30,10 @@
           "enabled": false
         },
         {
-          "type": "set_color",
+          "type": "set_entity_field",
           "entity_id": "self",
-          "color": [150, 150, 150]
+          "field_name": "color",
+          "value": [150, 150, 150]
         }
       ]
     }

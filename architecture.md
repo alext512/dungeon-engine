@@ -73,10 +73,11 @@ Example:
 
 Control routing is layered:
 
-- the project defines default input event names
+- the project defines fallback input event names
 - the project can also define a default active entity id
 - an area may override the active entity id
-- runtime commands may still switch the active entity or remap input event names temporarily
+- active entities may define their own `input_map`
+- runtime commands may switch the active entity temporarily, including stack-style handoff through `push_active_entity` / `pop_active_entity`
 - the project may enable or disable debug inspection controls such as zoom/pause/step through `project.json`
 
 This keeps player input, AI behavior, and cinematics aligned around the same action model.
@@ -203,6 +204,10 @@ The project needs a central command runner that can:
 - branch on success, failure, or choice
 - wait for async commands to finish
 - pass context between related commands
+
+Named command libraries should be indexed at project startup so runtime
+`run_named_command` calls only use in-memory definitions instead of rediscovering
+files from disk during active play.
 
 ### Command context
 
@@ -369,16 +374,17 @@ Dialogue needs:
 
 Current practical split:
 
-- the engine owns text measurement, wrapping, and page advancement
-- projects own panel images, portraits, choice layout, and dialogue-specific input flow
+- the engine owns text measurement, wrapping, pagination, marquee windowing, and text-session storage
+- projects own panel images, portraits, choice layout, dialogue-specific input flow, and when sessions advance or reset
 
 So the intended dialogue pattern is:
 
-1. show panel image through screen-space commands
-2. optionally show portrait image
-3. call `run_dialogue` for the text only
-4. if choices are needed, render them as normal screen text
-5. hand input to a controller entity whose events update the choice texts and branch
+1. hand input to a focused UI entity
+2. show panel image through screen-space commands
+3. optionally show portrait image
+4. prepare and read a text session for the current page or choice row
+5. render the returned text through normal screen-text commands
+6. let the UI entity decide whether input advances text, changes selection, resets marquee text, or closes the dialogue
 
 This keeps dialogue aligned with the general command architecture instead of
 turning it into a separate hardcoded menu system.

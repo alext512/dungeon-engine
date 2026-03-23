@@ -12,8 +12,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/blue_guide_open"
+          "type": "run_event",
+          "entity_id": "dialogue_ui",
+          "event_id": "open_blue_guide"
         }
       ]
     }

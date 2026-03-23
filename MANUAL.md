@@ -25,12 +25,14 @@ If you are new to the codebase, this is the shortest accurate summary:
 - input triggers entity events like `move_up` and `interact`
 - the sample player movement is authored in `entities/player.json` plus named commands in `commands/`
 - `variables.json` currently owns shared values like render resolution, dialogue layout, and `movement.ticks_per_tile`
-- `run_dialogue` is text-only:
-  - it wraps and paginates text
-  - panels, portraits, and choices are authored through normal screen-space commands
-- sample dialogue choices are handled by a hidden `dialogue_controller` entity plus named commands under `commands/dialogue/`
+- text sessions are the main dialogue text service:
+  - the engine wraps, paginates, and windows text
+  - UI entities decide when to read, advance, reset, and render it
+- `run_dialogue` still exists as a simple text-only helper
+- sample dialogue choices are handled by a focused `dialogue_ui` entity plus named commands under `commands/dialogue/`
 - the current sample room is `projects/test_project/areas/test_room.json`
 - startup validation blocks launch on malformed/duplicate command-library problems
+- named commands are indexed into an in-memory project database at startup
 - `logs/error.log` is the main runtime/debug log
 
 If you only need the most important files first, read these:
@@ -269,6 +271,9 @@ These are JSON command libraries addressed by path-based ids, for example:
 
 The engine loads them through `run_named_command`.
 
+At startup, the project builds an in-memory named-command database so runtime
+lookups do not rescan command folders during gameplay.
+
 ## Command Model
 
 Gameplay is built out of command chains.
@@ -323,9 +328,9 @@ By default:
 
 But:
 
-- projects define the default event-name mapping in `project.json`
-- commands can switch the active entity
-- commands can remap input event names at runtime
+- active entities can define their own `input_map`
+- projects define fallback event names in `project.json`
+- commands can switch the active entity with `set_active_entity`, `push_active_entity`, and `pop_active_entity`
 
 This lets a room temporarily hand control to something other than the player.
 
@@ -418,13 +423,14 @@ This layer is meant for:
 
 ### Current Design
 
-The current engine keeps dialogue intentionally narrow.
+The current engine keeps dialogue intentionally narrow and service-oriented.
 
 Engine-owned part:
 
 - text wrapping by measured pixel width
 - pagination by `max_lines`
-- advancing pages on action press
+- single-line marquee windowing for long choice text
+- text-session storage and cursor state
 
 Project-authored part:
 
@@ -432,9 +438,14 @@ Project-authored part:
 - showing a portrait image
 - deciding where the text box is
 - creating/removing choice text
+- deciding when text advances or resets
 - processing menu-like input through events and commands
 
-So `run_dialogue` is now text-only.
+So the recommended flow is now:
+
+- a UI entity owns dialogue flow
+- text-session commands provide processed text
+- normal screen-space commands render the result
 
 ### Current `run_dialogue`
 
@@ -454,6 +465,10 @@ Use either:
 
 - one long `text` and let the engine paginate it
 - or explicit `pages` for manual control
+
+`run_dialogue` is still fine for simple blocking text, but the sample project now
+uses `prepare_text_session`, `read_text_session`, `advance_text_session`, and
+`reset_text_session` instead.
 
 ### Dialogue Layout
 
@@ -478,26 +493,13 @@ The engine does not own a generic choice-menu command.
 Instead:
 
 - the command chain creates separate screen-text elements for each option
-- the selected option literally includes `- ` in its text
-- a hidden `dialogue_controller` entity becomes the active input receiver
+- the selected option can start a marquee-style long-text session
+- a focused `dialogue_ui` entity becomes the active input receiver
 - its `move_up`, `move_down`, and `interact` events run named commands that:
   - update the selected index
+  - update scroll offset when there are more than three choices
   - redraw the choice lines
   - confirm the selected branch
-
-### Single-Press Menu Navigation
-
-The sample dialogue controller now waits for direction release before allowing
-another up/down move.
-
-That means:
-
-- holding `Up` or `Down` moves the selection only once
-- you must release and press again to move again
-
-This is implemented with:
-
-- `wait_for_direction_release`
 
 ## Audio
 
@@ -585,7 +587,7 @@ Useful sample files:
 - `projects/test_project/entities/player.json`
 - `projects/test_project/entities/sign.json`
 - `projects/test_project/entities/npc_blue.json`
-- `projects/test_project/entities/dialogue_controller.json`
+- `projects/test_project/entities/dialogue_ui.json`
 - `projects/test_project/commands/dialogue/`
 - `projects/test_project/dialogues/`
 

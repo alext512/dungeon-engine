@@ -110,16 +110,7 @@ class InputHandler:
                 if event.key in ACTION_KEYS:
                     self.action_press_count += 1
                     if not self.command_runner.has_pending_work():
-                        active_entity_id = self.world.active_entity_id
-                        interact_event_name = self.action_event_names.get("interact", "").strip()
-                        if not interact_event_name:
-                            continue
-                        self.command_runner.enqueue(
-                            "run_event",
-                            entity_id=active_entity_id,
-                            event_id=interact_event_name,
-                            actor_entity_id=active_entity_id,
-                        )
+                        self._enqueue_action_if_mapped("interact")
                     continue
 
                 direction = KEY_TO_DIRECTION.get(event.key)
@@ -143,21 +134,12 @@ class InputHandler:
             if not self.held_directions[direction]:
                 continue
 
-            active_entity_id = self.world.active_entity_id
             action_name = f"move_{direction}"
-            event_name = self.action_event_names.get(action_name, "").strip()
-            if not event_name:
-                continue
-            self.command_runner.enqueue(
-                "run_event",
-                entity_id=active_entity_id,
-                event_id=event_name,
-                actor_entity_id=active_entity_id,
-            )
-            return
+            if self._enqueue_action_if_mapped(action_name):
+                return
 
     def set_action_event_name(self, action: str, event_name: str) -> None:
-        """Change which entity event a named input action triggers."""
+        """Change the fallback entity event for a named logical input action."""
         if action not in self.action_event_names:
             raise KeyError(f"Unknown input action '{action}'.")
         self.action_event_names[action] = str(event_name)
@@ -171,4 +153,27 @@ class InputHandler:
         if direction not in self.held_directions:
             raise KeyError(f"Unknown direction '{direction}'.")
         return bool(self.held_directions[direction])
+
+    def _enqueue_action_if_mapped(self, action_name: str) -> bool:
+        """Run the mapped event for the active entity when one exists."""
+        active_entity_id = self.world.get_active_entity().entity_id
+        event_name = self._resolve_active_entity_event_name(action_name)
+        if not event_name:
+            return False
+        self.command_runner.enqueue(
+            "run_event",
+            entity_id=active_entity_id,
+            event_id=event_name,
+            actor_entity_id=active_entity_id,
+        )
+        return True
+
+    def _resolve_active_entity_event_name(self, action_name: str) -> str:
+        """Resolve an input action to an event name on the current active entity."""
+        active_entity = self.world.get_active_entity()
+        if active_entity is not None:
+            event_name = active_entity.input_map.get(action_name)
+            if event_name is not None:
+                return str(event_name).strip()
+        return self.action_event_names.get(action_name, "").strip()
 

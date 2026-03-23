@@ -133,7 +133,7 @@ Example:
 - `active_entity_id`
   Which entity starts as the direct input receiver.
 - `input_events`
-  Which event names the engine looks for when input happens.
+  Fallback event names the engine uses when the active entity does not define its own `input_map`.
 
 So the real rule is:
 
@@ -360,6 +360,8 @@ Example:
   Whether it can be pushed by movement logic.
 - `variables`
   Entity-local mutable variables.
+- `input_map`
+  Optional logical-input to event-name map owned by this entity.
 - `sprite`
   Visual setup.
 - `events`
@@ -399,6 +401,28 @@ Example:
   "walk_phase": 0
 }
 ```
+
+### `input_map`
+
+`input_map` lets the active entity decide which event handles each logical input.
+
+Example:
+
+```json
+"input_map": {
+  "move_up": "move_up",
+  "move_down": "move_down",
+  "move_left": "move_left",
+  "move_right": "move_right",
+  "interact": "interact"
+}
+```
+
+This means:
+
+- physical keys are still mapped by the engine
+- the active entity decides which event names those logical inputs should trigger
+- project-level `input_events` only serve as fallback defaults
 
 ### Events
 
@@ -541,37 +565,80 @@ Rules:
 - use `pages` when you want exact page boundaries
 - do not define both
 
-## `run_dialogue`
+## Text Sessions
 
-Current `run_dialogue` is text-only.
+The current recommended dialogue flow is built around text sessions.
 
-It:
+Primitive text-session commands:
 
-- loads dialogue text
-- wraps by pixel width
-- paginates by `max_lines`
-- advances when the action button is pressed
+- `prepare_text_session`
+- `read_text_session`
+- `advance_text_session`
+- `reset_text_session`
 
-It does not:
+The engine owns:
 
-- create the panel image
-- create a portrait
-- create choice UI
+- text wrapping by pixel width
+- pagination by `max_lines`
+- single-line marquee windowing for long choice text
 
-### Example
+Your project owns:
+
+- when a session opens
+- when it advances
+- how it is rendered
+- how input is handled
+
+### Example: prepare paged dialogue text
 
 ```json
 {
-  "type": "run_dialogue",
-  "element_id": "dialogue_text",
+  "type": "prepare_text_session",
+  "entity_id": "self",
+  "session_id": "main_text",
   "dialogue_id": "signs/gate_hint",
-  "x": "$project.dialogue.plain_box.x",
-  "y": "$project.dialogue.plain_box.y",
+  "mode": "pages",
   "max_width": "$project.dialogue.plain_box.width",
-  "max_lines": "$project.dialogue.max_lines",
-  "layer": 101
+  "max_lines": "$project.dialogue.max_lines"
 }
 ```
+
+### Example: read current page into variables
+
+```json
+{
+  "type": "read_text_session",
+  "entity_id": "self",
+  "session_id": "main_text",
+  "scope": "entity",
+  "store_entity_id": "self",
+  "store_text_var": "visible_text",
+  "store_has_more_var": "text_has_more",
+  "store_position_var": "text_position",
+  "store_total_var": "text_total"
+}
+```
+
+### Example: advance to the next chunk
+
+```json
+{
+  "type": "advance_text_session",
+  "entity_id": "self",
+  "session_id": "main_text"
+}
+```
+
+## `run_dialogue`
+
+`run_dialogue` still exists as a simple text-only helper.
+
+It is still useful for:
+
+- quick text-only interactions
+- temporary prototypes
+
+But the sample project now uses a focused `dialogue_ui` entity plus text-session commands instead.
 
 ## Screen-Space Commands
 
@@ -615,57 +682,37 @@ Use these for dialogue panels, portraits, and overlays.
 
 ## How The Sample Sign Works
 
-The sign template:
+The sign template owns an `interact` event that opens the shared `dialogue_ui`
+entity.
 
-- owns an `interact` event
-- that event runs a named command
+That flow:
 
-The named command:
-
-1. shows the panel image
-2. runs text-only `run_dialogue`
-3. removes the text element
-4. removes the panel image
-
-So the dialogue presentation is authored in project commands, not hardcoded in
-the engine.
+1. pushes active input to `dialogue_ui`
+2. shows the panel image
+3. prepares and reads a text session
+4. draws the current page through normal screen-text commands
+5. lets `dialogue_ui.interact` advance or close
+6. removes its screen elements
+7. pops active input back to the previous entity
 
 ## How The Sample NPC Dialogue Works
 
-The blue NPC flow is slightly richer.
+The blue NPC and bard flows use the shared `dialogue_ui` entity too.
 
-It does this:
+That entity:
 
-1. show panel image
-2. show portrait image
-3. run the intro text with `run_dialogue`
-4. remove the intro text
-5. draw three choice lines with `show_screen_text`
-6. set `dialogue_controller` as the active entity
-7. let that controller handle `move_up`, `move_down`, and `interact`
-8. redraw the choices whenever the selected index changes
-9. run the selected follow-up dialogue
-10. remove portrait/panel/text
-11. restore the previous active entity
+- owns the current dialogue state in its own variables
+- receives input through its own `input_map`
+- prepares and reads paged text sessions for dialogue pages
+- prepares and reads marquee text sessions for highlighted long choices
+- draws portrait, panel, and choice rows through normal screen commands
+- supports scrolling menus when there are more than three choices
 
-This is the current pattern for command-driven dialogue choices.
-
-## Dialogue Controller Pattern
-
-`dialogue_controller` is just a hidden entity template.
-
-Its events do not own the dialogue directly. They dispatch to named commands.
-
-That means:
+So:
 
 - menu flow stays in JSON
-- the engine does not need a special baked choice-menu subsystem
-
-The controller currently also uses:
-
-- `wait_for_direction_release`
-
-so a held arrow does not keep scrolling through choices.
+- input ownership stays with a normal entity
+- the engine does not need a baked choice-menu subsystem
 
 ## Movement Authoring Pattern
 
@@ -725,12 +772,14 @@ Flow and state:
 - `set_var`
 - `increment_var`
 - `check_var`
+- `set_entity_field`
 - `set_event_enabled`
 - `set_active_entity`
+- `push_active_entity`
+- `pop_active_entity`
 
 Movement and animation:
 
-- `set_facing`
 - `move_entity_one_tile`
 - `move_entity`
 - `teleport_entity`
@@ -745,7 +794,10 @@ Screen-space and dialogue:
 - `show_screen_text`
 - `set_screen_text`
 - `remove_screen_element`
-- `play_screen_animation`
+- `prepare_text_session`
+- `read_text_session`
+- `advance_text_session`
+- `reset_text_session`
 - `run_dialogue`
 
 Audio:
@@ -780,7 +832,7 @@ Lifecycle and presence:
 Important current limitations:
 
 - movement/render feel still needs a dedicated polish pass
-- there is not yet a typewriter-style text reveal
+- there is not yet a full typewriter-style dialogue reveal
 - choice layout is still authored manually
 - there is not yet a visual command-chain editor
 - inventory/item systems are still planned
@@ -796,7 +848,7 @@ If you want to learn by example, read:
 4. `projects/test_project/entities/player.json`
 5. `projects/test_project/entities/sign.json`
 6. `projects/test_project/entities/npc_blue.json`
-7. `projects/test_project/entities/dialogue_controller.json`
+7. `projects/test_project/entities/dialogue_ui.json`
 8. `projects/test_project/commands/attempt_move_one_tile.json`
 9. `projects/test_project/commands/walk_one_tile.json`
 10. `projects/test_project/commands/dialogue/`

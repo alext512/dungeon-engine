@@ -1,0 +1,330 @@
+{
+  "kind": "system",
+  "solid": false,
+  "visible": false,
+  "input_map": {
+    "move_up": "move_up",
+    "move_down": "move_down",
+    "interact": "interact"
+  },
+  "variables": {
+    "mode": "",
+    "after_pages_command_id": "dialogue/ui_close",
+    "move_up_command_id": "dialogue/ui_menu_move_up",
+    "move_down_command_id": "dialogue/ui_menu_move_down",
+    "confirm_command_id": "",
+    "refresh_command_id": "",
+    "has_portrait": false,
+    "portrait_path": "",
+    "portrait_frame_width": null,
+    "portrait_frame_height": null,
+    "portrait_frame": 0,
+    "text_box_x": 8,
+    "text_box_y": 154,
+    "text_box_width": 240,
+    "page_text": "",
+    "page_has_more": false,
+    "choice_selected_index": 0,
+    "choice_scroll_offset": 0,
+    "choice_max_index": 0,
+    "choice_bottom_visible_index": 0,
+    "selected_visible_slot": 0,
+    "marquee_token": 0,
+    "slot_0_text": "",
+    "slot_1_text": "",
+    "slot_2_text": "",
+    "slot_0_has_more": false,
+    "slot_1_has_more": false,
+    "slot_2_has_more": false
+  },
+  "events": {
+    "open_sign_gate_hint": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/sign_gate_hint"
+        }
+      ]
+    },
+    "open_blue_guide": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/blue_guide_open"
+        }
+      ]
+    },
+    "open_bard": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/bard_open"
+        }
+      ]
+    },
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/ui_interact"
+        }
+      ]
+    },
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/ui_move_up_input"
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/ui_move_down_input"
+        }
+      ]
+    },
+    "marquee_slot_0": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "wait_frames",
+          "frames": "$project.choice_marquee_frames"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "mode",
+          "op": "eq",
+          "value": "menu",
+          "then": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "marquee_token",
+              "op": "eq",
+              "value": "$token",
+              "then": [
+                {
+                  "type": "check_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "selected_visible_slot",
+                  "op": "eq",
+                  "value": 0,
+                  "then": [
+                    {
+                      "type": "advance_text_session",
+                      "entity_id": "self",
+                      "session_id": "choice_slot_0"
+                    },
+                    {
+                      "type": "read_text_session",
+                      "entity_id": "self",
+                      "session_id": "choice_slot_0",
+                      "scope": "entity",
+                      "store_entity_id": "self",
+                      "store_text_var": "slot_0_text",
+                      "store_has_more_var": "slot_0_has_more"
+                    },
+                    {
+                      "type": "show_screen_text",
+                      "element_id": "dialogue_choice_0",
+                      "text": "$self.slot_0_text",
+                      "x": "$project.dialogue.choice_box.text_x",
+                      "y": "$project.dialogue.choice_rows_y.0",
+                      "layer": 101,
+                      "color": [245, 232, 190]
+                    },
+                    {
+                      "type": "check_var",
+                      "scope": "entity",
+                      "entity_id": "self",
+                      "name": "slot_0_has_more",
+                      "op": "eq",
+                      "value": true,
+                      "then": [
+                        {
+                          "type": "run_event",
+                          "entity_id": "self",
+                          "event_id": "marquee_slot_0",
+                          "token": "$token"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "marquee_slot_1": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "wait_frames",
+          "frames": "$project.choice_marquee_frames"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "mode",
+          "op": "eq",
+          "value": "menu",
+          "then": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "marquee_token",
+              "op": "eq",
+              "value": "$token",
+              "then": [
+                {
+                  "type": "check_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "selected_visible_slot",
+                  "op": "eq",
+                  "value": 1,
+                  "then": [
+                    {
+                      "type": "advance_text_session",
+                      "entity_id": "self",
+                      "session_id": "choice_slot_1"
+                    },
+                    {
+                      "type": "read_text_session",
+                      "entity_id": "self",
+                      "session_id": "choice_slot_1",
+                      "scope": "entity",
+                      "store_entity_id": "self",
+                      "store_text_var": "slot_1_text",
+                      "store_has_more_var": "slot_1_has_more"
+                    },
+                    {
+                      "type": "show_screen_text",
+                      "element_id": "dialogue_choice_1",
+                      "text": "$self.slot_1_text",
+                      "x": "$project.dialogue.choice_box.text_x",
+                      "y": "$project.dialogue.choice_rows_y.1",
+                      "layer": 101,
+                      "color": [245, 232, 190]
+                    },
+                    {
+                      "type": "check_var",
+                      "scope": "entity",
+                      "entity_id": "self",
+                      "name": "slot_1_has_more",
+                      "op": "eq",
+                      "value": true,
+                      "then": [
+                        {
+                          "type": "run_event",
+                          "entity_id": "self",
+                          "event_id": "marquee_slot_1",
+                          "token": "$token"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "marquee_slot_2": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "wait_frames",
+          "frames": "$project.choice_marquee_frames"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "mode",
+          "op": "eq",
+          "value": "menu",
+          "then": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "marquee_token",
+              "op": "eq",
+              "value": "$token",
+              "then": [
+                {
+                  "type": "check_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "selected_visible_slot",
+                  "op": "eq",
+                  "value": 2,
+                  "then": [
+                    {
+                      "type": "advance_text_session",
+                      "entity_id": "self",
+                      "session_id": "choice_slot_2"
+                    },
+                    {
+                      "type": "read_text_session",
+                      "entity_id": "self",
+                      "session_id": "choice_slot_2",
+                      "scope": "entity",
+                      "store_entity_id": "self",
+                      "store_text_var": "slot_2_text",
+                      "store_has_more_var": "slot_2_has_more"
+                    },
+                    {
+                      "type": "show_screen_text",
+                      "element_id": "dialogue_choice_2",
+                      "text": "$self.slot_2_text",
+                      "x": "$project.dialogue.choice_box.text_x",
+                      "y": "$project.dialogue.choice_rows_y.2",
+                      "layer": 101,
+                      "color": [245, 232, 190]
+                    },
+                    {
+                      "type": "check_var",
+                      "scope": "entity",
+                      "entity_id": "self",
+                      "name": "slot_2_has_more",
+                      "op": "eq",
+                      "value": true,
+                      "then": [
+                        {
+                          "type": "run_event",
+                          "entity_id": "self",
+                          "event_id": "marquee_slot_2",
+                          "token": "$token"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -27,7 +27,17 @@ class NamedCommandDefinition:
     source_path: Path
 
 
+@dataclass(slots=True)
+class NamedCommandDatabase:
+    """In-memory index of all named command definitions for one project."""
+
+    project_root: Path
+    definitions: dict[str, NamedCommandDefinition]
+    discovered_ids: set[str]
+
+
 _COMMAND_CACHE: dict[Path, dict[str, Any]] = {}
+_DATABASE_CACHE: dict[Path, NamedCommandDatabase] = {}
 
 
 class NamedCommandValidationError(ValueError):
@@ -60,12 +70,90 @@ def load_named_command_definition(
     project: ProjectContext,
     command_id: str,
 ) -> NamedCommandDefinition:
-    """Load and validate a project-level named command definition."""
-    command_path = project.find_command_definition(command_id)
-    if command_path is None:
+    """Load one named command definition from the prebuilt project database."""
+    resolved_command_id = str(command_id).replace("\\", "/").strip()
+    if not resolved_command_id:
         raise FileNotFoundError(
             f"Missing command definition '{command_id}' in project '{project.project_root}'."
         )
+
+    database = build_named_command_database(project)
+    definition = database.definitions.get(resolved_command_id)
+    if definition is None:
+        raise FileNotFoundError(
+            f"Missing command definition '{resolved_command_id}' in project '{project.project_root}'."
+        )
+    return copy.deepcopy(definition)
+
+
+def build_named_command_database(
+    project: ProjectContext,
+    *,
+    force: bool = False,
+) -> NamedCommandDatabase:
+    """Build and cache the full named-command database for one project."""
+    cache_key = project.project_root.resolve()
+    if not force:
+        cached_database = _DATABASE_CACHE.get(cache_key)
+        if cached_database is not None:
+            return cached_database
+
+    database, issues = _scan_named_command_database(project)
+    if issues:
+        raise NamedCommandValidationError(project.project_root, issues)
+    _DATABASE_CACHE[cache_key] = database
+    return database
+
+
+def _scan_named_command_database(
+    project: ProjectContext,
+) -> tuple[NamedCommandDatabase, list[str]]:
+    """Scan command files into an in-memory database plus any validation issues."""
+    known_ids: dict[str, list[Path]] = {}
+    for command_path in project.list_command_definition_files():
+        command_id = project.command_definition_id(command_path)
+        known_ids.setdefault(command_id, []).append(command_path)
+
+    issues: list[str] = []
+    definitions: dict[str, NamedCommandDefinition] = {}
+    discovered_ids = set(known_ids.keys())
+    for command_id, paths in sorted(known_ids.items()):
+        if len(paths) > 1:
+            formatted_paths = ", ".join(str(path) for path in paths)
+            issues.append(f"Duplicate command id '{command_id}' found in: {formatted_paths}")
+            continue
+
+        command_path = paths[0]
+        try:
+            definitions[command_id] = _load_named_command_definition_from_path(
+                project,
+                command_id,
+                command_path,
+            )
+        except json.JSONDecodeError as exc:
+            issues.append(
+                f"{command_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
+            )
+        except Exception as exc:
+            issues.append(f"{command_path}: {exc}")
+
+    return (
+        NamedCommandDatabase(
+            project_root=project.project_root.resolve(),
+            definitions=definitions,
+            discovered_ids=discovered_ids,
+        ),
+        issues,
+    )
+
+
+def _load_named_command_definition_from_path(
+    project: ProjectContext,
+    command_id: str,
+    command_path: Path,
+) -> NamedCommandDefinition:
+    """Parse and validate one command-definition file from a known path."""
+    resolved_command_id = str(command_id).replace("\\", "/").strip()
 
     cached = _COMMAND_CACHE.get(command_path)
     if cached is None:
@@ -74,7 +162,7 @@ def load_named_command_definition(
     raw = copy.deepcopy(cached)
 
     if not isinstance(raw, dict):
-        raise ValueError(f"Command definition '{command_id}' must be a JSON object.")
+        raise ValueError(f"Command definition '{resolved_command_id}' must be a JSON object.")
 
     expected_id = project.command_definition_id(command_path)
     raw_id = raw.get("id", expected_id)
@@ -155,15 +243,17 @@ def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
 def validate_project_named_commands(project: ProjectContext) -> None:
     """Validate command-library files and literal named-command references for a project."""
     issues: list[str] = []
-    valid_command_ids, discovered_command_ids = _validate_command_definition_files(project, issues)
+    database, database_issues = _scan_named_command_database(project)
+    issues.extend(database_issues)
     _validate_literal_named_command_references(
         project,
-        valid_command_ids,
-        discovered_command_ids,
+        set(database.definitions.keys()),
+        database.discovered_ids,
         issues,
     )
     if issues:
         raise NamedCommandValidationError(project.project_root, issues)
+    _DATABASE_CACHE[project.project_root.resolve()] = database
 
 
 def log_named_command_validation_error(error: NamedCommandValidationError) -> None:
@@ -174,34 +264,6 @@ def log_named_command_validation_error(error: NamedCommandValidationError) -> No
         len(error.issues),
         "\n".join(f"- {issue}" for issue in error.issues),
     )
-
-
-def _validate_command_definition_files(
-    project: ProjectContext,
-    issues: list[str],
-) -> tuple[set[str], set[str]]:
-    """Scan command-definition files and return the set of valid known ids."""
-    known_ids: dict[str, list[Path]] = {}
-    for command_path in project.list_command_definition_files():
-        command_id = project.command_definition_id(command_path)
-        known_ids.setdefault(command_id, []).append(command_path)
-
-    discovered_ids = set(known_ids.keys())
-    valid_ids: set[str] = set()
-    for command_id, paths in sorted(known_ids.items()):
-        if len(paths) > 1:
-            formatted_paths = ", ".join(str(path) for path in paths)
-            issues.append(f"Duplicate command id '{command_id}' found in: {formatted_paths}")
-            continue
-        command_path = paths[0]
-        try:
-            load_named_command_definition(project, command_id)
-            valid_ids.add(command_id)
-        except json.JSONDecodeError as exc:
-            issues.append(f"{command_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno}).")
-        except Exception as exc:
-            issues.append(f"{command_path}: {exc}")
-    return valid_ids, discovered_ids
 
 
 def _validate_literal_named_command_references(

@@ -1,0 +1,23 @@
+{
+  "id": "dialogue/ui_render_page",
+  "commands": [
+    {
+      "type": "read_text_session",
+      "entity_id": "self",
+      "session_id": "main",
+      "scope": "entity",
+      "store_entity_id": "self",
+      "store_text_var": "page_text",
+      "store_has_more_var": "page_has_more"
+    },
+    {
+      "type": "show_screen_text",
+      "element_id": "dialogue_text",
+      "text": "$self.page_text",
+      "x": "$self.text_box_x",
+      "y": "$self.text_box_y",
+      "layer": 101,
+      "max_width": "$self.text_box_width"
+    }
+  ]
+}

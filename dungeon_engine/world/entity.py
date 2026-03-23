@@ -90,6 +90,7 @@ class Entity:
     animation_elapsed: float = 0.0
     events: dict[str, EntityEvent] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
+    input_map: dict[str, str] = field(default_factory=dict)
     movement: MovementState = field(default_factory=MovementState)
     animation_playback: AnimationPlaybackState = field(default_factory=AnimationPlaybackState)
 

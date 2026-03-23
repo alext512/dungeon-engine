@@ -1,5 +1,5 @@
 {
-  "id": "dialogue/blue_guide_confirm",
+  "id": "dialogue/bard_confirm",
   "commands": [
     {
       "type": "check_var",
@@ -12,7 +12,7 @@
         {
           "type": "run_named_command",
           "command_id": "dialogue/ui_swap_to_pages",
-          "dialogue_id": "npcs/blue_guide_lever",
+          "dialogue_id": "npcs/bard_door",
           "after_pages_command_id": "dialogue/ui_close",
           "text_box_x": "$project.dialogue.portrait_box.x",
           "text_box_y": "$project.dialogue.portrait_box.y",
@@ -31,7 +31,7 @@
         {
           "type": "run_named_command",
           "command_id": "dialogue/ui_swap_to_pages",
-          "dialogue_id": "npcs/blue_guide_blocks",
+          "dialogue_id": "npcs/bard_push",
           "after_pages_command_id": "dialogue/ui_close",
           "text_box_x": "$project.dialogue.portrait_box.x",
           "text_box_y": "$project.dialogue.portrait_box.y",
@@ -50,7 +50,45 @@
         {
           "type": "run_named_command",
           "command_id": "dialogue/ui_swap_to_pages",
-          "dialogue_id": "npcs/blue_guide_bye",
+          "dialogue_id": "npcs/bard_more_options",
+          "after_pages_command_id": "dialogue/ui_close",
+          "text_box_x": "$project.dialogue.portrait_box.x",
+          "text_box_y": "$project.dialogue.portrait_box.y",
+          "text_box_width": "$project.dialogue.portrait_box.width"
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "choice_selected_index",
+      "op": "eq",
+      "value": 3,
+      "then": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/ui_swap_to_pages",
+          "dialogue_id": "npcs/bard_scrolling",
+          "after_pages_command_id": "dialogue/ui_close",
+          "text_box_x": "$project.dialogue.portrait_box.x",
+          "text_box_y": "$project.dialogue.portrait_box.y",
+          "text_box_width": "$project.dialogue.portrait_box.width"
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "choice_selected_index",
+      "op": "eq",
+      "value": 4,
+      "then": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/ui_swap_to_pages",
+          "dialogue_id": "npcs/bard_bye",
           "after_pages_command_id": "dialogue/ui_close",
           "text_box_x": "$project.dialogue.portrait_box.x",
           "text_box_y": "$project.dialogue.portrait_box.y",

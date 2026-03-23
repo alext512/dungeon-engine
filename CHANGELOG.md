@@ -4,6 +4,29 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Named Command Startup Database
+
+- Build a full in-memory named-command database per project at startup instead of rediscovering command files during gameplay
+- Reuse that startup-built database for runtime `run_named_command` lookups so frequent movement/interaction command chains no longer rescan `command_paths`
+- Keep startup validation aligned with the same database-building path so malformed files, duplicate ids, and literal missing references are still caught before launch
+
+## Dialogue UI Sample Refactor
+
+- Replaced the test project's old `run_dialogue` + `dialogue_controller` sample flow with a focused `dialogue_ui` entity that owns page advancement, menu selection, and dialogue teardown
+- Migrated the sample sign and blue-guide NPC onto the new text-session-driven dialogue flow
+- Added a second sample NPC that demonstrates more than three choices, visible menu scrolling, and marquee-style long option text
+
+## Active Entity Input Maps
+
+- Added text-session primitives for UI entities: `prepare_text_session`, `read_text_session`, `advance_text_session`, and `reset_text_session`
+- Added engine-managed page and marquee text processing so UI entities can own dialogue/choice flow while still using shared text-layout services
+- Added generic `set_entity_field` support for safe runtime entity-field mutation, including focused input maps and the common visibility/solidity/color-style fields
+- Collapsed the older field-specific setter commands onto the generic field-mutation path while keeping their command names available
+- Added entity-owned `input_map` support so the focused entity can decide which named events handle logical inputs
+- Updated input dispatch to resolve the active entity's mapping first, while keeping project-level `input_events` as fallback defaults
+- Authored the sample player and dialogue controller with explicit input maps to make control ownership visible in project content
+- Added `push_active_entity` / `pop_active_entity` commands plus a runtime active-entity stack for temporary UI/controller focus handoff
+
 ## Standalone Editor + Project Manifests
 
 - Split the old combined workflow into standalone `run_game.py` and `run_editor.py` entry points plus `Run_Game.cmd` and `Run_Editor.cmd`

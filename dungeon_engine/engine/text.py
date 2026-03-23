@@ -137,6 +137,28 @@ class BitmapFont:
         return tinted
 
 
+@dataclass(slots=True)
+class TextSession:
+    """Processed text chunks plus the current read position for one owner/session id."""
+
+    owner_entity_id: str
+    session_id: str
+    mode: str
+    font_id: str
+    chunks: list[str]
+    position: int = 0
+
+
+@dataclass(slots=True)
+class TextSessionReadResult:
+    """One read of a processed text session."""
+
+    text: str
+    has_more: bool
+    position: int
+    total: int
+
+
 class TextRenderer:
     """Load configurable fonts by id and render text blocks with them."""
 
@@ -363,4 +385,177 @@ class TextRenderer:
             else:
                 current = candidate
         return current
+
+
+class TextSessionManager:
+    """Prepare and step through processed text sessions for UI/controller entities."""
+
+    def __init__(self, text_renderer: TextRenderer) -> None:
+        self.text_renderer = text_renderer
+        self._sessions: dict[tuple[str, str], TextSession] = {}
+
+    def prepare_session(
+        self,
+        owner_entity_id: str,
+        session_id: str,
+        *,
+        mode: str,
+        font_id: str,
+        max_width: int,
+        max_lines: int | None = None,
+        text: str | None = None,
+        pages: list[str] | None = None,
+    ) -> TextSession:
+        """Create or replace one processed text session and reset it to the start."""
+        resolved_mode = str(mode).strip().lower()
+        resolved_owner = str(owner_entity_id).strip()
+        resolved_session_id = str(session_id).strip()
+        resolved_font_id = str(font_id).strip() or config.DEFAULT_DIALOGUE_FONT_ID
+        resolved_width = int(max_width)
+
+        if not resolved_owner:
+            raise ValueError("prepare_session requires a non-empty owner_entity_id.")
+        if not resolved_session_id:
+            raise ValueError("prepare_session requires a non-empty session_id.")
+        if resolved_width <= 0:
+            raise ValueError("prepare_session requires max_width > 0.")
+
+        chunks: list[str]
+        if resolved_mode == "pages":
+            resolved_max_lines = int(max_lines) if max_lines is not None else 1
+            if resolved_max_lines <= 0:
+                raise ValueError("prepare_session in pages mode requires max_lines > 0.")
+            chunks = self._build_page_chunks(
+                text=text,
+                pages=pages,
+                max_width=resolved_width,
+                max_lines=resolved_max_lines,
+                font_id=resolved_font_id,
+            )
+        elif resolved_mode == "marquee":
+            chunks = self._build_marquee_chunks(
+                text=text,
+                pages=pages,
+                max_width=resolved_width,
+                font_id=resolved_font_id,
+            )
+        else:
+            raise ValueError(f"Unknown text session mode '{mode}'.")
+
+        session = TextSession(
+            owner_entity_id=resolved_owner,
+            session_id=resolved_session_id,
+            mode=resolved_mode,
+            font_id=resolved_font_id,
+            chunks=chunks or [""],
+            position=0,
+        )
+        self._sessions[(resolved_owner, resolved_session_id)] = session
+        return session
+
+    def read_session(self, owner_entity_id: str, session_id: str) -> TextSessionReadResult:
+        """Return the current visible chunk and metadata for one prepared session."""
+        session = self._get_session(owner_entity_id, session_id)
+        total = max(1, len(session.chunks))
+        index = max(0, min(session.position, total - 1))
+        return TextSessionReadResult(
+            text=session.chunks[index],
+            has_more=index + 1 < total,
+            position=index + 1,
+            total=total,
+        )
+
+    def advance_session(
+        self,
+        owner_entity_id: str,
+        session_id: str,
+        *,
+        amount: int = 1,
+    ) -> TextSession:
+        """Advance one prepared session by a positive number of chunks."""
+        session = self._get_session(owner_entity_id, session_id)
+        if amount < 0:
+            raise ValueError("advance_session requires amount >= 0.")
+        if not session.chunks:
+            session.position = 0
+            return session
+        session.position = min(len(session.chunks) - 1, session.position + int(amount))
+        return session
+
+    def reset_session(self, owner_entity_id: str, session_id: str) -> TextSession:
+        """Reset one prepared session back to its first chunk."""
+        session = self._get_session(owner_entity_id, session_id)
+        session.position = 0
+        return session
+
+    def _get_session(self, owner_entity_id: str, session_id: str) -> TextSession:
+        """Return one prepared session or fail clearly when it does not exist."""
+        key = (str(owner_entity_id).strip(), str(session_id).strip())
+        session = self._sessions.get(key)
+        if session is None:
+            raise KeyError(
+                f"Unknown text session '{key[1]}' for owner entity '{key[0]}'."
+            )
+        return session
+
+    def _build_page_chunks(
+        self,
+        *,
+        text: str | None,
+        pages: list[str] | None,
+        max_width: int,
+        max_lines: int,
+        font_id: str,
+    ) -> list[str]:
+        """Return paginated wrapped chunks for normal dialogue-style text."""
+        if pages:
+            chunks: list[str] = []
+            for page_text in pages:
+                chunks.extend(
+                    self.text_renderer.paginate_text(
+                        str(page_text),
+                        max_width,
+                        max_lines,
+                        font_id=font_id,
+                    )
+                )
+            return chunks or [""]
+        return self.text_renderer.paginate_text(
+            str(text or ""),
+            max_width,
+            max_lines,
+            font_id=font_id,
+        )
+
+    def _build_marquee_chunks(
+        self,
+        *,
+        text: str | None,
+        pages: list[str] | None,
+        max_width: int,
+        font_id: str,
+    ) -> list[str]:
+        """Return sliding single-line windows for long option-style text."""
+        source_text = str(text or "")
+        if pages:
+            source_text = " ".join(str(page) for page in pages)
+        normalized_text = source_text.replace("\n", " ")
+        if not normalized_text:
+            return [""]
+        if self.text_renderer.measure_text(normalized_text, font_id=font_id)[0] <= max_width:
+            return [normalized_text]
+
+        chunks: list[str] = []
+        for start_index in range(len(normalized_text)):
+            best_chunk = normalized_text[start_index:start_index + 1]
+            for end_index in range(start_index + 1, len(normalized_text) + 1):
+                candidate = normalized_text[start_index:end_index]
+                if self.text_renderer.measure_text(candidate, font_id=font_id)[0] > max_width:
+                    break
+                best_chunk = candidate
+            chunks.append(best_chunk.rstrip())
+            if start_index + len(best_chunk) >= len(normalized_text):
+                break
+
+        return chunks or [normalized_text]
 

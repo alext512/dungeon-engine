@@ -32,6 +32,7 @@ class CommandContext:
     project: Any | None = None
     asset_manager: Any | None = None
     text_renderer: Any | None = None
+    text_session_manager: Any | None = None
     camera: Any | None = None
     audio_player: Any | None = None
     screen_manager: Any | None = None

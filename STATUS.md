@@ -27,9 +27,9 @@ If you only need the current reality quickly:
 - player movement is authored in `projects/test_project/entities/player.json`
 - dialogue text lives in `projects/test_project/dialogues/`
 - reusable command libraries live in `projects/test_project/commands/`
-- `run_dialogue` is text-only
-- dialogue panels, portraits, and choice lists are now command-authored screen elements
-- sample dialogue choices are controlled by `projects/test_project/entities/dialogue_controller.json`
+- `run_dialogue` is still available as a text-only helper, but the sample project now drives dialogue through a focused `dialogue_ui` entity plus text-session commands
+- dialogue panels, portraits, and choice lists are command-authored screen elements
+- sample dialogue choices, long-choice marquee behavior, and choice scrolling now live in `projects/test_project/entities/dialogue_ui.json`
 - the main runtime log is `logs/error.log`
 
 ## Implemented
@@ -55,7 +55,7 @@ If you only need the current reality quickly:
 - reusable text-only `run_dialogue` command with automatic text wrapping and pagination by pixel width + max lines
 - project-level dialogue assets loaded from `dialogues/` via dialogue ids
 - command-authored dialogue layouts that use screen-space images for panels and portraits
-- command-authored dialogue choices rendered as normal screen text and driven through a dialogue-controller entity
+- command-authored dialogue choices rendered as normal screen text and driven through a reusable dialogue UI entity
 - command runner foundation
 - command-driven grid movement
 - fixed-timestep simulation for movement/command playback
@@ -71,6 +71,7 @@ If you only need the current reality quickly:
 - persistent rotating error log in `logs/error.log`
 - reusable project-level named command libraries loaded from `command_paths`
 - startup validation for named command libraries (duplicate ids, malformed files, and literal missing references)
+- startup-built in-memory named-command database reused by runtime `run_named_command` lookups
 - variable system with `set_var`, `increment_var`, and `check_var` commands (entity and world scopes)
 - `check_var` supports conditional branching with `then`/`else` command lists
 - world-level variables storage (serialized in area JSON)
@@ -79,6 +80,8 @@ If you only need the current reality quickly:
 - in-memory live persistent state that tracks gameplay changes without auto-writing a save file
 - stable `area_id` support for room-level persistence
 - persistent command updates for entity fields and variables
+- generic `set_entity_field` command for runtime-safe entity field mutation
+- text-session primitives for UI-driven paged and marquee text flow
 - transient and persistent room reset commands
 - authored entity tags for grouping and reset targeting
 
@@ -91,6 +94,7 @@ The starter room currently includes:
 - one toggle lever (can be toggled on and off via variables)
 - one readable sign that opens a simple dialogue panel
 - one NPC with portrait-backed dialogue and a choice-based follow-up conversation
+- one bard NPC with a portrait-backed dialogue menu that demonstrates more than three choices plus scrolling and marquee choice text
 - the sign now reads its text from a dialogue asset instead of embedding the text inline
 - one gate
 - a wall tile with a painting overlay tile on top of it
@@ -102,7 +106,9 @@ Expected behavior:
 - face the lever and press `Space` to toggle the gate open/closed
 - face the sign and press `Space` to open a simple dialogue panel, then press `Space` again to close it
 - face the NPC and press `Space` to open a portrait-backed dialogue, then use `Up` / `Down` and `Space` to choose a reply
+- face the bard and press `Space` to open a longer portrait-backed menu; more-choice indicators appear when the list scrolls past the first three rows
 - dialogue choice navigation now moves once per keypress; it does not keep scrolling while a direction is held
+- highlighted long choice text now scrolls sideways and freezes at the end until you move the selection away
 - long sign dialogue now auto-splits into multiple pages when it exceeds the configured dialogue line count
 - live lever/gate state persists for the current play session in memory
 - if `saves/slot_1.json` exists when play starts, its overrides are loaded on top of the room JSON
@@ -168,7 +174,9 @@ Expected behavior:
 - Screen-space content can now be created through commands instead of being baked directly into the renderer, which is the intended foundation for dialogue panels, portraits, title cards, and later menu-like overlays.
 - Dialogue can now be authored as a single long text block and automatically paginated using measured font widths plus the project's configured `dialogue.max_lines`.
 - `run_dialogue` is intentionally text-only; panel images, portraits, and choice lists are authored separately through normal commands.
-- The sample NPC dialogue choices are handled in project JSON through a hidden `dialogue_controller` entity plus named commands, not through a baked engine choice-menu primitive.
+- The sample NPC dialogue flow is handled in project JSON through a hidden `dialogue_ui` entity plus text-session commands, not through a baked engine choice-menu primitive.
+- Active input now resolves from the focused entity's `input_map` first, with project-level `input_events` only serving as fallback defaults.
+- Runtime focus handoff now supports `push_active_entity` / `pop_active_entity`, so temporary UI/controller entities can take input and return it to the previous active entity.
 - The current assets are intentionally simple generated test art, not final art.
 - Pixel-perfect behavior is currently handled as a renderer/camera policy, not a level-data rule.
 - The game and editor are separate applications now, but they still share the same area/entity JSON model.
@@ -176,6 +184,7 @@ Expected behavior:
 - The live persistent layer is kept in memory during play; it is only written to disk when you press `F5`.
 - Runtime interaction now resolves the topmost enabled entity on a tile based on the current stack order, not just insertion order.
 - Named-command library errors such as malformed files, duplicate command ids, or missing literal `run_named_command` targets are now validated at project startup; launch is blocked, the full report is written to `logs/error.log`, and runtime command failures still show a short in-game hint to check the log.
+- Named commands are now indexed and loaded into memory at startup, so runtime command execution does not rescan project command folders while the game is already running.
 - `project.json` controls where the active project looks for areas, entities, assets, and fonts.
 - `project.json` can also define `dialogue_paths`, so reusable dialogue content can live separately from entity/event files.
 - `projects/test_project/` is now the repo-local versioned sample project; it is not bundled engine data, and other projects can still live anywhere else as long as they provide a `project.json`.
