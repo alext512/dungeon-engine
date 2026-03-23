@@ -140,6 +140,7 @@ def instantiate_entity(entity_instance: dict[str, Any], tile_size: int) -> Entit
         current_frame=int(animation_frames[0]),
         events=_parse_entity_events(entity_data),
         variables=copy.deepcopy(entity_data.get("variables", {})),
+        input_map=_parse_input_map(entity_data.get("input_map")),
     )
     return entity
 
@@ -182,7 +183,7 @@ def _parse_tile_layers(raw_data: dict[str, Any]) -> list[TileLayer]:
     """Parse tile layers with integer GID grids."""
     raw_layers = raw_data.get("tile_layers")
     if raw_layers is None:
-        # Legacy single-grid format (string tiles) — shouldn't occur with GID format
+        # Legacy single-grid format (string tiles) - should not occur with GID format
         # but kept for safety during migration
         legacy_tiles = raw_data.get("tiles", [])
         return [
@@ -393,6 +394,16 @@ def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
         )
 
     return parsed_events
+
+
+def _parse_input_map(raw_input_map: Any) -> dict[str, str]:
+    """Parse an optional entity-owned logical-input map."""
+    if not isinstance(raw_input_map, dict):
+        return {}
+    return {
+        str(action): str(event_name)
+        for action, event_name in raw_input_map.items()
+    }
 
 
 def _derive_area_id(raw_data: dict[str, Any], source_name: str) -> str:

@@ -2,31 +2,18 @@
   "id": "dialogue/sign_gate_hint",
   "commands": [
     {
-      "type": "show_screen_image",
-      "element_id": "dialogue_panel",
-      "path": "$project.dialogue.panel_path",
-      "x": 0,
-      "y": "$project.display.internal_height",
-      "anchor": "bottomleft",
-      "layer": 100
-    },
-    {
-      "type": "run_dialogue",
-      "element_id": "dialogue_text",
+      "type": "run_named_command",
+      "command_id": "dialogue/ui_open_pages",
       "dialogue_id": "signs/gate_hint",
-      "x": "$project.dialogue.plain_box.x",
-      "y": "$project.dialogue.plain_box.y",
-      "max_width": "$project.dialogue.plain_box.width",
-      "max_lines": "$project.dialogue.max_lines",
-      "layer": 101
-    },
-    {
-      "type": "remove_screen_element",
-      "element_id": "dialogue_text"
-    },
-    {
-      "type": "remove_screen_element",
-      "element_id": "dialogue_panel"
+      "after_pages_command_id": "dialogue/ui_close",
+      "text_box_x": "$project.dialogue.plain_box.x",
+      "text_box_y": "$project.dialogue.plain_box.y",
+      "text_box_width": "$project.dialogue.plain_box.width",
+      "has_portrait": false,
+      "portrait_path": "",
+      "portrait_frame_width": null,
+      "portrait_frame_height": null,
+      "portrait_frame": 0
     }
   ]
 }

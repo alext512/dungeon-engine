@@ -328,6 +328,66 @@ def _resolve_variables(
     raise ValueError(f"Unknown variable scope '{scope}'.")
 
 
+def _store_variable(
+    context: CommandContext,
+    *,
+    scope: str,
+    name: str,
+    value: Any,
+    entity_id: str | None = None,
+    source_entity_id: str | None = None,
+    actor_entity_id: str | None = None,
+) -> None:
+    """Store one resolved value into entity/world variables."""
+    variables = _resolve_variables(
+        context,
+        scope=scope,
+        entity_id=entity_id,
+        source_entity_id=source_entity_id,
+        actor_entity_id=actor_entity_id,
+    )
+    variables[str(name)] = copy.deepcopy(value)
+
+
+def _resolve_text_session_source(
+    context: CommandContext,
+    *,
+    dialogue_id: str | None = None,
+    text: str | None = None,
+    pages: list[str] | None = None,
+    font_id: str = config.DEFAULT_DIALOGUE_FONT_ID,
+    max_lines: int | None = None,
+) -> tuple[str | None, list[str] | None, str, int | None]:
+    """Resolve dialogue/text-session source data from inline text or a dialogue asset."""
+    dialogue_data: dict[str, Any] = {}
+    if dialogue_id is not None:
+        if context.project is None:
+            raise ValueError("Text sessions with dialogue_id require an active project.")
+        dialogue_definition = load_dialogue_definition(context.project, str(dialogue_id))
+        dialogue_data = dict(dialogue_definition.raw_data)
+
+    resolved_text = text
+    resolved_pages = pages
+    resolved_font_id = str(font_id)
+    resolved_max_lines = max_lines
+
+    if resolved_text is None and dialogue_data.get("text") is not None:
+        resolved_text = str(dialogue_data["text"])
+    if resolved_pages is None and dialogue_data.get("pages") is not None:
+        raw_pages = dialogue_data["pages"]
+        if isinstance(raw_pages, list):
+            resolved_pages = [str(page) for page in raw_pages]
+    if resolved_font_id == config.DEFAULT_DIALOGUE_FONT_ID and dialogue_data.get("font_id") is not None:
+        resolved_font_id = str(dialogue_data["font_id"])
+    if resolved_max_lines is None and dialogue_data.get("max_lines") is not None:
+        resolved_max_lines = int(dialogue_data["max_lines"])
+
+    if resolved_text is None and not resolved_pages:
+        raise ValueError("Text session preparation requires text or pages.")
+
+    return resolved_text, resolved_pages, resolved_font_id, resolved_max_lines
+
+
 def _resolve_facing_direction(entity, direction: str | None) -> str:
     """Return an explicit direction, defaulting to the entity's current facing."""
     resolved_direction = str(direction or entity.facing)
@@ -402,6 +462,104 @@ def _persist_entity_event_enabled(
     context.persistence_runtime.set_entity_event_enabled(entity_id, event_id, enabled)
 
 
+def _normalize_input_map(value: Any) -> dict[str, str]:
+    """Convert JSON-like input-map data into a stable string-to-string mapping."""
+    if not isinstance(value, dict):
+        raise ValueError("input_map must be an object.")
+    return {
+        str(action): str(event_name)
+        for action, event_name in value.items()
+    }
+
+
+def _apply_entity_field_value(
+    entity: Any,
+    field_name: str,
+    value: Any,
+) -> tuple[str, Any]:
+    """Apply one supported runtime entity field mutation and return its persistent form."""
+    path = [segment for segment in str(field_name).split(".") if segment]
+    if not path:
+        raise ValueError("set_entity_field requires a non-empty field name.")
+
+    root = path[0]
+    if root == "facing":
+        if len(path) != 1:
+            raise ValueError("facing does not support nested field paths.")
+        entity.facing = _resolve_facing_direction(entity, str(value))  # type: ignore[assignment]
+        return "facing", entity.facing
+
+    if root == "solid":
+        if len(path) != 1:
+            raise ValueError("solid does not support nested field paths.")
+        entity.solid = bool(value)
+        return "solid", entity.solid
+
+    if root == "pushable":
+        if len(path) != 1:
+            raise ValueError("pushable does not support nested field paths.")
+        entity.pushable = bool(value)
+        return "pushable", entity.pushable
+
+    if root == "present":
+        if len(path) != 1:
+            raise ValueError("present does not support nested field paths.")
+        entity.set_present(bool(value))
+        return "present", entity.present
+
+    if root == "visible":
+        if len(path) != 1:
+            raise ValueError("visible does not support nested field paths.")
+        entity.visible = bool(value)
+        return "visible", entity.visible
+
+    if root == "events_enabled":
+        if len(path) != 1:
+            raise ValueError("events_enabled does not support nested field paths.")
+        entity.set_events_enabled(bool(value))
+        return "events_enabled", entity.events_enabled
+
+    if root == "layer":
+        if len(path) != 1:
+            raise ValueError("layer does not support nested field paths.")
+        entity.layer = int(value)
+        return "layer", entity.layer
+
+    if root == "stack_order":
+        if len(path) != 1:
+            raise ValueError("stack_order does not support nested field paths.")
+        entity.stack_order = int(value)
+        return "stack_order", entity.stack_order
+
+    if root == "color":
+        if len(path) != 1:
+            raise ValueError("color does not support nested field paths.")
+        if not isinstance(value, (list, tuple)) or len(value) < 3:
+            raise ValueError("color must be a list or tuple with at least 3 channels.")
+        entity.color = (int(value[0]), int(value[1]), int(value[2]))
+        return "color", list(entity.color)
+
+    if root == "sprite_flip_x":
+        if len(path) != 1:
+            raise ValueError("sprite_flip_x does not support nested field paths.")
+        entity.sprite_flip_x = bool(value)
+        return "sprite_flip_x", entity.sprite_flip_x
+
+    if root == "input_map":
+        if len(path) == 1:
+            entity.input_map = _normalize_input_map(value)
+        elif len(path) == 2:
+            entity.input_map[str(path[1])] = str(value)
+        else:
+            raise ValueError("input_map only supports one nested key level.")
+        return "input_map", copy.deepcopy(entity.input_map)
+
+    raise ValueError(
+        f"Unsupported entity field '{field_name}'. "
+        "Use set_var for variables and dedicated commands for events/template rebuilds."
+    )
+
+
 _COMPARE_OPS: dict[str, Any] = {
     "eq": lambda a, b: a == b,
     "neq": lambda a, b: a != b,
@@ -414,6 +572,42 @@ _COMPARE_OPS: dict[str, Any] = {
 
 def register_builtin_commands(registry: CommandRegistry) -> None:
     """Register the minimal command set needed for the first movement slice."""
+
+    def _set_entity_field_handle(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        field_name: str,
+        value: Any,
+        persistent: bool = False,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+    ) -> CommandHandle:
+        """Apply one generic entity field mutation through the shared helper."""
+        resolved_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_id:
+            logger.warning("set_entity_field: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        entity = context.world.get_entity(resolved_id)
+        if entity is None:
+            raise KeyError(f"Cannot set field on missing entity '{resolved_id}'.")
+        persisted_field_name, persisted_value = _apply_entity_field_value(
+            entity,
+            str(field_name),
+            value,
+        )
+        if persistent:
+            _persist_entity_field(
+                context,
+                entity_id=resolved_id,
+                field_name=persisted_field_name,
+                value=persisted_value,
+            )
+        return ImmediateHandle()
 
     def _step_entity(
         context: CommandContext,
@@ -688,19 +882,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Set an entity's facing direction without moving it."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="facing",
+            value=direction,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_facing: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set facing on missing entity '{resolved_id}'.")
-        entity.facing = _resolve_facing_direction(entity, direction)  # type: ignore[assignment]
-        return ImmediateHandle()
 
     @registry.register("query_facing_state")
     def query_facing_state(
@@ -1038,19 +1227,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Set whether an entity's sprite should be mirrored horizontally."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="sprite_flip_x",
+            value=flip_x,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_sprite_flip_x: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set sprite flip on missing entity '{resolved_id}'.")
-        entity.sprite_flip_x = bool(flip_x)
-        return ImmediateHandle()
 
     @registry.register("play_audio")
     def play_audio(
@@ -1348,6 +1532,212 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             ),
         )
 
+    @registry.register("prepare_text_session")
+    def prepare_text_session(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        session_id: str,
+        mode: str = "pages",
+        dialogue_id: str | None = None,
+        text: str | None = None,
+        pages: list[str] | None = None,
+        font_id: str = config.DEFAULT_DIALOGUE_FONT_ID,
+        max_width: int | None = None,
+        max_lines: int | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Prepare one reusable text session for later reads/advances."""
+        if context.text_session_manager is None:
+            raise ValueError("Cannot prepare text sessions without a text session manager.")
+
+        resolved_entity_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_entity_id:
+            logger.warning("prepare_text_session: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+
+        resolved_text, resolved_pages, resolved_font_id, resolved_max_lines = _resolve_text_session_source(
+            context,
+            dialogue_id=dialogue_id,
+            text=text,
+            pages=pages,
+            font_id=font_id,
+            max_lines=max_lines,
+        )
+        dialogue_defaults = _get_project_dialogue_defaults(context)
+        resolved_mode = str(mode).strip().lower()
+        resolved_max_width = int(max_width) if max_width is not None else None
+        if resolved_max_width is None or resolved_max_width <= 0:
+            raise ValueError("prepare_text_session requires a positive max_width.")
+        if resolved_mode == "pages":
+            resolved_max_lines = int(
+                resolved_max_lines
+                if resolved_max_lines is not None
+                else _get_dialogue_setting(dialogue_defaults, "max_lines", 2)
+            )
+        context.text_session_manager.prepare_session(
+            resolved_entity_id,
+            str(session_id),
+            mode=resolved_mode,
+            font_id=resolved_font_id,
+            max_width=resolved_max_width,
+            max_lines=resolved_max_lines,
+            text=resolved_text,
+            pages=resolved_pages,
+        )
+        return ImmediateHandle()
+
+    @registry.register("read_text_session")
+    def read_text_session(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        session_id: str,
+        store_text_var: str,
+        store_has_more_var: str | None = None,
+        store_position_var: str | None = None,
+        store_total_var: str | None = None,
+        scope: str = "entity",
+        store_entity_id: str | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Read the current visible chunk from one prepared text session into vars."""
+        if context.text_session_manager is None:
+            raise ValueError("Cannot read text sessions without a text session manager.")
+
+        resolved_entity_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_entity_id:
+            logger.warning("read_text_session: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+
+        resolved_store_entity_id = store_entity_id
+        if scope == "entity":
+            resolved_store_entity_id = _resolve_entity_id(
+                store_entity_id or resolved_entity_id,
+                source_entity_id=source_entity_id,
+                actor_entity_id=actor_entity_id,
+            )
+            if not resolved_store_entity_id:
+                logger.warning("read_text_session: skipping because store_entity_id resolved to blank.")
+                return ImmediateHandle()
+
+        result = context.text_session_manager.read_session(
+            resolved_entity_id,
+            str(session_id),
+        )
+        _store_variable(
+            context,
+            scope=scope,
+            entity_id=resolved_store_entity_id,
+            name=store_text_var,
+            value=result.text,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if store_has_more_var:
+            _store_variable(
+                context,
+                scope=scope,
+                entity_id=resolved_store_entity_id,
+                name=store_has_more_var,
+                value=result.has_more,
+                source_entity_id=source_entity_id,
+                actor_entity_id=actor_entity_id,
+            )
+        if store_position_var:
+            _store_variable(
+                context,
+                scope=scope,
+                entity_id=resolved_store_entity_id,
+                name=store_position_var,
+                value=result.position,
+                source_entity_id=source_entity_id,
+                actor_entity_id=actor_entity_id,
+            )
+        if store_total_var:
+            _store_variable(
+                context,
+                scope=scope,
+                entity_id=resolved_store_entity_id,
+                name=store_total_var,
+                value=result.total,
+                source_entity_id=source_entity_id,
+                actor_entity_id=actor_entity_id,
+            )
+        return ImmediateHandle()
+
+    @registry.register("advance_text_session")
+    def advance_text_session(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        session_id: str,
+        amount: int = 1,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Advance one prepared text session to its next chunk/window."""
+        if context.text_session_manager is None:
+            raise ValueError("Cannot advance text sessions without a text session manager.")
+
+        resolved_entity_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_entity_id:
+            logger.warning("advance_text_session: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+
+        context.text_session_manager.advance_session(
+            resolved_entity_id,
+            str(session_id),
+            amount=int(amount),
+        )
+        return ImmediateHandle()
+
+    @registry.register("reset_text_session")
+    def reset_text_session(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        session_id: str,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Reset one prepared text session back to its first chunk/window."""
+        if context.text_session_manager is None:
+            raise ValueError("Cannot reset text sessions without a text session manager.")
+
+        resolved_entity_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_entity_id:
+            logger.warning("reset_text_session: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+
+        context.text_session_manager.reset_session(
+            resolved_entity_id,
+            str(session_id),
+        )
+        return ImmediateHandle()
+
     @registry.register("run_detached_commands")
     def run_detached_commands(
         context: CommandContext,
@@ -1539,26 +1929,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Enable or disable all named events on an entity at once."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="events_enabled",
+            value=enabled,
+            persistent=persistent,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_events_enabled: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set events enabled state on missing entity '{resolved_id}'.")
-        entity.set_events_enabled(enabled)
-        if persistent:
-            _persist_entity_field(
-                context,
-                entity_id=resolved_id,
-                field_name="events_enabled",
-                value=enabled,
-            )
-        return ImmediateHandle()
 
     @registry.register("set_active_entity")
     def set_active_entity(
@@ -1579,6 +1958,59 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             logger.warning("set_active_entity: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
         context.world.set_active_entity(resolved_id)
+        return ImmediateHandle()
+
+    @registry.register("set_entity_field")
+    def set_entity_field(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        field_name: str,
+        value: Any,
+        persistent: bool = False,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Change one supported runtime field on an entity."""
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name=field_name,
+            value=value,
+            persistent=persistent,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+
+    @registry.register("push_active_entity")
+    def push_active_entity(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Remember the current active entity, then switch to a new one."""
+        resolved_id = _resolve_entity_id(
+            entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        if not resolved_id:
+            logger.warning("push_active_entity: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        context.world.push_active_entity(resolved_id)
+        return ImmediateHandle()
+
+    @registry.register("pop_active_entity")
+    def pop_active_entity(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Restore the previously pushed active entity, falling back safely when needed."""
+        context.world.pop_active_entity()
         return ImmediateHandle()
 
     @registry.register("set_input_event_name")
@@ -1727,26 +2159,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Change whether an entity is rendered and targetable."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="visible",
+            value=visible,
+            persistent=persistent,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_visible: skipping - entity_id is empty (unconfigured parameter?)")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set visibility on missing entity '{resolved_id}'.")
-        entity.visible = visible
-        if persistent:
-            _persist_entity_field(
-                context,
-                entity_id=resolved_id,
-                field_name="visible",
-                value=visible,
-            )
-        return ImmediateHandle()
 
     @registry.register("set_solid")
     def set_solid(
@@ -1760,26 +2181,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Change whether an entity blocks movement."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="solid",
+            value=solid,
+            persistent=persistent,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_solid: skipping - entity_id is empty (unconfigured parameter?)")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set solidity on missing entity '{resolved_id}'.")
-        entity.solid = solid
-        if persistent:
-            _persist_entity_field(
-                context,
-                entity_id=resolved_id,
-                field_name="solid",
-                value=solid,
-            )
-        return ImmediateHandle()
 
     @registry.register("set_present")
     def set_present(
@@ -1793,26 +2203,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Change whether an entity participates in the current scene."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="present",
+            value=present,
+            persistent=persistent,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_present: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set presence on missing entity '{resolved_id}'.")
-        entity.set_present(present)
-        if persistent:
-            _persist_entity_field(
-                context,
-                entity_id=resolved_id,
-                field_name="present",
-                value=present,
-            )
-        return ImmediateHandle()
 
     @registry.register("set_color")
     def set_color(
@@ -1826,26 +2225,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Change an entity's debug-render color."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
+        return _set_entity_field_handle(
+            context,
+            entity_id=entity_id,
+            field_name="color",
+            value=color,
+            persistent=persistent,
             source_entity_id=source_entity_id,
             actor_entity_id=actor_entity_id,
         )
-        if not resolved_id:
-            logger.warning("set_color: skipping - entity_id is empty (unconfigured parameter?)")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set color on missing entity '{resolved_id}'.")
-        entity.color = (int(color[0]), int(color[1]), int(color[2]))
-        if persistent:
-            _persist_entity_field(
-                context,
-                entity_id=resolved_id,
-                field_name="color",
-                value=list(entity.color),
-            )
-        return ImmediateHandle()
 
     @registry.register("destroy_entity")
     def destroy_entity(

@@ -155,6 +155,8 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),
     }
+    if entity.input_map:
+        data["input_map"] = copy.deepcopy(entity.input_map)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
     events = _serialize_events(entity)
     if events:
@@ -178,6 +180,8 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "tags": copy.deepcopy(entity.tags),
         "variables": copy.deepcopy(entity.variables),
     }
+    if entity.input_map:
+        data["input_map"] = copy.deepcopy(entity.input_map)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
     events = _serialize_events(entity)
     if events:

@@ -1,0 +1,37 @@
+{
+  "id": "dialogue/ui_clear_choices",
+  "commands": [
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_marker_0"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_marker_1"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_marker_2"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_0"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_1"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_choice_2"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_more_top"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_more_bottom"
+    }
+  ]
+}

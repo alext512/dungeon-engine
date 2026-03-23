@@ -1,0 +1,52 @@
+{
+  "id": "dialogue/ui_move_down_input",
+  "commands": [
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "mode",
+      "op": "eq",
+      "value": "menu",
+      "then": [
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "move_up",
+          "enabled": false
+        },
+        {
+          "type": "set_event_enabled",
+          "entity_id": "self",
+          "event_id": "move_down",
+          "enabled": false
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "$self.move_down_command_id"
+        },
+        {
+          "type": "run_detached_commands",
+          "commands": [
+            {
+              "type": "wait_for_direction_release",
+              "directions": ["up", "down"]
+            },
+            {
+              "type": "set_event_enabled",
+              "entity_id": "dialogue_ui",
+              "event_id": "move_up",
+              "enabled": true
+            },
+            {
+              "type": "set_event_enabled",
+              "entity_id": "dialogue_ui",
+              "event_id": "move_down",
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

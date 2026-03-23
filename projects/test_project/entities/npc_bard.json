@@ -1,8 +1,8 @@
 {
-  "kind": "sign",
+  "kind": "npc",
   "solid": true,
   "sprite": {
-    "path": "assets/project/sprites/sign.png",
+    "path": "assets/16x16-RPG-characters/sprites/old-style/02-bard.png",
     "frame_width": 16,
     "frame_height": 16,
     "frames": [0]
@@ -14,7 +14,7 @@
         {
           "type": "run_event",
           "entity_id": "dialogue_ui",
-          "event_id": "open_sign_gate_hint"
+          "event_id": "open_bard"
         }
       ]
     }

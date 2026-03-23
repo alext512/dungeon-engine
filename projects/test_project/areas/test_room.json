@@ -526,10 +526,16 @@
       "template": "npc_blue"
     },
     {
-      "id": "dialogue_controller",
-      "x": 2,
-      "y": 2,
-      "template": "dialogue_controller"
+      "id": "npc_bard_1",
+      "x": 9,
+      "y": 5,
+      "template": "npc_bard"
+    },
+    {
+      "id": "dialogue_ui",
+      "x": 1,
+      "y": 1,
+      "template": "dialogue_ui"
     },
     {
       "id": "player",

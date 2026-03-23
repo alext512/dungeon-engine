@@ -1,0 +1,162 @@
+{
+  "id": "dialogue/ui_open_pages",
+  "params": [
+    "dialogue_id",
+    "after_pages_command_id",
+    "text_box_x",
+    "text_box_y",
+    "text_box_width",
+    "has_portrait",
+    "portrait_path",
+    "portrait_frame_width",
+    "portrait_frame_height",
+    "portrait_frame"
+  ],
+  "commands": [
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/ui_clear_choices"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "dialogue_text"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "mode",
+      "value": "pages"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "after_pages_command_id",
+      "value": "$after_pages_command_id"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "confirm_command_id",
+      "value": ""
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "refresh_command_id",
+      "value": ""
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "has_portrait",
+      "value": "$has_portrait"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "portrait_path",
+      "value": "$portrait_path"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "portrait_frame_width",
+      "value": "$portrait_frame_width"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "portrait_frame_height",
+      "value": "$portrait_frame_height"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "portrait_frame",
+      "value": "$portrait_frame"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "text_box_x",
+      "value": "$text_box_x"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "text_box_y",
+      "value": "$text_box_y"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "text_box_width",
+      "value": "$text_box_width"
+    },
+    {
+      "type": "show_screen_image",
+      "element_id": "dialogue_panel",
+      "path": "$project.dialogue.panel_path",
+      "x": 0,
+      "y": "$project.display.internal_height",
+      "anchor": "bottomleft",
+      "layer": 100
+    },
+    {
+      "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "has_portrait",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "show_screen_image",
+          "element_id": "dialogue_portrait",
+          "path": "$self.portrait_path",
+          "x": "$project.dialogue.portrait_position.x",
+          "y": "$project.dialogue.portrait_position.y",
+          "anchor": "topleft",
+          "layer": 101,
+          "frame_width": "$self.portrait_frame_width",
+          "frame_height": "$self.portrait_frame_height",
+          "frame": "$self.portrait_frame"
+        }
+      ],
+      "else": [
+        {
+          "type": "remove_screen_element",
+          "element_id": "dialogue_portrait"
+        }
+      ]
+    },
+    {
+      "type": "prepare_text_session",
+      "entity_id": "self",
+      "session_id": "main",
+      "dialogue_id": "$dialogue_id",
+      "max_width": "$text_box_width",
+      "max_lines": "$project.dialogue.max_lines"
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/ui_render_page"
+    },
+    {
+      "type": "push_active_entity",
+      "entity_id": "self"
+    }
+  ]
+}

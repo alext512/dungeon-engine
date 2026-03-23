@@ -417,6 +417,13 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.stack_order = int(value)
         elif key == "color":
             entity.color = (int(value[0]), int(value[1]), int(value[2]))
+        elif key == "sprite_flip_x":
+            entity.sprite_flip_x = bool(value)
+        elif key == "input_map":
+            entity.input_map = {
+                str(action): str(event_name)
+                for action, event_name in dict(value).items()
+            }
         elif key == "variables":
             entity.variables.update(copy.deepcopy(value))
         elif key == "event_states":
@@ -482,6 +489,10 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["stack_order"] = current_entity.stack_order
     if current_entity.color != authored_entity.color:
         overrides["color"] = list(current_entity.color)
+    if current_entity.sprite_flip_x != authored_entity.sprite_flip_x:
+        overrides["sprite_flip_x"] = current_entity.sprite_flip_x
+    if current_entity.input_map != authored_entity.input_map:
+        overrides["input_map"] = copy.deepcopy(current_entity.input_map)
 
     variable_overrides = _capture_variable_overrides(
         authored_entity.variables,

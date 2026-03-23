@@ -1,0 +1,77 @@
+{
+  "id": "dialogue/ui_swap_to_pages",
+  "params": [
+    "dialogue_id",
+    "after_pages_command_id",
+    "text_box_x",
+    "text_box_y",
+    "text_box_width"
+  ],
+  "commands": [
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/ui_clear_choices"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "mode",
+      "value": "pages"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "after_pages_command_id",
+      "value": "$after_pages_command_id"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "confirm_command_id",
+      "value": ""
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "refresh_command_id",
+      "value": ""
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "text_box_x",
+      "value": "$text_box_x"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "text_box_y",
+      "value": "$text_box_y"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "text_box_width",
+      "value": "$text_box_width"
+    },
+    {
+      "type": "prepare_text_session",
+      "entity_id": "self",
+      "session_id": "main",
+      "dialogue_id": "$dialogue_id",
+      "max_width": "$text_box_width",
+      "max_lines": "$project.dialogue.max_lines"
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/ui_render_page"
+    }
+  ]
+}

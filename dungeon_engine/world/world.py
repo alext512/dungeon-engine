@@ -15,6 +15,7 @@ class World:
     entities: dict[str, Entity] = field(default_factory=dict)
     player_id: str = "player"
     active_entity_id: str = "player"
+    active_entity_stack: list[str] = field(default_factory=list)
     variables: dict[str, Any] = field(default_factory=dict)
 
     def add_entity(self, entity: Entity) -> None:
@@ -24,6 +25,13 @@ class World:
     def remove_entity(self, entity_id: str) -> None:
         """Remove an entity when it exists in the current room."""
         self.entities.pop(entity_id, None)
+        self.active_entity_stack = [
+            stacked_entity_id
+            for stacked_entity_id in self.active_entity_stack
+            if stacked_entity_id != entity_id
+        ]
+        if self.active_entity_id == entity_id:
+            self.pop_active_entity()
 
     def get_entity(self, entity_id: str) -> Entity | None:
         """Return an entity when it exists in the current room."""
@@ -49,6 +57,23 @@ class World:
         if entity is None:
             raise KeyError(f"Active entity '{entity_id}' was not found in the world.")
         self.active_entity_id = entity.entity_id
+
+    def push_active_entity(self, entity_id: str) -> None:
+        """Remember the current active entity, then switch to a new one."""
+        self.active_entity_stack.append(self.get_active_entity().entity_id)
+        self.set_active_entity(entity_id)
+
+    def pop_active_entity(self) -> str:
+        """Restore the most recently pushed active entity, or fall back cleanly."""
+        while self.active_entity_stack:
+            candidate_id = self.active_entity_stack.pop()
+            entity = self.get_entity(candidate_id)
+            if entity is not None:
+                self.active_entity_id = entity.entity_id
+                return self.active_entity_id
+
+        self.active_entity_id = self._resolve_fallback_active_entity_id()
+        return self.active_entity_id
 
     def iter_entities(self, *, include_absent: bool = False) -> list[Entity]:
         """Return entities as a list, optionally including non-present ones."""
@@ -113,4 +138,13 @@ class World:
             counter += 1
             candidate = f"{base_name}_{counter}"
         return candidate
+
+    def _resolve_fallback_active_entity_id(self) -> str:
+        """Return the safest active-entity id when the requested one no longer exists."""
+        player = self.get_entity(self.player_id)
+        if player is not None:
+            return player.entity_id
+        if self.entities:
+            return sorted(self.entities.keys())[0]
+        return self.player_id
 

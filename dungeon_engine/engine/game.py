@@ -9,6 +9,7 @@ import pygame
 
 from dungeon_engine import config
 from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.library import build_named_command_database
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
@@ -17,6 +18,7 @@ from dungeon_engine.engine.camera import Camera
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
+from dungeon_engine.engine.text import TextSessionManager
 from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
@@ -94,6 +96,8 @@ class Game:
         )
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
+        if self.project is not None:
+            build_named_command_database(self.project)
 
         self.collision_system: CollisionSystem | None = None
         self.interaction_system: InteractionSystem | None = None
@@ -101,6 +105,7 @@ class Game:
         self.animation_system: AnimationSystem | None = None
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
+        self.text_session_manager: TextSessionManager | None = None
 
         self.area = self.play_authored_area
         self.world = self.play_authored_world
@@ -214,6 +219,7 @@ class Game:
         self.interaction_system = InteractionSystem(self.world)
         self.movement_system = MovementSystem(self.area, self.world, self.collision_system)
         self.animation_system = AnimationSystem(self.world)
+        self.text_session_manager = TextSessionManager(self.renderer.text_renderer)
         command_context = CommandContext(
             area=self.area,
             world=self.world,
@@ -224,6 +230,7 @@ class Game:
             project=self.project,
             asset_manager=self.asset_manager,
             text_renderer=self.renderer.text_renderer,
+            text_session_manager=self.text_session_manager,
             camera=self.camera,
             audio_player=self.audio_player,
             screen_manager=self.screen_manager,

@@ -27,8 +27,23 @@
     "portrait_position": {
       "x": 8,
       "y": 154
+    },
+    "choice_box": {
+      "marker_x": 56,
+      "text_x": 64,
+      "width": 180
+    },
+    "choice_rows_y": [154, 164, 174],
+    "choice_more_top": {
+      "x": 238,
+      "y": 146
+    },
+    "choice_more_bottom": {
+      "x": 238,
+      "y": 178
     }
   },
+  "choice_marquee_frames": 10,
   "movement": {
     "_comment_ticks_per_tile": "Recommended to keep this even so the sprite change lands halfway through a tile move.",
     "ticks_per_tile": 16
