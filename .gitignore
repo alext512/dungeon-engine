@@ -28,3 +28,7 @@ env/
 
 # Claude
 .claude/
+
+# Local project scratch/state
+settings/
+external_assets/
