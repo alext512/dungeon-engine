@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "python-dungeon-engine"
 version = "0.1.0"
 description = "A command-driven top-down RPG/puzzle engine built with pygame-ce."
-readme = "architecture.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pygame-ce>=2.5.2,<3.0.0",
