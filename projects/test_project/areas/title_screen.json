@@ -1,0 +1,147 @@
+{
+  "area_id": "title_screen",
+  "name": "Title Screen",
+  "tile_size": 16,
+  "player_id": "player",
+  "variables": {},
+  "tilesets": [],
+  "tile_layers": [
+    {
+      "name": "background",
+      "draw_above_entities": false,
+      "grid": [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ]
+    }
+  ],
+  "cell_flags": [
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+  ],
+  "entities": [
+    {
+      "id": "title_backdrop",
+      "x": 0,
+      "y": 0,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/backdrop.png",
+        "frame_width": 256,
+        "frame_height": 128,
+        "frames": [0],
+        "animation_fps": 0
+      }
+    },
+    {
+      "id": "title_logo",
+      "x": 2,
+      "y": 1,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/logo.png",
+        "frame_width": 192,
+        "frame_height": 48,
+        "frames": [0],
+        "animation_fps": 0
+      }
+    },
+    {
+      "id": "title_sparkle_left",
+      "x": 1,
+      "y": 1,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/sparkle.png",
+        "frame_width": 12,
+        "frame_height": 12,
+        "frames": [0, 1, 2, 3],
+        "animation_fps": 6
+      }
+    },
+    {
+      "id": "title_sparkle_right",
+      "x": 13,
+      "y": 2,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/sparkle.png",
+        "frame_width": 12,
+        "frame_height": 12,
+        "frames": [0, 1, 2, 3],
+        "animation_fps": 6
+      }
+    },
+    {
+      "id": "menu_new_game",
+      "x": 2,
+      "y": 6,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/new_game.png",
+        "frame_width": 112,
+        "frame_height": 20,
+        "frames": [1],
+        "animation_fps": 0
+      }
+    },
+    {
+      "id": "menu_load_game",
+      "x": 2,
+      "y": 7,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/load_game.png",
+        "frame_width": 112,
+        "frame_height": 20,
+        "frames": [0],
+        "animation_fps": 0
+      }
+    },
+    {
+      "id": "menu_exit_game",
+      "x": 2,
+      "y": 8,
+      "template": "display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/exit_game.png",
+        "frame_width": 112,
+        "frame_height": 20,
+        "frames": [0],
+        "animation_fps": 0
+      }
+    },
+    {
+      "id": "dialogue_ui",
+      "x": 1,
+      "y": 1,
+      "template": "dialogue_ui"
+    },
+    {
+      "id": "player",
+      "x": 8,
+      "y": 6,
+      "template": "title_player"
+    }
+  ]
+}

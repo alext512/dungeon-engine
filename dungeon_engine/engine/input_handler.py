@@ -33,8 +33,6 @@ class InputFrameResult:
     """High-level play actions requested during one input frame."""
 
     should_quit: bool = False
-    save_requested: bool = False
-    load_requested: bool = False
     toggle_pause_requested: bool = False
     step_tick_requested: bool = False
     zoom_delta: int = 0
@@ -80,15 +78,9 @@ class InputHandler:
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    if not self.command_runner.has_pending_work() and self._enqueue_action_if_mapped("menu"):
+                        continue
                     result.should_quit = True
-                    continue
-
-                if event.key == pygame.K_F5:
-                    result.save_requested = True
-                    continue
-
-                if event.key == pygame.K_F9:
-                    result.load_requested = True
                     continue
 
                 if self.debug_inspection_enabled and event.key == pygame.K_F6:

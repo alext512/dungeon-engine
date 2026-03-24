@@ -55,6 +55,7 @@ class ProjectContext:
     """Resolved search paths for a single project."""
 
     project_root: Path
+    save_dir: Path
     entity_paths: list[Path] = field(default_factory=list)
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
@@ -277,12 +278,51 @@ class ProjectContext:
         for directory in self.area_paths:
             if not directory.is_dir():
                 continue
-            for f in sorted(directory.glob("*.json")):
+            for f in sorted(directory.rglob("*.json")):
                 resolved = f.resolve()
                 if resolved not in seen:
                     seen.add(resolved)
                     files.append(f)
         return files
+
+    def resolve_area_path(self, area_path: str | Path) -> Path | None:
+        """Resolve an authored area path against this project's configured roots."""
+        raw_path = Path(area_path)
+        candidate_inputs = [raw_path]
+        if raw_path.suffix.lower() != ".json":
+            candidate_inputs.append(raw_path.with_suffix(".json"))
+
+        candidates: list[Path] = []
+        seen: set[Path] = set()
+
+        def _record(candidate: Path) -> None:
+            resolved = candidate.resolve()
+            if resolved in seen:
+                return
+            seen.add(resolved)
+            candidates.append(candidate)
+
+        for candidate_input in candidate_inputs:
+            if candidate_input.is_absolute():
+                _record(candidate_input)
+                continue
+
+            _record(self.project_root / candidate_input)
+            for area_dir in self.area_paths:
+                _record(area_dir / candidate_input)
+
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.resolve()
+        return None
+
+    def area_path_to_reference(self, area_path: str | Path) -> str:
+        """Return a stable authored area reference suitable for save data."""
+        resolved = Path(area_path).resolve()
+        try:
+            return str(resolved.relative_to(self.project_root.resolve())).replace("\\", "/")
+        except ValueError:
+            return str(resolved)
 
     def resolve_shared_variable(self, path: str | list[str]) -> Any:
         """Return a nested project-shared variable by dotted path or path-parts list."""
@@ -347,6 +387,7 @@ def load_project(project_path: Path) -> ProjectContext:
 
     return ProjectContext(
         project_root=project_root,
+        save_dir=(project_root / str(raw.get("save_dir", "saves"))).resolve(),
         entity_paths=_resolve_paths("entity_paths", "entities"),
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
@@ -373,6 +414,7 @@ def default_project(project_root: Path | None = None) -> ProjectContext:
     shared_variables = _load_shared_variables((root / "variables.json") if (root / "variables.json").is_file() else None)
     return ProjectContext(
         project_root=root,
+        save_dir=(root / "saves").resolve(),
         entity_paths=_optional_dir(root / "entities"),
         asset_paths=_optional_dir(root / "assets"),
         area_paths=_optional_dir(root / "areas"),

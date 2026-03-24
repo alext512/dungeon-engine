@@ -1,0 +1,19 @@
+{
+  "id": "dialogue/save_prompt_open",
+  "commands": [
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/ui_open_pages",
+      "dialogue_id": "system/save_prompt_intro",
+      "after_pages_command_id": "dialogue/save_prompt_open_menu",
+      "text_box_x": "$project.dialogue.plain_box.x",
+      "text_box_y": "$project.dialogue.plain_box.y",
+      "text_box_width": "$project.dialogue.plain_box.width",
+      "has_portrait": false,
+      "portrait_path": "",
+      "portrait_frame_width": 16,
+      "portrait_frame_height": 16,
+      "portrait_frame": 0
+    }
+  ]
+}

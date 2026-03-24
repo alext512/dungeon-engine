@@ -1,0 +1,8 @@
+{
+  "id": "title/load_game",
+  "commands": [
+    {
+      "type": "load_game"
+    }
+  ]
+}

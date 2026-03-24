@@ -1,16 +1,18 @@
 {
   "kind": "player",
-  "solid": true,
+  "solid": false,
+  "visible": false,
   "input_map": {
-    "move_up": "move_up",
-    "move_down": "move_down",
-    "move_left": "move_left",
-    "move_right": "move_right",
-    "interact": "interact",
-    "menu": "open_pause_menu"
+    "move_up": "title_move_up",
+    "move_down": "title_move_down",
+    "move_left": "",
+    "move_right": "",
+    "interact": "title_confirm"
   },
   "variables": {
-    "walk_phase": 0
+    "walk_phase": 0,
+    "menu_index": 0,
+    "title_started": false
   },
   "sprite": {
     "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
@@ -46,22 +48,47 @@
         }
       ]
     },
+    "title_move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "title/move_up"
+        },
+        {
+          "type": "wait_for_direction_release",
+          "direction": "up"
+        }
+      ]
+    },
+    "title_move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "title/move_down"
+        },
+        {
+          "type": "wait_for_direction_release",
+          "direction": "down"
+        }
+      ]
+    },
+    "title_confirm": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "title/confirm"
+        }
+      ]
+    },
     "interact": {
       "enabled": true,
       "commands": [
         {
           "type": "interact_facing",
           "entity_id": "self"
-        }
-      ]
-    },
-    "open_pause_menu": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "run_event",
-          "entity_id": "dialogue_ui",
-          "event_id": "open_pause_menu"
         }
       ]
     },

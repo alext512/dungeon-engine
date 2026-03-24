@@ -19,14 +19,15 @@ from dungeon_engine.world.entity import Entity
 from dungeon_engine.world.world import World
 
 
-SAVE_DATA_VERSION = 1
+SAVE_DATA_VERSION = 3
 
 
 @dataclass(slots=True)
 class PersistentEntityState:
-    """Persistent changes for a single authored entity instance."""
+    """Saved changes for one entity instance in an area diff."""
 
     removed: bool = False
+    spawned: dict[str, Any] | None = None
     overrides: dict[str, Any] = field(default_factory=dict)
 
 
@@ -44,7 +45,10 @@ class SaveData:
 
     version: int = SAVE_DATA_VERSION
     globals: dict[str, Any] = field(default_factory=dict)
+    current_area: str = ""
+    active_entity: str = ""
     areas: dict[str, PersistentAreaState] = field(default_factory=dict)
+    current_area_state: PersistentAreaState | None = None
 
 
 @dataclass(slots=True)
@@ -60,32 +64,54 @@ class ResetRequest:
 class PersistenceRuntime:
     """Manage live persistent save data plus deferred reset requests."""
 
-    def __init__(self, save_path: Path) -> None:
+    def __init__(self, save_path: Path | None = None, *, load_existing: bool = False) -> None:
         self.save_path = save_path
-        self.save_data = load_save_data(save_path)
+        self.save_data = (
+            load_save_data(save_path)
+            if load_existing and save_path is not None
+            else SaveData()
+        )
         self.current_area_id: str = ""
+        self._current_authored_entity_ids: set[str] = set()
         self.dirty = False
         self._pending_immediate_resets: list[ResetRequest] = []
         self._pending_reentry_resets: dict[str, list[ResetRequest]] = {}
 
-    def bind_area(self, area_id: str) -> None:
+    def set_save_path(self, save_path: Path | None) -> None:
+        """Update which save-slot path future load/flush calls target."""
+        self.save_path = save_path.resolve() if save_path is not None else None
+
+    def bind_area(self, area_id: str, *, authored_world: World | None = None) -> None:
         """Set the currently active area id for mutation commands."""
         self.current_area_id = area_id
+        if authored_world is not None:
+            self._current_authored_entity_ids = {
+                entity.entity_id
+                for entity in authored_world.iter_entities(include_absent=True)
+            }
+        else:
+            self._current_authored_entity_ids = set()
 
     def flush(self, *, force: bool = False) -> bool:
         """Write the current in-memory persistent state to disk when requested."""
         if not force and not self.dirty:
             return False
+        if self.save_path is None:
+            raise ValueError("No save-slot path is configured for persistence flush.")
         save_save_data(self.save_path, self.save_data)
         self.dirty = False
         return True
 
     def has_save_file(self) -> bool:
         """Return True when a save slot file currently exists on disk."""
-        return self.save_path.exists()
+        return self.save_path is not None and self.save_path.exists()
 
     def reload_from_disk(self) -> bool:
         """Replace in-memory persistent state with the current save slot file."""
+        if self.save_path is None:
+            self.save_data = SaveData()
+            self.dirty = False
+            return False
         save_exists = self.save_path.exists()
         self.save_data = load_save_data(self.save_path)
         self.dirty = False
@@ -103,35 +129,84 @@ class PersistenceRuntime:
         area_state.variables[name] = copy.deepcopy(value)
         self.dirty = True
 
-    def set_entity_field(self, entity_id: str, field_name: str, value: Any) -> None:
+    def set_entity_field(
+        self,
+        entity_id: str,
+        field_name: str,
+        value: Any,
+        *,
+        entity: Entity | None = None,
+        tile_size: int | None = None,
+    ) -> None:
         """Persist a top-level entity field override."""
+        if not self._is_authored_entity(entity_id):
+            self._record_spawned_entity(entity=entity, tile_size=tile_size)
+            return
         entity_state = self._ensure_entity_state(entity_id)
         entity_state.removed = False
+        entity_state.spawned = None
         entity_state.overrides[field_name] = copy.deepcopy(value)
         self.dirty = True
 
-    def set_entity_variable(self, entity_id: str, name: str, value: Any) -> None:
+    def set_entity_variable(
+        self,
+        entity_id: str,
+        name: str,
+        value: Any,
+        *,
+        entity: Entity | None = None,
+        tile_size: int | None = None,
+    ) -> None:
         """Persist an entity variable override."""
+        if not self._is_authored_entity(entity_id):
+            self._record_spawned_entity(entity=entity, tile_size=tile_size)
+            return
         entity_state = self._ensure_entity_state(entity_id)
         entity_state.removed = False
+        entity_state.spawned = None
         variables = entity_state.overrides.setdefault("variables", {})
         variables[name] = copy.deepcopy(value)
         self.dirty = True
 
-    def set_entity_event_enabled(self, entity_id: str, event_id: str, enabled: bool) -> None:
+    def set_entity_event_enabled(
+        self,
+        entity_id: str,
+        event_id: str,
+        enabled: bool,
+        *,
+        entity: Entity | None = None,
+        tile_size: int | None = None,
+    ) -> None:
         """Persist an entity event enabled-state override."""
+        if not self._is_authored_entity(entity_id):
+            self._record_spawned_entity(entity=entity, tile_size=tile_size)
+            return
         entity_state = self._ensure_entity_state(entity_id)
         entity_state.removed = False
+        entity_state.spawned = None
         event_states = entity_state.overrides.setdefault("event_states", {})
         event_states[str(event_id)] = bool(enabled)
         self.dirty = True
 
     def remove_entity(self, entity_id: str) -> None:
         """Mark an entity as removed in persistent state."""
+        if not self._is_authored_entity(entity_id):
+            area_state = self.current_area_state()
+            if area_state is None:
+                return
+            area_state.entities.pop(entity_id, None)
+            self._prune_current_area_state()
+            self.dirty = True
+            return
         entity_state = self._ensure_entity_state(entity_id)
         entity_state.removed = True
+        entity_state.spawned = None
         entity_state.overrides.clear()
         self.dirty = True
+
+    def record_spawned_entity(self, entity: Entity, *, tile_size: int) -> None:
+        """Persist a spawned entity so it survives re-entry and save/load."""
+        self._record_spawned_entity(entity=entity, tile_size=tile_size)
 
     def request_reset(
         self,
@@ -220,6 +295,31 @@ class PersistenceRuntime:
             area_state.entities[entity_id] = entity_state
         return entity_state
 
+    def _record_spawned_entity(self, *, entity: Entity | None, tile_size: int | None) -> None:
+        """Store the full serialized state for one spawned entity."""
+        if entity is None:
+            raise ValueError("Persisting a spawned entity requires the runtime entity.")
+        if tile_size is None:
+            raise ValueError("Persisting a spawned entity requires the active area tile size.")
+        entity_state = self._ensure_entity_state(entity.entity_id)
+        entity_state.removed = False
+        entity_state.spawned = _serialize_saved_entity(entity, tile_size)
+        entity_state.overrides.clear()
+        self.dirty = True
+
+    def _is_authored_entity(self, entity_id: str) -> bool:
+        """Return True when the entity id belongs to the authored area document."""
+        return entity_id in self._current_authored_entity_ids
+
+    def _prune_current_area_state(self) -> None:
+        """Drop the bound area's entry when it no longer stores anything."""
+        area_state = self.current_area_state()
+        if area_state is None:
+            return
+        if area_state.variables or area_state.entities:
+            return
+        self.save_data.areas.pop(self.current_area_id, None)
+
 
 def load_save_data(path: Path) -> SaveData:
     """Load save data from disk, returning an empty slot when missing."""
@@ -240,44 +340,37 @@ def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
     """Parse a JSON-like dict into structured save data."""
     version = int(raw_data.get("version", SAVE_DATA_VERSION))
     globals_data = copy.deepcopy(raw_data.get("globals", {}))
-    areas: dict[str, PersistentAreaState] = {}
-    for area_id, area_data in raw_data.get("areas", {}).items():
-        entities: dict[str, PersistentEntityState] = {}
-        for entity_id, entity_data in area_data.get("entities", {}).items():
-            entity_overrides = copy.deepcopy(entity_data)
-            removed = bool(entity_overrides.pop("removed", False))
-            entities[str(entity_id)] = PersistentEntityState(
-                removed=removed,
-                overrides=entity_overrides,
-            )
-        areas[str(area_id)] = PersistentAreaState(
-            variables=copy.deepcopy(area_data.get("variables", {})),
-            entities=entities,
-        )
+    legacy_session_data = copy.deepcopy(raw_data.get("session", {}))
+    current_area = str(
+        raw_data.get("current_area", legacy_session_data.get("current_area_path", ""))
+    ).strip()
+    active_entity = str(
+        raw_data.get("active_entity", legacy_session_data.get("active_entity_id", ""))
+    ).strip()
+    areas = _load_area_state_mapping(raw_data.get("areas", {}))
 
-    return SaveData(version=version, globals=globals_data, areas=areas)
+    return SaveData(
+        version=version,
+        globals=globals_data if isinstance(globals_data, dict) else {},
+        current_area=current_area,
+        active_entity=active_entity,
+        areas=areas,
+        current_area_state=_area_state_from_dict(raw_data.get("current_area_state")),
+    )
 
 
 def save_data_to_dict(save_data: SaveData) -> dict[str, Any]:
     """Convert structured save data into JSON-serializable dictionaries."""
-    areas: dict[str, Any] = {}
-    for area_id, area_state in save_data.areas.items():
-        area_data: dict[str, Any] = {}
-        if area_state.variables:
-            area_data["variables"] = copy.deepcopy(area_state.variables)
-        if area_state.entities:
-            area_data["entities"] = {
-                entity_id: _persistent_entity_state_to_dict(entity_state)
-                for entity_id, entity_state in area_state.entities.items()
-            }
-        if area_data:
-            areas[area_id] = area_data
-
-    return {
+    data = {
         "version": save_data.version,
         "globals": copy.deepcopy(save_data.globals),
-        "areas": areas,
+        "current_area": str(save_data.current_area),
+        "active_entity": str(save_data.active_entity),
+        "areas": _area_state_mapping_to_dict(save_data.areas),
     }
+    if save_data.current_area_state is not None:
+        data["current_area_state"] = _area_state_to_dict(save_data.current_area_state)
+    return data
 
 
 def get_persistent_area_state(save_data: SaveData, area_id: str) -> PersistentAreaState | None:
@@ -319,9 +412,28 @@ def apply_persistent_area_state(area: Area, world: World, area_state: Persistent
             continue
 
         entity = world.get_entity(entity_id)
+        if entity_state.spawned is not None:
+            entity = _instantiate_saved_entity(entity_state.spawned, area.tile_size)
+            world.add_entity(entity)
+
         if entity is None:
             continue
         _apply_entity_overrides(area, entity, entity_state.overrides)
+
+
+def capture_current_area_state(
+    area: Area,
+    base_world: World,
+    current_world: World,
+) -> PersistentAreaState | None:
+    """Capture the exact saved diff for the current area over its persistent base."""
+    return _capture_area_state(
+        area,
+        base_world,
+        current_world,
+        include_player=True,
+        include_spawned_entities=True,
+    )
 
 
 def capture_persistent_area_state(
@@ -330,34 +442,13 @@ def capture_persistent_area_state(
     current_world: World,
 ) -> PersistentAreaState | None:
     """Capture persistent overrides by comparing current runtime state to authored defaults."""
-    _ = area
-    area_state = PersistentAreaState()
-
-    variable_overrides = _capture_variable_overrides(
-        authored_world.variables,
-        current_world.variables,
+    return _capture_area_state(
+        area,
+        authored_world,
+        current_world,
+        include_player=False,
+        include_spawned_entities=False,
     )
-    if variable_overrides:
-        area_state.variables = variable_overrides
-
-    for authored_entity in authored_world.iter_entities(include_absent=True):
-        if authored_entity.entity_id == authored_world.player_id:
-            continue
-
-        current_entity = current_world.get_entity(authored_entity.entity_id)
-        if current_entity is None:
-            area_state.entities[authored_entity.entity_id] = PersistentEntityState(removed=True)
-            continue
-
-        entity_overrides = _capture_entity_overrides(authored_entity, current_entity)
-        if entity_overrides:
-            area_state.entities[authored_entity.entity_id] = PersistentEntityState(
-                overrides=entity_overrides,
-            )
-
-    if not area_state.variables and not area_state.entities:
-        return None
-    return area_state
 
 
 def update_save_data_for_area(
@@ -377,9 +468,141 @@ def update_save_data_for_area(
 def _persistent_entity_state_to_dict(entity_state: PersistentEntityState) -> dict[str, Any]:
     """Serialize a persistent entity state using flat override keys."""
     data = copy.deepcopy(entity_state.overrides)
+    if entity_state.spawned is not None:
+        data["spawned"] = copy.deepcopy(entity_state.spawned)
     if entity_state.removed:
         data["removed"] = True
     return data
+
+
+def _area_state_from_dict(raw_state: Any) -> PersistentAreaState | None:
+    """Parse one saved area-state payload from a JSON-like dict."""
+    if not isinstance(raw_state, dict):
+        return None
+
+    entities: dict[str, PersistentEntityState] = {}
+    raw_entities = raw_state.get("entities", {})
+    if isinstance(raw_entities, dict):
+        for entity_id, entity_data in raw_entities.items():
+            if not isinstance(entity_data, dict):
+                continue
+            entity_payload = copy.deepcopy(entity_data)
+            removed = bool(entity_payload.pop("removed", False))
+            spawned = copy.deepcopy(entity_payload.pop("spawned", None))
+            entities[str(entity_id)] = PersistentEntityState(
+                removed=removed,
+                spawned=spawned if isinstance(spawned, dict) else None,
+                overrides=entity_payload,
+            )
+
+    variables = raw_state.get("variables", {})
+    return PersistentAreaState(
+        variables=copy.deepcopy(variables) if isinstance(variables, dict) else {},
+        entities=entities,
+    )
+
+
+def _area_state_to_dict(area_state: PersistentAreaState) -> dict[str, Any]:
+    """Convert one saved area state into a JSON-friendly dict."""
+    data: dict[str, Any] = {}
+    if area_state.variables:
+        data["variables"] = copy.deepcopy(area_state.variables)
+    if area_state.entities:
+        data["entities"] = {
+            entity_id: _persistent_entity_state_to_dict(entity_state)
+            for entity_id, entity_state in area_state.entities.items()
+        }
+    return data
+
+
+def _load_area_state_mapping(raw_areas: Any) -> dict[str, PersistentAreaState]:
+    """Parse the save file's area-state mapping."""
+    if not isinstance(raw_areas, dict):
+        return {}
+
+    areas: dict[str, PersistentAreaState] = {}
+    for area_id, area_data in raw_areas.items():
+        area_state = _area_state_from_dict(area_data)
+        if area_state is None:
+            continue
+        areas[str(area_id)] = area_state
+    return areas
+
+
+def _area_state_mapping_to_dict(areas: dict[str, PersistentAreaState]) -> dict[str, Any]:
+    """Serialize the save file's area-state mapping."""
+    serialized: dict[str, Any] = {}
+    for area_id, area_state in areas.items():
+        area_data = _area_state_to_dict(area_state)
+        if area_data:
+            serialized[str(area_id)] = area_data
+    return serialized
+
+
+def _instantiate_saved_entity(entity_data: dict[str, Any], tile_size: int) -> Entity:
+    """Create an entity instance from saved serialized entity data."""
+    from dungeon_engine.world.loader import instantiate_entity
+
+    return instantiate_entity(copy.deepcopy(entity_data), tile_size)
+
+
+def _serialize_saved_entity(entity: Entity, tile_size: int) -> dict[str, Any]:
+    """Serialize one runtime entity for save-state storage."""
+    from dungeon_engine.world.serializer import serialize_entity_instance
+
+    return serialize_entity_instance(entity, tile_size)
+
+
+def _capture_area_state(
+    area: Area,
+    authored_world: World,
+    current_world: World,
+    *,
+    include_player: bool,
+    include_spawned_entities: bool,
+) -> PersistentAreaState | None:
+    """Capture one area diff against authored data with configurable scope."""
+    area_state = PersistentAreaState()
+
+    variable_overrides = _capture_variable_overrides(
+        authored_world.variables,
+        current_world.variables,
+    )
+    if variable_overrides:
+        area_state.variables = variable_overrides
+
+    authored_entities = {
+        entity.entity_id: entity
+        for entity in authored_world.iter_entities(include_absent=True)
+    }
+    for authored_entity in authored_entities.values():
+        if not include_player and authored_entity.entity_id == authored_world.player_id:
+            continue
+
+        current_entity = current_world.get_entity(authored_entity.entity_id)
+        if current_entity is None:
+            area_state.entities[authored_entity.entity_id] = PersistentEntityState(removed=True)
+            continue
+
+        entity_overrides = _capture_entity_overrides(authored_entity, current_entity)
+        if entity_overrides:
+            area_state.entities[authored_entity.entity_id] = PersistentEntityState(
+                overrides=entity_overrides,
+            )
+
+    if include_spawned_entities:
+        for current_entity in current_world.iter_entities(include_absent=True):
+            if not include_player and current_entity.entity_id == current_world.player_id:
+                continue
+            if current_entity.entity_id in authored_entities:
+                continue
+            area_state.entities[current_entity.entity_id] = PersistentEntityState(
+                spawned=_serialize_saved_entity(current_entity, area.tile_size),
+            )
+
+    if not area_state.variables and not area_state.entities:
+        return None
+    return area_state
 
 
 def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any]) -> None:

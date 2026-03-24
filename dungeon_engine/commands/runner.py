@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 import copy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
@@ -39,6 +39,10 @@ class CommandContext:
     command_runner: Any | None = None
     input_handler: Any | None = None
     persistence_runtime: Any | None = None
+    request_area_change: Callable[[str], None] | None = None
+    request_load_game: Callable[[str | None], None] | None = None
+    save_game: Callable[[str | None], bool] | None = None
+    request_quit: Callable[[], None] | None = None
     named_command_stack: list[str] = field(default_factory=list)
     command_trace: list[str] = field(default_factory=list)
 

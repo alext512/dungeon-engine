@@ -5,7 +5,8 @@
   "input_map": {
     "move_up": "move_up",
     "move_down": "move_down",
-    "interact": "interact"
+    "interact": "interact",
+    "menu": "menu"
   },
   "variables": {
     "mode": "",
@@ -62,6 +63,73 @@
         {
           "type": "run_named_command",
           "command_id": "dialogue/bard_open"
+        }
+      ]
+    },
+    "open_save_prompt": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/save_prompt_open"
+        }
+      ]
+    },
+    "open_pause_menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/pause_menu_open"
+        }
+      ]
+    },
+    "open_showcase_village_note": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/showcase_note_open",
+          "dialogue_id": "showcase/village_square_note"
+        }
+      ]
+    },
+    "open_showcase_house_block_note": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/showcase_note_open",
+          "dialogue_id": "showcase/house_block_note"
+        }
+      ]
+    },
+    "open_showcase_house_gate_note": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/showcase_note_open",
+          "dialogue_id": "showcase/house_gate_note"
+        }
+      ]
+    },
+    "menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "mode",
+          "op": "neq",
+          "value": "",
+          "then": [
+            {
+              "type": "run_named_command",
+              "command_id": "dialogue/ui_close"
+            }
+          ]
         }
       ]
     },

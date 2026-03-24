@@ -1,0 +1,147 @@
+{
+  "area_id": "village_house",
+  "name": "Village House",
+  "tile_size": 16,
+  "player_id": "player",
+  "variables": {},
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/project/tiles/showcase_tiles.png",
+      "tile_width": 16,
+      "tile_height": 16
+    }
+  ],
+  "tile_layers": [
+    {
+      "name": "ground",
+      "draw_above_entities": false,
+      "grid": [
+        [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 7, 7, 7, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 7, 7, 7, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4],
+        [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+      ]
+    },
+    {
+      "name": "structure",
+      "draw_above_entities": false,
+      "grid": [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 4, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 4, 0],
+        [0, 0, 0, 0, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 4, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 4, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 4, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ]
+    },
+    {
+      "name": "overlay",
+      "draw_above_entities": true,
+      "grid": [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ]
+    }
+  ],
+  "cell_flags": [
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false],
+    [false, true, true, true, false, false, false, true, true, true, true, true, true, true, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false],
+    [false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false],
+    [false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+  ],
+  "entities": [
+    {
+      "id": "dialogue_ui",
+      "x": 1,
+      "y": 1,
+      "template": "dialogue_ui"
+    },
+    {
+      "id": "player",
+      "x": 8,
+      "y": 9,
+      "template": "player"
+    },
+    {
+      "id": "house_exit",
+      "x": 8,
+      "y": 10,
+      "template": "area_door",
+      "parameters": {
+        "target_area": "areas/village_square.json"
+      }
+    },
+    {
+      "id": "house_lever",
+      "x": 4,
+      "y": 4,
+      "template": "lever_toggle",
+      "parameters": {
+        "target_gate": "house_gate"
+      }
+    },
+    {
+      "id": "house_gate",
+      "x": 11,
+      "y": 5,
+      "template": "gate"
+    },
+    {
+      "id": "house_block",
+      "x": 6,
+      "y": 8,
+      "template": "block"
+    },
+    {
+      "id": "house_block_note",
+      "x": 2,
+      "y": 8,
+      "template": "showcase_sign",
+      "parameters": {
+        "dialogue_event": "open_showcase_house_block_note"
+      }
+    },
+    {
+      "id": "house_gate_note",
+      "x": 13,
+      "y": 5,
+      "template": "showcase_sign",
+      "parameters": {
+        "dialogue_event": "open_showcase_house_gate_note"
+      }
+    }
+  ]
+}

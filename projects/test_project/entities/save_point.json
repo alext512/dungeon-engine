@@ -1,0 +1,22 @@
+{
+  "kind": "save_point",
+  "solid": true,
+  "sprite": {
+    "path": "assets/project/sprites/sign.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frames": [0]
+  },
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "dialogue_ui",
+          "event_id": "open_save_prompt"
+        }
+      ]
+    }
+  }
+}

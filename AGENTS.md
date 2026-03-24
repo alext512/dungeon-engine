@@ -31,7 +31,7 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 
 | File | What It Tells You |
 |---|---|
-| `STATUS.md` | What's implemented, current controls, current test room, known gaps |
+| `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
 | `MANUAL.md` | Practical guide for running the engine and authoring project content |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
 | `functionality.md` | Plain-language feature list by priority tier |

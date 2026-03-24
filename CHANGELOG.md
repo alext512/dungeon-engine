@@ -4,6 +4,16 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Title Screen, Save Slots, and Connected Showcase Areas
+
+- Added generic `change_area`, `save_game`, `load_game`, and `quit_game` primitives so project JSON can drive area travel, save/load, and quitting without hardcoded project logic
+- Moved save/load to project-scoped JSON slots rooted in each project's `saves/` folder and removed the old `F5` / `F9` debug-only save flow
+- Updated save data to record the current area, active entity, persistent per-area diffs, and an exact diff for the currently loaded area
+- Added one-time restore of the saved current area so temporary room changes come back on load but still disappear after the player leaves that room again
+- Added support for persistent spawned entities and persistent deletion in area-diff save data
+- Reworked the sample project to start in a title-screen area with authored `New Game`, `Load`, and `Exit` menu options
+- Added a connected tilemap showcase slice with `village_square` and `village_house`, including a save point, a persistent lever/gate puzzle, and a non-persistent push block example
+
 ## Named Command Startup Database
 
 - Build a full in-memory named-command database per project at startup instead of rediscovering command files during gameplay
@@ -42,9 +52,8 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ## Manual Save Flow
 
-- Changed play-mode persistence so live persistent changes stay in memory instead of auto-writing `saves/slot_1.json`
-- Added explicit play-mode save/load controls: `F5` writes the current persistent state to disk and `F9` reloads the current save slot
-- Updated the play HUD to show live-state/save-file status and manual save feedback
+- Changed play-mode persistence so live persistent changes stay in memory instead of auto-writing save data during gameplay
+- This older milestone has since been superseded by the project-scoped menu/save-point save flow described above
 
 ## Persistence Foundation
 
