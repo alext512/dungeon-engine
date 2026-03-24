@@ -163,14 +163,9 @@ def _pick_area_file(default_path: Path) -> Path | None:
 
 def _resolve_area_path(project, area_path: Path) -> Path:
     """Resolve an area argument against the current project."""
-    candidates: list[Path] = [area_path]
-    if not area_path.is_absolute():
-        candidates.append(project.project_root / area_path)
-        candidates.extend(area_dir / area_path for area_dir in project.area_paths)
-
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate.resolve()
+    resolved = project.resolve_area_path(area_path)
+    if resolved is not None:
+        return resolved
     return area_path.resolve()
 
 

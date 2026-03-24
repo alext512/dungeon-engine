@@ -532,6 +532,12 @@
       "template": "npc_bard"
     },
     {
+      "id": "save_point_1",
+      "x": 5,
+      "y": 2,
+      "template": "save_point"
+    },
+    {
       "id": "dialogue_ui",
       "x": 1,
       "y": 1,

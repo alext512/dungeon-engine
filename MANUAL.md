@@ -30,7 +30,9 @@ If you are new to the codebase, this is the shortest accurate summary:
   - UI entities decide when to read, advance, reset, and render it
 - `run_dialogue` still exists as a simple text-only helper
 - sample dialogue choices are handled by a focused `dialogue_ui` entity plus named commands under `commands/dialogue/`
-- the current sample room is `projects/test_project/areas/test_room.json`
+- the project starts in `projects/test_project/areas/title_screen.json`
+- `New Game` leads into `projects/test_project/areas/village_square.json`
+- `village_square` connects to `projects/test_project/areas/village_house.json`
 - startup validation blocks launch on malformed/duplicate command-library problems
 - named commands are indexed into an in-memory project database at startup
 - `logs/error.log` is the main runtime/debug log
@@ -41,12 +43,14 @@ If you only need the most important files first, read these:
 2. `MANUAL.md`
 3. `projects/test_project/project.json`
 4. `projects/test_project/variables.json`
-5. `projects/test_project/areas/test_room.json`
+5. `projects/test_project/areas/title_screen.json`
 6. `projects/test_project/entities/player.json`
-7. `projects/test_project/commands/dialogue/blue_guide_open.json`
-8. `dungeon_engine/commands/builtin.py`
-9. `dungeon_engine/commands/runner.py`
-10. `dungeon_engine/engine/game.py`
+7. `projects/test_project/areas/village_square.json`
+8. `projects/test_project/areas/village_house.json`
+9. `projects/test_project/entities/dialogue_ui.json`
+10. `dungeon_engine/commands/builtin.py`
+11. `dungeon_engine/commands/runner.py`
+12. `dungeon_engine/engine/game.py`
 
 ## What This Project Is
 
@@ -97,7 +101,7 @@ Examples:
 
 ```text
 .venv/Scripts/python run_game.py --project projects/test_project
-.venv/Scripts/python run_game.py --project projects/test_project areas/test_room.json
+.venv/Scripts/python run_game.py --project projects/test_project areas/village_square.json
 .venv/Scripts/python run_editor.py --project projects/test_project
 ```
 
@@ -167,7 +171,7 @@ Example:
   "command_paths": ["commands/"],
   "dialogue_paths": ["dialogues/"],
   "variables_path": "variables.json",
-  "startup_area": "areas/test_room.json",
+  "startup_area": "areas/title_screen.json",
   "active_entity_id": "player",
   "debug_inspection_enabled": true,
   "input_events": {
@@ -293,6 +297,7 @@ Examples of primitive commands already in the engine:
 - `move_entity`
 - `move_entity_one_tile`
 - `teleport_entity`
+- `change_area`
 - `play_animation`
 - `stop_animation`
 - `set_sprite_frame`
@@ -301,6 +306,9 @@ Examples of primitive commands already in the engine:
 - `remove_screen_element`
 - `play_audio`
 - `run_dialogue`
+- `save_game`
+- `load_game`
+- `quit_game`
 
 ### Events
 
@@ -523,10 +531,13 @@ Conceptual layers:
 - persistent runtime overrides
 - save slot data
 
-Current play controls:
+Current save/load flow:
 
-- `F5` writes the current persistent state to `saves/slot_1.json`
-- `F9` reloads persistent state from `saves/slot_1.json`
+- title-screen `Load` opens a native file chooser rooted at the active project's `saves/` folder
+- in-level save points open an authored yes/no prompt and then a save-file chooser rooted at the same folder
+- the in-level `Escape` menu is just normal dialogue UI and currently exposes `Continue`, `Load`, and `Exit`
+- save data records the current area, the current active entity, persistent diffs for visited areas, and the current area's full runtime diff
+- when a save is loaded, the active area's temporary changes are restored for that load, but they still reset after the player leaves that area again
 
 ## Debug and Inspection
 
@@ -570,25 +581,30 @@ Errors go to:
 
 ## Current Sample Project
 
-The sample room demonstrates:
+The sample project demonstrates:
 
-- player movement
-- pushing blocks
-- lever/gate interaction
-- a sign with paginated dialogue
-- an NPC with portrait dialogue and command-driven choices
+- a title screen authored as a normal area with animated screen-space art and button entities
+- generic area-to-area travel through a door entity and the `change_area` command
+- a tilemap-based outdoor area and a connected tilemap-based house interior
+- an authored save point that calls the project-scoped save dialog
+- an in-level `Escape` menu built as ordinary dialogue/options JSON
+- a persistent lever/gate example
+- a non-persistent push block that resets after area exit/re-entry
 - project-level variables for resolution, dialogue layout, and movement timing
 
 Useful sample files:
 
 - `projects/test_project/project.json`
 - `projects/test_project/variables.json`
-- `projects/test_project/areas/test_room.json`
+- `projects/test_project/areas/title_screen.json`
+- `projects/test_project/areas/village_square.json`
+- `projects/test_project/areas/village_house.json`
 - `projects/test_project/entities/player.json`
-- `projects/test_project/entities/sign.json`
-- `projects/test_project/entities/npc_blue.json`
+- `projects/test_project/entities/area_door.json`
+- `projects/test_project/entities/save_point.json`
 - `projects/test_project/entities/dialogue_ui.json`
 - `projects/test_project/commands/dialogue/`
+- `projects/test_project/commands/title/`
 - `projects/test_project/dialogues/`
 
 ## Current Limits

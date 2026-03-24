@@ -27,6 +27,8 @@ from dungeon_engine.world.loader import load_area, load_area_from_data
 from dungeon_engine.world.persistence import (
     PersistenceRuntime,
     ResetRequest,
+    apply_persistent_area_state,
+    capture_current_area_state,
     get_persistent_area_state,
     select_entity_ids_by_tags,
 )
@@ -66,21 +68,12 @@ class Game:
 
         if area_path is None:
             raise ValueError("Game requires an explicit area path. Use run_game.py or Run_Game.cmd.")
-        self.area_path = area_path
+        self.area_path = Path(area_path)
         self.project = project
         self.asset_manager = AssetManager(project=project)
         self.audio_player = AudioPlayer(self.asset_manager, enabled=not self.headless)
         self.screen_manager = ScreenElementManager()
-        self.persistence_runtime = PersistenceRuntime(config.DEFAULT_SAVE_SLOT_PATH)
-
-        document_area, document_world = load_area(self.area_path, asset_manager=self.asset_manager)
-        document_data = serialize_area(document_area, document_world)
-        self.play_document_data = copy.deepcopy(document_data)
-        self.play_authored_area, self.play_authored_world = load_area_from_data(
-            copy.deepcopy(document_data),
-            source_name=str(self.area_path),
-            asset_manager=self.asset_manager,
-        )
+        self.persistence_runtime = PersistenceRuntime()
 
         self.renderer = Renderer(
             self.display_surface,
@@ -89,11 +82,7 @@ class Game:
             internal_height=self.internal_height,
             output_scale=self.output_scale,
         )
-        self.camera = Camera(
-            self.internal_width,
-            self.internal_height,
-            self.play_authored_area,
-        )
+        self.camera: Camera | None = None
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
         if self.project is not None:
@@ -106,22 +95,11 @@ class Game:
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
         self.text_session_manager: TextSessionManager | None = None
+        self._pending_area_change_path: Path | None = None
+        self._pending_load_save_path: Path | None = None
+        self._quit_requested = False
 
-        self.area = self.play_authored_area
-        self.world = self.play_authored_world
-
-        self.persistence_runtime.bind_area(self.play_authored_area.area_id)
-        self._apply_reentry_resets()
-        self.area, self.world = load_area_from_data(
-            copy.deepcopy(document_data),
-            source_name=str(self.area_path),
-            asset_manager=self.asset_manager,
-            persistent_area_state=get_persistent_area_state(
-                self.persistence_runtime.save_data,
-                self.play_authored_area.area_id,
-            ),
-        )
-        self._install_play_runtime()
+        self._load_area_runtime(self.area_path)
         self._update_window_caption()
 
     def run(self, max_frames: int | None = None) -> None:
@@ -148,10 +126,6 @@ class Game:
         assert self.animation_system is not None
 
         input_result = self.input_handler.handle_events(events)
-        if input_result.save_requested:
-            self._save_persistent_state_to_disk()
-        if input_result.load_requested:
-            self._reload_persistent_state_from_disk()
         if input_result.should_quit:
             return False
         if input_result.toggle_pause_requested and self.debug_inspection_enabled:
@@ -178,6 +152,9 @@ class Game:
                     self._advance_simulation_tick(self.fixed_timestep)
                     self._accumulated_time -= self.fixed_timestep
                     catchup_ticks += 1
+
+        if self._quit_requested:
+            return False
 
         self.camera.update(self.world, advance_tick=False)
         self.renderer.render(
@@ -206,6 +183,8 @@ class Game:
         self._apply_pending_reset_if_idle()
         self.command_runner.update(0.0)
         self._apply_pending_reset_if_idle()
+        self._apply_pending_load_if_idle()
+        self._apply_pending_area_change_if_idle()
         self.simulation_tick_count += 1
 
     def _install_play_runtime(self) -> None:
@@ -237,6 +216,10 @@ class Game:
             command_runner=None,
             input_handler=None,
             persistence_runtime=self.persistence_runtime,
+            request_area_change=self.request_area_change,
+            request_load_game=self.request_load_game,
+            save_game=self.save_game,
+            request_quit=self.request_quit,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
         project_input_events = None if self.project is None else self.project.input_event_names
@@ -247,6 +230,193 @@ class Game:
             debug_inspection_enabled=self.debug_inspection_enabled,
         )
         command_context.input_handler = self.input_handler
+
+    def request_area_change(self, area_path: str | Path) -> None:
+        """Queue a transition into another authored area."""
+        self._pending_area_change_path = self._resolve_area_path(area_path)
+        self._pending_load_save_path = None
+
+    def request_load_game(self, save_path: str | None = None) -> None:
+        """Queue a save-slot load so it applies after the current command lane finishes."""
+        resolved_save_path = (
+            self._resolve_save_slot_path(save_path)
+            if save_path is not None
+            else self._prompt_for_load_save_path()
+        )
+        if resolved_save_path is None:
+            return
+        self._pending_load_save_path = resolved_save_path
+        self._pending_area_change_path = None
+
+    def save_game(self, save_path: str | None = None) -> bool:
+        """Open a project-scoped save dialog or write to an explicit save path."""
+        resolved_save_path = (
+            self._resolve_save_slot_path(save_path)
+            if save_path is not None
+            else self._prompt_for_save_save_path()
+        )
+        if resolved_save_path is None:
+            return False
+        self._write_save_slot(resolved_save_path)
+        return True
+
+    def request_quit(self) -> None:
+        """Ask the runtime loop to close the game at the end of the current frame."""
+        self._quit_requested = True
+
+    def _load_area_runtime(self, area_path: Path | str) -> None:
+        """Load one authored area plus any persistent overrides and rebuild runtime systems."""
+        resolved_area_path = self._resolve_area_path(area_path)
+        document_area, document_world = load_area(
+            resolved_area_path,
+            asset_manager=self.asset_manager,
+        )
+        document_data = serialize_area(document_area, document_world)
+        play_document_data = copy.deepcopy(document_data)
+        play_authored_area, play_authored_world = load_area_from_data(
+            copy.deepcopy(document_data),
+            source_name=str(resolved_area_path),
+            asset_manager=self.asset_manager,
+        )
+        self._apply_reentry_resets_for_area(play_authored_area.area_id, play_authored_world)
+        area, world = load_area_from_data(
+            copy.deepcopy(document_data),
+            source_name=str(resolved_area_path),
+            asset_manager=self.asset_manager,
+            persistent_area_state=get_persistent_area_state(
+                self.persistence_runtime.save_data,
+                play_authored_area.area_id,
+            ),
+        )
+
+        self.area_path = resolved_area_path
+        self.play_document_data = play_document_data
+        self.play_authored_area = play_authored_area
+        self.play_authored_world = play_authored_world
+        self.area = area
+        self.world = world
+        self.persistence_runtime.bind_area(
+            self.play_authored_area.area_id,
+            authored_world=self.play_authored_world,
+        )
+        self._install_play_runtime()
+
+    def _resolve_area_path(self, area_path: Path | str) -> Path:
+        """Resolve an area reference against the active project or current area location."""
+        raw_path = Path(area_path)
+
+        if self.project is not None:
+            resolved = self.project.resolve_area_path(raw_path)
+            if resolved is not None:
+                return resolved
+
+        candidate_inputs = [raw_path]
+        if raw_path.suffix.lower() != ".json":
+            candidate_inputs.append(raw_path.with_suffix(".json"))
+
+        candidates: list[Path] = []
+        seen: set[Path] = set()
+
+        def _record(candidate: Path) -> None:
+            resolved_candidate = candidate.resolve()
+            if resolved_candidate in seen:
+                return
+            seen.add(resolved_candidate)
+            candidates.append(candidate)
+
+        for candidate_input in candidate_inputs:
+            if candidate_input.is_absolute():
+                _record(candidate_input)
+                continue
+            _record(self.area_path.parent / candidate_input)
+
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.resolve()
+
+        searched_paths = ", ".join(str(candidate) for candidate in candidates)
+        raise FileNotFoundError(
+            f"Cannot resolve area path '{area_path}'. "
+            f"Searched: {searched_paths or '<none>'}."
+        )
+
+    def _project_save_dir(self) -> Path:
+        """Return the active project's save-root directory, creating it when needed."""
+        save_dir = self.project.save_dir if self.project is not None else config.SAVES_DIR
+        save_dir.mkdir(parents=True, exist_ok=True)
+        return save_dir.resolve()
+
+    def _resolve_save_slot_path(self, save_path: str | Path) -> Path:
+        """Resolve and validate a save-slot path inside the active project's save directory."""
+        raw_path = Path(save_path)
+        save_dir = self._project_save_dir()
+        candidate = raw_path if raw_path.is_absolute() else save_dir / raw_path
+        if candidate.suffix.lower() != ".json":
+            candidate = candidate.with_suffix(".json")
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(save_dir)
+        except ValueError as exc:
+            raise ValueError(
+                f"Save path '{resolved}' must stay inside '{save_dir}'."
+            ) from exc
+        return resolved
+
+    def _default_save_slot_name(self) -> str:
+        """Return a sensible default file name for project-scoped save dialogs."""
+        current_save_path = self.persistence_runtime.save_path
+        if current_save_path is not None:
+            try:
+                current_save_path.resolve().relative_to(self._project_save_dir())
+                return current_save_path.name
+            except ValueError:
+                pass
+        return "save_1.json"
+
+    def _prompt_for_save_save_path(self) -> Path | None:
+        """Open a Save As dialog rooted to the active project's save directory."""
+        if self.headless:
+            raise ValueError("save_game without an explicit save_path is unavailable in headless mode.")
+
+        import tkinter as tk
+        from tkinter import filedialog
+
+        save_dir = self._project_save_dir()
+        root = tk.Tk()
+        root.withdraw()
+        file_path = filedialog.asksaveasfilename(
+            title="Save game",
+            initialdir=str(save_dir),
+            initialfile=self._default_save_slot_name(),
+            defaultextension=".json",
+            filetypes=[("JSON save files", "*.json"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if not file_path:
+            return None
+        return self._resolve_save_slot_path(Path(file_path))
+
+    def _prompt_for_load_save_path(self) -> Path | None:
+        """Open a load dialog rooted to the active project's save directory."""
+        if self.headless:
+            raise ValueError("load_game without an explicit save_path is unavailable in headless mode.")
+
+        import tkinter as tk
+        from tkinter import filedialog
+
+        save_dir = self._project_save_dir()
+        root = tk.Tk()
+        root.withdraw()
+        file_path = filedialog.askopenfilename(
+            title="Load game",
+            initialdir=str(save_dir),
+            initialfile=self._default_save_slot_name(),
+            filetypes=[("JSON save files", "*.json"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if not file_path:
+            return None
+        return self._resolve_save_slot_path(Path(file_path))
 
     def _window_size_for_scale(self, scale: int) -> tuple[int, int]:
         """Return the integer-scaled output size for the current internal surface."""
@@ -331,14 +501,38 @@ class Game:
 
         self._apply_runtime_reset(request)
 
-    def _apply_reentry_resets(self) -> None:
-        """Apply scheduled on-reentry resets before constructing the play world."""
-        for request in self.persistence_runtime.consume_reentry_resets(self.play_authored_area.area_id):
+    def _apply_pending_load_if_idle(self) -> None:
+        """Apply a queued save-slot load once the command lane is idle."""
+        if self.command_runner is None or self.command_runner.has_pending_work():
+            return
+        if self._pending_load_save_path is None:
+            return
+
+        load_path = self._pending_load_save_path
+        self._pending_load_save_path = None
+        self._accumulated_time = 0.0
+        self._load_save_slot(load_path)
+
+    def _apply_pending_area_change_if_idle(self) -> None:
+        """Apply a queued area transition once the main command lane is idle."""
+        if self.command_runner is None or self.command_runner.has_pending_work():
+            return
+        if self._pending_area_change_path is None:
+            return
+
+        next_area_path = self._pending_area_change_path
+        self._pending_area_change_path = None
+        self._accumulated_time = 0.0
+        self._load_area_runtime(next_area_path)
+
+    def _apply_reentry_resets_for_area(self, area_id: str, authored_world) -> None:
+        """Apply scheduled on-reentry persistent resets before constructing an area runtime."""
+        for request in self.persistence_runtime.consume_reentry_resets(area_id):
             if request.kind != "persistent":
                 continue
             self.persistence_runtime.clear_persistent_area_state(
-                self.play_authored_area.area_id,
-                self.play_authored_world,
+                area_id,
+                authored_world,
                 include_tags=request.include_tags,
                 exclude_tags=request.exclude_tags,
             )
@@ -388,15 +582,66 @@ class Game:
             self.world.add_entity(preserved_player)
         self._install_play_runtime()
 
-    def _save_persistent_state_to_disk(self) -> None:
-        """Write the current in-memory persistent state to the save slot."""
-        self.persistence_runtime.flush(force=True)
+    def _capture_current_area_reference(self) -> str:
+        """Return a stable project-relative reference for the currently loaded area."""
+        return (
+            self.project.area_path_to_reference(self.area_path)
+            if self.project is not None
+            else str(self.area_path.resolve())
+        )
 
-    def _reload_persistent_state_from_disk(self) -> None:
-        """Reload persistent state from disk and rebuild the current room."""
-        if self.command_runner is not None and self.command_runner.has_pending_work():
-            return
+    def _write_save_slot(self, save_path: Path) -> None:
+        """Write the current persistent/session state to one explicit save slot."""
+        active_entity = self.world.get_active_entity()
+        _, persistent_reference_world = self._build_current_play_reference()
+        self.persistence_runtime.save_data.current_area = self._capture_current_area_reference()
+        self.persistence_runtime.save_data.active_entity = (
+            active_entity.entity_id if active_entity is not None else ""
+        )
+        self.persistence_runtime.save_data.current_area_state = capture_current_area_state(
+            self.area,
+            persistent_reference_world,
+            self.world,
+        )
+        self.persistence_runtime.set_save_path(save_path)
+        try:
+            self.persistence_runtime.flush(force=True)
+        finally:
+            # The exact saved room state is for file output and one-time load restore only.
+            self.persistence_runtime.save_data.current_area_state = None
 
-        self.persistence_runtime.reload_from_disk()
-        self._rebuild_play_world(preserve_player=True)
+    def _load_save_slot(self, save_path: Path) -> None:
+        """Load one explicit save slot and rebuild the runtime from its saved session."""
+        self.persistence_runtime.set_save_path(save_path)
+        if not self.persistence_runtime.reload_from_disk():
+            raise FileNotFoundError(f"Save file '{save_path}' was not found.")
+
+        current_area_state = copy.deepcopy(self.persistence_runtime.save_data.current_area_state)
+        self.persistence_runtime.save_data.current_area_state = None
+        target_area_path = self._resolve_saved_area_path()
+        self._load_area_runtime(target_area_path)
+        if current_area_state is not None:
+            apply_persistent_area_state(self.area, self.world, current_area_state)
+        self._apply_saved_active_entity()
+
+    def _resolve_saved_area_path(self) -> Path:
+        """Resolve the saved session's current area reference, falling back safely."""
+        current_area_path = str(self.persistence_runtime.save_data.current_area).strip()
+        if current_area_path:
+            return self._resolve_area_path(current_area_path)
+
+        startup_area = self.project.startup_area if self.project is not None else None
+        if startup_area:
+            return self._resolve_area_path(startup_area)
+        return self.area_path.resolve()
+
+    def _apply_saved_active_entity(self) -> None:
+        """Restore the saved active entity after the current room has been rebuilt."""
+        active_entity_id = str(self.persistence_runtime.save_data.active_entity).strip()
+        if active_entity_id and self.world.get_entity(active_entity_id) is not None:
+            self.world.set_active_entity(active_entity_id)
+
+        if self.camera is not None:
+            self.camera.follow_active_entity()
+            self.camera.update(self.world, advance_tick=False)
 

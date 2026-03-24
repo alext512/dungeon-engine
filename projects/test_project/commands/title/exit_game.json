@@ -1,0 +1,8 @@
+{
+  "id": "title/exit_game",
+  "commands": [
+    {
+      "type": "quit_game"
+    }
+  ]
+}

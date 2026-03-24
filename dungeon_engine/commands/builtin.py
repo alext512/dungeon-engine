@@ -442,11 +442,18 @@ def _persist_entity_field(
     entity_id: str,
     field_name: str,
     value: Any,
+    entity: Any,
 ) -> None:
     """Persist a single entity field when runtime persistence is available."""
     if context.persistence_runtime is None:
         return
-    context.persistence_runtime.set_entity_field(entity_id, field_name, value)
+    context.persistence_runtime.set_entity_field(
+        entity_id,
+        field_name,
+        value,
+        entity=entity,
+        tile_size=context.area.tile_size,
+    )
 
 
 def _persist_entity_event_enabled(
@@ -455,11 +462,18 @@ def _persist_entity_event_enabled(
     entity_id: str,
     event_id: str,
     enabled: bool,
+    entity: Any,
 ) -> None:
     """Persist an event enabled-state change when runtime persistence is available."""
     if context.persistence_runtime is None:
         return
-    context.persistence_runtime.set_entity_event_enabled(entity_id, event_id, enabled)
+    context.persistence_runtime.set_entity_event_enabled(
+        entity_id,
+        event_id,
+        enabled,
+        entity=entity,
+        tile_size=context.area.tile_size,
+    )
 
 
 def _normalize_input_map(value: Any) -> dict[str, str]:
@@ -606,6 +620,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 entity_id=resolved_id,
                 field_name=persisted_field_name,
                 value=persisted_value,
+                entity=entity,
             )
         return ImmediateHandle()
 
@@ -1914,6 +1929,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 entity_id=resolved_id,
                 event_id=event_id,
                 enabled=enabled,
+                entity=entity,
             )
         return ImmediateHandle()
 
@@ -2025,6 +2041,61 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if context.input_handler is None:
             raise ValueError("Cannot change input event names without an input handler.")
         context.input_handler.set_action_event_name(str(action), str(event_name))
+        return ImmediateHandle()
+
+    @registry.register("change_area")
+    def change_area(
+        context: CommandContext,
+        *,
+        area_path: str,
+        **_: Any,
+    ) -> CommandHandle:
+        """Queue a transition into another authored area once the command lane is idle."""
+        if context.request_area_change is None:
+            raise ValueError("Cannot change area without an active area-transition handler.")
+
+        resolved_area_path = str(area_path).strip()
+        if not resolved_area_path:
+            raise ValueError("change_area requires a non-empty area_path.")
+
+        context.request_area_change(resolved_area_path)
+        return ImmediateHandle()
+
+    @registry.register("load_game")
+    def load_game(
+        context: CommandContext,
+        *,
+        save_path: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Queue a save-slot load, optionally targeting an explicit relative save path."""
+        if context.request_load_game is None:
+            raise ValueError("Cannot load a game without an active save-slot loader.")
+        context.request_load_game(str(save_path) if save_path is not None else None)
+        return ImmediateHandle()
+
+    @registry.register("save_game")
+    def save_game(
+        context: CommandContext,
+        *,
+        save_path: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Open a save-slot dialog or write to an explicit relative save path."""
+        if context.save_game is None:
+            raise ValueError("Cannot save a game without an active save-slot writer.")
+        context.save_game(str(save_path) if save_path is not None else None)
+        return ImmediateHandle()
+
+    @registry.register("quit_game")
+    def quit_game(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Request that the runtime close the game window."""
+        if context.request_quit is None:
+            raise ValueError("Cannot quit the game without an active runtime quit handler.")
+        context.request_quit()
         return ImmediateHandle()
 
     @registry.register("set_camera_follow_entity")
@@ -2273,6 +2344,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         y: int | None = None,
         parameters: dict[str, Any] | None = None,
         present: bool = True,
+        persistent: bool = False,
         **_: Any,
     ) -> CommandHandle:
         """Create a new entity instance in the current world."""
@@ -2305,6 +2377,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
         new_entity = instantiate_entity(entity_data, context.area.tile_size)
         context.world.add_entity(new_entity)
+        if persistent and context.persistence_runtime is not None:
+            context.persistence_runtime.record_spawned_entity(
+                new_entity,
+                tile_size=context.area.tile_size,
+            )
         return ImmediateHandle()
 
     @registry.register("set_var")
@@ -2341,7 +2418,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     source_entity_id=source_entity_id,
                     actor_entity_id=actor_entity_id,
                 )
-                context.persistence_runtime.set_entity_variable(resolved_id, name, persisted_value)
+                entity = context.world.get_entity(resolved_id)
+                if entity is None:
+                    raise KeyError(f"Cannot persist variable on missing entity '{resolved_id}'.")
+                context.persistence_runtime.set_entity_variable(
+                    resolved_id,
+                    name,
+                    persisted_value,
+                    entity=entity,
+                    tile_size=context.area.tile_size,
+                )
         return ImmediateHandle()
 
     @registry.register("increment_var")
@@ -2377,7 +2463,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     source_entity_id=source_entity_id,
                     actor_entity_id=actor_entity_id,
                 )
-                context.persistence_runtime.set_entity_variable(resolved_id, name, variables[name])
+                entity = context.world.get_entity(resolved_id)
+                if entity is None:
+                    raise KeyError(f"Cannot persist variable on missing entity '{resolved_id}'.")
+                context.persistence_runtime.set_entity_variable(
+                    resolved_id,
+                    name,
+                    variables[name],
+                    entity=entity,
+                    tile_size=context.area.tile_size,
+                )
         return ImmediateHandle()
 
     @registry.register("check_var")

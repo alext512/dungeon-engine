@@ -22,7 +22,9 @@ If you only need the current reality quickly:
 - engine code is under `dungeon_engine/`
 - sample content is under `projects/test_project/`
 - gameplay behavior is mostly authored in JSON commands and entity events
-- the current sample room is `projects/test_project/areas/test_room.json`
+- the project now boots into `projects/test_project/areas/title_screen.json`
+- the first playable showcase area is `projects/test_project/areas/village_square.json`
+- the connected interior example is `projects/test_project/areas/village_house.json`
 - shared project values are in `projects/test_project/variables.json`
 - player movement is authored in `projects/test_project/entities/player.json`
 - dialogue text lives in `projects/test_project/dialogues/`
@@ -84,40 +86,38 @@ If you only need the current reality quickly:
 - text-session primitives for UI-driven paged and marquee text flow
 - transient and persistent room reset commands
 - authored entity tags for grouping and reset targeting
+- generic `change_area`, `save_game`, `load_game`, and `quit_game` primitives
+- project-scoped JSON save slots rooted in each project's `saves/` folder
+- menu-driven title-screen load/exit flow and authored in-level save prompts
+- current-area save capture that restores the saved room exactly on load while still dropping temporary state after you leave that room again
+- persistent spawned-entity and persistent destruction support in save data
 
-## Current Test Room
+## Current Sample Project
 
-The starter room currently includes:
+The sample project currently includes:
 
-- player
-- one pushable block
-- one toggle lever (can be toggled on and off via variables)
-- one readable sign that opens a simple dialogue panel
-- one NPC with portrait-backed dialogue and a choice-based follow-up conversation
-- one bard NPC with a portrait-backed dialogue menu that demonstrates more than three choices plus scrolling and marquee choice text
-- the sign now reads its text from a dialogue asset instead of embedding the text inline
-- one gate
-- a wall tile with a painting overlay tile on top of it
+- a title-screen startup area with animated sparkles, a background image, and authored `New Game`, `Load`, and `Exit` buttons
+- a tilemap-based `village_square` outdoor area with a save point, a note sign, and a door into a house
+- a connected tilemap-based `village_house` interior area with a persistent lever/gate puzzle
+- one pushable block in the house that resets when you leave and re-enter
+- authored dialogue UI for title actions, save prompts, showcase notes, and the in-level `Escape` menu
+- placeholder project art for the title screen, buttons, door, and showcase tileset
 
 Expected behavior:
 
 - move with arrows or `WASD`
 - interact with `Space`
-- face the lever and press `Space` to toggle the gate open/closed
-- face the sign and press `Space` to open a simple dialogue panel, then press `Space` again to close it
-- face the NPC and press `Space` to open a portrait-backed dialogue, then use `Up` / `Down` and `Space` to choose a reply
-- face the bard and press `Space` to open a longer portrait-backed menu; more-choice indicators appear when the list scrolls past the first three rows
-- dialogue choice navigation now moves once per keypress; it does not keep scrolling while a direction is held
-- highlighted long choice text now scrolls sideways and freezes at the end until you move the selection away
-- long sign dialogue now auto-splits into multiple pages when it exceeds the configured dialogue line count
-- live lever/gate state persists for the current play session in memory
-- if `saves/slot_1.json` exists when play starts, its overrides are loaded on top of the room JSON
-- press `F5` in play mode to write the current persistent state to `saves/slot_1.json`
-- press `F9` in play mode to reload persistent overrides from `saves/slot_1.json`
+- from the title screen, `New Game` enters `village_square`, `Load` opens a file chooser rooted at `projects/test_project/saves/`, and `Exit` quits the game
+- in `village_square`, face the save point and press `Space` to open an authored yes/no save prompt that writes a named JSON save file
+- face the house door and press `Space` to enter `village_house`
+- in `village_house`, face the lever and press `Space` to toggle the gate open/closed, then leave and return to confirm the lever/gate state persisted
+- push the house block, leave the house, and return to confirm the block reset to its authored position
+- press `Escape` in a playable area to open a normal dialogue-style menu with `Continue`, `Load`, and `Exit`
+- note signs still open command-authored dialogue panels
 - if the active project's `project.json` enables `debug_inspection_enabled`, `F6` pauses/resumes simulation, `F7` advances one simulation tick, and `[` / `]` zoom the output window out or in
 - the player uses a tiny 2-frame walk animation while moving
 - player walking now carries a simple alternating walk phase across successful moves
-- the room uses layered tiles instead of a single character grid
+- the showcase areas use layered tilemaps instead of a single character grid
 
 ## Editor Controls
 
@@ -180,8 +180,10 @@ Expected behavior:
 - The current assets are intentionally simple generated test art, not final art.
 - Pixel-perfect behavior is currently handled as a renderer/camera policy, not a level-data rule.
 - The game and editor are separate applications now, but they still share the same area/entity JSON model.
-- Play mode layers any existing save-slot state on top of the authored room clone without modifying authored room data.
-- The live persistent layer is kept in memory during play; it is only written to disk when you press `F5`.
+- Play mode loads and saves JSON slots through authored commands and menus without modifying authored area data.
+- Save slots live under the active project's `saves/` folder, and the native file chooser is restricted to that project-local directory.
+- Save data stores the current area, the current active entity, persistent diffs for visited areas, and the full current diff of the active area at save time.
+- Temporary changes in the currently loaded area are restored when that save is loaded, but they are discarded again once the player leaves that area.
 - Runtime interaction now resolves the topmost enabled entity on a tile based on the current stack order, not just insertion order.
 - Named-command library errors such as malformed files, duplicate command ids, or missing literal `run_named_command` targets are now validated at project startup; launch is blocked, the full report is written to `logs/error.log`, and runtime command failures still show a short in-game hint to check the log.
 - Named commands are now indexed and loaded into memory at startup, so runtime command execution does not rescan project command folders while the game is already running.

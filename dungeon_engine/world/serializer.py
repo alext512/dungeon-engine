@@ -47,7 +47,7 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
             for row in area.cell_flags
         ],
         "entities": [
-            _serialize_entity(entity, area.tile_size)
+            serialize_entity_instance(entity, area.tile_size)
             for entity in sorted(
                 world.iter_entities(include_absent=True),
                 key=world.entity_sort_key,
@@ -77,7 +77,7 @@ def _serialize_cell_flags(cell_flags: dict[str, Any]) -> bool | dict[str, Any]:
     return dict(cell_flags)
 
 
-def _serialize_entity(entity: Any, tile_size: int) -> dict[str, Any]:
+def serialize_entity_instance(entity: Any, tile_size: int) -> dict[str, Any]:
     """Persist either a template instance or a fully inline entity definition."""
     data: dict[str, Any] = {
         "id": entity.entity_id,
