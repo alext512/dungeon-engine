@@ -61,7 +61,39 @@
         {
           "type": "run_event",
           "entity_id": "dialogue_ui",
-          "event_id": "open_pause_menu"
+          "event_id": "show_choice_dialogue",
+          "prompt_dialogue_id": "",
+          "prompt_text": null,
+          "prompt_pages": null,
+          "choices": [
+            {
+              "text": "Continue",
+              "commands": []
+            },
+            {
+              "text": "Load",
+              "commands": [
+                {
+                  "type": "load_game"
+                }
+              ]
+            },
+            {
+              "text": "Exit",
+              "commands": [
+                {
+                  "type": "quit_game"
+                }
+              ]
+            }
+          ],
+          "portrait_path": "",
+          "portrait_frame_width": null,
+          "portrait_frame_height": null,
+          "portrait_frame": 0,
+          "on_start_commands": [],
+          "on_finish_commands": [],
+          "command_source_entity_id": "$source_entity_id"
         }
       ]
     },

@@ -1,5 +1,4 @@
 {
-  "id": "attempt_move_one_tile",
   "params": [
     "direction",
     "push_event_id",
@@ -121,3 +120,4 @@
     }
   ]
 }
+

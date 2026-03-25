@@ -1,9 +1,0 @@
-{
-  "id": "title/start_new_game",
-  "commands": [
-    {
-      "type": "change_area",
-      "area_path": "areas/village_square.json"
-    }
-  ]
-}

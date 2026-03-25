@@ -1,5 +1,4 @@
 {
-  "area_id": "title_screen",
   "name": "Title Screen",
   "tile_size": 16,
   "player_id": "player",
@@ -145,3 +144,4 @@
     }
   ]
 }
+

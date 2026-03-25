@@ -21,6 +21,7 @@ Project content lives outside the engine package. The engine/editor code is unde
 cd python_puzzle_engine
 .venv/Scripts/python run_game.py
 .venv/Scripts/python run_editor.py
+.venv/Scripts/python -m unittest discover -s tests -v
 ```
 
 Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
@@ -34,6 +35,7 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 | `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
 | `MANUAL.md` | Practical guide for running the engine and authoring project content |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
+| `CONTENT_TYPES.md` | Cross-cutting explanation of project search paths, path-derived IDs, and how areas/entities/commands/dialogues/assets relate |
 | `functionality.md` | Plain-language feature list by priority tier |
 | `architecture.md` | Design philosophy, tech stack, command system, entity/component model |
 | `CONTRIBUTING.md` | Working rules and project direction |
@@ -49,6 +51,7 @@ run_game.py                      # Preferred standalone game entry point
 run_editor.py                    # Preferred standalone editor entry point
 Run_Game.cmd                     # Windows launcher for the game
 Run_Editor.cmd                   # Windows launcher for the editor
+tests/                           # Focused unittest coverage for engine behavior regressions
 dungeon_engine/
     config.py                    # Paths, constants, window sizes
     logging_utils.py             # Rotating error log setup
@@ -86,6 +89,7 @@ dungeon_engine/
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
 - **Shared data model across apps**: The standalone game and standalone editor both read the same area/entity JSON format.
 - **Project manifests**: `project.json` defines `entity_paths`, `asset_paths`, and `area_paths`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Path-derived reusable IDs**: Areas, named commands, and dialogue assets derive identity from their path under the configured search roots instead of authored `id` fields.
 - **Tileset discovery**: The editor browses PNG assets recursively from the active project's asset paths, but a room only stores the tilesets it actually uses.
 - **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
 
@@ -100,6 +104,8 @@ dungeon_engine/
 **Changing how tiles/areas work**: Core data model is `world/area.py`. Loading is `world/loader.py`. Saving is `world/serializer.py`.
 
 **Changing project asset/content lookup**: Project search-path behavior lives in `project.py` plus `world/loader.py` and `engine/asset_manager.py`.
+
+**Running focused verification**: Use `.venv/Scripts/python -m unittest discover -s tests -v` for the current built-in regression suite.
 
 ## Gotchas
 

@@ -1777,6 +1777,34 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.command_runner.spawn_background_handle(handle)
         return ImmediateHandle()
 
+    @registry.register("run_commands")
+    def run_commands(
+        context: CommandContext,
+        *,
+        commands: list[dict[str, Any]] | dict[str, Any] | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Run an inline command list on the main lane."""
+        if not commands:
+            return ImmediateHandle()
+        if isinstance(commands, dict):
+            normalized_commands = [dict(commands)]
+        elif isinstance(commands, list):
+            normalized_commands = [dict(command) for command in commands]
+        else:
+            raise TypeError("run_commands requires a dict, list of dicts, or null.")
+        return SequenceCommandHandle(
+            registry,
+            context,
+            normalized_commands,
+            base_params={
+                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
+                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
+            },
+        )
+
     @registry.register("interact_facing")
     def interact_facing(
         context: CommandContext,
@@ -2047,18 +2075,18 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     def change_area(
         context: CommandContext,
         *,
-        area_path: str,
+        area_id: str = "",
         **_: Any,
     ) -> CommandHandle:
         """Queue a transition into another authored area once the command lane is idle."""
         if context.request_area_change is None:
             raise ValueError("Cannot change area without an active area-transition handler.")
 
-        resolved_area_path = str(area_path).strip()
-        if not resolved_area_path:
-            raise ValueError("change_area requires a non-empty area_path.")
+        resolved_reference = str(area_id).strip()
+        if not resolved_reference:
+            raise ValueError("change_area requires a non-empty area_id.")
 
-        context.request_area_change(resolved_area_path)
+        context.request_area_change(resolved_reference)
         return ImmediateHandle()
 
     @registry.register("load_game")
@@ -2375,7 +2403,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if context.world.get_entity(new_entity_id) is not None:
             raise KeyError(f"Cannot spawn duplicate entity '{new_entity_id}'.")
 
-        new_entity = instantiate_entity(entity_data, context.area.tile_size)
+        new_entity = instantiate_entity(
+            entity_data,
+            context.area.tile_size,
+            project=context.project,
+            source_name=f"spawned entity '{new_entity_id}'",
+        )
         context.world.add_entity(new_entity)
         if persistent and context.persistence_runtime is not None:
             context.persistence_runtime.record_spawned_entity(
@@ -2475,6 +2508,127 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 )
         return ImmediateHandle()
 
+    @registry.register("set_var_length")
+    def set_var_length(
+        context: CommandContext,
+        *,
+        name: str,
+        value: Any = None,
+        scope: str = "entity",
+        persistent: bool = False,
+        entity_id: str | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Store the length of a collection-like value."""
+        if value is None:
+            length_value = 0
+        else:
+            try:
+                length_value = len(value)
+            except TypeError as exc:
+                raise TypeError("set_var_length requires a sized value or null.") from exc
+
+        variables = _resolve_variables(
+            context,
+            scope=scope,
+            entity_id=entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        variables[name] = length_value
+        if persistent and context.persistence_runtime is not None:
+            if scope == "world":
+                context.persistence_runtime.set_world_variable(name, length_value)
+            else:
+                if entity_id is None:
+                    raise ValueError("Persistent entity variable set requires entity_id.")
+                resolved_id = _resolve_entity_id(
+                    entity_id,
+                    source_entity_id=source_entity_id,
+                    actor_entity_id=actor_entity_id,
+                )
+                entity = context.world.get_entity(resolved_id)
+                if entity is None:
+                    raise KeyError(f"Cannot persist variable on missing entity '{resolved_id}'.")
+                context.persistence_runtime.set_entity_variable(
+                    resolved_id,
+                    name,
+                    length_value,
+                    entity=entity,
+                    tile_size=context.area.tile_size,
+                )
+        return ImmediateHandle()
+
+    @registry.register("set_var_from_collection_item")
+    def set_var_from_collection_item(
+        context: CommandContext,
+        *,
+        name: str,
+        value: Any = None,
+        index: int | None = None,
+        key: str | None = None,
+        default: Any = None,
+        scope: str = "entity",
+        persistent: bool = False,
+        entity_id: str | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Store one item from a list/tuple or dict into a variable."""
+        extracted_value = copy.deepcopy(default)
+        if key is not None:
+            if value is None:
+                extracted_value = copy.deepcopy(default)
+            elif not isinstance(value, dict):
+                raise TypeError("set_var_from_collection_item with key requires a dict value.")
+            elif key in value:
+                extracted_value = copy.deepcopy(value[key])
+        else:
+            if index is None:
+                raise ValueError("set_var_from_collection_item requires either key or index.")
+            if value is None:
+                extracted_value = copy.deepcopy(default)
+            elif not isinstance(value, (list, tuple)):
+                raise TypeError("set_var_from_collection_item with index requires a list or tuple value.")
+            else:
+                resolved_index = int(index)
+                if 0 <= resolved_index < len(value):
+                    extracted_value = copy.deepcopy(value[resolved_index])
+
+        variables = _resolve_variables(
+            context,
+            scope=scope,
+            entity_id=entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+        )
+        variables[name] = extracted_value
+        if persistent and context.persistence_runtime is not None:
+            if scope == "world":
+                context.persistence_runtime.set_world_variable(name, extracted_value)
+            else:
+                if entity_id is None:
+                    raise ValueError("Persistent entity variable set requires entity_id.")
+                resolved_id = _resolve_entity_id(
+                    entity_id,
+                    source_entity_id=source_entity_id,
+                    actor_entity_id=actor_entity_id,
+                )
+                entity = context.world.get_entity(resolved_id)
+                if entity is None:
+                    raise KeyError(f"Cannot persist variable on missing entity '{resolved_id}'.")
+                context.persistence_runtime.set_entity_variable(
+                    resolved_id,
+                    name,
+                    extracted_value,
+                    entity=entity,
+                    tile_size=context.area.tile_size,
+                )
+        return ImmediateHandle()
+
     @registry.register("check_var")
     def check_var(
         context: CommandContext,
@@ -2551,4 +2705,3 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             exclude_tags=exclude_tags,
         )
         return ImmediateHandle()
-

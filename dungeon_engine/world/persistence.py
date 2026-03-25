@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from dungeon_engine.project import ProjectContext
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import Entity
 from dungeon_engine.world.world import World
@@ -64,8 +65,15 @@ class ResetRequest:
 class PersistenceRuntime:
     """Manage live persistent save data plus deferred reset requests."""
 
-    def __init__(self, save_path: Path | None = None, *, load_existing: bool = False) -> None:
+    def __init__(
+        self,
+        save_path: Path | None = None,
+        *,
+        load_existing: bool = False,
+        project: ProjectContext | None = None,
+    ) -> None:
         self.save_path = save_path
+        self.project = project
         self.save_data = (
             load_save_data(save_path)
             if load_existing and save_path is not None
@@ -303,7 +311,11 @@ class PersistenceRuntime:
             raise ValueError("Persisting a spawned entity requires the active area tile size.")
         entity_state = self._ensure_entity_state(entity.entity_id)
         entity_state.removed = False
-        entity_state.spawned = _serialize_saved_entity(entity, tile_size)
+        entity_state.spawned = _serialize_saved_entity(
+            entity,
+            tile_size,
+            project=self.project,
+        )
         entity_state.overrides.clear()
         self.dirty = True
 
@@ -340,13 +352,8 @@ def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
     """Parse a JSON-like dict into structured save data."""
     version = int(raw_data.get("version", SAVE_DATA_VERSION))
     globals_data = copy.deepcopy(raw_data.get("globals", {}))
-    legacy_session_data = copy.deepcopy(raw_data.get("session", {}))
-    current_area = str(
-        raw_data.get("current_area", legacy_session_data.get("current_area_path", ""))
-    ).strip()
-    active_entity = str(
-        raw_data.get("active_entity", legacy_session_data.get("active_entity_id", ""))
-    ).strip()
+    current_area = str(raw_data.get("current_area", "")).strip()
+    active_entity = str(raw_data.get("active_entity", "")).strip()
     areas = _load_area_state_mapping(raw_data.get("areas", {}))
 
     return SaveData(
@@ -401,7 +408,13 @@ def select_entity_ids_by_tags(
     return matched_ids
 
 
-def apply_persistent_area_state(area: Area, world: World, area_state: PersistentAreaState) -> None:
+def apply_persistent_area_state(
+    area: Area,
+    world: World,
+    area_state: PersistentAreaState,
+    *,
+    project: ProjectContext | None = None,
+) -> None:
     """Layer persistent overrides on top of a freshly loaded authored room."""
     if area_state.variables:
         world.variables.update(copy.deepcopy(area_state.variables))
@@ -413,7 +426,11 @@ def apply_persistent_area_state(area: Area, world: World, area_state: Persistent
 
         entity = world.get_entity(entity_id)
         if entity_state.spawned is not None:
-            entity = _instantiate_saved_entity(entity_state.spawned, area.tile_size)
+            entity = _instantiate_saved_entity(
+                entity_state.spawned,
+                area.tile_size,
+                project=project,
+            )
             world.add_entity(entity)
 
         if entity is None:
@@ -425,6 +442,8 @@ def capture_current_area_state(
     area: Area,
     base_world: World,
     current_world: World,
+    *,
+    project: ProjectContext | None = None,
 ) -> PersistentAreaState | None:
     """Capture the exact saved diff for the current area over its persistent base."""
     return _capture_area_state(
@@ -433,6 +452,7 @@ def capture_current_area_state(
         current_world,
         include_player=True,
         include_spawned_entities=True,
+        project=project,
     )
 
 
@@ -440,6 +460,8 @@ def capture_persistent_area_state(
     area: Area,
     authored_world: World,
     current_world: World,
+    *,
+    project: ProjectContext | None = None,
 ) -> PersistentAreaState | None:
     """Capture persistent overrides by comparing current runtime state to authored defaults."""
     return _capture_area_state(
@@ -448,6 +470,7 @@ def capture_persistent_area_state(
         current_world,
         include_player=False,
         include_spawned_entities=False,
+        project=project,
     )
 
 
@@ -456,9 +479,16 @@ def update_save_data_for_area(
     area: Area,
     authored_world: World,
     current_world: World,
+    *,
+    project: ProjectContext | None = None,
 ) -> None:
     """Refresh one area's persistent save entry from the current runtime state."""
-    area_state = capture_persistent_area_state(area, authored_world, current_world)
+    area_state = capture_persistent_area_state(
+        area,
+        authored_world,
+        current_world,
+        project=project,
+    )
     if area_state is None:
         save_data.areas.pop(area.area_id, None)
         return
@@ -539,18 +569,33 @@ def _area_state_mapping_to_dict(areas: dict[str, PersistentAreaState]) -> dict[s
     return serialized
 
 
-def _instantiate_saved_entity(entity_data: dict[str, Any], tile_size: int) -> Entity:
+def _instantiate_saved_entity(
+    entity_data: dict[str, Any],
+    tile_size: int,
+    *,
+    project: ProjectContext | None = None,
+) -> Entity:
     """Create an entity instance from saved serialized entity data."""
     from dungeon_engine.world.loader import instantiate_entity
 
-    return instantiate_entity(copy.deepcopy(entity_data), tile_size)
+    return instantiate_entity(
+        copy.deepcopy(entity_data),
+        tile_size,
+        project=project,
+        source_name="<saved entity>",
+    )
 
 
-def _serialize_saved_entity(entity: Entity, tile_size: int) -> dict[str, Any]:
+def _serialize_saved_entity(
+    entity: Entity,
+    tile_size: int,
+    *,
+    project: ProjectContext | None = None,
+) -> dict[str, Any]:
     """Serialize one runtime entity for save-state storage."""
     from dungeon_engine.world.serializer import serialize_entity_instance
 
-    return serialize_entity_instance(entity, tile_size)
+    return serialize_entity_instance(entity, tile_size, project=project)
 
 
 def _capture_area_state(
@@ -560,6 +605,7 @@ def _capture_area_state(
     *,
     include_player: bool,
     include_spawned_entities: bool,
+    project: ProjectContext | None = None,
 ) -> PersistentAreaState | None:
     """Capture one area diff against authored data with configurable scope."""
     area_state = PersistentAreaState()
@@ -597,7 +643,11 @@ def _capture_area_state(
             if current_entity.entity_id in authored_entities:
                 continue
             area_state.entities[current_entity.entity_id] = PersistentEntityState(
-                spawned=_serialize_saved_entity(current_entity, area.tile_size),
+                spawned=_serialize_saved_entity(
+                    current_entity,
+                    area.tile_size,
+                    project=project,
+                ),
             )
 
     if not area_state.variables and not area_state.entities:

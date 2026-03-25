@@ -13,15 +13,20 @@ import copy
 import math
 from typing import Any
 
+from dungeon_engine.project import ProjectContext
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.loader import instantiate_entity
 from dungeon_engine.world.world import World
 
 
-def serialize_area(area: Area, world: World) -> dict[str, Any]:
+def serialize_area(
+    area: Area,
+    world: World,
+    *,
+    project: ProjectContext | None = None,
+) -> dict[str, Any]:
     """Convert the editable area and world state into JSON-serializable data."""
     return {
-        "area_id": area.area_id,
         "name": area.name,
         "tile_size": area.tile_size,
         "player_id": world.player_id,
@@ -47,7 +52,7 @@ def serialize_area(area: Area, world: World) -> dict[str, Any]:
             for row in area.cell_flags
         ],
         "entities": [
-            serialize_entity_instance(entity, area.tile_size)
+            serialize_entity_instance(entity, area.tile_size, project=project)
             for entity in sorted(
                 world.iter_entities(include_absent=True),
                 key=world.entity_sort_key,
@@ -77,7 +82,12 @@ def _serialize_cell_flags(cell_flags: dict[str, Any]) -> bool | dict[str, Any]:
     return dict(cell_flags)
 
 
-def serialize_entity_instance(entity: Any, tile_size: int) -> dict[str, Any]:
+def serialize_entity_instance(
+    entity: Any,
+    tile_size: int,
+    *,
+    project: ProjectContext | None = None,
+) -> dict[str, Any]:
     """Persist either a template instance or a fully inline entity definition."""
     data: dict[str, Any] = {
         "id": entity.entity_id,
@@ -90,7 +100,7 @@ def serialize_entity_instance(entity: Any, tile_size: int) -> dict[str, Any]:
         data["template"] = entity.template_id
         if entity.template_parameters:
             data["parameters"] = copy.deepcopy(entity.template_parameters)
-        data.update(_serialize_template_entity_overrides(entity, tile_size))
+        data.update(_serialize_template_entity_overrides(entity, tile_size, project=project))
         return data
 
     data.update(_serialize_runtime_entity_fields(entity, tile_size))
@@ -101,7 +111,12 @@ def serialize_entity_instance(entity: Any, tile_size: int) -> dict[str, Any]:
     return data
 
 
-def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[str, Any]:
+def _serialize_template_entity_overrides(
+    entity: Any,
+    tile_size: int,
+    *,
+    project: ProjectContext | None = None,
+) -> dict[str, Any]:
     """Persist only explicit authored overrides for a template instance.
 
     Generated data like resolved command chains should not leak back into room
@@ -117,6 +132,8 @@ def _serialize_template_entity_overrides(entity: Any, tile_size: int) -> dict[st
             "parameters": copy.deepcopy(entity.template_parameters),
         },
         tile_size,
+        project=project,
+        source_name=f"template reference '{entity.entity_id}'",
     )
 
     overrides: dict[str, Any] = {}

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from dungeon_engine import config
+from dungeon_engine.project import ProjectContext
 from dungeon_engine.world.area import Area, TileLayer, Tileset
 from dungeon_engine.world.entity import Entity
 from dungeon_engine.world.loader import (
@@ -28,15 +29,10 @@ from dungeon_engine.world.serializer import serialize_area
 from dungeon_engine.world.world import World
 
 
-def list_tileset_paths() -> list[str]:
-    """Scan the asset directory recursively for PNG files.
-
-    Uses the active project context from the loader module if available.
-    """
-    from dungeon_engine.world.loader import _active_project
-
-    if _active_project is not None:
-        return _active_project.list_tileset_paths()
+def list_tileset_paths(project: ProjectContext | None = None) -> list[str]:
+    """Scan the active project's asset roots recursively for PNG files."""
+    if project is not None:
+        return project.list_tileset_paths()
 
     if not config.ASSETS_DIR.exists():
         return []
@@ -53,6 +49,7 @@ class LevelEditor:
     area_path: Path
     area: Area
     world: World
+    project: ProjectContext | None = None
     asset_manager: Any = None
     mode: str = "paint"
     paint_submode: str = "tile"
@@ -88,8 +85,8 @@ class LevelEditor:
     def refresh_catalogs(self) -> None:
         """Refresh tileset and template lists when content definitions change."""
         current_tileset_path = self.current_tileset_path if self.available_tileset_paths else None
-        self.available_tileset_paths = list_tileset_paths()
-        self.template_ids = list_entity_template_ids()
+        self.available_tileset_paths = list_tileset_paths(self.project)
+        self.template_ids = list_entity_template_ids(self.project)
         self.selected_template_index %= max(1, len(self.template_ids))
         self.selected_layer_index %= max(1, len(self.area.tile_layers))
 
@@ -322,18 +319,24 @@ class LevelEditor:
                 "y": grid_y,
             },
             self.area.tile_size,
+            project=self.project,
+            source_name="<preview entity>",
         )
 
     def save(self) -> None:
         """Write the editable document to disk."""
-        data = serialize_area(self.area, self.world)
+        data = serialize_area(self.area, self.world, project=self.project)
         self.area_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         self.dirty = False
         self.status_message = f"Saved {self.area_path.name}"
 
     def reload_from_disk(self) -> None:
         """Discard unsaved changes and reload the document from its JSON file."""
-        self.area, self.world = load_area(self.area_path, asset_manager=self.asset_manager)
+        self.area, self.world = load_area(
+            self.area_path,
+            asset_manager=self.asset_manager,
+            project=self.project,
+        )
         self._normalize_all_stack_orders()
         self.refresh_catalogs()
         player = self.world.get_player()
@@ -578,7 +581,7 @@ class LevelEditor:
         entity_id = self.world.generate_entity_id(template_id)
 
         # Seed parameters from the template so the editor exposes them
-        param_names = extract_template_parameter_names(template_id)
+        param_names = extract_template_parameter_names(template_id, project=self.project)
         parameters = {name: "" for name in param_names}
 
         entity = instantiate_entity(
@@ -591,6 +594,8 @@ class LevelEditor:
                 "parameters": parameters,
             },
             self.area.tile_size,
+            project=self.project,
+            source_name=f"placed entity '{entity_id}'",
         )
         self.world.add_entity(entity)
         self.selected_entity_id = entity_id
@@ -624,6 +629,8 @@ class LevelEditor:
                 "parameters": copy.deepcopy(previous_parameters),
             },
             self.area.tile_size,
+            project=self.project,
+            source_name=f"template refresh '{entity.entity_id}' (previous)",
         )
         rebuilt_entity = instantiate_entity(
             {
@@ -631,6 +638,8 @@ class LevelEditor:
                 "parameters": copy.deepcopy(entity.template_parameters),
             },
             self.area.tile_size,
+            project=self.project,
+            source_name=f"template refresh '{entity.entity_id}'",
         )
 
         # Keep placement/editor-managed overrides when they intentionally differ

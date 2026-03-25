@@ -29,11 +29,11 @@ If you are new to the codebase, this is the shortest accurate summary:
   - the engine wraps, paginates, and windows text
   - UI entities decide when to read, advance, reset, and render it
 - `run_dialogue` still exists as a simple text-only helper
-- sample dialogue choices are handled by a focused `dialogue_ui` entity plus named commands under `commands/dialogue/`
-- the project starts in `projects/test_project/areas/title_screen.json`
+- sample dialogue and choices are handled by a focused `dialogue_ui` entity with two public entry events: `show_message` and `show_choice_dialogue`
+- the project startup area id is `title_screen`
 - `New Game` leads into `projects/test_project/areas/village_square.json`
 - `village_square` connects to `projects/test_project/areas/village_house.json`
-- startup validation blocks launch on malformed/duplicate command-library problems
+- startup validation blocks launch on malformed or duplicate reusable content plus invalid startup-area ids
 - named commands are indexed into an in-memory project database at startup
 - `logs/error.log` is the main runtime/debug log
 
@@ -93,14 +93,15 @@ Windows launchers also exist:
 Launcher behavior:
 
 - if you pass `--project`, that project is used directly
-- if you also pass an area path, that area opens directly
-- if you pass only a project, the engine uses `startup_area` from `project.json`
+- if you also pass an area id or path, that area opens directly
+- if you pass only a project, the engine uses the path-derived `startup_area` id from `project.json`
 - if you pass nothing, the launcher opens file pickers rooted at the last used location
 
 Examples:
 
 ```text
 .venv/Scripts/python run_game.py --project projects/test_project
+.venv/Scripts/python run_game.py --project projects/test_project title_screen
 .venv/Scripts/python run_game.py --project projects/test_project areas/village_square.json
 .venv/Scripts/python run_editor.py --project projects/test_project
 ```
@@ -171,7 +172,7 @@ Example:
   "command_paths": ["commands/"],
   "dialogue_paths": ["dialogues/"],
   "variables_path": "variables.json",
-  "startup_area": "areas/title_screen.json",
+  "startup_area": "title_screen",
   "active_entity_id": "player",
   "debug_inspection_enabled": true,
   "input_events": {
@@ -251,7 +252,6 @@ Dialogue text lives in dedicated JSON files under `dialogues/`.
 
 Current dialogue assets may define:
 
-- `id`
 - `text`
 - or `pages`
 
@@ -259,7 +259,6 @@ Example:
 
 ```json
 {
-  "id": "signs/gate_hint",
   "text": "Sign: The old path is sealed. Pull the lever to open the gate."
 }
 ```
@@ -267,11 +266,12 @@ Example:
 ### Named Command Assets
 
 Reusable project commands live under `commands/`.
+Entity-specific controller logic should stay on the entity itself as local events.
 
 These are JSON command libraries addressed by path-based ids, for example:
 
-- `dialogue/sign_gate_hint`
-- `dialogue/blue_guide_open`
+- `attempt_move_one_tile`
+- `push_one_tile`
 
 The engine loads them through `run_named_command`.
 
@@ -494,20 +494,16 @@ into the engine.
 
 ### Choices
 
-Current choices are command-driven in the sample project.
+Current choices are still JSON-authored in the sample project.
 
-The engine does not own a generic choice-menu command.
+The engine still does not own a baked generic choice-menu subsystem.
 
 Instead:
 
-- the command chain creates separate screen-text elements for each option
-- the selected option can start a marquee-style long-text session
-- a focused `dialogue_ui` entity becomes the active input receiver
-- its `move_up`, `move_down`, and `interact` events run named commands that:
-  - update the selected index
-  - update scroll offset when there are more than three choices
-  - redraw the choice lines
-  - confirm the selected branch
+- callers open the shared `dialogue_ui` entity through `show_choice_dialogue`
+- choices are passed as a JSON list of `{ "text", "commands" }` objects
+- `dialogue_ui` becomes the active input receiver while open
+- its local events handle selection, scrolling, marquee playback for long highlighted text, and confirmation
 
 ## Audio
 
@@ -569,10 +565,14 @@ For detailed controls, see `STATUS.md`.
 
 At startup, the engine validates:
 
+- malformed area files
+- duplicate area ids
+- invalid `startup_area` ids in `project.json`
+- malformed entity templates
 - malformed named-command files
 - duplicate command ids
 - malformed dialogue files
-- duplicate dialogue ids when looked up
+- duplicate dialogue ids
 - literal missing command references where validation can prove they are missing
 
 Errors go to:
@@ -603,8 +603,7 @@ Useful sample files:
 - `projects/test_project/entities/area_door.json`
 - `projects/test_project/entities/save_point.json`
 - `projects/test_project/entities/dialogue_ui.json`
-- `projects/test_project/commands/dialogue/`
-- `projects/test_project/commands/title/`
+- `projects/test_project/commands/`
 - `projects/test_project/dialogues/`
 
 ## Current Limits

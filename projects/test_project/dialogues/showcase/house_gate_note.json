@@ -1,4 +1,4 @@
 {
-  "id": "showcase/house_gate_note",
   "text": "Mechanism note: The lever and gate use persistent changes. Once opened, the gate stays open after you leave the room and after you save and load."
 }
+

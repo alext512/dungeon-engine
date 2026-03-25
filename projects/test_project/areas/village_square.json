@@ -1,5 +1,4 @@
 {
-  "area_id": "village_square",
   "name": "Village Square",
   "tile_size": 16,
   "player_id": "player",
@@ -105,9 +104,9 @@
       "id": "village_note",
       "x": 12,
       "y": 8,
-      "template": "showcase_sign",
+      "template": "sign",
       "parameters": {
-        "dialogue_event": "open_showcase_village_note"
+        "dialogue_id": "showcase/village_square_note"
       }
     },
     {
@@ -121,3 +120,4 @@
     }
   ]
 }
+

@@ -1,5 +1,4 @@
 {
-  "id": "walk_one_tile",
   "params": [
     "direction",
     "phase_a_frames",
@@ -70,3 +69,4 @@
     }
   ]
 }
+

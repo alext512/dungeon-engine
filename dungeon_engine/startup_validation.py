@@ -7,6 +7,19 @@ from dungeon_engine.commands.library import (
     log_named_command_validation_error,
     validate_project_named_commands,
 )
+from dungeon_engine.dialogue_library import (
+    DialogueValidationError,
+    log_dialogue_validation_error,
+    validate_project_dialogues,
+)
+from dungeon_engine.world.loader import (
+    AreaValidationError,
+    EntityTemplateValidationError,
+    log_area_validation_error,
+    log_entity_template_validation_error,
+    validate_project_areas,
+    validate_project_entity_templates,
+)
 
 
 def validate_project_startup(
@@ -14,8 +27,48 @@ def validate_project_startup(
     *,
     ui_title: str,
     show_dialog: bool = True,
-) -> NamedCommandValidationError | None:
-    """Validate project command content and report any startup-blocking errors."""
+) -> (
+    NamedCommandValidationError
+    | EntityTemplateValidationError
+    | AreaValidationError
+    | DialogueValidationError
+    | None
+):
+    """Validate project content and report any startup-blocking errors."""
+    # Validate entity templates.
+    try:
+        validate_project_entity_templates(project)
+    except EntityTemplateValidationError as error:
+        log_entity_template_validation_error(error)
+        message = error.format_user_message()
+        print(message)
+        if show_dialog:
+            _show_error_dialog(ui_title, message)
+        return error
+
+    # Validate areas.
+    try:
+        validate_project_areas(project)
+    except AreaValidationError as error:
+        log_area_validation_error(error)
+        message = error.format_user_message()
+        print(message)
+        if show_dialog:
+            _show_error_dialog(ui_title, message)
+        return error
+
+    # Validate dialogues.
+    try:
+        validate_project_dialogues(project)
+    except DialogueValidationError as error:
+        log_dialogue_validation_error(error)
+        message = error.format_user_message()
+        print(message)
+        if show_dialog:
+            _show_error_dialog(ui_title, message)
+        return error
+
+    # Validate named commands.
     try:
         validate_project_named_commands(project)
         return None
@@ -40,4 +93,3 @@ def _show_error_dialog(title: str, message: str) -> None:
         root.destroy()
     except Exception:
         return
-

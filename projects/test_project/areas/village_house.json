@@ -1,5 +1,4 @@
 {
-  "area_id": "village_house",
   "name": "Village House",
   "tile_size": 16,
   "player_id": "player",
@@ -129,19 +128,20 @@
       "id": "house_block_note",
       "x": 2,
       "y": 8,
-      "template": "showcase_sign",
+      "template": "sign",
       "parameters": {
-        "dialogue_event": "open_showcase_house_block_note"
+        "dialogue_id": "showcase/house_block_note"
       }
     },
     {
       "id": "house_gate_note",
       "x": 13,
       "y": 5,
-      "template": "showcase_sign",
+      "template": "sign",
       "parameters": {
-        "dialogue_event": "open_showcase_house_gate_note"
+        "dialogue_id": "showcase/house_gate_note"
       }
     }
   ]
 }
+

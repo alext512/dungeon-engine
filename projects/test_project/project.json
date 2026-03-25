@@ -5,7 +5,7 @@
   "command_paths": ["commands/"],
   "dialogue_paths": ["dialogues/"],
   "variables_path": "variables.json",
-  "startup_area": "areas/title_screen.json",
+  "startup_area": "title_screen",
   "active_entity_id": "player",
   "debug_inspection_enabled": true,
   "input_events": {
@@ -16,3 +16,4 @@
     "interact": "interact"
   }
 }
+

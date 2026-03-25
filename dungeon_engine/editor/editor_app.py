@@ -1,4 +1,4 @@
-"""Standalone Tiled-like level editor application.
+ï»¿"""Standalone Tiled-like level editor application.
 
 Renders at native resolution in a resizable window with persistent panels
 for tileset browsing, entity management, and property editing.
@@ -87,8 +87,14 @@ class EditorApp:
 
         self.project = project
         self.asset_manager = AssetManager(project=project)
-        area, world = load_area(area_path, asset_manager=self.asset_manager)
-        self.editor = LevelEditor(area_path, area, world, asset_manager=self.asset_manager)
+        area, world = load_area(area_path, asset_manager=self.asset_manager, project=project)
+        self.editor = LevelEditor(
+            area_path,
+            area,
+            world,
+            project=project,
+            asset_manager=self.asset_manager,
+        )
 
         # Layout rects (recomputed on resize)
         self._compute_layout()
@@ -1166,7 +1172,7 @@ class EditorApp:
         self._draw_text("Add Entity", rx, ry, bold=True)
         ry += 20
 
-        # Template selector: [<] button — template name — [>] button — [Add] button
+        # Template selector: [<] button â€” template name â€” [>] button â€” [Add] button
         btn_w = 22
         btn_h = 22
         prev_rect = pygame.Rect(rx, ry, btn_w, btn_h)
@@ -1255,4 +1261,5 @@ class EditorApp:
     def _draw_text_small(self, text: str, x: int, y: int, color: tuple[int, int, int] = config.COLOR_TEXT) -> None:
         surface = self.font_small.render(text, True, color)
         self.display.blit(surface, (x, y))
+
 

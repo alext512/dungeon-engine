@@ -13,9 +13,10 @@
       "commands": [
         {
           "type": "change_area",
-          "area_path": "$target_area"
+          "area_id": "$target_area"
         }
       ]
     }
   }
 }
+

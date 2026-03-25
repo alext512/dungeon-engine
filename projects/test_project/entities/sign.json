@@ -14,7 +14,17 @@
         {
           "type": "run_event",
           "entity_id": "dialogue_ui",
-          "event_id": "open_sign_gate_hint"
+          "event_id": "show_message",
+          "dialogue_id": "$dialogue_id",
+          "text": null,
+          "pages": null,
+          "portrait_path": "",
+          "portrait_frame_width": null,
+          "portrait_frame_height": null,
+          "portrait_frame": 0,
+          "on_start_commands": [],
+          "on_finish_commands": [],
+          "command_source_entity_id": "$source_entity_id"
         }
       ]
     }
