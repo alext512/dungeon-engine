@@ -599,7 +599,7 @@ Your project owns:
   "type": "prepare_text_session",
   "entity_id": "self",
   "session_id": "main_text",
-  "dialogue_id": "signs/gate_hint",
+  "dialogue_id": "showcase/village_square_note",
   "mode": "pages",
   "max_width": "$project.dialogue.plain_box.width",
   "max_lines": "$project.dialogue.max_lines"
@@ -849,12 +849,14 @@ If you want to learn by example, read:
 
 1. `projects/test_project/project.json`
 2. `projects/test_project/variables.json`
-3. `projects/test_project/areas/test_room.json`
-4. `projects/test_project/entities/player.json`
-5. `projects/test_project/entities/sign.json`
-6. `projects/test_project/entities/npc_blue.json`
-7. `projects/test_project/entities/dialogue_ui.json`
-8. `projects/test_project/commands/attempt_move_one_tile.json`
-9. `projects/test_project/commands/walk_one_tile.json`
-10. `projects/test_project/commands/push_one_tile.json`
-11. `projects/test_project/dialogues/`
+3. `projects/test_project/areas/title_screen.json`
+4. `projects/test_project/areas/village_square.json`
+5. `projects/test_project/areas/village_house.json`
+6. `projects/test_project/entities/player.json`
+7. `projects/test_project/entities/area_door.json`
+8. `projects/test_project/entities/sign.json`
+9. `projects/test_project/entities/dialogue_ui.json`
+10. `projects/test_project/commands/attempt_move_one_tile.json`
+11. `projects/test_project/commands/walk_one_tile.json`
+12. `projects/test_project/commands/push_one_tile.json`
+13. `projects/test_project/dialogues/`
