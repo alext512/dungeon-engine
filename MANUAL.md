@@ -31,8 +31,8 @@ If you are new to the codebase, this is the shortest accurate summary:
 - `run_dialogue` still exists as a simple text-only helper
 - sample dialogue and choices are handled by a focused `dialogue_ui` entity with two public entry events: `show_message` and `show_choice_dialogue`
 - the project startup area id is `title_screen`
-- `New Game` leads into `projects/test_project/areas/village_square.json`
-- `village_square` connects to `projects/test_project/areas/village_house.json`
+- `New Game` leads into the area id `village_square`
+- `village_square` connects to the area id `village_house`
 - startup validation blocks launch on malformed or duplicate reusable content plus invalid startup-area ids
 - named commands are indexed into an in-memory project database at startup
 - `logs/error.log` is the main runtime/debug log
@@ -93,8 +93,9 @@ Windows launchers also exist:
 Launcher behavior:
 
 - if you pass `--project`, that project is used directly
-- if you also pass an area id or path, that area opens directly
+- if you also pass an area id, that area opens directly
 - if you pass only a project, the engine uses the path-derived `startup_area` id from `project.json`
+- a valid `project.json` manifest is required; the launcher no longer invents a default project
 - if you pass nothing, the launcher opens file pickers rooted at the last used location
 
 Examples:
@@ -102,7 +103,7 @@ Examples:
 ```text
 .venv/Scripts/python run_game.py --project projects/test_project
 .venv/Scripts/python run_game.py --project projects/test_project title_screen
-.venv/Scripts/python run_game.py --project projects/test_project areas/village_square.json
+.venv/Scripts/python run_game.py --project projects/test_project village_square
 .venv/Scripts/python run_editor.py --project projects/test_project
 ```
 

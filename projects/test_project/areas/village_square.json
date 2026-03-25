@@ -115,7 +115,7 @@
       "y": 5,
       "template": "area_door",
       "parameters": {
-        "target_area": "areas/village_house.json"
+        "target_area": "village_house"
       }
     }
   ]

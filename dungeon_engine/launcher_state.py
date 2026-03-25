@@ -11,7 +11,7 @@ from dungeon_engine import config
 
 @dataclass(slots=True)
 class LauncherState:
-    """Remember the last project/area opened by each standalone launcher."""
+    """Remember the last project and area ids opened by each standalone launcher."""
 
     last_project: str | None = None
     last_game_area: str | None = None

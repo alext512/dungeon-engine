@@ -69,8 +69,8 @@ class PersistenceRuntime:
         self,
         save_path: Path | None = None,
         *,
+        project: ProjectContext,
         load_existing: bool = False,
-        project: ProjectContext | None = None,
     ) -> None:
         self.save_path = save_path
         self.project = project
@@ -413,7 +413,7 @@ def apply_persistent_area_state(
     world: World,
     area_state: PersistentAreaState,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> None:
     """Layer persistent overrides on top of a freshly loaded authored room."""
     if area_state.variables:
@@ -443,7 +443,7 @@ def capture_current_area_state(
     base_world: World,
     current_world: World,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> PersistentAreaState | None:
     """Capture the exact saved diff for the current area over its persistent base."""
     return _capture_area_state(
@@ -461,7 +461,7 @@ def capture_persistent_area_state(
     authored_world: World,
     current_world: World,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> PersistentAreaState | None:
     """Capture persistent overrides by comparing current runtime state to authored defaults."""
     return _capture_area_state(
@@ -480,7 +480,7 @@ def update_save_data_for_area(
     authored_world: World,
     current_world: World,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> None:
     """Refresh one area's persistent save entry from the current runtime state."""
     area_state = capture_persistent_area_state(
@@ -573,7 +573,7 @@ def _instantiate_saved_entity(
     entity_data: dict[str, Any],
     tile_size: int,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> Entity:
     """Create an entity instance from saved serialized entity data."""
     from dungeon_engine.world.loader import instantiate_entity
@@ -590,7 +590,7 @@ def _serialize_saved_entity(
     entity: Entity,
     tile_size: int,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> dict[str, Any]:
     """Serialize one runtime entity for save-state storage."""
     from dungeon_engine.world.serializer import serialize_entity_instance
@@ -605,7 +605,7 @@ def _capture_area_state(
     *,
     include_player: bool,
     include_spawned_entities: bool,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> PersistentAreaState | None:
     """Capture one area diff against authored data with configurable scope."""
     area_state = PersistentAreaState()
@@ -705,8 +705,6 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
                 if event is None:
                     continue
                 event.enabled = bool(event_enabled)
-        elif key == "interact_commands":
-            entity.interact_commands = copy.deepcopy(value)
         elif key == "sprite":
             _apply_sprite_override(entity, value)
         else:

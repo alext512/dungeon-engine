@@ -100,7 +100,7 @@
       "y": 10,
       "template": "area_door",
       "parameters": {
-        "target_area": "areas/village_square.json"
+        "target_area": "village_square"
       }
     },
     {

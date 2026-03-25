@@ -26,8 +26,6 @@ cd python_puzzle_engine
 
 Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 
-`main.py` still exists as a thin legacy entry point that forwards into `run_game.py`, but the standalone launchers are the preferred workflow.
-
 ## Read These Files (In Order)
 
 | File | What It Tells You |
@@ -46,7 +44,6 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 ## Project Structure
 
 ```text
-main.py                          # Legacy quick-launch game entry point
 run_game.py                      # Preferred standalone game entry point
 run_editor.py                    # Preferred standalone editor entry point
 Run_Game.cmd                     # Windows launcher for the game

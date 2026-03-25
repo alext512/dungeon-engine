@@ -11,7 +11,7 @@ from pathlib import Path
 import pygame
 
 from dungeon_engine import config
-from dungeon_engine.editor.level_editor import LevelEditor, list_tileset_paths
+from dungeon_engine.editor.level_editor import LevelEditor
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.camera import Camera
 from dungeon_engine.world.area import Area
@@ -67,10 +67,11 @@ class EditorApp:
     TILESET_ZOOM = 2  # Zoom for tileset frames in the left panel
     FACING_CYCLE = ("up", "right", "down", "left")
 
-    def __init__(self, area_path: Path, project: "ProjectContext | None" = None) -> None:
+    def __init__(self, area_path: Path, project: "ProjectContext") -> None:
         from dungeon_engine.project import ProjectContext  # noqa: F811
 
         pygame.init()
+        area_id = project.area_path_to_reference(area_path)
 
         # Pick a sensible initial size: 80% of the desktop, clamped to minimum
         info = pygame.display.Info()
@@ -78,7 +79,7 @@ class EditorApp:
         init_h = max(self.MIN_HEIGHT, int(info.current_h * 0.80))
 
         self.display = pygame.display.set_mode((init_w, init_h), pygame.RESIZABLE)
-        pygame.display.set_caption(f"Editor - {area_path.stem}")
+        pygame.display.set_caption(f"Editor - {area_id}")
         self.clock = pygame.time.Clock()
 
         # Track live window size (updated on resize)

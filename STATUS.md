@@ -22,9 +22,9 @@ If you only need the current reality quickly:
 - engine code is under `dungeon_engine/`
 - sample content is under `projects/test_project/`
 - gameplay behavior is mostly authored in JSON commands and entity events
-- the project now boots into `projects/test_project/areas/title_screen.json`
-- the first playable showcase area is `projects/test_project/areas/village_square.json`
-- the connected interior example is `projects/test_project/areas/village_house.json`
+- the project now boots into the path-derived area id `title_screen`
+- the first playable showcase area id is `village_square`
+- the connected interior example area id is `village_house`
 - shared project values are in `projects/test_project/variables.json`
 - player movement is authored in `projects/test_project/entities/player.json`
 - dialogue text lives in `projects/test_project/dialogues/`
@@ -45,7 +45,7 @@ If you only need the current reality quickly:
 - generated test asset sheets for tiles and sprites
 - layered tilemaps with separate walkability cell flags
 - reusable entity templates with per-instance parameters
-- template entity saves that keep generated command data in the template instead of writing resolved `interact_commands` into room JSON
+- template entity saves that keep generated runtime data out of authored room JSON
 - pixel-art rendering mode with snapped camera/draw positions
 - standalone resizable editor with tileset browser, map canvas, and inspector panels
 - paint/select editor workflow
@@ -72,7 +72,7 @@ If you only need the current reality quickly:
 - UI/editor text rendered through the custom `pixelbet` bitmap font atlas
 - persistent rotating error log in `logs/error.log`
 - reusable project-level named command libraries loaded from `command_paths`
-- startup validation for named command libraries (duplicate ids, malformed files, and literal missing references)
+- startup validation for areas, entity templates, dialogue assets, and named command libraries
 - startup-built in-memory named-command database reused by runtime `run_named_command` lookups
 - variable system with `set_var`, `increment_var`, and `check_var` commands (entity and world scopes)
 - `check_var` supports conditional branching with `then`/`else` command lists
@@ -80,7 +80,7 @@ If you only need the current reality quickly:
 - `lever_toggle` entity template demonstrating toggle behavior via variables
 - persistent save-slot state layered over authored room data
 - in-memory live persistent state that tracks gameplay changes without auto-writing a save file
-- stable `area_id` support for room-level persistence
+- path-derived area ids for room-level persistence
 - persistent command updates for entity fields and variables
 - generic `set_entity_field` command for runtime-safe entity field mutation
 - text-session primitives for UI-driven paged and marquee text flow

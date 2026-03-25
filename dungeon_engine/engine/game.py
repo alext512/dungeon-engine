@@ -38,21 +38,13 @@ from dungeon_engine.world.serializer import serialize_area
 class Game:
     """Own the play-mode runtime loop."""
 
-    def __init__(self, area_path: Path | None = None, project: "ProjectContext | None" = None) -> None:
+    def __init__(self, area_path: Path, project: "ProjectContext") -> None:
         from dungeon_engine.project import ProjectContext  # noqa: F811
 
         pygame.init()
 
-        self.internal_width = (
-            max(1, int(project.internal_width))
-            if project is not None
-            else config.INTERNAL_WIDTH
-        )
-        self.internal_height = (
-            max(1, int(project.internal_height))
-            if project is not None
-            else config.INTERNAL_HEIGHT
-        )
+        self.internal_width = max(1, int(project.internal_width))
+        self.internal_height = max(1, int(project.internal_height))
         self.output_scale = config.SCALE
         self.display_surface = pygame.display.set_mode(
             self._window_size_for_scale(self.output_scale)
@@ -62,12 +54,10 @@ class Game:
         self.fixed_timestep = config.FIXED_TIMESTEP_SECONDS
         self._accumulated_time = 0.0
         self._max_catchup_ticks = 5
-        self.debug_inspection_enabled = bool(project.debug_inspection_enabled) if project is not None else False
+        self.debug_inspection_enabled = bool(project.debug_inspection_enabled)
         self.simulation_paused = False
         self.simulation_tick_count = 0
 
-        if area_path is None:
-            raise ValueError("Game requires an explicit area path. Use run_game.py or Run_Game.cmd.")
         self.area_path = Path(area_path)
         self.project = project
         self.asset_manager = AssetManager(project=project)
@@ -85,8 +75,7 @@ class Game:
         self.camera: Camera | None = None
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
-        if self.project is not None:
-            build_named_command_database(self.project)
+        build_named_command_database(self.project)
 
         self.collision_system: CollisionSystem | None = None
         self.interaction_system: InteractionSystem | None = None
@@ -239,9 +228,9 @@ class Game:
         )
         command_context.input_handler = self.input_handler
 
-    def request_area_change(self, area_path: str | Path) -> None:
-        """Queue a transition into another authored area."""
-        self._pending_area_change_path = self._resolve_area_path(area_path)
+    def request_area_change(self, area_id: str) -> None:
+        """Queue a transition into another authored area by area id."""
+        self._pending_area_change_path = self._resolve_area_path(area_id)
         self._pending_load_save_path = None
 
     def request_load_game(self, save_path: str | None = None) -> None:
@@ -313,22 +302,21 @@ class Game:
         self._install_play_runtime()
 
     def _resolve_area_path(self, area_path: Path | str) -> Path:
-        """Resolve an area reference (ID or path) against the active project.
+        """Resolve an area reference (ID or already-resolved path).
 
-        Authored references resolve by strict path-derived area id. Direct
-        filesystem paths are still accepted for launch/editor entry points.
+        Authored references resolve by strict path-derived area id. ``Path``
+        inputs are reserved for internal callers that already hold a resolved
+        area file.
         """
         if isinstance(area_path, str):
             reference = area_path.strip()
-            if self.project is not None:
-                resolved = self.project.resolve_area_reference(reference)
-                if resolved is not None:
-                    return resolved
-                raise FileNotFoundError(
-                    f"Cannot resolve authored area id '{reference}' in project '{self.project.project_root}'."
-                )
+            resolved = self.project.resolve_area_reference(reference)
+            if resolved is not None:
+                return resolved
+            raise FileNotFoundError(
+                f"Cannot resolve authored area id '{reference}' in project '{self.project.project_root}'."
+            )
 
-        # Fallback for no-project mode or unresolved references.
         raw_path = Path(area_path)
         candidate_inputs = [raw_path]
         if raw_path.suffix.lower() != ".json":
@@ -362,7 +350,7 @@ class Game:
 
     def _project_save_dir(self) -> Path:
         """Return the active project's save-root directory, creating it when needed."""
-        save_dir = self.project.save_dir if self.project is not None else config.SAVES_DIR
+        save_dir = self.project.save_dir
         save_dir.mkdir(parents=True, exist_ok=True)
         return save_dir.resolve()
 
@@ -608,8 +596,6 @@ class Game:
         """Return a stable project-relative reference for the currently loaded area."""
         return (
             self.project.area_path_to_reference(self.area_path)
-            if self.project is not None
-            else str(self.area_path.resolve())
         )
 
     def _write_save_slot(self, save_path: Path) -> None:
@@ -658,7 +644,7 @@ class Game:
         if current_area_path:
             return self._resolve_area_path(current_area_path)
 
-        startup_area = self.project.startup_area if self.project is not None else None
+        startup_area = self.project.startup_area
         if startup_area:
             return self._resolve_area_path(startup_area)
         return self.area_path.resolve()
