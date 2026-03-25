@@ -23,7 +23,7 @@ def serialize_area(
     area: Area,
     world: World,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> dict[str, Any]:
     """Convert the editable area and world state into JSON-serializable data."""
     return {
@@ -86,7 +86,7 @@ def serialize_entity_instance(
     entity: Any,
     tile_size: int,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> dict[str, Any]:
     """Persist either a template instance or a fully inline entity definition."""
     data: dict[str, Any] = {
@@ -115,7 +115,7 @@ def _serialize_template_entity_overrides(
     entity: Any,
     tile_size: int,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> dict[str, Any]:
     """Persist only explicit authored overrides for a template instance.
 

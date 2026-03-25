@@ -296,7 +296,6 @@ projects/
         commands/
 
 dungeon_engine/
-    main.py
     config.py
 
     engine/

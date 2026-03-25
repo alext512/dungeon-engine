@@ -442,37 +442,6 @@ class ProjectContext:
             return None
         return self.find_area_by_id(reference)
 
-    def resolve_area_path(self, area_path: str | Path) -> Path | None:
-        """Resolve an authored area path against this project's configured roots."""
-        raw_path = Path(area_path)
-        candidate_inputs = [raw_path]
-        if raw_path.suffix.lower() != ".json":
-            candidate_inputs.append(raw_path.with_suffix(".json"))
-
-        candidates: list[Path] = []
-        seen: set[Path] = set()
-
-        def _record(candidate: Path) -> None:
-            resolved = candidate.resolve()
-            if resolved in seen:
-                return
-            seen.add(resolved)
-            candidates.append(candidate)
-
-        for candidate_input in candidate_inputs:
-            if candidate_input.is_absolute():
-                _record(candidate_input)
-                continue
-
-            _record(self.project_root / candidate_input)
-            for area_dir in self.area_paths:
-                _record(area_dir / candidate_input)
-
-        for candidate in candidates:
-            if candidate.is_file():
-                return candidate.resolve()
-        return None
-
     def area_path_to_reference(self, area_path: str | Path) -> str:
         """Return a stable area reference suitable for save data.
 
@@ -532,10 +501,10 @@ def load_project(project_path: Path) -> ProjectContext:
 
     project_root = project_file.parent.resolve()
 
-    if project_file.exists():
-        raw: dict[str, Any] = json.loads(project_file.read_text(encoding="utf-8"))
-    else:
-        raw = {}
+    if not project_file.is_file():
+        raise FileNotFoundError(f"Project manifest '{project_file}' was not found.")
+
+    raw: dict[str, Any] = json.loads(project_file.read_text(encoding="utf-8"))
 
     def _resolve_paths(key: str, default_name: str) -> list[Path]:
         entries = raw.get(key, [])
@@ -567,33 +536,6 @@ def load_project(project_path: Path) -> ProjectContext:
         internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
         internal_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
         input_event_names=_resolve_input_events(raw.get("input_events")),
-    )
-
-
-def default_project(project_root: Path | None = None) -> ProjectContext:
-    """Return a project context using standard folders under the chosen root."""
-    root = (project_root or Path.cwd()).resolve()
-
-    def _optional_dir(path: Path) -> list[Path]:
-        return [path] if path.is_dir() else []
-
-    shared_variables = _load_shared_variables((root / "variables.json") if (root / "variables.json").is_file() else None)
-    return ProjectContext(
-        project_root=root,
-        save_dir=(root / "saves").resolve(),
-        entity_paths=_optional_dir(root / "entities"),
-        asset_paths=_optional_dir(root / "assets"),
-        area_paths=_optional_dir(root / "areas"),
-        command_paths=_optional_dir(root / "commands"),
-        dialogue_paths=_optional_dir(root / "dialogues"),
-        variables_path=(root / "variables.json") if (root / "variables.json").is_file() else None,
-        startup_area=None,
-        active_entity_id="player",
-        debug_inspection_enabled=False,
-        shared_variables=shared_variables,
-        internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
-        internal_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
-        input_event_names=dict(DEFAULT_INPUT_EVENT_NAMES),
     )
 
 

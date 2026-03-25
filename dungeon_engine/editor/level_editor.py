@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dungeon_engine import config
 from dungeon_engine.project import ProjectContext
 from dungeon_engine.world.area import Area, TileLayer, Tileset
 from dungeon_engine.world.entity import Entity
@@ -29,17 +28,9 @@ from dungeon_engine.world.serializer import serialize_area
 from dungeon_engine.world.world import World
 
 
-def list_tileset_paths(project: ProjectContext | None = None) -> list[str]:
+def list_tileset_paths(project: ProjectContext) -> list[str]:
     """Scan the active project's asset roots recursively for PNG files."""
-    if project is not None:
-        return project.list_tileset_paths()
-
-    if not config.ASSETS_DIR.exists():
-        return []
-    return sorted(
-        str(path.relative_to(config.DATA_DIR)).replace("\\", "/")
-        for path in config.ASSETS_DIR.rglob("*.png")
-    )
+    return project.list_tileset_paths()
 
 
 @dataclass(slots=True)
@@ -49,7 +40,7 @@ class LevelEditor:
     area_path: Path
     area: Area
     world: World
-    project: ProjectContext | None = None
+    project: ProjectContext
     asset_manager: Any = None
     mode: str = "paint"
     paint_submode: str = "tile"

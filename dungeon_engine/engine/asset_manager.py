@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from dungeon_engine import config
-
 if TYPE_CHECKING:
     from dungeon_engine.project import ProjectContext
 
@@ -16,12 +14,11 @@ if TYPE_CHECKING:
 class AssetManager:
     """Cache loaded images and sliced frames for the prototype asset pipeline.
 
-    When a :class:`~dungeon_engine.project.ProjectContext` is provided, asset
-    paths are resolved across the project's asset search paths. Otherwise the
-    legacy package-relative fallback is used.
+    Asset paths are always resolved through the active project's configured
+    asset search paths.
     """
 
-    def __init__(self, project: ProjectContext | None = None) -> None:
+    def __init__(self, project: ProjectContext) -> None:
         self._project = project
         self._image_cache: dict[Path, pygame.Surface] = {}
         self._frame_cache: dict[tuple[Path, int, int], list[pygame.Surface]] = {}
@@ -29,12 +26,12 @@ class AssetManager:
 
     def _resolve(self, relative_path: str) -> Path:
         """Turn a relative asset path into an absolute filesystem path."""
-        if self._project is not None:
-            resolved = self._project.resolve_asset(relative_path)
-            if resolved is not None:
-                return resolved
-        # Fallback for compatibility when no project context is provided.
-        return config.DATA_DIR / relative_path
+        resolved = self._project.resolve_asset(relative_path)
+        if resolved is not None:
+            return resolved
+        raise FileNotFoundError(
+            f"Asset '{relative_path}' could not be resolved in project '{self._project.project_root}'."
+        )
 
     def get_frame(
         self,

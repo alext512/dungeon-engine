@@ -1,4 +1,4 @@
-"""Standalone editor entry point - pick a project and area file, then edit."""
+"""Standalone editor entry point - pick a project and area id, then edit."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
         "area",
         nargs="?",
         default=None,
-        help="Authored area id or path to an area JSON file. If omitted, uses the project's startup area or opens a picker.",
+        help="Authored area id. If omitted, uses the project's startup area or opens a picker.",
     )
     parser.add_argument(
         "--project",
@@ -53,14 +53,15 @@ def main() -> int:
         return 1
     update_launcher_state(last_project=str(project_path))
 
-    area_path = _choose_area_path(args.area, project, launcher_state.last_editor_area)
-    if area_path is None:
-        print("No area file selected.")
+    area_id = _choose_area_id(args.area, project, launcher_state.last_editor_area)
+    if area_id is None:
+        print("No area selected.")
         return 0
+    area_path = _resolve_area_id(project, area_id)
 
     update_launcher_state(
         last_project=str(project_path),
-        last_editor_area=str(area_path.resolve()),
+        last_editor_area=area_id,
     )
 
     try:
@@ -85,16 +86,16 @@ def _choose_project_path(cli_project, launcher_state, fallback_dir) -> Path | No
     return _normalize_project_path(picked)
 
 
-def _choose_area_path(cli_area, project, remembered_area) -> Path | None:
-    """Choose an area path from CLI, project startup area, or a picker rooted at the last area location."""
+def _choose_area_id(cli_area, project, remembered_area) -> str | None:
+    """Choose an area id from CLI, project startup area, or a file picker."""
     if cli_area:
         return _resolve_area_argument(project, cli_area)
 
-    startup_area = _resolve_project_startup_area(project)
-    if startup_area is not None:
-        return startup_area
+    startup_area_id = _resolve_project_startup_area(project)
+    if startup_area_id is not None:
+        return startup_area_id
 
-    return _pick_area_file(_default_area_path(project, remembered_area))
+    return _pick_area_id(project, _default_area_id(project, remembered_area))
 
 
 def _pick_project_file(default_path: Path) -> Path | None:
@@ -118,13 +119,14 @@ def _pick_project_file(default_path: Path) -> Path | None:
     return Path(file_path)
 
 
-def _pick_area_file(default_path: Path) -> Path | None:
-    """Open a file dialog to pick an area JSON file."""
+def _pick_area_id(project, default_area_id: str | None) -> str | None:
+    """Open a file dialog to pick an area file, then return its canonical area id."""
     import tkinter as tk
     from tkinter import filedialog
 
     root = tk.Tk()
     root.withdraw()
+    default_path = _default_area_path(project, default_area_id)
 
     file_path = filedialog.askopenfilename(
         title="Select area file",
@@ -136,25 +138,31 @@ def _pick_area_file(default_path: Path) -> Path | None:
 
     if not file_path:
         return None
-    return Path(file_path)
+    return _area_id_from_path(project, Path(file_path))
 
 
-def _resolve_area_argument(project, area_argument: str | Path) -> Path:
-    """Resolve a CLI area argument as an authored id first, then as a path."""
-    if isinstance(area_argument, str):
-        area_reference = area_argument.strip()
-        if area_reference:
-            resolved_reference = project.resolve_area_reference(area_reference)
-            if resolved_reference is not None:
-                return resolved_reference
-        raw_path = Path(area_argument)
-    else:
-        raw_path = area_argument
+def _resolve_area_argument(project, area_argument: str) -> str:
+    """Resolve and canonicalize one authored area id from the CLI."""
+    area_reference = str(area_argument).strip()
+    if not area_reference:
+        raise FileNotFoundError("Area id must not be empty.")
 
-    resolved = project.resolve_area_path(raw_path)
-    if resolved is not None:
-        return resolved
-    return raw_path.resolve()
+    resolved_reference = project.resolve_area_reference(area_reference)
+    if resolved_reference is None:
+        raise FileNotFoundError(
+            f"Cannot resolve authored area id '{area_reference}' in project '{project.project_root}'."
+        )
+    return project.area_path_to_reference(resolved_reference)
+
+
+def _resolve_area_id(project, area_id: str) -> Path:
+    """Resolve one canonical authored area id to its JSON file path."""
+    resolved = project.resolve_area_reference(area_id)
+    if resolved is None:
+        raise FileNotFoundError(
+            f"Cannot resolve authored area id '{area_id}' in project '{project.project_root}'."
+        )
+    return resolved
 
 
 def _normalize_project_path(project_path: Path) -> Path:
@@ -183,38 +191,36 @@ def _default_project_path(launcher_state, fallback_dir) -> Path:
     return Path(fallback_dir) / "test_project" / "project.json"
 
 
-def _resolve_remembered_area(project, remembered_area: str | None) -> Path | None:
-    """Resolve the last-opened editor area against the selected project."""
-    if not remembered_area:
-        return None
-
-    remembered_path = Path(remembered_area)
-    if remembered_path.exists() and _area_belongs_to_project(project, remembered_path.resolve()):
-        return remembered_path.resolve()
-
-    resolved = _resolve_area_argument(project, remembered_path)
-    if resolved.exists() and _area_belongs_to_project(project, resolved):
-        return resolved
-    return None
-
-
-def _default_area_path(project, remembered_area: str | None) -> Path:
-    """Pick a sensible initial area path for the area picker."""
-    remembered = _resolve_remembered_area(project, remembered_area)
-    if remembered is not None:
-        return remembered
+def _default_area_id(project, remembered_area: str | None) -> str | None:
+    """Pick a sensible initial area id for the area picker."""
+    if remembered_area:
+        resolved = project.resolve_area_reference(remembered_area)
+        if resolved is not None:
+            return project.area_path_to_reference(resolved)
 
     startup_area = _resolve_project_startup_area(project)
     if startup_area is not None:
         return startup_area
 
-    area_files = project.list_area_files()
-    if area_files:
-        return area_files[0]
+    area_ids = project.list_area_ids()
+    if area_ids:
+        return area_ids[0]
+    return None
+
+
+def _default_area_path(project, default_area_id: str | None) -> Path:
+    """Resolve the picker default from an area id when possible."""
+    if default_area_id:
+        resolved = project.resolve_area_reference(default_area_id)
+        if resolved is not None:
+            return resolved
+    for area_dir in project.area_paths:
+        if area_dir.is_dir():
+            return area_dir
     return project.project_root
 
 
-def _resolve_project_startup_area(project) -> Path | None:
+def _resolve_project_startup_area(project) -> str | None:
     """Resolve the project's authored startup area id, if any."""
     startup_area = getattr(project, "startup_area", None)
     if not startup_area:
@@ -223,25 +229,18 @@ def _resolve_project_startup_area(project) -> Path | None:
     resolved = project.resolve_area_reference(startup_area)
     if resolved is None:
         return None
-    if resolved.exists() and _area_belongs_to_project(project, resolved):
-        return resolved
-    return None
+    return project.area_path_to_reference(resolved)
 
 
-def _area_belongs_to_project(project, area_path: Path) -> bool:
-    """Return True when an area path is inside one of the project's area roots."""
+def _area_id_from_path(project, area_path: Path) -> str:
+    """Convert a picked area file into its canonical project area id."""
     resolved = area_path.resolve()
-    for area_dir in project.area_paths:
-        try:
-            resolved.relative_to(area_dir.resolve())
-            return True
-        except ValueError:
-            continue
     try:
-        resolved.relative_to(project.project_root.resolve())
-        return True
-    except ValueError:
-        return False
+        return project.area_path_to_reference(resolved)
+    except ValueError as exc:
+        raise FileNotFoundError(
+            f"Selected area '{resolved}' is outside the configured area roots for project '{project.project_root}'."
+        ) from exc
 
 
 if __name__ == "__main__":

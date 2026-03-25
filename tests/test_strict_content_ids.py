@@ -18,6 +18,7 @@ from dungeon_engine.dialogue_library import (
 from dungeon_engine.project import load_project
 from dungeon_engine.world.loader import AreaValidationError, validate_project_areas
 from dungeon_engine.world.persistence import save_data_from_dict
+from dungeon_engine.engine.asset_manager import AssetManager
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -31,9 +32,22 @@ def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
         "tile_size": 16,
         "player_id": "player",
         "variables": {},
-        "tilesets": [],
-        "tile_layers": [],
-        "cell_flags": [],
+        "tilesets": [
+            {
+                "firstgid": 1,
+                "path": "assets/project/tiles/test.png",
+                "tile_width": 16,
+                "tile_height": 16,
+            }
+        ],
+        "tile_layers": [
+            {
+                "name": "ground",
+                "draw_above_entities": False,
+                "grid": [[1]],
+            }
+        ],
+        "cell_flags": [[True]],
         "entities": [],
     }
 
@@ -101,6 +115,13 @@ class StrictContentIdTests(unittest.TestCase):
             any("startup_area 'missing_room'" in issue for issue in raised.exception.issues)
         )
 
+    def test_load_project_requires_manifest(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+
+        with self.assertRaises(FileNotFoundError):
+            load_project(Path(temp_dir.name) / "project.json")
+
     def test_named_command_validation_rejects_authored_id(self) -> None:
         _, project = self._make_project(
             commands={
@@ -136,17 +157,60 @@ class StrictContentIdTests(unittest.TestCase):
             any("must not declare 'id'" in issue for issue in raised.exception.issues)
         )
 
+    def test_area_validation_rejects_legacy_interact_commands(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "entities": [
+                        {
+                            "id": "sign_1",
+                            "kind": "sign",
+                            "x": 1,
+                            "y": 1,
+                            "interact_commands": [{"type": "run_dialogue", "text": "Old schema"}],
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any("interact_commands" in issue and "events.interact" in issue for issue in raised.exception.issues)
+        )
+
     def test_launchers_resolve_startup_area_and_cli_ids(self) -> None:
-        project_root, project = self._make_project(
+        _, project = self._make_project(
             startup_area="intro/title_screen",
             areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
         )
-        expected_path = (project_root / "areas" / "intro" / "title_screen.json").resolve()
 
-        self.assertEqual(run_game._resolve_project_startup_area(project), expected_path)
-        self.assertEqual(run_editor._resolve_project_startup_area(project), expected_path)
-        self.assertEqual(run_game._resolve_area_argument(project, "intro/title_screen"), expected_path)
-        self.assertEqual(run_editor._resolve_area_argument(project, "intro/title_screen"), expected_path)
+        self.assertEqual(run_game._resolve_project_startup_area(project), "intro/title_screen")
+        self.assertEqual(run_editor._resolve_project_startup_area(project), "intro/title_screen")
+        self.assertEqual(run_game._resolve_area_argument(project, "intro/title_screen"), "intro/title_screen")
+        self.assertEqual(run_editor._resolve_area_argument(project, "intro/title_screen"), "intro/title_screen")
+
+    def test_launchers_reject_area_paths_as_cli_arguments(self) -> None:
+        _, project = self._make_project(
+            startup_area="intro/title_screen",
+            areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
+        )
+
+        with self.assertRaises(FileNotFoundError):
+            run_game._resolve_area_argument(project, "areas/intro/title_screen.json")
+
+        with self.assertRaises(FileNotFoundError):
+            run_editor._resolve_area_argument(project, "areas/intro/title_screen.json")
+
+    def test_asset_manager_requires_project_asset_resolution(self) -> None:
+        _, project = self._make_project()
+        asset_manager = AssetManager(project)
+
+        with self.assertRaises(FileNotFoundError):
+            asset_manager.get_image("assets/project/missing.png")
 
     def test_save_data_ignores_removed_legacy_session_fields(self) -> None:
         save_data = save_data_from_dict(

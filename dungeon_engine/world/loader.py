@@ -28,14 +28,15 @@ from dungeon_engine.project import ProjectContext
 
 logger = get_logger(__name__)
 
-_TEMPLATE_CACHE: dict[tuple[Path | None, str], dict[str, Any]] = {}
+_TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
 
 
 def load_area(
     area_path: Path,
+    *,
+    project: ProjectContext,
     asset_manager: Any = None,
     persistent_area_state: PersistentAreaState | None = None,
-    project: ProjectContext | None = None,
 ) -> tuple[Area, World]:
     """Load an area JSON file and build a runtime world for it.
 
@@ -57,10 +58,10 @@ def load_area(
 def load_area_from_data(
     raw_data: dict[str, Any],
     *,
+    project: ProjectContext,
     source_name: str = "<memory>",
     asset_manager: Any = None,
     persistent_area_state: PersistentAreaState | None = None,
-    project: ProjectContext | None = None,
 ) -> tuple[Area, World]:
     """Build a runtime area and world from already-loaded JSON-like data."""
     if not isinstance(raw_data, dict):
@@ -113,9 +114,7 @@ def load_area_from_data(
         field_name="player_id",
         source_name=source_name,
     ) or "player"
-    default_active_entity_id = configured_player_id
-    if project is not None:
-        default_active_entity_id = str(project.active_entity_id or configured_player_id)
+    default_active_entity_id = str(project.active_entity_id or configured_player_id)
     configured_active_entity_id = _optional_string(
         raw_data.get("active_entity_id"),
         field_name="active_entity_id",
@@ -145,7 +144,7 @@ def instantiate_entity(
     entity_instance: dict[str, Any],
     tile_size: int,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
     source_name: str = "<entity>",
 ) -> Entity:
     """Create a runtime entity from an instance definition or template reference."""
@@ -210,14 +209,12 @@ def instantiate_entity(
     return entity
 
 
-def list_entity_template_ids(project: ProjectContext | None = None) -> list[str]:
+def list_entity_template_ids(project: ProjectContext) -> list[str]:
     """Return all available entity template ids in a stable order."""
-    if project is not None:
-        return project.list_entity_template_ids()
-    return sorted(path.stem for path in config.ENTITIES_DIR.glob("*.json"))
+    return project.list_entity_template_ids()
 
 
-def load_entity_template(template_id: str, *, project: ProjectContext | None = None) -> dict[str, Any]:
+def load_entity_template(template_id: str, *, project: ProjectContext) -> dict[str, Any]:
     """Load and cache a reusable entity template by its file name."""
     return _load_entity_template(template_id, project=project)
 
@@ -323,7 +320,7 @@ def _parse_cell_flags(
     width: int,
     height: int,
 ) -> list[list[dict[str, Any]]]:
-    """Parse explicit cell flags or derive them from legacy single-character tiles."""
+    """Parse explicit cell flags or fall back to all-walkable cells."""
     raw_flags = raw_data.get("cell_flags")
     if raw_flags is not None:
         if len(raw_flags) != height or any(len(row) != width for row in raw_flags):
@@ -350,7 +347,7 @@ def _parse_cell_flags(
 def _resolve_entity_instance(
     instance_data: dict[str, Any],
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
     source_name: str,
 ) -> dict[str, Any]:
     """Merge a reusable template with a level-specific instance definition."""
@@ -373,27 +370,18 @@ def _resolve_entity_instance(
     return substituted
 
 
-def _load_entity_template(template_id: str, *, project: ProjectContext | None = None) -> dict[str, Any]:
+def _load_entity_template(template_id: str, *, project: ProjectContext) -> dict[str, Any]:
     """Load and cache a reusable entity template by its path-derived id.
 
     Template ids support subdirectories (e.g. ``"npcs/village_guard"``).
     """
     normalized_id = str(template_id).replace("\\", "/").strip()
-    cache_key = ((project.project_root.resolve() if project is not None else None), normalized_id)
+    cache_key = (project.project_root.resolve(), normalized_id)
     cached = _TEMPLATE_CACHE.get(cache_key)
     if cached is not None:
         return copy.deepcopy(cached)
 
-    template_path: Path | None = None
-    if project is not None:
-        template_path = project.find_entity_template(normalized_id)
-
-    if template_path is None:
-        # Fallback for engine-internal entities when no project is active.
-        candidate = config.ENTITIES_DIR / f"{normalized_id}.json"
-        if candidate.exists():
-            template_path = candidate
-
+    template_path = project.find_entity_template(normalized_id)
     if template_path is None or not template_path.exists():
         raise FileNotFoundError(f"Missing entity template '{normalized_id}'.")
 
@@ -416,7 +404,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 def extract_template_parameter_names(
     template_id: str,
     *,
-    project: ProjectContext | None = None,
+    project: ProjectContext,
 ) -> list[str]:
     """Return the parameter placeholder names used by a template.
 
@@ -480,8 +468,13 @@ def _parse_color(
 
 
 def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
-    """Parse named entity events, wrapping legacy interact_commands when needed."""
+    """Parse named entity events from the authored ``events`` object."""
     parsed_events: dict[str, EntityEvent] = {}
+
+    if "interact_commands" in entity_data:
+        raise ValueError(
+            "Entity data must not use 'interact_commands'; define an 'events.interact' entry instead."
+        )
 
     raw_events = entity_data.get("events", {})
     if isinstance(raw_events, dict):
@@ -501,13 +494,6 @@ def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
                 commands=copy.deepcopy(raw_event.get("commands", [])),
             )
 
-    legacy_interact_commands = entity_data.get("interact_commands", [])
-    if legacy_interact_commands and "interact" not in parsed_events:
-        parsed_events["interact"] = EntityEvent(
-            enabled=True,
-            commands=copy.deepcopy(legacy_interact_commands),
-        )
-
     return parsed_events
 
 
@@ -524,15 +510,13 @@ def _parse_input_map(raw_input_map: Any) -> dict[str, str]:
 def _derive_area_id(
     *,
     source_name: str,
-    project: ProjectContext | None,
+    project: ProjectContext,
     area_name: str | None,
 ) -> str:
     """Return a stable area id from the source path when available."""
     if source_name not in {"", "<memory>"}:
         source_path = Path(source_name)
-        if project is not None:
-            return project.area_id(source_path)
-        return source_path.stem
+        return project.area_id(source_path)
 
     name = (area_name or "untitled_area").strip().lower()
     slug_chars = [

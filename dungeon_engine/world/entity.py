@@ -99,25 +99,6 @@ class Entity:
         self.pixel_x = self.grid_x * tile_size
         self.pixel_y = self.grid_y * tile_size
 
-    @property
-    def interact_commands(self) -> list[dict[str, Any]]:
-        """Backward-compatible access to the interact event command list."""
-        event = self.events.get("interact")
-        if event is None:
-            return []
-        return event.commands
-
-    @interact_commands.setter
-    def interact_commands(self, commands: list[dict[str, Any]]) -> None:
-        """Backward-compatible setter for the interact event command list."""
-        if commands:
-            self.events["interact"] = EntityEvent(
-                enabled=self.events.get("interact", EntityEvent()).enabled,
-                commands=commands,
-            )
-            return
-        self.events.pop("interact", None)
-
     def get_event(self, event_id: str) -> EntityEvent | None:
         """Return a named event definition when it exists."""
         return self.events.get(event_id)

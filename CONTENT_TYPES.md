@@ -90,7 +90,7 @@ extension.
 | File path | Derived ID |
 |---|---|
 | `commands/push_one_tile.json` | `push_one_tile` |
-| `commands/dialogue/blue_guide_intro.json` | `dialogue/blue_guide_intro` |
+| `commands/ui/blue_guide_intro.json` | `ui/blue_guide_intro` |
 | `commands/puzzles/lever_toggle.json` | `puzzles/lever_toggle` |
 
 ### No Explicit ID Field Needed

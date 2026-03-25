@@ -19,6 +19,7 @@ The repo includes a working sample project under [projects/test_project](./proje
 
 - standalone game launcher and standalone level editor
 - project manifests with configurable search paths for areas, entities, commands, dialogues, and assets
+- path-derived IDs for areas, named commands, and dialogue assets
 - layered tilemaps with separate walkability data
 - reusable entity templates with per-instance parameters
 - command runner with primitive engine commands plus reusable project-level named commands
@@ -26,7 +27,7 @@ The repo includes a working sample project under [projects/test_project](./proje
 - dialogue assets, screen-space UI elements, and entity-driven dialogue flow
 - text sessions for paged dialogue text and marquee-style long option text
 - entity-owned input maps plus active-entity focus handoff
-- startup validation for named command libraries
+- startup validation for areas, entity templates, dialogues, and named command libraries
 - persistence foundation with save-slot overrides layered on top of authored room data
 - standalone editor with paint/select workflow, tileset browser, layer management, and entity inspection
 
@@ -45,10 +46,11 @@ Useful files to inspect:
 
 - [projects/test_project/project.json](./projects/test_project/project.json)
 - [projects/test_project/variables.json](./projects/test_project/variables.json)
-- [projects/test_project/areas/test_room.json](./projects/test_project/areas/test_room.json)
+- [projects/test_project/areas/title_screen.json](./projects/test_project/areas/title_screen.json)
+- [projects/test_project/areas/village_square.json](./projects/test_project/areas/village_square.json)
 - [projects/test_project/entities/player.json](./projects/test_project/entities/player.json)
 - [projects/test_project/entities/dialogue_ui.json](./projects/test_project/entities/dialogue_ui.json)
-- [projects/test_project/commands/dialogue](./projects/test_project/commands/dialogue)
+- [projects/test_project/dialogues](./projects/test_project/dialogues)
 
 ## Quick Start
 
@@ -73,6 +75,7 @@ pip install pygame-ce
 
 ```bash
 python run_game.py --project projects/test_project
+python run_game.py --project projects/test_project village_square
 ```
 
 ### Run The Editor

@@ -350,17 +350,22 @@ class TextRenderer:
         )
 
     def _resolve_font_definition_path(self, font_id: str) -> Path:
-        """Resolve a font definition from the active project first, then legacy fallback."""
+        """Resolve a font definition from the active project's asset roots."""
         project = getattr(self.asset_manager, "_project", None)
-        if project is not None:
-            for asset_dir in project.asset_paths:
-                candidate = asset_dir / "fonts" / f"{font_id}.json"
-                if candidate.exists():
-                    return candidate
-                for recursive_candidate in sorted(asset_dir.rglob(f"{font_id}.json")):
-                    if recursive_candidate.is_file():
-                        return recursive_candidate
-        return config.FONTS_DIR / f"{font_id}.json"
+        if project is None:
+            raise FileNotFoundError("Bitmap fonts require an active project context.")
+
+        for asset_dir in project.asset_paths:
+            candidate = asset_dir / "fonts" / f"{font_id}.json"
+            if candidate.exists():
+                return candidate
+            for recursive_candidate in sorted(asset_dir.rglob(f"{font_id}.json")):
+                if recursive_candidate.is_file():
+                    return recursive_candidate
+
+        raise FileNotFoundError(
+            f"Bitmap font '{font_id}' could not be resolved in project '{project.project_root}'."
+        )
 
     def _to_white_mask(self, source_surface: pygame.Surface) -> pygame.Surface:
         """Convert a glyph cell to a white alpha mask so it can be tinted later."""
