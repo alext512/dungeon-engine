@@ -243,7 +243,7 @@ Each tileset entry usually looks like:
 ```json
 {
   "firstgid": 1,
-  "path": "assets/project/tiles/basic_tiles.png",
+  "path": "assets/project/tiles/showcase_tiles.png",
   "tile_width": 16,
   "tile_height": 16
 }
@@ -376,7 +376,7 @@ Example:
 
 ```json
 {
-  "path": "assets/project/sprites/npc_blue.png",
+  "path": "assets/project/sprites/sign.png",
   "frame_width": 16,
   "frame_height": 16,
   "frames": [0]

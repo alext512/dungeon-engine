@@ -150,7 +150,7 @@ manages its entities.
   "tilesets": [
     {
       "firstgid": 1,
-      "path": "assets/project/tiles/basic_tiles.png",
+      "path": "assets/project/tiles/showcase_tiles.png",
       "tile_width": 16,
       "tile_height": 16
     }
