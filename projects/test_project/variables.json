@@ -33,6 +33,11 @@
       "text_x": 64,
       "width": 180
     },
+    "plain_choice_box": {
+      "marker_x": 8,
+      "text_x": 16,
+      "width": 232
+    },
     "choice_rows_y": [154, 164, 174],
     "choice_more_top": {
       "x": 238,

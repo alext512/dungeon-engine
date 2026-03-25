@@ -165,15 +165,11 @@ def _load_named_command_definition_from_path(
         raise ValueError(f"Command definition '{resolved_command_id}' must be a JSON object.")
 
     expected_id = project.command_definition_id(command_path)
-    raw_id = raw.get("id", expected_id)
-    resolved_id = str(raw_id).strip()
-    if not resolved_id:
-        raise ValueError(f"Command definition '{expected_id}' must use a non-empty string for 'id'.")
-    if resolved_id != expected_id:
+    if "id" in raw:
         raise ValueError(
-            f"Command definition '{expected_id}' declares id '{resolved_id}', but command ids are path-based. "
-            f"Use '{expected_id}' or omit the 'id' field."
+            f"Command definition '{expected_id}' must not declare 'id'; command ids are path-derived."
         )
+    resolved_id = expected_id
 
     raw_params = raw.get("params", [])
     if raw_params is None:

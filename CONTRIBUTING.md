@@ -3,9 +3,12 @@
 Read these files in this order:
 
 1. `STATUS.md`
-2. `functionality.md`
-3. `architecture.md`
-4. `roadmap.md`
+2. `MANUAL.md`
+3. `AUTHORING_GUIDE.md`
+4. `CONTENT_TYPES.md`
+5. `functionality.md`
+6. `architecture.md`
+7. `roadmap.md`
 
 ## Project direction
 
@@ -22,6 +25,7 @@ Read these files in this order:
 - Keep the boundary clear: engine code belongs under `dungeon_engine/`, while project content belongs in a project folder selected through `project.json`, even if that project is versioned inside this repo under `projects/`.
 - Keep room/entity/command data portable so a future runtime can reuse the same content pipeline.
 - Update the docs when implementation changes the plan.
+- Add or update focused regression tests when engine behavior changes. The current built-in suite runs with `.venv/Scripts/python -m unittest discover -s tests -v`.
 
 ## Replatforming stance
 

@@ -1,5 +1,4 @@
 {
-  "id": "push_one_tile",
   "params": [
     "direction",
     "frames_needed"
@@ -35,3 +34,4 @@
     }
   ]
 }
+

@@ -101,7 +101,7 @@ Example:
   "command_paths": ["commands/"],
   "dialogue_paths": ["dialogues/"],
   "variables_path": "variables.json",
-  "startup_area": "areas/test_room.json",
+  "startup_area": "test_room",
   "active_entity_id": "player",
   "debug_inspection_enabled": true,
   "input_events": {
@@ -129,7 +129,7 @@ Example:
 - `variables_path`
   Project-wide shared variables file.
 - `startup_area`
-  Default room to open when only the project is selected.
+  Default room to open when only the project is selected. This must be a path-derived area id such as `test_room` or `town/inn`.
 - `active_entity_id`
   Which entity starts as the direct input receiver.
 - `input_events`
@@ -200,7 +200,6 @@ Example structure:
 
 ```json
 {
-  "area_id": "test_room",
   "name": "Test Room",
   "tile_size": 16,
   "player_id": "player",
@@ -214,8 +213,6 @@ Example structure:
 
 ### Important fields
 
-- `area_id`
-  Stable room id. Important for persistence.
 - `name`
   Human-readable room name.
 - `tile_size`
@@ -232,6 +229,12 @@ Example structure:
   Walkability grid.
 - `entities`
   Placed entity instances.
+
+Important note:
+
+- area ids are derived from the area file path relative to `area_paths`
+- do not author an `area_id` field inside area JSON
+- for example, `areas/test_room.json` becomes `test_room`
 
 ### Tilesets
 
@@ -466,7 +469,6 @@ Examples:
 
 ```json
 {
-  "id": "walk_one_tile",
   "params": [
     "direction",
     "phase_a_frames",
@@ -509,6 +511,7 @@ Examples:
 ### Important rules
 
 - command ids are path-based
+- do not author an `id` field inside command JSON
 - duplicate command ids are validation errors
 - command files are meant for reusable behavior, not single-instance content
 
@@ -542,7 +545,6 @@ Simple example:
 
 ```json
 {
-  "id": "signs/gate_hint",
   "text": "Sign: The old path is sealed. Pull the lever to open the gate."
 }
 ```
@@ -551,7 +553,6 @@ Manual paging example:
 
 ```json
 {
-  "id": "npcs/example",
   "pages": [
     "Guide: First page.",
     "Guide: Second page."
@@ -561,6 +562,8 @@ Manual paging example:
 
 Rules:
 
+- dialogue ids are derived from the file path under `dialogue_paths`
+- do not author an `id` field inside dialogue JSON
 - use `text` for one long block that should be auto-paginated
 - use `pages` when you want exact page boundaries
 - do not define both
@@ -638,7 +641,10 @@ It is still useful for:
 - quick text-only interactions
 - temporary prototypes
 
-But the sample project now uses a focused `dialogue_ui` entity plus text-session commands instead.
+But the sample project now uses a focused `dialogue_ui` entity with two high-level events instead:
+
+- `show_message`
+- `show_choice_dialogue`
 
 ## Screen-Space Commands
 
@@ -682,18 +688,16 @@ Use these for dialogue panels, portraits, and overlays.
 
 ## How The Sample Sign Works
 
-The sign template owns an `interact` event that opens the shared `dialogue_ui`
-entity.
+The sign template owns an `interact` event that calls `dialogue_ui.show_message`.
 
 That flow:
 
-1. pushes active input to `dialogue_ui`
-2. shows the panel image
-3. prepares and reads a text session
-4. draws the current page through normal screen-text commands
-5. lets `dialogue_ui.interact` advance or close
-6. removes its screen elements
-7. pops active input back to the previous entity
+1. calls `show_message` with a `dialogue_id`
+2. `dialogue_ui` chooses the portrait/plain text box layout
+3. `dialogue_ui` shows the panel and optional portrait
+4. `dialogue_ui` prepares and reads the text session
+5. `dialogue_ui.interact` advances pages until it finishes
+6. `dialogue_ui` closes and restores the previous active entity
 
 ## How The Sample NPC Dialogue Works
 
@@ -707,6 +711,7 @@ That entity:
 - prepares and reads marquee text sessions for highlighted long choices
 - draws portrait, panel, and choice rows through normal screen commands
 - supports scrolling menus when there are more than three choices
+- accepts choices as a variable-length list instead of fixed `menu_choice_0...4` slots
 
 So:
 
@@ -851,5 +856,5 @@ If you want to learn by example, read:
 7. `projects/test_project/entities/dialogue_ui.json`
 8. `projects/test_project/commands/attempt_move_one_tile.json`
 9. `projects/test_project/commands/walk_one_tile.json`
-10. `projects/test_project/commands/dialogue/`
+10. `projects/test_project/commands/push_one_tile.json`
 11. `projects/test_project/dialogues/`

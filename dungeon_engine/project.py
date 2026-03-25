@@ -13,7 +13,7 @@ Example ``project.json``::
         "command_paths": ["commands/"],
         "dialogue_paths": ["dialogues/"],
         "variables_path": "variables.json",
-        "startup_area": "areas/test_room.json",
+        "startup_area": "test_room",
         "active_entity_id": "player",
         "debug_inspection_enabled": true,
         "input_events": {
@@ -76,21 +76,85 @@ class ProjectContext:
     # Entity template discovery
     # ------------------------------------------------------------------
 
+    def entity_template_id(self, template_path: Path) -> str:
+        """Return the canonical template id for an entity-template file.
+
+        The id is derived from the file's path relative to its entity root
+        directory, with the ``.json`` suffix stripped and backslashes
+        normalized to forward slashes.
+        """
+        resolved = template_path.resolve()
+        for directory in self.entity_paths:
+            try:
+                relative = resolved.relative_to(directory.resolve())
+                return str(relative.with_suffix("")).replace("\\", "/")
+            except ValueError:
+                continue
+        return template_path.stem
+
+    def list_entity_template_files(self) -> list[Path]:
+        """Return all entity-template JSON files across all entity paths."""
+        files: list[Path] = []
+        seen: set[Path] = set()
+        for directory in self.entity_paths:
+            if not directory.is_dir():
+                continue
+            for file_path in sorted(directory.rglob("*.json")):
+                resolved = file_path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                files.append(file_path)
+        return files
+
     def list_entity_template_ids(self) -> list[str]:
         """Return sorted unique template ids from all entity paths."""
         ids: set[str] = set()
-        for directory in self.entity_paths:
-            if directory.is_dir():
-                ids.update(p.stem for p in directory.glob("*.json"))
+        for template_path in self.list_entity_template_files():
+            ids.add(self.entity_template_id(template_path))
         return sorted(ids)
 
-    def find_entity_template(self, template_id: str) -> Path | None:
-        """Return the first matching template path, or *None*."""
+    def find_entity_template_matches(self, template_id: str) -> list[Path]:
+        """Return all matching entity-template JSON files for the requested id."""
+        normalized_id = str(template_id).replace("\\", "/").strip()
+        if not normalized_id:
+            return []
+
+        relative_id = Path(normalized_id)
+        matches: list[Path] = []
+        seen: set[Path] = set()
+
+        def _record(candidate: Path) -> None:
+            resolved = candidate.resolve()
+            if resolved in seen:
+                return
+            seen.add(resolved)
+            matches.append(candidate)
+
         for directory in self.entity_paths:
-            candidate = directory / f"{template_id}.json"
-            if candidate.exists():
-                return candidate
-        return None
+            direct_candidate = directory / relative_id
+            if direct_candidate.suffix.lower() != ".json":
+                direct_candidate = direct_candidate.with_suffix(".json")
+            if direct_candidate.exists():
+                _record(direct_candidate)
+
+            for candidate in directory.rglob("*.json"):
+                relative_candidate = self.entity_template_id(candidate)
+                if relative_candidate == normalized_id:
+                    _record(candidate)
+        return matches
+
+    def find_entity_template(self, template_id: str) -> Path | None:
+        """Return the single matching entity-template JSON file, or *None*."""
+        matches = self.find_entity_template_matches(template_id)
+        if not matches:
+            return None
+        if len(matches) > 1:
+            match_list = ", ".join(str(path) for path in matches)
+            raise ValueError(
+                f"Duplicate entity template lookup for '{template_id}'. Matches: {match_list}"
+            )
+        return matches[0]
 
     # ------------------------------------------------------------------
     # Command definition discovery
@@ -209,6 +273,28 @@ class ProjectContext:
                     _record(candidate)
         return matches
 
+    def list_dialogue_definition_files(self) -> list[Path]:
+        """Return all dialogue-definition JSON files across all dialogue paths."""
+        files: list[Path] = []
+        seen: set[Path] = set()
+        for directory in self.dialogue_paths:
+            if not directory.is_dir():
+                continue
+            for file_path in sorted(directory.rglob("*.json")):
+                resolved = file_path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                files.append(file_path)
+        return files
+
+    def list_dialogue_definition_ids(self) -> list[str]:
+        """Return sorted unique dialogue ids from all dialogue paths."""
+        ids: set[str] = set()
+        for dialogue_path in self.list_dialogue_definition_files():
+            ids.add(self.dialogue_definition_id(dialogue_path))
+        return sorted(ids)
+
     def find_dialogue_definition(self, dialogue_id: str) -> Path | None:
         """Return the single matching dialogue-definition JSON file, or *None*."""
         matches = self.find_dialogue_definition_matches(dialogue_id)
@@ -271,6 +357,22 @@ class ProjectContext:
     # Area discovery
     # ------------------------------------------------------------------
 
+    def area_id(self, area_path: Path) -> str:
+        """Return the canonical area id for an area JSON file.
+
+        The id is derived from the file's path relative to its area root
+        directory, with the ``.json`` suffix stripped and backslashes
+        normalized to forward slashes.
+        """
+        resolved = area_path.resolve()
+        for directory in self.area_paths:
+            try:
+                relative = resolved.relative_to(directory.resolve())
+                return str(relative.with_suffix("")).replace("\\", "/")
+            except ValueError:
+                continue
+        return area_path.stem
+
     def list_area_files(self) -> list[Path]:
         """Return all area JSON files across all area paths."""
         files: list[Path] = []
@@ -284,6 +386,61 @@ class ProjectContext:
                     seen.add(resolved)
                     files.append(f)
         return files
+
+    def list_area_ids(self) -> list[str]:
+        """Return sorted unique area ids from all area paths."""
+        ids: set[str] = set()
+        for area_path in self.list_area_files():
+            ids.add(self.area_id(area_path))
+        return sorted(ids)
+
+    def find_area_by_id(self, area_id_str: str) -> Path | None:
+        """Resolve an area id to a single file path, or *None*.
+
+        Raises ``ValueError`` if the id matches multiple files.
+        """
+        normalized_id = str(area_id_str).replace("\\", "/").strip()
+        if not normalized_id:
+            return None
+
+        relative_id = Path(normalized_id)
+        matches: list[Path] = []
+        seen: set[Path] = set()
+
+        def _record(candidate: Path) -> None:
+            resolved = candidate.resolve()
+            if resolved in seen:
+                return
+            seen.add(resolved)
+            matches.append(candidate)
+
+        for directory in self.area_paths:
+            direct_candidate = directory / relative_id
+            if direct_candidate.suffix.lower() != ".json":
+                direct_candidate = direct_candidate.with_suffix(".json")
+            if direct_candidate.exists():
+                _record(direct_candidate)
+
+            for candidate in directory.rglob("*.json"):
+                relative_candidate = self.area_id(candidate)
+                if relative_candidate == normalized_id:
+                    _record(candidate)
+
+        if not matches:
+            return None
+        if len(matches) > 1:
+            match_list = ", ".join(str(path) for path in matches)
+            raise ValueError(
+                f"Duplicate area lookup for '{normalized_id}'. Matches: {match_list}"
+            )
+        return matches[0]
+
+    def resolve_area_reference(self, area_reference: str) -> Path | None:
+        """Resolve one strict authored area reference by path-derived area id."""
+        reference = str(area_reference).strip()
+        if not reference:
+            return None
+        return self.find_area_by_id(reference)
 
     def resolve_area_path(self, area_path: str | Path) -> Path | None:
         """Resolve an authored area path against this project's configured roots."""
@@ -317,12 +474,21 @@ class ProjectContext:
         return None
 
     def area_path_to_reference(self, area_path: str | Path) -> str:
-        """Return a stable authored area reference suitable for save data."""
+        """Return a stable area reference suitable for save data.
+
+        Area references are strict path-derived ids, so the area file must live
+        under one of the configured area roots.
+        """
         resolved = Path(area_path).resolve()
-        try:
-            return str(resolved.relative_to(self.project_root.resolve())).replace("\\", "/")
-        except ValueError:
-            return str(resolved)
+        for directory in self.area_paths:
+            try:
+                relative = resolved.relative_to(directory.resolve())
+                return str(relative.with_suffix("")).replace("\\", "/")
+            except ValueError:
+                continue
+        raise ValueError(
+            f"Area path '{resolved}' is outside the configured area roots for project '{self.project_root}'."
+        )
 
     def resolve_shared_variable(self, path: str | list[str]) -> Any:
         """Return a nested project-shared variable by dotted path or path-parts list."""

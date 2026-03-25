@@ -52,8 +52,54 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "title/move_up"
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "menu_index",
+          "op": "eq",
+          "value": 0,
+          "then": [
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "menu_index",
+              "value": 2
+            }
+          ],
+          "else": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "menu_index",
+              "op": "eq",
+              "value": 1,
+              "then": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "menu_index",
+                  "value": 0
+                }
+              ],
+              "else": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "menu_index",
+                  "value": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "run_event",
+          "entity_id": "self",
+          "event_id": "refresh_menu"
         },
         {
           "type": "wait_for_direction_release",
@@ -65,8 +111,54 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "title/move_down"
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "menu_index",
+          "op": "eq",
+          "value": 2,
+          "then": [
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "menu_index",
+              "value": 0
+            }
+          ],
+          "else": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "menu_index",
+              "op": "eq",
+              "value": 0,
+              "then": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "menu_index",
+                  "value": 1
+                }
+              ],
+              "else": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "menu_index",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "run_event",
+          "entity_id": "self",
+          "event_id": "refresh_menu"
         },
         {
           "type": "wait_for_direction_release",
@@ -78,8 +170,142 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "title/confirm"
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "menu_index",
+          "op": "eq",
+          "value": 0,
+          "then": [
+            {
+              "type": "run_event",
+              "entity_id": "self",
+              "event_id": "start_new_game"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "menu_index",
+              "op": "eq",
+              "value": 1,
+              "then": [
+                {
+                  "type": "run_event",
+                  "entity_id": "self",
+                  "event_id": "load_game"
+                }
+              ],
+              "else": [
+                {
+                  "type": "run_event",
+                  "entity_id": "self",
+                  "event_id": "exit_game"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "refresh_menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "menu_index",
+          "op": "eq",
+          "value": 0,
+          "then": [
+            {
+              "type": "set_sprite_frame",
+              "entity_id": "menu_new_game",
+              "frame": 1
+            },
+            {
+              "type": "set_sprite_frame",
+              "entity_id": "menu_load_game",
+              "frame": 0
+            },
+            {
+              "type": "set_sprite_frame",
+              "entity_id": "menu_exit_game",
+              "frame": 0
+            }
+          ],
+          "else": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "menu_index",
+              "op": "eq",
+              "value": 1,
+              "then": [
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "menu_new_game",
+                  "frame": 0
+                },
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "menu_load_game",
+                  "frame": 1
+                },
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "menu_exit_game",
+                  "frame": 0
+                }
+              ],
+              "else": [
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "menu_new_game",
+                  "frame": 0
+                },
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "menu_load_game",
+                  "frame": 0
+                },
+                {
+                  "type": "set_sprite_frame",
+                  "entity_id": "menu_exit_game",
+                  "frame": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "start_new_game": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "change_area",
+          "area_id": "village_square"
+        }
+      ]
+    },
+    "load_game": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "load_game"
+        }
+      ]
+    },
+    "exit_game": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "quit_game"
         }
       ]
     },
@@ -179,3 +405,4 @@
     }
   }
 }
+

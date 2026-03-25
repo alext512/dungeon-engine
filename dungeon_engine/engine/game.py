@@ -73,7 +73,7 @@ class Game:
         self.asset_manager = AssetManager(project=project)
         self.audio_player = AudioPlayer(self.asset_manager, enabled=not self.headless)
         self.screen_manager = ScreenElementManager()
-        self.persistence_runtime = PersistenceRuntime()
+        self.persistence_runtime = PersistenceRuntime(project=project)
 
         self.renderer = Renderer(
             self.display_surface,
@@ -120,10 +120,14 @@ class Game:
 
     def _run_play_frame(self, dt: float, events: list[pygame.event.Event]) -> bool:
         """Advance the play state for one frame."""
-        assert self.input_handler is not None
-        assert self.command_runner is not None
-        assert self.movement_system is not None
-        assert self.animation_system is not None
+        if self.input_handler is None:
+            raise RuntimeError("Game runtime is missing an input handler.")
+        if self.command_runner is None:
+            raise RuntimeError("Game runtime is missing a command runner.")
+        if self.movement_system is None:
+            raise RuntimeError("Game runtime is missing a movement system.")
+        if self.animation_system is None:
+            raise RuntimeError("Game runtime is missing an animation system.")
 
         input_result = self.input_handler.handle_events(events)
         if input_result.should_quit:
@@ -168,10 +172,14 @@ class Game:
 
     def _advance_simulation_tick(self, dt: float) -> None:
         """Advance gameplay by one fixed simulation step."""
-        assert self.input_handler is not None
-        assert self.command_runner is not None
-        assert self.movement_system is not None
-        assert self.animation_system is not None
+        if self.input_handler is None:
+            raise RuntimeError("Game runtime is missing an input handler.")
+        if self.command_runner is None:
+            raise RuntimeError("Game runtime is missing a command runner.")
+        if self.movement_system is None:
+            raise RuntimeError("Game runtime is missing a movement system.")
+        if self.animation_system is None:
+            raise RuntimeError("Game runtime is missing an animation system.")
 
         self.input_handler.enqueue_held_movement_if_idle()
         self.command_runner.update(0.0)
@@ -270,13 +278,15 @@ class Game:
         document_area, document_world = load_area(
             resolved_area_path,
             asset_manager=self.asset_manager,
+            project=self.project,
         )
-        document_data = serialize_area(document_area, document_world)
+        document_data = serialize_area(document_area, document_world, project=self.project)
         play_document_data = copy.deepcopy(document_data)
         play_authored_area, play_authored_world = load_area_from_data(
             copy.deepcopy(document_data),
             source_name=str(resolved_area_path),
             asset_manager=self.asset_manager,
+            project=self.project,
         )
         self._apply_reentry_resets_for_area(play_authored_area.area_id, play_authored_world)
         area, world = load_area_from_data(
@@ -287,6 +297,7 @@ class Game:
                 self.persistence_runtime.save_data,
                 play_authored_area.area_id,
             ),
+            project=self.project,
         )
 
         self.area_path = resolved_area_path
@@ -302,14 +313,23 @@ class Game:
         self._install_play_runtime()
 
     def _resolve_area_path(self, area_path: Path | str) -> Path:
-        """Resolve an area reference against the active project or current area location."""
+        """Resolve an area reference (ID or path) against the active project.
+
+        Authored references resolve by strict path-derived area id. Direct
+        filesystem paths are still accepted for launch/editor entry points.
+        """
+        if isinstance(area_path, str):
+            reference = area_path.strip()
+            if self.project is not None:
+                resolved = self.project.resolve_area_reference(reference)
+                if resolved is not None:
+                    return resolved
+                raise FileNotFoundError(
+                    f"Cannot resolve authored area id '{reference}' in project '{self.project.project_root}'."
+                )
+
+        # Fallback for no-project mode or unresolved references.
         raw_path = Path(area_path)
-
-        if self.project is not None:
-            resolved = self.project.resolve_area_path(raw_path)
-            if resolved is not None:
-                return resolved
-
         candidate_inputs = [raw_path]
         if raw_path.suffix.lower() != ".json":
             candidate_inputs.append(raw_path.with_suffix(".json"))
@@ -336,7 +356,7 @@ class Game:
 
         searched_paths = ", ".join(str(candidate) for candidate in candidates)
         raise FileNotFoundError(
-            f"Cannot resolve area path '{area_path}'. "
+            f"Cannot resolve area reference '{area_path}'. "
             f"Searched: {searched_paths or '<none>'}."
         )
 
@@ -563,7 +583,8 @@ class Game:
 
     def _build_current_play_reference(self):
         """Build a fresh play world from authored data plus current persistent overrides."""
-        assert self.play_document_data is not None
+        if self.play_document_data is None:
+            raise RuntimeError("Game runtime is missing the current play document.")
         return load_area_from_data(
             copy.deepcopy(self.play_document_data),
             source_name=str(self.area_path),
@@ -572,6 +593,7 @@ class Game:
                 self.persistence_runtime.save_data,
                 self.play_authored_area.area_id,
             ),
+            project=self.project,
         )
 
     def _rebuild_play_world(self, *, preserve_player: bool) -> None:
@@ -602,6 +624,7 @@ class Game:
             self.area,
             persistent_reference_world,
             self.world,
+            project=self.project,
         )
         self.persistence_runtime.set_save_path(save_path)
         try:
@@ -621,7 +644,12 @@ class Game:
         target_area_path = self._resolve_saved_area_path()
         self._load_area_runtime(target_area_path)
         if current_area_state is not None:
-            apply_persistent_area_state(self.area, self.world, current_area_state)
+            apply_persistent_area_state(
+                self.area,
+                self.world,
+                current_area_state,
+                project=self.project,
+            )
         self._apply_saved_active_entity()
 
     def _resolve_saved_area_path(self) -> Path:
@@ -644,4 +672,3 @@ class Game:
         if self.camera is not None:
             self.camera.follow_active_entity()
             self.camera.update(self.world, advance_tick=False)
-

@@ -13,7 +13,7 @@ def parse_args() -> argparse.Namespace:
         "area",
         nargs="?",
         default=None,
-        help="Path to an area JSON file. If omitted, uses the project's startup area or opens a picker.",
+        help="Authored area id or path to an area JSON file. If omitted, uses the project's startup area or opens a picker.",
     )
     parser.add_argument(
         "--project",
@@ -50,7 +50,6 @@ def main() -> int:
     from dungeon_engine.logging_utils import install_exception_logging
     from dungeon_engine.project import load_project
     from dungeon_engine.startup_validation import validate_project_startup
-    from dungeon_engine.world.loader import set_active_project
 
     if not args.headless:
         configure_process_dpi_awareness()
@@ -72,7 +71,6 @@ def main() -> int:
     if validation_error is not None:
         return 1
     update_launcher_state(last_project=str(project_path))
-    set_active_project(project)
 
     area_path = _choose_area_path(args.area, project, launcher_state.last_game_area, allow_picker=not args.headless)
     if area_path is None:
@@ -107,7 +105,7 @@ def _choose_project_path(cli_project, launcher_state, fallback_dir) -> Path | No
 def _choose_area_path(cli_area, project, remembered_area, allow_picker: bool = True) -> Path | None:
     """Choose an area path from CLI, project startup area, or a picker rooted at the last area location."""
     if cli_area:
-        return _resolve_area_path(project, Path(cli_area))
+        return _resolve_area_argument(project, cli_area)
 
     startup_area = _resolve_project_startup_area(project)
     if startup_area is not None:
@@ -161,12 +159,22 @@ def _pick_area_file(default_path: Path) -> Path | None:
     return Path(file_path)
 
 
-def _resolve_area_path(project, area_path: Path) -> Path:
-    """Resolve an area argument against the current project."""
-    resolved = project.resolve_area_path(area_path)
+def _resolve_area_argument(project, area_argument: str | Path) -> Path:
+    """Resolve a CLI area argument as an authored id first, then as a path."""
+    if isinstance(area_argument, str):
+        area_reference = area_argument.strip()
+        if area_reference:
+            resolved_reference = project.resolve_area_reference(area_reference)
+            if resolved_reference is not None:
+                return resolved_reference
+        raw_path = Path(area_argument)
+    else:
+        raw_path = area_argument
+
+    resolved = project.resolve_area_path(raw_path)
     if resolved is not None:
         return resolved
-    return area_path.resolve()
+    return raw_path.resolve()
 
 
 def _normalize_project_path(project_path: Path) -> Path:
@@ -204,7 +212,7 @@ def _resolve_remembered_area(project, remembered_area: str | None) -> Path | Non
     if remembered_path.exists() and _area_belongs_to_project(project, remembered_path.resolve()):
         return remembered_path.resolve()
 
-    resolved = _resolve_area_path(project, remembered_path)
+    resolved = _resolve_area_argument(project, remembered_path)
     if resolved.exists() and _area_belongs_to_project(project, resolved):
         return resolved
     return None
@@ -227,12 +235,14 @@ def _default_area_path(project, remembered_area: str | None) -> Path:
 
 
 def _resolve_project_startup_area(project) -> Path | None:
-    """Resolve the project's authored startup area, if any."""
+    """Resolve the project's authored startup area id, if any."""
     startup_area = getattr(project, "startup_area", None)
     if not startup_area:
         return None
 
-    resolved = _resolve_area_path(project, Path(startup_area))
+    resolved = project.resolve_area_reference(startup_area)
+    if resolved is None:
+        return None
     if resolved.exists() and _area_belongs_to_project(project, resolved):
         return resolved
     return None
