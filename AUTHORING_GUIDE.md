@@ -596,6 +596,13 @@ Use `option_commands_by_id` when your choice options have stable `option_id` val
 
 If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. Optional `actor_entity_id` and `caller_entity_id` parameters can be passed at the call site when you need to preserve or override semantic context across dialogue-to-dialogue calls.
 
+Generic per-command lifecycle wrapper fields are removed from the active command model:
+
+- removed: command-level `on_start`
+- removed: command-level `on_end`
+- use `run_commands` when later commands should wait for an earlier long-running command to finish
+- use `run_detached_commands` when work should overlap in the background
+
 ## Area Transfers
 
 `change_area` and `new_game` now support transfer-aware payloads.

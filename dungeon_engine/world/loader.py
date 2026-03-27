@@ -570,12 +570,18 @@ def _parse_camera_defaults(raw_camera_defaults: Any, *, source_name: str) -> dic
 def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
     """Reject removed command-shape fields anywhere inside authored command data."""
     if isinstance(value, dict):
-        if "on_complete" in value:
+        command_type = value.get("type")
+        if command_type is not None and "on_complete" in value:
             raise ValueError(
                 f"{source_name} command '{location}' must not use 'on_complete'; "
-                "use 'on_start' and 'on_end' instead."
+                "use explicit sequencing with 'run_commands' instead."
             )
-        command_type = value.get("type")
+        if command_type is not None and ("on_start" in value or "on_end" in value):
+            raise ValueError(
+                f"{source_name} command '{location}' must not use lifecycle wrapper fields "
+                "'on_start' or 'on_end'; use explicit sequencing with 'run_commands' or "
+                "overlapping work with 'run_detached_commands' instead."
+            )
         if command_type == "run_dialogue":
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'run_dialogue'; "

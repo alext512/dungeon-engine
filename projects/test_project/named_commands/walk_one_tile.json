@@ -46,12 +46,15 @@
       ]
     },
     {
-      "type": "move_entity_one_tile",
-      "entity_id": "$self_id",
-      "direction": "$direction",
-      "frames_needed": "$frames_needed",
-      "allow_push": false,
-      "on_end": [
+      "type": "run_commands",
+      "commands": [
+        {
+          "type": "move_entity_one_tile",
+          "entity_id": "$self_id",
+          "direction": "$direction",
+          "frames_needed": "$frames_needed",
+          "allow_push": false
+        },
         {
           "type": "stop_animation",
           "entity_id": "$self_id",

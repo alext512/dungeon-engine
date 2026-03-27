@@ -399,7 +399,7 @@ That event forwards values such as:
 
 When a dialogue starts:
 
-1. the controller's `on_start` commands reroute the needed logical inputs to the dialogue controller
+1. the caller-supplied `dialogue_on_start` commands reroute the needed logical inputs to the dialogue controller
 2. the controller loads ordinary JSON dialogue data into entity variables
 3. controller-owned commands derive visible text/options and render them through the screen manager
 4. controller input routes to normal entity events like `interact`, `move_up`, `move_down`, and `menu`
@@ -423,6 +423,13 @@ Each segment hook can contain:
 - `option_commands`
 
 This is how the sample lever, save point, pause menu, and title screen attach gameplay consequences to plain JSON dialogue/menu data.
+
+Generic per-command lifecycle wrapper fields are no longer part of the active command surface:
+
+- removed: command-level `on_start`
+- removed: command-level `on_end`
+- replacement for ordered work: `run_commands`
+- replacement for overlapping work: `run_detached_commands`
 
 When a choice needs to trigger something after the dialogue has fully closed, the reliable pattern is:
 

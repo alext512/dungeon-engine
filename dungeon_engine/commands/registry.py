@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import fields
 import inspect
 from typing import Any
 
@@ -52,23 +53,38 @@ class CommandRegistry:
         if command is None:
             raise KeyError(f"Unknown command '{name}'.")
         signature = self._signatures[name]
+        context_field_names = {
+            field_info.name
+            for field_info in fields(CommandContext)
+        }
         accepts_kwargs = any(
             parameter.kind == inspect.Parameter.VAR_KEYWORD
             for parameter in signature.parameters.values()
         )
+        injected_kwargs = {
+            parameter_name: getattr(context, parameter_name)
+            for parameter_name in signature.parameters
+            if parameter_name in context_field_names
+        }
+        if "context" in signature.parameters:
+            injected_kwargs["context"] = context
         if accepts_kwargs:
-            filtered_params = dict(params)
+            filtered_params = {
+                parameter_name: value
+                for parameter_name, value in params.items()
+                if parameter_name not in injected_kwargs
+            }
         else:
             accepted_names = {
                 parameter_name
                 for parameter_name, parameter in signature.parameters.items()
-                if parameter_name != "context"
+                if parameter_name not in injected_kwargs
             }
             filtered_params = {
                 parameter_name: value
                 for parameter_name, value in params.items()
                 if parameter_name in accepted_names
             }
-        return command(context, **filtered_params)
+        return command(**injected_kwargs, **filtered_params)
 
 
