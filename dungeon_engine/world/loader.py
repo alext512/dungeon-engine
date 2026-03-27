@@ -628,6 +628,11 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
                 f"{source_name} command '{location}' uses removed command 'set_var_from_camera'; "
                 "use explicit variable commands with runtime tokens like '$camera.x' instead."
             )
+        if command_type == "set_input_event_name":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_input_event_name'; "
+                "routed entities should define explicit 'input_map' entries instead."
+            )
         if command_type in {"set_world_var_from_camera", "set_entity_var_from_camera"}:
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command '{command_type}'; "

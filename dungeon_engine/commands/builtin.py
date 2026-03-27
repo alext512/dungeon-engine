@@ -2207,17 +2207,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("set_input_event_name")
     def set_input_event_name(
-        context: CommandContext,
-        *,
-        action: str,
-        event_name: str,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Change which event name the engine looks up for an input action."""
-        if context.input_handler is None:
-            raise ValueError("Cannot change input event names without an input handler.")
-        context.input_handler.set_action_event_name(str(action), str(event_name))
-        return ImmediateHandle()
+        """Reject the removed project-level input fallback remapping helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_input_event_name was removed; routed entities should define explicit "
+            "'input_map' entries instead of relying on engine fallback event names."
+        )
 
     @registry.register("change_area")
     def change_area(

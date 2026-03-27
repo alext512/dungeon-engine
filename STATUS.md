@@ -24,7 +24,7 @@ If you only need the current reality quickly:
 - entities now use a `visuals` array instead of a single `sprite` block
 - entities also declare `space` (`world` or `screen`) and `scope` (`area` or `global`)
 - project-level global entities are authored in `project.json` under `global_entities`
-- input resolves per logical action through `input_targets`, then that routed entity's `input_map`, then project-level `input_events`
+- input resolves per logical action through `input_targets`, then the routed entity's explicit `input_map`
 - area changes can target authored `entry_points` and optionally transfer one or more live entities
 - the runtime persists transferred travelers and the current camera state across save/load
 - the sample project's shared dialogue UI is a global `dialogue_controller` entity from `entity_templates/dialogue_panel.json`

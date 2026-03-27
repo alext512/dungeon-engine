@@ -78,14 +78,7 @@ Example:
   "input_targets": {
     "menu": "pause_controller"
   },
-  "debug_inspection_enabled": true,
-  "input_events": {
-    "move_up": "move_up",
-    "move_down": "move_down",
-    "move_left": "move_left",
-    "move_right": "move_right",
-    "interact": "interact"
-  }
+  "debug_inspection_enabled": true
 }
 ```
 
@@ -107,8 +100,6 @@ Example:
   Default area id to open when only the project is selected.
 - `input_targets`
   Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
-- `input_events`
-  Fallback action-to-event mapping when the routed entity does not define its own `input_map`.
 
 ## `shared_variables.json`
 
