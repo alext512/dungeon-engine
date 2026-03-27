@@ -31,12 +31,16 @@
       ]
     },
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_participants",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_definition",
-      "key": "participants",
-      "default": {}
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_definition",
+          "key": "participants",
+          "default": {}
+        }
+      }
     },
     {
       "type": "check_entity_var",
@@ -54,46 +58,66 @@
       ],
       "else": [
         {
-          "type": "set_entity_var_from_collection_item",
+          "type": "set_entity_var",
           "name": "dialogue_current_participant",
           "entity_id": "$self_id",
-          "value": "$self.dialogue_current_participants",
-          "key": "$self.dialogue_current_speaker_id",
-          "default": {}
+          "value": {
+            "$collection_item": {
+              "value": "$self.dialogue_current_participants",
+              "key": "$self.dialogue_current_speaker_id",
+              "default": {}
+            }
+          }
         }
       ]
     },
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_portrait_path",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_current_participant",
-      "key": "portrait_path",
-      "default": ""
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_path",
+          "default": ""
+        }
+      }
     },
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_portrait_frame_width",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_current_participant",
-      "key": "portrait_frame_width",
-      "default": "$self.default_portrait_frame_width"
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_frame_width",
+          "default": "$self.default_portrait_frame_width"
+        }
+      }
     },
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_portrait_frame_height",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_current_participant",
-      "key": "portrait_frame_height",
-      "default": "$self.default_portrait_frame_height"
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_frame_height",
+          "default": "$self.default_portrait_frame_height"
+        }
+      }
     },
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_portrait_frame",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_current_participant",
-      "key": "portrait_frame",
-      "default": 0
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_frame",
+          "default": 0
+        }
+      }
     },
     {
       "type": "set_entity_var",

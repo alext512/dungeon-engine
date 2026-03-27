@@ -1280,7 +1280,7 @@ class StrictContentIdTests(unittest.TestCase):
                     params = {"entity_id": "self", "store_state_var": "move_attempt_state"}
                 execute_registered_command(registry, context, command_name, params)
             self.assertIsNotNone(raised.exception.__cause__)
-            self.assertIn("was removed", str(raised.exception.__cause__))
+            self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
 
     def test_removed_dialogue_runtime_commands_raise_clear_errors(self) -> None:
         registry, context = self._make_command_context()
@@ -1295,7 +1295,7 @@ class StrictContentIdTests(unittest.TestCase):
             with self.assertRaises(CommandExecutionError) as raised:
                 execute_registered_command(registry, context, command_name, {})
             self.assertIsNotNone(raised.exception.__cause__)
-            self.assertIn("was removed", str(raised.exception.__cause__))
+            self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
 
     def test_wrapped_lines_and_text_window_value_sources_store_visible_text(self) -> None:
         world = World()
@@ -1440,19 +1440,23 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": [{"a": 1}, {"b": 2}],
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "set_entity_var_from_collection_item",
             {
+                "type": "set_entity_var",
                 "entity_id": "dialogue_controller",
                 "name": "selected_option",
-                "value": [
-                    {"option_id": "new_game"},
-                    {"option_id": "load_game"},
-                ],
-                "index": 1,
-                "default": {},
+                "value": {
+                    "$collection_item": {
+                        "value": [
+                            {"option_id": "new_game"},
+                            {"option_id": "load_game"},
+                        ],
+                        "index": 1,
+                        "default": {},
+                    }
+                },
             },
         ).update(0.0)
         execute_registered_command(
@@ -1550,15 +1554,19 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": context.world.variables["visited_rooms"],
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "set_world_var_from_collection_item",
             {
+                "type": "set_world_var",
                 "name": "latest_room",
-                "value": context.world.variables["visited_rooms"],
-                "index": 1,
-                "default": "",
+                "value": {
+                    "$collection_item": {
+                        "value": context.world.variables["visited_rooms"],
+                        "index": 1,
+                        "default": "",
+                    }
+                },
             },
         ).update(0.0)
         execute_registered_command(
@@ -3531,7 +3539,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(raised.exception.__cause__)
-        self.assertIn("set_camera_follow_player is removed", str(raised.exception.__cause__))
+        self.assertIn("Unknown command 'set_camera_follow_player'", str(raised.exception.__cause__))
 
     def test_set_var_from_camera_is_removed(self) -> None:
         world = World()
@@ -3552,7 +3560,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(raised.exception.__cause__)
-        self.assertIn("set_var_from_camera was removed", str(raised.exception.__cause__))
+        self.assertIn("Unknown command 'set_var_from_camera'", str(raised.exception.__cause__))
 
     def test_set_input_event_name_is_removed(self) -> None:
         world = World()
@@ -3570,7 +3578,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(raised.exception.__cause__)
-        self.assertIn("set_input_event_name was removed", str(raised.exception.__cause__))
+        self.assertIn("Unknown command 'set_input_event_name'", str(raised.exception.__cause__))
 
     def test_explicit_camera_query_helpers_are_removed(self) -> None:
         world = World()
@@ -3582,12 +3590,12 @@ class StrictContentIdTests(unittest.TestCase):
             (
                 "set_world_var_from_camera",
                 {"name": "camera_x", "field": "x"},
-                "set_world_var_from_camera was removed",
+                "Unknown command 'set_world_var_from_camera'",
             ),
             (
                 "set_entity_var_from_camera",
                 {"entity_id": "player", "name": "camera_x", "field": "x"},
-                "set_entity_var_from_camera was removed",
+                "Unknown command 'set_entity_var_from_camera'",
             ),
         ):
             with self.assertRaises(CommandExecutionError) as raised:
