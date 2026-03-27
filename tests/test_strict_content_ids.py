@@ -897,6 +897,30 @@ class StrictContentIdTests(unittest.TestCase):
             any("must not use 'on_complete'" in issue for issue in raised.exception.issues)
         )
 
+    def test_named_command_validation_rejects_on_start_on_end_wrappers(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "walk_one_tile.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "wait_frames",
+                            "frames": 1,
+                            "on_start": [],
+                            "on_end": [],
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(NamedCommandValidationError) as raised:
+            validate_project_named_commands(project)
+
+        self.assertTrue(
+            any("must not use lifecycle wrapper fields" in issue for issue in raised.exception.issues)
+        )
+
     def test_named_command_validation_rejects_removed_sprite_command(self) -> None:
         _, project = self._make_project(
             commands={
@@ -2114,6 +2138,42 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any("must not use 'on_complete'" in issue for issue in raised.exception.issues)
+        )
+
+    def test_area_validation_rejects_on_start_on_end_in_entity_event(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "entities": [
+                        {
+                            "id": "sign_1",
+                            "kind": "sign",
+                            "x": 1,
+                            "y": 1,
+                            "events": {
+                                "interact": {
+                                    "commands": [
+                                        {
+                                            "type": "wait_frames",
+                                            "frames": 1,
+                                            "on_start": [],
+                                            "on_end": [],
+                                        }
+                                    ]
+                                }
+                            },
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any("must not use lifecycle wrapper fields" in issue for issue in raised.exception.issues)
         )
 
     def test_area_validation_rejects_reserved_entity_id_self(self) -> None:

@@ -127,103 +127,6 @@ class CommandExecutionError(RuntimeError):
         self.trace = list(trace)
 
 
-def _normalize_command_list(commands: Any) -> list[dict[str, Any]]:
-    """Return a normalized list of command specs."""
-    if commands is None:
-        return []
-    if isinstance(commands, dict):
-        return [dict(commands)]
-    if isinstance(commands, list):
-        return [dict(command) for command in commands]
-    raise TypeError("Command list must be a dict or list of dicts.")
-
-
-class LifecycleChainHandle(CommandHandle):
-    """Run optional on_start/on_end command lists around a primary handle."""
-
-    def __init__(
-        self,
-        registry: Any,
-        context: CommandContext,
-        primary_handle: CommandHandle,
-        on_start: list[dict[str, Any]] | dict[str, Any] | None,
-        on_end: list[dict[str, Any]] | dict[str, Any] | None,
-        *,
-        base_params: dict[str, Any] | None = None,
-    ) -> None:
-        super().__init__()
-        self.registry = registry
-        self.context = context
-        self.primary_handle = primary_handle
-        self.on_start_commands = _normalize_command_list(on_start)
-        self.on_end_commands = _normalize_command_list(on_end)
-        self.base_params = dict(base_params or {})
-        self.start_handle: CommandHandle | None = None
-        self.end_handle: CommandHandle | None = None
-        self._start_finished = False
-        self._primary_finished = False
-        if self.on_start_commands:
-            self.start_handle = SequenceCommandHandle(
-                self.registry,
-                self.context,
-                self.on_start_commands,
-                base_params=self.base_params,
-            )
-        else:
-            self._start_finished = True
-        self.update(0.0)
-
-    def update(self, dt: float) -> None:
-        """Advance the on_start hooks, primary handle, then on_end hooks."""
-        if self.complete:
-            return
-
-        if not self._start_finished:
-            assert self.start_handle is not None
-            self.start_handle.update(dt)
-            self.captures_menu_input = self.start_handle.captures_menu_input
-            self.allow_entity_input = self.start_handle.allow_entity_input
-            if not self.start_handle.complete:
-                return
-            self.start_handle = None
-            self._start_finished = True
-
-        if not self._primary_finished:
-            self.primary_handle.update(dt)
-            self.captures_menu_input = self.primary_handle.captures_menu_input
-            self.allow_entity_input = self.primary_handle.allow_entity_input
-            if not self.primary_handle.complete:
-                return
-            self._primary_finished = True
-            if not self.on_end_commands:
-                self.complete = True
-                self.captures_menu_input = False
-                self.allow_entity_input = False
-                return
-            self.end_handle = SequenceCommandHandle(
-                self.registry,
-                self.context,
-                self.on_end_commands,
-                base_params=self.base_params,
-            )
-            self.captures_menu_input = self.end_handle.captures_menu_input
-            self.allow_entity_input = self.end_handle.allow_entity_input
-            if self.end_handle.complete:
-                self.complete = True
-                self.captures_menu_input = False
-                self.allow_entity_input = False
-                return
-
-        assert self.end_handle is not None
-        self.end_handle.update(dt)
-        self.captures_menu_input = self.end_handle.captures_menu_input
-        self.allow_entity_input = self.end_handle.allow_entity_input
-        if self.end_handle.complete:
-            self.complete = True
-            self.captures_menu_input = False
-            self.allow_entity_input = False
-
-
 @dataclass(slots=True)
 class QueuedCommand:
     """A pending command request waiting to be executed by the runner."""
@@ -632,14 +535,24 @@ def execute_registered_command(
     name: str,
     params: dict[str, Any],
 ) -> CommandHandle:
-    """Execute a named command and wrap any generic completion chain."""
+    """Execute a named command with one already-resolved parameter dictionary."""
     command_params = dict(params)
-    if "on_complete" in command_params:
-        raise ValueError(
-            f"Command '{name}' must not use 'on_complete'; use 'on_start' and 'on_end'."
-        )
-    on_start = command_params.pop("on_start", None)
-    on_end = command_params.pop("on_end", None)
+    disallowed_lifecycle_keys = {"on_complete", "on_start", "on_end"} & set(command_params)
+    if disallowed_lifecycle_keys:
+        forbidden = sorted(disallowed_lifecycle_keys)
+        if forbidden == ["on_complete"]:
+            message = (
+                f"Command '{name}' must not use 'on_complete'; "
+                "use explicit sequencing with 'run_commands' instead."
+            )
+        else:
+            formatted = ", ".join(f"'{key}'" for key in forbidden)
+            message = (
+                f"Command '{name}' must not use lifecycle wrapper field(s) {formatted}; "
+                "use explicit sequencing with 'run_commands' or overlapping work with "
+                "'run_detached_commands' instead."
+            )
+        raise ValueError(message)
     trace_entry = _describe_command(name, command_params)
     context.command_trace.append(trace_entry)
     try:
@@ -657,15 +570,6 @@ def execute_registered_command(
     finally:
         if context.command_trace and context.command_trace[-1] == trace_entry:
             context.command_trace.pop()
-    if on_start or on_end:
-        return LifecycleChainHandle(
-            registry,
-            context,
-            handle,
-            on_start,
-            on_end,
-            base_params=command_params,
-        )
     return handle
 
 

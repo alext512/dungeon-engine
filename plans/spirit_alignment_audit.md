@@ -30,10 +30,11 @@ These areas look broadly aligned with the intended direction and are not the mai
 - input-route restore is handled through the engine-owned route stack rather than a privileged actor
 - camera state is explicit runtime state instead of being derived from a special player concept
 - helper "read and store" commands for camera, JSON/text processing, facing state, and collection items have been replaced by runtime tokens or structured value sources in the active authored model
+- removed dialogue/data/input helper command names and the old broad variable builtins are no longer part of the active builtin registry
 
 ## Definite Mismatches
 
-### 1. `CommandContext` is still a giant shared service bag
+### 1. `CommandContext` is still a giant shared service bag internally
 
 Files:
 
@@ -59,17 +60,19 @@ What is happening:
   - input handler
   - persistence
   - area/new-game/load/save/quit callbacks
-- `Game._install_play_runtime()` builds and passes this full bag to all command execution.
+- `Game._install_play_runtime()` still builds one full runtime root for command execution.
+- The active runner no longer hands that full bag to every strict primitive by default.
+- Many strict primitive families now receive only the explicit engine services named in their Python signatures, while richer orchestration commands still receive full runner context.
 
 Why this conflicts with the spirit:
 
 - the project direction is that primitive commands should receive only what they actually need
 - this broad runtime bag is still the opposite shape: one shared "everything" toolbox
 
-What to do later:
+Remaining work:
 
-- move toward command-specific dependency injection for true primitives
-- keep a full runtime root internally if needed, but stop letting primitive command contracts effectively depend on the whole bag
+- finish converting the remaining strict primitive families that still take full `context`
+- keep the full runtime root internal, but continue shrinking the number of command contracts that effectively depend on it
 
 ### 2. Input still has hidden engine fallbacks and engine-owned meaning
 
@@ -97,30 +100,19 @@ Likely future direction:
 - decide whether `Escape` quit fallback should remain a low-level shell/app behavior or be pushed higher
 - keep only true low-level input plumbing in the engine
 
-### 3. The runner still has hidden command lifecycle wrappers
+### 3. Generic per-command lifecycle wrappers are now removed from the active model
 
-Files:
+Status:
 
-- `dungeon_engine/commands/runner.py`
-- `MANUAL.md`
-- `AUTHORING_GUIDE.md`
+- resolved in the active runtime surface
+- generic command-level `on_start` / `on_end` wrapper syntax is gone
+- `LifecycleChainHandle` is gone
+- explicit sequencing now goes through `run_commands`
+- overlapping/background work now goes through `run_detached_commands`
 
-Current examples:
+Remaining follow-through:
 
-- generic per-command `on_start` / `on_end` wrapper syntax
-- `LifecycleChainHandle`
-
-What is happening:
-
-- any command can quietly gain extra wrapper command chains through special keys
-
-Why this conflicts with the spirit:
-
-- this is hidden engine authorship/composition syntax rather than explicit command chaining
-
-Likely future direction:
-
-- decide whether `on_start` / `on_end` should remain as a generic composition feature or be replaced by more explicit command-chain structure
+- keep the docs/examples aligned so old wrapper syntax does not reappear
 
 ### 4. There is still a transitional layer of removed command-name knowledge in validation
 
@@ -143,7 +135,12 @@ Examples:
 - `advance_text_session`
 - `reset_text_session`
 - `set_var_from_camera`
-- the old broad variable builtins
+- `set_var`
+- `increment_var`
+- `set_var_length`
+- `append_to_var`
+- `pop_var`
+- `check_var`
 
 What is happening:
 
@@ -172,7 +169,6 @@ Files:
 
 Current examples:
 
-- `query_facing_state`
 - `run_facing_event`
 - `interact_facing`
 
@@ -264,13 +260,10 @@ They still deserve re-checking later if they start swallowing gameplay meaning, 
 
 ## Suggested Tackling Order
 
-1. Clean runner-level hidden composition/deferred plumbing:
-   - `on_start`
-   - `on_end`
-   - dialogue-branded deferred parameter handling
+1. Finish the remaining `CommandContext` shrink work for the strict primitive families that still take full runner context
 2. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
-3. Once replacement paths are stable, remove the legacy rejection-shim layer
-4. Later, revisit the broader `CommandContext` dependency shape after the command surface is cleaner
+3. Decide the final shape of engine-owned fallback input behavior such as `Escape`
+4. Once replacement paths are stable, remove the legacy rejection-shim layer
 
 ## Working Rule
 
