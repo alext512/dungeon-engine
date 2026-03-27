@@ -16,10 +16,21 @@
       "value": "$direction"
     },
     {
-      "type": "query_facing_state",
-      "entity_id": "self",
-      "movable_event_id": "$push_event_id",
-      "store_state_var": "move_attempt_state"
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_attempt_info",
+      "value": {
+        "$facing_state": {
+          "entity_id": "$self_id",
+          "movable_event_id": "$push_event_id"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_attempt_state",
+      "value": "$self.move_attempt_info.state"
     },
     {
       "type": "check_entity_var",
@@ -53,10 +64,21 @@
               "event_id": "$push_event_id"
             },
             {
-              "type": "query_facing_state",
-              "entity_id": "self",
-              "movable_event_id": "$push_event_id",
-              "store_state_var": "move_attempt_state"
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "move_attempt_info",
+              "value": {
+                "$facing_state": {
+                  "entity_id": "$self_id",
+                  "movable_event_id": "$push_event_id"
+                }
+              }
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "move_attempt_state",
+              "value": "$self.move_attempt_info.state"
             },
             {
               "type": "check_entity_var",

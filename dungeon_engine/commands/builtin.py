@@ -967,72 +967,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("query_facing_state")
     def query_facing_state(
-        context: CommandContext,
-        *,
-        entity_id: str,
-        store_state_var: str,
-        store_entity_id_var: str | None = None,
-        direction: str | None = None,
-        movable_event_id: str | None = None,
-        scope: str = "entity",
-        variable_entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Store whether the tile in front is free, movable, or blocked."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
+        """Reject the removed facing-state-to-var helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "query_facing_state was removed; use explicit variable commands with "
+            "value sources like {'$facing_state': {...}} instead."
         )
-        if not resolved_id:
-            logger.warning("query_facing_state: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        actor = context.world.get_entity(resolved_id)
-        if actor is None:
-            raise KeyError(f"Cannot query facing state for missing entity '{resolved_id}'.")
-
-        target_x, target_y, _ = _get_facing_tile(actor, direction)
-        blocking_entity = context.collision_system.get_blocking_entity(
-            target_x,
-            target_y,
-            ignore_entity_id=resolved_id,
-        )
-        if blocking_entity is None:
-            state = (
-                "free"
-                if context.collision_system.can_move_to(
-                    target_x,
-                    target_y,
-                    ignore_entity_id=resolved_id,
-                )
-                else "blocked"
-            )
-            blocking_entity_id = ""
-        else:
-            blocking_entity_id = blocking_entity.entity_id
-            if movable_event_id and blocking_entity.has_enabled_event(str(movable_event_id)):
-                state = "movable"
-            elif blocking_entity.pushable:
-                state = "movable"
-            else:
-                state = "blocked"
-
-        variables = _resolve_variables(
-            context,
-            scope=scope,
-            entity_id=variable_entity_id if scope == "entity" and variable_entity_id is not None else resolved_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        variables[store_state_var] = state
-        if store_entity_id_var:
-            variables[store_entity_id_var] = blocking_entity_id
-        return ImmediateHandle()
 
     @registry.register("run_facing_event")
     def run_facing_event(

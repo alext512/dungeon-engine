@@ -376,6 +376,32 @@ class _StubTextRenderer:
         return [part for part in str(text).split(" ") if part]
 
 
+class _FacingStateCollisionSystem:
+    def __init__(self, *, blocking_entity=None, can_move: bool = True) -> None:
+        self.blocking_entity = blocking_entity
+        self.can_move = can_move
+
+    def get_blocking_entity(
+        self,
+        target_x: int,
+        target_y: int,
+        *,
+        ignore_entity_id: str | None = None,
+    ):
+        _ = target_x, target_y, ignore_entity_id
+        return self.blocking_entity
+
+    def can_move_to(
+        self,
+        target_x: int,
+        target_y: int,
+        *,
+        ignore_entity_id: str | None = None,
+    ) -> bool:
+        _ = target_x, target_y, ignore_entity_id
+        return self.can_move
+
+
 class _RecordingInputDispatchRunner:
     def __init__(self) -> None:
         self.dispatched: list[tuple[str, str, str | None]] = []
@@ -740,6 +766,10 @@ class StrictContentIdTests(unittest.TestCase):
                 "set_var_from_text_window",
                 {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
             ),
+            (
+                "query_facing_state",
+                {"entity_id": "self", "store_state_var": "move_attempt_state"},
+            ),
         ):
             with self.subTest(command_name=command_name):
                 _, project = self._make_project(
@@ -961,6 +991,10 @@ class StrictContentIdTests(unittest.TestCase):
             (
                 "set_var_from_text_window",
                 {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
+            ),
+            (
+                "query_facing_state",
+                {"entity_id": "self", "store_state_var": "move_attempt_state"},
             ),
         ):
             with self.subTest(command_name=command_name):
@@ -1236,9 +1270,14 @@ class StrictContentIdTests(unittest.TestCase):
             "set_var_from_json_file",
             "set_var_from_wrapped_lines",
             "set_var_from_text_window",
+            "query_facing_state",
         ):
             with self.assertRaises(CommandExecutionError) as raised:
-                params = {"direction": "down"} if command_name == "wait_for_direction_release" else {}
+                params = {}
+                if command_name == "wait_for_direction_release":
+                    params = {"direction": "down"}
+                elif command_name == "query_facing_state":
+                    params = {"entity_id": "self", "store_state_var": "move_attempt_state"}
                 execute_registered_command(registry, context, command_name, params)
             self.assertIsNotNone(raised.exception.__cause__)
             self.assertIn("was removed", str(raised.exception.__cause__))
@@ -1309,6 +1348,42 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertTrue(controller.variables["text_window"]["has_more"])
         self.assertEqual(controller.variables["text_window"]["total_lines"], 4)
+
+    def test_facing_state_value_source_reports_state_and_blocking_entity(self) -> None:
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.facing = "right"
+        blocking_entity = _make_runtime_entity("crate", kind="crate")
+        blocking_entity.pushable = True
+        world.add_entity(actor)
+        world.add_entity(blocking_entity)
+        registry, context = self._make_command_context(world=world)
+        context.collision_system = _FacingStateCollisionSystem(
+            blocking_entity=blocking_entity,
+            can_move=False,
+        )
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "player",
+                "name": "facing_info",
+                "value": {
+                    "$facing_state": {
+                        "entity_id": "player",
+                    }
+                },
+            },
+        )
+        handle.update(0.0)
+
+        player = world.get_entity("player")
+        assert player is not None
+        self.assertEqual(player.variables["facing_info"]["state"], "movable")
+        self.assertEqual(player.variables["facing_info"]["entity_id"], "crate")
+        self.assertEqual(player.variables["facing_info"]["direction"], "right")
 
     def test_explicit_entity_var_primitives_manage_values_and_branching(self) -> None:
         world = World()
@@ -1777,6 +1852,10 @@ class StrictContentIdTests(unittest.TestCase):
             (
                 "set_var_from_text_window",
                 {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
+            ),
+            (
+                "query_facing_state",
+                {"entity_id": "self", "store_state_var": "move_attempt_state"},
             ),
         ):
             with self.subTest(command_name=command_name):

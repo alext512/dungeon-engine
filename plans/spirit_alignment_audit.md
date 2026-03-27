@@ -80,7 +80,6 @@ Files:
 
 Current examples:
 
-- `query_facing_state`
 - `set_world_var_from_collection_item`
 - `set_entity_var_from_collection_item`
 
@@ -89,7 +88,7 @@ What is happening:
 - some commands are still doing two things at once:
   - read/compute something from engine services or input data
   - store the result into a variable
-- the obvious camera and JSON/text helper cases have already been replaced with runtime tokens and structured value sources, but a smaller helper layer still remains
+- the obvious camera, JSON/text, and facing-state helper cases have already been replaced with runtime tokens and structured value sources, but a smaller helper layer still remains
 
 Why this conflicts with the spirit:
 
