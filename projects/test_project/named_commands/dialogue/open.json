@@ -36,11 +36,27 @@
       ],
       "else": [
         {
-          "type": "push_input_routes"
+          "type": "push_input_routes",
+          "actions": [
+            "interact",
+            "menu",
+            "move_up",
+            "move_down",
+            "move_left",
+            "move_right"
+          ]
         },
         {
           "type": "route_inputs_to_entity",
-          "entity_id": "$self_id"
+          "entity_id": "$self_id",
+          "actions": [
+            "interact",
+            "menu",
+            "move_up",
+            "move_down",
+            "move_left",
+            "move_right"
+          ]
         }
       ]
     },

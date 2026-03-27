@@ -422,15 +422,6 @@ def load_project(project_path: Path) -> ProjectContext:
         fallback_name="shared_variables.json",
     )
     shared_variables = _load_shared_variables(shared_variables_path)
-    if "active_entity_id" in raw:
-        raise ValueError(
-            "project.json must not use 'active_entity_id'; use 'input_targets' instead."
-        )
-    if "input_events" in raw:
-        raise ValueError(
-            "project.json must not use 'input_events'; routed entities should define explicit "
-            "'input_map' entries instead."
-        )
 
     return ProjectContext(
         project_root=project_root,

@@ -503,24 +503,6 @@ class StrictContentIdTests(unittest.TestCase):
             any("must not declare 'area_id'" in issue for issue in raised.exception.issues)
         )
 
-    def test_area_validation_rejects_removed_player_id_field(self) -> None:
-        _, project = self._make_project(
-            startup_area="test_room",
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "player_id": "player",
-                }
-            },
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any("must not declare 'player_id'" in issue for issue in raised.exception.issues)
-        )
-
     def test_area_validation_rejects_missing_startup_area_id(self) -> None:
         _, project = self._make_project(
             startup_area="missing_room",
@@ -615,25 +597,6 @@ class StrictContentIdTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             load_project(Path(temp_dir.name) / "project.json")
 
-    def test_load_project_rejects_removed_input_events_manifest_field(self) -> None:
-        temp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(temp_dir.cleanup)
-        project_root = Path(temp_dir.name)
-        _write_json(
-            project_root / "project.json",
-            {
-                "area_paths": ["areas/"],
-                "entity_template_paths": ["entity_templates/"],
-                "named_command_paths": ["named_commands/"],
-                "input_events": {"interact": "confirm"},
-            },
-        )
-
-        with self.assertRaises(ValueError) as raised:
-            load_project(project_root / "project.json")
-
-        self.assertIn("must not use 'input_events'", str(raised.exception))
-
     def test_area_loader_leaves_unassigned_project_input_targets_unrouted(self) -> None:
         _, project = self._make_project(
             input_targets={"menu": "pause_controller"},
@@ -684,6 +647,65 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(runner.dispatched, [("player", "confirm", "player")])
 
+    def test_input_handler_escape_without_menu_target_does_not_quit(self) -> None:
+        import pygame
+
+        world = World()
+        runner = _RecordingInputDispatchRunner()
+        input_handler = InputHandler(runner, world)
+
+        result = input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE})]
+        )
+
+        self.assertFalse(result.should_quit)
+        self.assertEqual(runner.dispatched, [])
+
+    def test_input_handler_routes_debug_keys_only_when_explicit_targets_exist(self) -> None:
+        import pygame
+
+        world = World(
+            default_input_targets={
+                "debug_toggle_pause": "debug_controller",
+                "debug_step_tick": "debug_controller",
+                "debug_zoom_out": "debug_controller",
+                "debug_zoom_in": "debug_controller",
+            }
+        )
+        debug_controller = _make_runtime_entity("debug_controller", kind="system")
+        world.add_entity(debug_controller)
+        runner = _RecordingInputDispatchRunner()
+        input_handler = InputHandler(runner, world)
+
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_F6})]
+        )
+        self.assertEqual(runner.dispatched, [])
+
+        debug_controller.input_map["debug_toggle_pause"] = "toggle_pause"
+        debug_controller.input_map["debug_step_tick"] = "step_tick"
+        debug_controller.input_map["debug_zoom_out"] = "zoom_out"
+        debug_controller.input_map["debug_zoom_in"] = "zoom_in"
+
+        input_handler.handle_events(
+            [
+                pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_F6}),
+                pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_F7}),
+                pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_LEFTBRACKET}),
+                pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RIGHTBRACKET}),
+            ]
+        )
+
+        self.assertEqual(
+            runner.dispatched,
+            [
+                ("debug_controller", "toggle_pause", "debug_controller"),
+                ("debug_controller", "step_tick", "debug_controller"),
+                ("debug_controller", "zoom_out", "debug_controller"),
+                ("debug_controller", "zoom_in", "debug_controller"),
+            ],
+        )
+
     def test_entity_template_validation_rejects_removed_sprite_field(self) -> None:
         _, project = self._make_project(
             entity_templates={
@@ -703,167 +725,6 @@ class StrictContentIdTests(unittest.TestCase):
             any("must not use 'sprite'" in issue for issue in raised.exception.issues)
         )
 
-    def test_entity_template_validation_rejects_removed_run_dialogue_command(self) -> None:
-        _, project = self._make_project(
-            entity_templates={
-                "legacy_sign.json": {
-                    "kind": "sign",
-                    "events": {
-                        "interact": [
-                            {
-                                "type": "run_dialogue",
-                                "dialogue_path": "dialogues/system/title_menu.json",
-                            }
-                        ]
-                    },
-                }
-            }
-        )
-
-        with self.assertRaises(EntityTemplateValidationError) as raised:
-            validate_project_entity_templates(project)
-
-        self.assertTrue(
-            any("uses removed command 'run_dialogue'" in issue for issue in raised.exception.issues)
-        )
-
-    def test_entity_template_validation_rejects_removed_set_input_event_name_command(self) -> None:
-        _, project = self._make_project(
-            entity_templates={
-                "legacy_controller.json": {
-                    "kind": "system",
-                    "events": {
-                        "interact": [
-                            {
-                                "type": "set_input_event_name",
-                                "action": "interact",
-                                "event_id": "confirm",
-                            }
-                        ]
-                    },
-                }
-            }
-        )
-
-        with self.assertRaises(EntityTemplateValidationError) as raised:
-            validate_project_entity_templates(project)
-
-        self.assertTrue(
-            any(
-                "uses removed command 'set_input_event_name'" in issue
-                for issue in raised.exception.issues
-            )
-        )
-
-    def test_entity_template_validation_rejects_removed_data_helper_commands(self) -> None:
-        for command_name, extra_params in (
-            ("set_var_from_json_file", {"scope": "entity", "name": "data", "path": "dialogues/menus/test.json"}),
-            (
-                "set_var_from_wrapped_lines",
-                {"scope": "entity", "name": "lines", "text": "hello", "max_width": 64},
-            ),
-            (
-                "set_var_from_text_window",
-                {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
-            ),
-            (
-                "query_facing_state",
-                {"entity_id": "self", "store_state_var": "move_attempt_state"},
-            ),
-            (
-                "run_facing_event",
-                {"entity_id": "self", "event_id": "interact"},
-            ),
-            (
-                "interact_facing",
-                {"entity_id": "self"},
-            ),
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    entity_templates={
-                        "legacy_helper.json": {
-                            "kind": "system",
-                            "events": {
-                                "interact": [
-                                    {
-                                        "type": command_name,
-                                        **extra_params,
-                                    }
-                                ]
-                            },
-                        }
-                    }
-                )
-
-                with self.assertRaises(EntityTemplateValidationError) as raised:
-                    validate_project_entity_templates(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
-    def test_entity_template_validation_rejects_removed_raw_input_wait_commands(self) -> None:
-        for command_name, extra_params in (
-            ("wait_for_action_press", {}),
-            ("wait_for_direction_release", {"direction": "down"}),
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    entity_templates={
-                        "legacy_input_wait.json": {
-                            "kind": "system",
-                            "events": {
-                                "interact": [
-                                    {
-                                        "type": command_name,
-                                        **extra_params,
-                                    }
-                                ]
-                            },
-                        }
-                    }
-                )
-
-                with self.assertRaises(EntityTemplateValidationError) as raised:
-                    validate_project_entity_templates(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
-    def test_entity_template_validation_rejects_removed_set_camera_follow_player_command(self) -> None:
-        _, project = self._make_project(
-            entity_templates={
-                "legacy_camera.json": {
-                    "kind": "system",
-                    "events": {
-                        "activate": [
-                            {
-                                "type": "set_camera_follow_player",
-                            }
-                        ]
-                    },
-                }
-            }
-        )
-
-        with self.assertRaises(EntityTemplateValidationError) as raised:
-            validate_project_entity_templates(project)
-
-        self.assertTrue(
-            any(
-                "uses removed command 'set_camera_follow_player'" in issue
-                for issue in raised.exception.issues
-            )
-        )
-
     def test_named_command_validation_rejects_authored_id(self) -> None:
         _, project = self._make_project(
             commands={
@@ -881,272 +742,6 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(
             any("must not declare 'id'" in issue for issue in raised.exception.issues)
         )
-
-    def test_named_command_validation_rejects_on_complete(self) -> None:
-        _, project = self._make_project(
-            commands={
-                "walk_one_tile.json": {
-                    "params": [],
-                    "commands": [
-                        {
-                            "type": "wait_frames",
-                            "frames": 1,
-                            "on_complete": [],
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
-
-        self.assertTrue(
-            any("must not use 'on_complete'" in issue for issue in raised.exception.issues)
-        )
-
-    def test_named_command_validation_rejects_on_start_on_end_wrappers(self) -> None:
-        _, project = self._make_project(
-            commands={
-                "walk_one_tile.json": {
-                    "params": [],
-                    "commands": [
-                        {
-                            "type": "wait_frames",
-                            "frames": 1,
-                            "on_start": [],
-                            "on_end": [],
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
-
-        self.assertTrue(
-            any("must not use lifecycle wrapper fields" in issue for issue in raised.exception.issues)
-        )
-
-    def test_named_command_validation_rejects_removed_sprite_command(self) -> None:
-        _, project = self._make_project(
-            commands={
-                "walk_one_tile.json": {
-                    "params": [],
-                    "commands": [
-                        {
-                            "type": "set_sprite_frame",
-                            "entity_id": "self",
-                            "frame": 1,
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
-
-        self.assertTrue(
-            any("uses removed command 'set_sprite_frame'" in issue for issue in raised.exception.issues)
-        )
-
-    def test_named_command_validation_rejects_removed_set_camera_follow_player_command(self) -> None:
-        _, project = self._make_project(
-            commands={
-                "follow_camera.json": {
-                    "params": [],
-                    "commands": [
-                        {
-                            "type": "set_camera_follow_player",
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
-
-        self.assertTrue(
-            any(
-                "uses removed command 'set_camera_follow_player'" in issue
-                for issue in raised.exception.issues
-            )
-        )
-
-    def test_named_command_validation_rejects_removed_camera_query_helpers(self) -> None:
-        for command_name in (
-            "set_var_from_camera",
-            "set_world_var_from_camera",
-            "set_entity_var_from_camera",
-        ):
-            _, project = self._make_project(
-                commands={
-                    "camera_query.json": {
-                        "params": [],
-                        "commands": [
-                            {
-                                "type": command_name,
-                                "name": "camera_x",
-                                **(
-                                    {"entity_id": "system_ui"}
-                                    if command_name == "set_entity_var_from_camera"
-                                    else {}
-                                ),
-                                **({"scope": "world"} if command_name == "set_var_from_camera" else {}),
-                                "field": "x",
-                            }
-                        ],
-                    }
-                }
-            )
-
-            with self.assertRaises(NamedCommandValidationError) as raised:
-                validate_project_named_commands(project)
-
-            self.assertTrue(
-                any(
-                    f"uses removed command '{command_name}'" in issue
-                    for issue in raised.exception.issues
-                )
-            )
-
-    def test_named_command_validation_rejects_removed_data_helper_commands(self) -> None:
-        for command_name, extra_params in (
-            ("set_var_from_json_file", {"scope": "entity", "name": "data", "path": "dialogues/menus/test.json"}),
-            (
-                "set_var_from_wrapped_lines",
-                {"scope": "entity", "name": "lines", "text": "hello", "max_width": 64},
-            ),
-            (
-                "set_var_from_text_window",
-                {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
-            ),
-            (
-                "query_facing_state",
-                {"entity_id": "self", "store_state_var": "move_attempt_state"},
-            ),
-            (
-                "run_facing_event",
-                {"entity_id": "self", "event_id": "interact"},
-            ),
-            (
-                "interact_facing",
-                {"entity_id": "self"},
-            ),
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    commands={
-                        "legacy_helper.json": {
-                            "params": [],
-                            "commands": [
-                                {
-                                    "type": command_name,
-                                    **extra_params,
-                                }
-                            ],
-                        }
-                    }
-                )
-
-                with self.assertRaises(NamedCommandValidationError) as raised:
-                    validate_project_named_commands(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
-    def test_named_command_validation_rejects_removed_raw_input_wait_commands(self) -> None:
-        for command_name, extra_params in (
-            ("wait_for_action_press", {}),
-            ("wait_for_direction_release", {"direction": "down"}),
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    commands={
-                        "legacy_input_wait.json": {
-                            "params": [],
-                            "commands": [
-                                {
-                                    "type": command_name,
-                                    **extra_params,
-                                }
-                            ],
-                        }
-                    }
-                )
-
-                with self.assertRaises(NamedCommandValidationError) as raised:
-                    validate_project_named_commands(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
-    def test_named_command_validation_rejects_removed_set_input_event_name_command(self) -> None:
-        _, project = self._make_project(
-            commands={
-                "legacy_input_event.json": {
-                    "params": [],
-                    "commands": [
-                        {
-                            "type": "set_input_event_name",
-                            "action": "interact",
-                            "event_id": "confirm",
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
-
-        self.assertTrue(
-            any(
-                "uses removed command 'set_input_event_name'" in issue
-                for issue in raised.exception.issues
-            )
-        )
-
-    def test_named_command_validation_rejects_removed_broad_variable_commands(self) -> None:
-        for command_name in (
-            "set_var",
-            "increment_var",
-            "set_var_length",
-            "append_to_var",
-            "pop_var",
-            "set_var_from_collection_item",
-            "check_var",
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    commands={
-                        "legacy_var.json": {
-                            "params": [],
-                            "commands": [{"type": command_name}],
-                        }
-                    }
-                )
-
-                with self.assertRaises(NamedCommandValidationError) as raised:
-                    validate_project_named_commands(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
 
     def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
         _, project = self._make_project(
@@ -1273,30 +868,6 @@ class StrictContentIdTests(unittest.TestCase):
             "Gate is closed.",
         )
         self.assertEqual(controller.variables["dialogue_definition"]["font_id"], "pixelbet")
-
-    def test_entity_template_validation_rejects_removed_start_dialogue_session_command(self) -> None:
-        _, project = self._make_project(
-            entity_templates={
-                "legacy_sign.json": {
-                    "kind": "sign",
-                    "events": {
-                        "interact": [
-                            {
-                                "type": "start_dialogue_session",
-                                "dialogue_path": "dialogues/system/title_menu.json",
-                            }
-                        ]
-                    },
-                }
-            }
-        )
-
-        with self.assertRaises(EntityTemplateValidationError) as raised:
-            validate_project_entity_templates(project)
-
-        self.assertTrue(
-            any("uses removed command 'start_dialogue_session'" in issue for issue in raised.exception.issues)
-        )
 
     def test_removed_text_session_commands_raise_clear_runtime_errors(self) -> None:
         registry, context = self._make_command_context()
@@ -1548,6 +1119,48 @@ class StrictContentIdTests(unittest.TestCase):
         )
         sum_handle.update(0.0)
         self.assertEqual(controller.variables["target_x"], 1)
+
+    def test_debug_runtime_commands_are_gated_by_project_debug_flag(self) -> None:
+        registry, context = self._make_command_context()
+        paused_states: list[bool] = []
+        zoom_deltas: list[int] = []
+        step_requests: list[str] = []
+        pause_state = {"paused": False}
+
+        def _record_pause(paused: bool) -> None:
+            paused_states.append(bool(paused))
+            pause_state["paused"] = bool(paused)
+
+        context.set_simulation_paused = _record_pause
+        context.get_simulation_paused = lambda: pause_state["paused"]
+        context.request_step_simulation_tick = lambda: step_requests.append("step")
+        context.adjust_output_scale = lambda delta: zoom_deltas.append(int(delta))
+
+        context.debug_inspection_enabled = False
+        execute_registered_command(registry, context, "toggle_simulation_paused", {}).update(0.0)
+        execute_registered_command(registry, context, "step_simulation_tick", {}).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "adjust_output_scale",
+            {"delta": 1},
+        ).update(0.0)
+        self.assertEqual(paused_states, [])
+        self.assertEqual(step_requests, [])
+        self.assertEqual(zoom_deltas, [])
+
+        context.debug_inspection_enabled = True
+        execute_registered_command(registry, context, "toggle_simulation_paused", {}).update(0.0)
+        execute_registered_command(registry, context, "step_simulation_tick", {}).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "adjust_output_scale",
+            {"delta": -1},
+        ).update(0.0)
+        self.assertEqual(paused_states, [True])
+        self.assertEqual(step_requests, ["step"])
+        self.assertEqual(zoom_deltas, [-1])
 
     def test_named_interact_one_tile_can_target_adjacent_entity_with_explicit_tile_query(self) -> None:
         _, project = self._make_project(
@@ -2060,249 +1673,6 @@ class StrictContentIdTests(unittest.TestCase):
             any("interact_commands" in issue and "events.interact" in issue for issue in raised.exception.issues)
         )
 
-    def test_area_validation_rejects_removed_run_dialogue_command(self) -> None:
-        _, project = self._make_project(
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "enter_commands": [
-                        {
-                            "type": "run_dialogue",
-                            "dialogue_path": "dialogues/system/title_menu.json",
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any("uses removed command 'run_dialogue'" in issue for issue in raised.exception.issues)
-        )
-
-    def test_area_validation_rejects_removed_set_camera_follow_player_command(self) -> None:
-        _, project = self._make_project(
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "enter_commands": [
-                        {
-                            "type": "set_camera_follow_player",
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any(
-                "uses removed command 'set_camera_follow_player'" in issue
-                for issue in raised.exception.issues
-            )
-        )
-
-    def test_area_validation_rejects_removed_camera_query_helpers(self) -> None:
-        for command_name in (
-            "set_var_from_camera",
-            "set_world_var_from_camera",
-            "set_entity_var_from_camera",
-        ):
-            _, project = self._make_project(
-                areas={
-                    "test_room.json": {
-                        **_minimal_area(),
-                        "enter_commands": [
-                            {
-                                "type": command_name,
-                                "name": "camera_x",
-                                **(
-                                    {"entity_id": "system_ui"}
-                                    if command_name == "set_entity_var_from_camera"
-                                    else {}
-                                ),
-                                **({"scope": "world"} if command_name == "set_var_from_camera" else {}),
-                                "field": "x",
-                            }
-                        ],
-                    }
-                }
-            )
-
-            with self.assertRaises(AreaValidationError) as raised:
-                validate_project_areas(project)
-
-            self.assertTrue(
-                any(
-                    f"uses removed command '{command_name}'" in issue
-                    for issue in raised.exception.issues
-                )
-            )
-
-    def test_area_validation_rejects_removed_data_helper_commands(self) -> None:
-        for command_name, extra_params in (
-            ("set_var_from_json_file", {"scope": "entity", "name": "data", "path": "dialogues/menus/test.json"}),
-            (
-                "set_var_from_wrapped_lines",
-                {"scope": "entity", "name": "lines", "text": "hello", "max_width": 64},
-            ),
-            (
-                "set_var_from_text_window",
-                {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
-            ),
-            (
-                "query_facing_state",
-                {"entity_id": "self", "store_state_var": "move_attempt_state"},
-            ),
-            (
-                "run_facing_event",
-                {"entity_id": "self", "event_id": "interact"},
-            ),
-            (
-                "interact_facing",
-                {"entity_id": "self"},
-            ),
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    areas={
-                        "test_room.json": {
-                            **_minimal_area(),
-                            "enter_commands": [
-                                {
-                                    "type": command_name,
-                                    **extra_params,
-                                }
-                            ],
-                        }
-                    }
-                )
-
-                with self.assertRaises(AreaValidationError) as raised:
-                    validate_project_areas(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
-    def test_area_validation_rejects_removed_raw_input_wait_commands(self) -> None:
-        for command_name, extra_params in (
-            ("wait_for_action_press", {}),
-            ("wait_for_direction_release", {"direction": "down"}),
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    areas={
-                        "test_room.json": {
-                            **_minimal_area(),
-                            "enter_commands": [
-                                {
-                                    "type": command_name,
-                                    **extra_params,
-                                }
-                            ],
-                        }
-                    }
-                )
-
-                with self.assertRaises(AreaValidationError) as raised:
-                    validate_project_areas(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
-    def test_area_validation_rejects_removed_set_input_event_name_command(self) -> None:
-        _, project = self._make_project(
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "enter_commands": [
-                        {
-                            "type": "set_input_event_name",
-                            "action": "interact",
-                            "event_id": "confirm",
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any(
-                "uses removed command 'set_input_event_name'" in issue
-                for issue in raised.exception.issues
-            )
-        )
-
-    def test_area_validation_rejects_removed_if_var_command(self) -> None:
-        _, project = self._make_project(
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "enter_commands": [
-                        {
-                            "type": "if_var",
-                            "scope": "entity",
-                            "entity_id": "self",
-                            "name": "seen",
-                            "then": [],
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any("uses removed command 'if_var'" in issue for issue in raised.exception.issues)
-        )
-
-    def test_area_validation_rejects_removed_broad_variable_commands(self) -> None:
-        for command_name in (
-            "set_var",
-            "increment_var",
-            "set_var_length",
-            "append_to_var",
-            "pop_var",
-            "set_var_from_collection_item",
-            "check_var",
-        ):
-            with self.subTest(command_name=command_name):
-                _, project = self._make_project(
-                    areas={
-                        "test_room.json": {
-                            **_minimal_area(),
-                            "enter_commands": [{"type": command_name}],
-                        }
-                    }
-                )
-
-                with self.assertRaises(AreaValidationError) as raised:
-                    validate_project_areas(project)
-
-                self.assertTrue(
-                    any(
-                        f"uses removed command '{command_name}'" in issue
-                        for issue in raised.exception.issues
-                    )
-                )
-
     def test_area_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
         _, project = self._make_project(
             areas={
@@ -2380,77 +1750,6 @@ class StrictContentIdTests(unittest.TestCase):
                 in issue
                 for issue in raised.exception.issues
             )
-        )
-
-    def test_area_validation_rejects_on_complete_in_entity_event(self) -> None:
-        _, project = self._make_project(
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "entities": [
-                        {
-                            "id": "sign_1",
-                            "kind": "sign",
-                            "x": 1,
-                            "y": 1,
-                            "events": {
-                                "interact": {
-                                    "commands": [
-                                        {
-                                            "type": "wait_frames",
-                                            "frames": 1,
-                                            "on_complete": [],
-                                        }
-                                    ]
-                                }
-                            },
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any("must not use 'on_complete'" in issue for issue in raised.exception.issues)
-        )
-
-    def test_area_validation_rejects_on_start_on_end_in_entity_event(self) -> None:
-        _, project = self._make_project(
-            areas={
-                "test_room.json": {
-                    **_minimal_area(),
-                    "entities": [
-                        {
-                            "id": "sign_1",
-                            "kind": "sign",
-                            "x": 1,
-                            "y": 1,
-                            "events": {
-                                "interact": {
-                                    "commands": [
-                                        {
-                                            "type": "wait_frames",
-                                            "frames": 1,
-                                            "on_start": [],
-                                            "on_end": [],
-                                        }
-                                    ]
-                                }
-                            },
-                        }
-                    ],
-                }
-            }
-        )
-
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any("must not use lifecycle wrapper fields" in issue for issue in raised.exception.issues)
         )
 
     def test_area_validation_rejects_reserved_entity_id_self(self) -> None:
@@ -2741,6 +2040,87 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertIn(">", font.glyphs)
         self.assertIn("<", font.glyphs)
         self.assertGreater(text_renderer.measure_text("><", font_id="pixelbet")[0], 0)
+
+    def test_sample_debug_controller_routes_pause_step_and_zoom_actions(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        self.addCleanup(pygame.quit)
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        title_area_path = project.resolve_area_reference("title_screen")
+        assert title_area_path is not None
+        game = Game(area_path=title_area_path, project=project)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertFalse(game.simulation_paused)
+        base_scale = game.output_scale
+        base_tick_count = game.simulation_tick_count
+
+        self.assertTrue(
+            game._run_play_frame(
+                1 / 60,
+                [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_F6})],
+            )
+        )
+        self.assertTrue(game.simulation_paused)
+
+        paused_tick_count = game.simulation_tick_count
+        self.assertTrue(
+            game._run_play_frame(
+                1 / 60,
+                [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_F7})],
+            )
+        )
+        self.assertTrue(game.simulation_paused)
+        self.assertEqual(game.simulation_tick_count, paused_tick_count + 1)
+
+        self.assertTrue(
+            game._run_play_frame(
+                1 / 60,
+                [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RIGHTBRACKET})],
+            )
+        )
+        self.assertGreaterEqual(game.output_scale, base_scale)
+
+        self.assertTrue(
+            game._run_play_frame(
+                1 / 60,
+                [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_F6})],
+            )
+        )
+        self.assertFalse(game.simulation_paused)
+        self.assertGreater(game.simulation_tick_count, base_tick_count)
+
+    def test_sample_escape_without_menu_target_no_longer_quits(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        self.addCleanup(pygame.quit)
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        title_area_path = project.resolve_area_reference("title_screen")
+        assert title_area_path is not None
+        game = Game(area_path=title_area_path, project=project)
+
+        game.world.route_inputs_to_entity(None, actions=["menu"])
+
+        still_running = game._run_play_frame(
+            1 / 60,
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE})],
+        )
+
+        self.assertTrue(still_running)
 
     def test_save_data_ignores_removed_legacy_session_fields(self) -> None:
         save_data = save_data_from_dict(

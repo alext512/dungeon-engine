@@ -96,10 +96,14 @@ Example:
   ],
   "startup_area": "title_screen",
   "input_targets": {
-    "menu": "pause_controller"
-  },
+      "menu": "pause_controller",
+      "debug_toggle_pause": "debug_controller",
+      "debug_step_tick": "debug_controller",
+      "debug_zoom_in": "debug_controller",
+      "debug_zoom_out": "debug_controller"
+    },
   "debug_inspection_enabled": true
-}
+  }
 ```
 
 Notes:
@@ -362,7 +366,7 @@ Examples:
 
 ### Removed Dialogue Session Commands
 
-The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are intentionally gone. Startup validation rejects authored uses of them, and the runtime names remain only as fail-fast errors.
+The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are intentionally gone. They are no longer part of the active command surface, and if they surface they fail as unknown runtime commands rather than as a special startup migration layer.
 
 Current rule:
 
@@ -519,13 +523,13 @@ Current camera state is saved and restored with the session.
 
 - `WASD` or arrow keys: move
 - `Space` or `Enter`: interact, advance dialogue, confirm choice
-- `Escape`: open the pause menu in playable areas
+- `Escape`: send the routed logical `menu` action; in the sample project this opens the pause menu in playable areas
 
-If debug inspection is enabled:
+If debug inspection is enabled and the project routes the debug actions:
 
-- `F6`: pause/resume simulation
-- `F7`: step one simulation tick
-- `[` / `]`: zoom out/in
+- `F6`: send `debug_toggle_pause`
+- `F7`: send `debug_step_tick`
+- `[` / `]`: send `debug_zoom_out` / `debug_zoom_in`
 
 ### Editor
 

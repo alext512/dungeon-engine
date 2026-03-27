@@ -1695,6 +1695,67 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.request_quit()
         return ImmediateHandle()
 
+    @registry.register("set_simulation_paused")
+    def set_simulation_paused(
+        debug_inspection_enabled: bool,
+        set_simulation_paused: Any | None,
+        *,
+        paused: bool,
+        **_: Any,
+    ) -> CommandHandle:
+        """Enable or disable debug simulation pause when debug inspection is allowed."""
+        if not debug_inspection_enabled:
+            return ImmediateHandle()
+        if set_simulation_paused is None:
+            raise ValueError("Cannot change simulation pause without an active runtime callback.")
+        set_simulation_paused(bool(paused))
+        return ImmediateHandle()
+
+    @registry.register("toggle_simulation_paused")
+    def toggle_simulation_paused(
+        debug_inspection_enabled: bool,
+        get_simulation_paused: Any | None,
+        set_simulation_paused: Any | None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Toggle debug simulation pause when debug inspection is allowed."""
+        if not debug_inspection_enabled:
+            return ImmediateHandle()
+        if get_simulation_paused is None or set_simulation_paused is None:
+            raise ValueError("Cannot toggle simulation pause without active runtime callbacks.")
+        set_simulation_paused(not bool(get_simulation_paused()))
+        return ImmediateHandle()
+
+    @registry.register("step_simulation_tick")
+    def step_simulation_tick(
+        debug_inspection_enabled: bool,
+        request_step_simulation_tick: Any | None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Request one debug simulation tick when debug inspection is allowed."""
+        if not debug_inspection_enabled:
+            return ImmediateHandle()
+        if request_step_simulation_tick is None:
+            raise ValueError("Cannot step simulation without an active runtime callback.")
+        request_step_simulation_tick()
+        return ImmediateHandle()
+
+    @registry.register("adjust_output_scale")
+    def adjust_output_scale(
+        debug_inspection_enabled: bool,
+        adjust_output_scale: Any | None,
+        *,
+        delta: int,
+        **_: Any,
+    ) -> CommandHandle:
+        """Adjust debug render zoom when debug inspection is allowed."""
+        if not debug_inspection_enabled:
+            return ImmediateHandle()
+        if adjust_output_scale is None:
+            raise ValueError("Cannot adjust output scale without an active runtime callback.")
+        adjust_output_scale(int(delta))
+        return ImmediateHandle()
+
     @registry.register("set_camera_follow_entity")
     def set_camera_follow_entity(
         world: Any,

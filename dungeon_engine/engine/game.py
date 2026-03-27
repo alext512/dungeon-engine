@@ -59,6 +59,7 @@ class Game:
         self._max_catchup_ticks = 5
         self.debug_inspection_enabled = bool(project.debug_inspection_enabled)
         self.simulation_paused = False
+        self._debug_step_tick_requested = False
         self.simulation_tick_count = 0
 
         self.area_path = Path(area_path)
@@ -124,17 +125,18 @@ class Game:
         input_result = self.input_handler.handle_events(events)
         if input_result.should_quit:
             return False
-        if input_result.toggle_pause_requested and self.debug_inspection_enabled:
-            self._set_simulation_paused(not self.simulation_paused)
-        if input_result.zoom_delta and self.debug_inspection_enabled:
-            self._adjust_output_scale(input_result.zoom_delta)
 
         if self.simulation_paused:
+            self._flush_immediate_command_work()
             self._accumulated_time = 0.0
-            if input_result.step_tick_requested and self.debug_inspection_enabled:
+            if self._debug_step_tick_requested and self.debug_inspection_enabled:
                 tick_dt = self.fixed_timestep if self.fixed_timestep > 0 else dt
+                self._debug_step_tick_requested = False
                 self._advance_simulation_tick(tick_dt)
+            else:
+                self._debug_step_tick_requested = False
         else:
+            self._debug_step_tick_requested = False
             if self.fixed_timestep <= 0:
                 self._advance_simulation_tick(dt)
             else:
@@ -218,13 +220,14 @@ class Game:
             request_load_game=self.request_load_game,
             save_game=self.save_game,
             request_quit=self.request_quit,
+            debug_inspection_enabled=self.debug_inspection_enabled,
+            set_simulation_paused=self._set_simulation_paused,
+            get_simulation_paused=self._get_simulation_paused,
+            request_step_simulation_tick=self._request_step_simulation_tick,
+            adjust_output_scale=self._adjust_output_scale,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
-        self.input_handler = InputHandler(
-            self.command_runner,
-            self.world,
-            debug_inspection_enabled=self.debug_inspection_enabled,
-        )
+        self.input_handler = InputHandler(self.command_runner, self.world)
 
     def request_area_change(self, request: AreaTransitionRequest) -> None:
         """Queue a transition into another authored area by area id."""
@@ -266,6 +269,33 @@ class Game:
     def request_quit(self) -> None:
         """Ask the runtime loop to close the game at the end of the current frame."""
         self._quit_requested = True
+
+    def _request_step_simulation_tick(self) -> None:
+        """Request one debug simulation tick on the next paused-frame pass."""
+        self._debug_step_tick_requested = True
+
+    def _flush_immediate_command_work(self) -> None:
+        """Let queued immediate commands settle while paused without advancing time."""
+        if self.command_runner is None:
+            return
+        for _ in range(8):
+            before_state = (
+                len(self.command_runner.pending),
+                len(self.command_runner.background_handles),
+                id(self.command_runner.active_handle) if self.command_runner.active_handle else 0,
+                bool(self.command_runner.active_handle),
+            )
+            self.command_runner.update(0.0)
+            after_state = (
+                len(self.command_runner.pending),
+                len(self.command_runner.background_handles),
+                id(self.command_runner.active_handle) if self.command_runner.active_handle else 0,
+                bool(self.command_runner.active_handle),
+            )
+            if not self.command_runner.has_pending_work():
+                break
+            if after_state == before_state:
+                break
 
     def _load_area_runtime(
         self,
@@ -529,6 +559,10 @@ class Game:
         self.simulation_paused = bool(paused)
         self._accumulated_time = 0.0
         self._update_window_caption()
+
+    def _get_simulation_paused(self) -> bool:
+        """Return whether debug simulation pause is currently active."""
+        return bool(self.simulation_paused)
 
     def _update_window_caption(self) -> None:
         """Show zoom, simulation state, and input-routing details in the window title."""

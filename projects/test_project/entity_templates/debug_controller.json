@@ -1,0 +1,49 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "solid": false,
+  "visible": false,
+  "layer": 99,
+  "input_map": {
+    "debug_toggle_pause": "toggle_pause",
+    "debug_step_tick": "step_tick",
+    "debug_zoom_in": "zoom_in",
+    "debug_zoom_out": "zoom_out"
+  },
+  "events": {
+    "toggle_pause": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "toggle_simulation_paused"
+        }
+      ]
+    },
+    "step_tick": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "step_simulation_tick"
+        }
+      ]
+    },
+    "zoom_in": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "adjust_output_scale",
+          "delta": 1
+        }
+      ]
+    },
+    "zoom_out": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "adjust_output_scale",
+          "delta": -1
+        }
+      ]
+    }
+  }
+}

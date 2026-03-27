@@ -25,6 +25,8 @@ If you only need the current reality quickly:
 - entities also declare `space` (`world` or `screen`) and `scope` (`area` or `global`)
 - project-level global entities are authored in `project.json` under `global_entities`
 - input resolves per logical action through `input_targets`, then the routed entity's explicit `input_map`
+- `Escape` in play mode is now just the routed logical `menu` action; it no longer falls back to quit when unrouted
+- sample debug keys now route through a normal global `debug_controller`, while the underlying debug commands are gated by `debug_inspection_enabled`
 - area changes can target authored `entry_points` and optionally transfer one or more live entities
 - the runtime persists transferred travelers and the current camera state across save/load
 - the sample project's shared dialogue UI is a global `dialogue_controller` entity from `entity_templates/dialogue_panel.json`
@@ -63,12 +65,13 @@ If you only need the current reality quickly:
 - generic `set_entity_field` command for safe runtime entity-field mutation, including nested visual paths such as `visuals.main.tint`
 - generic per-command lifecycle wrapper fields `on_start` / `on_end` are removed from the active command surface; explicit sequencing now goes through `run_commands` and overlapping work through `run_detached_commands`
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
-- strict primitive entity-target commands across variables, input routing, camera follow/query, movement, and visual/animation control now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
+- strict primitive entity-target commands across variables, input routing, camera follow, movement, and visual/animation control now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
 - strict primitive command execution now injects only the engine services named in each primitive's Python signature instead of handing the full runtime service bag to those primitive implementations; orchestration commands still use richer runner context where needed
 - controller-driven dialogue/menu flow with entity-owned state and stack snapshots on the controller entity
 - explicit variable commands plus structured value sources such as `{"$json_file": ...}`, `{"$wrapped_lines": {...}}`, `{"$text_window": {...}}`, `{"$entity_ref": {...}}`, `{"$entities_at": {...}}`, `{"$entity_at": {...}}`, and `{"$sum": [...]}` for entity-authored dialogue and spatial logic
 - generic collection helpers such as `append_world_var`, `append_entity_var`, `pop_world_var`, and `pop_entity_var`
 - reusable dialogue/menu data stored as ordinary JSON under the sample project's `dialogues/` folder
+- startup validation now focuses on current structural invariants instead of carrying a broad blacklist of removed command names
 - transient and persistent room reset commands
 - persistent save-slot state layered over authored room data
 - generic `change_area`, `new_game`, `save_game`, `load_game`, and `quit_game` primitives

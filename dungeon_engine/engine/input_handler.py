@@ -36,9 +36,6 @@ class InputFrameResult:
     """High-level play actions requested during one input frame."""
 
     should_quit: bool = False
-    toggle_pause_requested: bool = False
-    step_tick_requested: bool = False
-    zoom_delta: int = 0
 
 
 class InputHandler:
@@ -48,12 +45,9 @@ class InputHandler:
         self,
         command_runner: CommandRunner,
         world: World,
-        *,
-        debug_inspection_enabled: bool = False,
     ) -> None:
         self.command_runner = command_runner
         self.world = world
-        self.debug_inspection_enabled = bool(debug_inspection_enabled)
         self.held_directions: dict[str, bool] = {
             "up": False,
             "down": False,
@@ -91,25 +85,19 @@ class InputHandler:
                         continue
                     if not self.command_runner.has_pending_work() and self._enqueue_action_if_mapped("menu"):
                         continue
-                    if self.command_runner.has_pending_work():
-                        continue
-                    result.should_quit = True
                     continue
 
-                if self.debug_inspection_enabled and event.key == pygame.K_F6:
-                    result.toggle_pause_requested = True
-                    continue
-
-                if self.debug_inspection_enabled and event.key == pygame.K_F7:
-                    result.step_tick_requested = True
-                    continue
-
-                if self.debug_inspection_enabled and event.key == pygame.K_LEFTBRACKET:
-                    result.zoom_delta -= 1
-                    continue
-
-                if self.debug_inspection_enabled and event.key == pygame.K_RIGHTBRACKET:
-                    result.zoom_delta += 1
+                debug_action_name = {
+                    pygame.K_F6: "debug_toggle_pause",
+                    pygame.K_F7: "debug_step_tick",
+                    pygame.K_LEFTBRACKET: "debug_zoom_out",
+                    pygame.K_RIGHTBRACKET: "debug_zoom_in",
+                }.get(event.key)
+                if debug_action_name is not None:
+                    if self._can_route_input_while_busy():
+                        self._enqueue_action_if_mapped(debug_action_name)
+                    elif not self.command_runner.has_pending_work():
+                        self._enqueue_action_if_mapped(debug_action_name)
                     continue
 
                 if event.key in ACTION_KEYS:

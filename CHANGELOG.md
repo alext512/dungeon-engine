@@ -6,6 +6,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ## Primitive Command Cleanup
 
+- Removed most historical removed-command / removed-field startup blacklists so validation now focuses on current structural invariants instead of memorializing obsolete authoring forms
 - Removed generic command-level `on_start` / `on_end` wrapper syntax from the active runtime model in favor of explicit `run_commands` sequencing and `run_detached_commands` overlap
 - Reworked the sample `walk_one_tile` command to use explicit sequencing instead of hidden lifecycle wrappers
 - Tightened validation/runtime so old wrapper syntax now fails fast while dialogue hook payload data such as `segment_hooks[].on_end` continues to work as ordinary controller-owned data
@@ -14,6 +15,8 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Removed `run_facing_event` from the active runtime surface and migrated the sample push path to explicit query/result-driven `run_event`
 - Added generic `"$entity_ref"` and `"$sum"` value sources so authored logic can read runtime tile/facing state and compute explicit target coordinates
 - Removed `interact_facing` from the active runtime surface and migrated the sample player interaction path to explicit coordinate math plus `"$entity_at"` and `run_event`
+- Removed the play-mode `Escape -> quit` fallback so `Escape` is now only the routed logical `menu` action
+- Added explicit debug runtime commands for simulation pause, single-step, and zoom, and routed the sample project's debug keys through a normal global `debug_controller`
 - Removed `set_var_from_json_file`, `set_var_from_wrapped_lines`, and `set_var_from_text_window` in favor of explicit variable commands with structured value sources such as `{"$json_file": ...}`, `{"$wrapped_lines": {...}}`, and `{"$text_window": {...}}`
 - Removed the project-level `input_events` fallback mapping and `set_input_event_name`, so routed entities now fully own input meaning through explicit `input_map` entries
 - Removed the broad variable primitives (`set_var`, `increment_var`, `set_var_length`, `append_to_var`, `pop_var`, `set_var_from_collection_item`, `check_var`) in favor of explicit world/entity forms
