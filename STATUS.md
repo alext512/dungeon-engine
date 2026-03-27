@@ -123,6 +123,6 @@ Expected behavior:
 ## Suggested Next Steps
 
 - expand dialogue authoring with stronger editor-facing tooling
-- add inventory and usable-item commands
+- build more real JSON content and let authoring pressure reveal the next engine changes
 - improve the editor's parameter editing and room-creation workflows
 - revisit movement/render feel and finish the pixel-perfect quality pass

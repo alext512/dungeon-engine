@@ -8,31 +8,22 @@ The spirit should still come from the old Godot project:
 
 - gameplay is driven by reusable commands
 - objects do not hard-code bespoke one-off behavior
-- the same command ideas should be usable by the player, interactable objects, usable items, dialogue choices, and cinematics
+- the same command ideas should be usable by the player, interactable objects, and dialogue choices
 - testing content creation should be possible early through an editor
 
-This is not meant to be a totally generic engine. It is a focused, data-driven puzzle/RPG framework with room to grow.
+This is not meant to be a totally generic engine. It is a focused, data-driven puzzle/RPG framework.
 
-## Core Direction
+## Scope
 
-The first-class functionality is:
+The core engine is centered on:
 
 - grid movement
 - interactable objects
 - dialogue
 - world creation
-- inventory and requirement checks
-- usable items
-- early cinematics
 - early level editor
 
-The architecture should also leave room for later features without forcing a rewrite:
-
-- turn-based mode
-- free movement mode
-- NPC AI
-- richer combat and stats
-- better editor tooling
+This document is about architectural direction, not a promise of specific future engine features.
 
 ## Tech Stack
 
@@ -55,9 +46,6 @@ That includes:
 - object interactions
 - tile triggers
 - dialogue branching
-- inventory checks
-- using items
-- cinematics
 
 Systems still exist, but systems provide primitives. Commands orchestrate those primitives into gameplay.
 
@@ -73,7 +61,6 @@ Example:
 
 Control routing is layered:
 
-- the project defines fallback input event names
 - the project can also define default `input_targets`
 - an area may override `input_targets`
 - actions omitted by both stay unrouted until runtime commands assign them
@@ -82,7 +69,7 @@ Control routing is layered:
 - modal controllers may snapshot and restore borrowed routes through `push_input_routes` / `pop_input_routes`
 - the project may enable or disable debug inspection controls such as zoom/pause/step through `project.json`
 
-This keeps player input, AI behavior, and cinematics aligned around the same action model.
+This keeps player input and controller-driven behavior aligned around the same action model.
 
 ### 3. Grid-first, not grid-only forever
 
@@ -167,7 +154,6 @@ Typical state buckets:
 - authored tags used for grouping, selection, and reset targeting
 - interaction command chains
 - trigger command chains
-- inventory or item container state
 - stats and custom variables
 - visibility, presence, and event enabled state
 
@@ -182,7 +168,6 @@ Systems should provide reusable services such as:
 - movement execution
 - animation playback
 - dialogue UI
-- inventory handling
 - save/load
 - editor tools
 
@@ -216,26 +201,7 @@ files from disk during active play.
 
 ### Command context
 
-Every command should have access to a runtime context such as:
-
-- world
-- current area
-- initiator entity
-- target entity
-- direction
-- selected choice
-- item being used
-- active input target
-- temporary local variables
-
-This matters because the same command type may be used by:
-
-- the player
-- an NPC
-- a door
-- a dialogue branch
-- a cutscene
-- a usable item
+Commands need access to live runtime state, but primitive command APIs should stay narrow and explicit. The engine may keep a broad internal runtime root, while primitive commands receive only the dependencies they actually need.
 
 ### Command types
 
@@ -247,10 +213,8 @@ Expected early command categories:
 - visibility/map: show, hide, remove from map, restore to map
 - dialogue: show text, choices, branch on choice
 - variables: set, increment, compare, copy
-- inventory: add item, remove item, check item, consume item, use item
-- stats: modify stat, check stat
 - level/world: change area, warp, set spawn, persist state, reset transient state, reset persistent state
-- camera: follow, move, shake, lock
+- camera: follow, move, lock
 - audio: play sound, play music, stop audio
 
 ### Command composition
@@ -317,9 +281,9 @@ Suggested responsibilities:
 
 - `engine/`: game loop, renderer, camera, asset loading, save/load
 - `world/`: area model, entity storage, data loading, persistence helpers
-- `systems/`: movement, collision, dialogue, inventory, animation
+- `systems/`: movement, collision, dialogue, animation
 - `commands/`: command runner, registry, command implementations
-- `ui/`: dialogue boxes, choices, inventory UI, debug overlays
+- `ui/`: dialogue boxes, choices, debug overlays
 - `editor/`: editor state, tools, inspector, save/load helpers
 - `data/`: engine-owned internal support data only, if still needed
 
@@ -347,28 +311,7 @@ Early editor scope:
 
 The first editor version does not need a full visual command-chain authoring UI. A simple property inspector plus raw JSON editing for advanced fields is acceptable early on.
 
-## Inventory and Requirements
-
-Inventory is not just a bag of items. It is part of the interaction system.
-
-Important use cases:
-
-- a key allows a door interaction
-- an item can be consumed to trigger commands
-- an NPC can require an item before continuing a dialogue branch
-- a puzzle can check for item combinations
-
-This suggests early support for:
-
-- item definitions
-- inventory storage
-- requirement-check commands
-- success and failure branches
-- usable-item commands
-
-## Dialogue and Cinematics
-
-Dialogue and cinematics should share the command system rather than becoming separate script formats.
+## Dialogue
 
 Dialogue needs:
 
@@ -398,24 +341,12 @@ So the intended dialogue pattern is:
 This keeps dialogue aligned with the general command architecture instead of
 turning it into a separate hardcoded menu system.
 
-Cinematics need:
-
-- sequence commands
-- wait commands
-- movement commands
-- camera commands
-- dialogue commands
-- input lock while active
-
-Because both are command-driven, a cinematic can simply become a command chain that temporarily owns input flow.
-
 ## Persistence
 
 Persistence should support:
 
 - player progress
 - current area
-- inventory
 - persistent area state
 - transferred cross-area traveler state
 - current camera state when exact session restore matters
@@ -559,23 +490,7 @@ are especially relevant:
 
 Those are implementation problems, not arguments against the layered persistence model itself.
 
-## Deferred Expansion Hooks
-
-The architecture should deliberately leave extension points for later work:
-
-### Turn-based mode
-
-Later, a turn manager can decide when commands are allowed to start. Because actions are already commands, the turn layer can sit above them rather than replacing them.
-
-### Free movement
-
-Later, movement commands can target a different movement executor while keeping the same higher-level action API.
-
-### NPC AI
-
-Later, AI can issue the same commands the player does instead of needing a separate bespoke behavior pathway.
-
-## What Success Looks Like Early
+## Success Check
 
 The architecture is on the right track if we can quickly build a small room where:
 
@@ -583,9 +498,6 @@ The architecture is on the right track if we can quickly build a small room wher
 - a lever opens a gate
 - a box can be pushed
 - an NPC talks
-- a key unlocks a door
-- a usable item triggers an effect
-- a short cutscene runs as a command sequence
 - the room can be created and tested from the editor
 
 If the architecture makes that awkward, it should be changed.

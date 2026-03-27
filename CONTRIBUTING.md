@@ -3,12 +3,10 @@
 Read these files in this order:
 
 1. `STATUS.md`
-2. `MANUAL.md`
-3. `AUTHORING_GUIDE.md`
-4. `CONTENT_TYPES.md`
-5. `functionality.md`
-6. `architecture.md`
-7. `roadmap.md`
+2. `AUTHORING_GUIDE.md`
+3. `architecture.md`
+4. `MANUAL.md`
+5. `roadmap.md`
 
 ## Project direction
 
@@ -36,5 +34,5 @@ Read these files in this order:
 
 ## Practical rule of thumb
 
-If a feature would be triggered by the player, an NPC, a usable item, or a cutscene, try to express it through the same command system.
+If a feature would be triggered by the player, an NPC, or a controller flow, try to express it through the same command system.
 

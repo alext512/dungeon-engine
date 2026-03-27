@@ -92,18 +92,22 @@ Example:
     {
       "id": "pause_controller",
       "template": "pause_controller"
+    },
+    {
+      "id": "debug_controller",
+      "template": "debug_controller"
     }
   ],
   "startup_area": "title_screen",
   "input_targets": {
-      "menu": "pause_controller",
-      "debug_toggle_pause": "debug_controller",
-      "debug_step_tick": "debug_controller",
-      "debug_zoom_in": "debug_controller",
-      "debug_zoom_out": "debug_controller"
-    },
+    "menu": "pause_controller",
+    "debug_toggle_pause": "debug_controller",
+    "debug_step_tick": "debug_controller",
+    "debug_zoom_in": "debug_controller",
+    "debug_zoom_out": "debug_controller"
+  },
   "debug_inspection_enabled": true
-  }
+}
 ```
 
 Notes:
