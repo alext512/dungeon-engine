@@ -66,7 +66,7 @@ If you only need the current reality quickly:
 - strict primitive entity-target commands across variables, input routing, camera follow/query, movement, and visual/animation control now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
 - strict primitive command execution now injects only the engine services named in each primitive's Python signature instead of handing the full runtime service bag to those primitive implementations; orchestration commands still use richer runner context where needed
 - controller-driven dialogue/menu flow with entity-owned state and stack snapshots on the controller entity
-- explicit variable commands plus structured value sources such as `{"$json_file": ...}`, `{"$wrapped_lines": {...}}`, and `{"$text_window": {...}}` for entity-authored dialogue logic
+- explicit variable commands plus structured value sources such as `{"$json_file": ...}`, `{"$wrapped_lines": {...}}`, `{"$text_window": {...}}`, `{"$entity_ref": {...}}`, `{"$entities_at": {...}}`, `{"$entity_at": {...}}`, and `{"$sum": [...]}` for entity-authored dialogue and spatial logic
 - generic collection helpers such as `append_world_var`, `append_entity_var`, `pop_world_var`, and `pop_entity_var`
 - reusable dialogue/menu data stored as ordinary JSON under the sample project's `dialogues/` folder
 - transient and persistent room reset commands

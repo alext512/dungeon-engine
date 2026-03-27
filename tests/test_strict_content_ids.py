@@ -770,6 +770,14 @@ class StrictContentIdTests(unittest.TestCase):
                 "query_facing_state",
                 {"entity_id": "self", "store_state_var": "move_attempt_state"},
             ),
+            (
+                "run_facing_event",
+                {"entity_id": "self", "event_id": "interact"},
+            ),
+            (
+                "interact_facing",
+                {"entity_id": "self"},
+            ),
         ):
             with self.subTest(command_name=command_name):
                 _, project = self._make_project(
@@ -1019,6 +1027,14 @@ class StrictContentIdTests(unittest.TestCase):
             (
                 "query_facing_state",
                 {"entity_id": "self", "store_state_var": "move_attempt_state"},
+            ),
+            (
+                "run_facing_event",
+                {"entity_id": "self", "event_id": "interact"},
+            ),
+            (
+                "interact_facing",
+                {"entity_id": "self"},
             ),
         ):
             with self.subTest(command_name=command_name):
@@ -1295,6 +1311,8 @@ class StrictContentIdTests(unittest.TestCase):
             "set_var_from_wrapped_lines",
             "set_var_from_text_window",
             "query_facing_state",
+            "run_facing_event",
+            "interact_facing",
         ):
             with self.assertRaises(CommandExecutionError) as raised:
                 params = {}
@@ -1302,6 +1320,10 @@ class StrictContentIdTests(unittest.TestCase):
                     params = {"direction": "down"}
                 elif command_name == "query_facing_state":
                     params = {"entity_id": "self", "store_state_var": "move_attempt_state"}
+                elif command_name == "run_facing_event":
+                    params = {"entity_id": "self", "event_id": "interact"}
+                elif command_name == "interact_facing":
+                    params = {"entity_id": "self"}
                 execute_registered_command(registry, context, command_name, params)
             self.assertIsNotNone(raised.exception.__cause__)
             self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
@@ -1408,6 +1430,253 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(player.variables["facing_info"]["state"], "movable")
         self.assertEqual(player.variables["facing_info"]["entity_id"], "crate")
         self.assertEqual(player.variables["facing_info"]["direction"], "right")
+
+    def test_entities_at_and_entity_at_value_sources_return_stable_plain_refs(self) -> None:
+        world = World()
+        low = _make_runtime_entity("low", kind="sign")
+        low.grid_x = 2
+        low.grid_y = 3
+        low.layer = 1
+        low.stack_order = 0
+        high = _make_runtime_entity("high", kind="lever")
+        high.grid_x = 2
+        high.grid_y = 3
+        high.layer = 2
+        high.stack_order = 5
+        world.add_entity(low)
+        world.add_entity(high)
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "targets_here",
+                "value": {
+                    "$entities_at": {
+                        "x": 2,
+                        "y": 3,
+                    }
+                },
+            },
+        )
+        handle.update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        targets_here = controller.variables["targets_here"]
+        self.assertEqual([item["entity_id"] for item in targets_here], ["low", "high"])
+        self.assertEqual(targets_here[0]["kind"], "sign")
+        self.assertEqual(targets_here[1]["kind"], "lever")
+
+        first_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "first_target",
+                "value": {
+                    "$entity_at": {
+                        "x": 2,
+                        "y": 3,
+                        "index": 0,
+                        "default": None,
+                    }
+                },
+            },
+        )
+        first_handle.update(0.0)
+        self.assertEqual(controller.variables["first_target"]["entity_id"], "low")
+
+        last_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "last_target",
+                "value": {
+                    "$entity_at": {
+                        "x": 2,
+                        "y": 3,
+                        "index": -1,
+                        "default": None,
+                    }
+                },
+            },
+        )
+        last_handle.update(0.0)
+        self.assertEqual(controller.variables["last_target"]["entity_id"], "high")
+
+        ref_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "self_ref",
+                "value": {
+                    "$entity_ref": {
+                        "entity_id": "high",
+                    }
+                },
+            },
+        )
+        ref_handle.update(0.0)
+        self.assertEqual(controller.variables["self_ref"]["entity_id"], "high")
+        self.assertEqual(controller.variables["self_ref"]["grid_x"], 2)
+
+        sum_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "target_x",
+                "value": {
+                    "$sum": [
+                        "$self.self_ref.grid_x",
+                        -1,
+                    ]
+                },
+            },
+            base_params={"source_entity_id": "dialogue_controller"},
+        )
+        sum_handle.update(0.0)
+        self.assertEqual(controller.variables["target_x"], 1)
+
+    def test_named_interact_one_tile_can_target_adjacent_entity_with_explicit_tile_query(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "interact_one_tile.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "interact_self_ref",
+                            "value": {
+                                "$entity_ref": {
+                                    "entity_id": "$self_id",
+                                }
+                            },
+                        },
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "interact_offset",
+                            "value": {
+                                "$collection_item": {
+                                    "value": {
+                                        "up": {"x": 0, "y": -1},
+                                        "down": {"x": 0, "y": 1},
+                                        "left": {"x": -1, "y": 0},
+                                        "right": {"x": 1, "y": 0},
+                                    },
+                                    "key": "$self.interact_self_ref.facing",
+                                    "default": {"x": 0, "y": 0},
+                                }
+                            },
+                        },
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "interact_target_x",
+                            "value": {
+                                "$sum": [
+                                    "$self.interact_self_ref.grid_x",
+                                    "$self.interact_offset.x",
+                                ]
+                            },
+                        },
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "interact_target_y",
+                            "value": {
+                                "$sum": [
+                                    "$self.interact_self_ref.grid_y",
+                                    "$self.interact_offset.y",
+                                ]
+                            },
+                        },
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "interact_target",
+                            "value": {
+                                "$entity_at": {
+                                    "x": "$self.interact_target_x",
+                                    "y": "$self.interact_target_y",
+                                    "index": 0,
+                                    "default": None,
+                                }
+                            },
+                        },
+                        {
+                            "type": "check_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "interact_target",
+                            "op": "neq",
+                            "value": None,
+                            "then": [
+                                {
+                                    "type": "run_event",
+                                    "entity_id": "$self.interact_target.entity_id",
+                                    "event_id": "interact",
+                                    "actor_entity_id": "$self_id",
+                                }
+                            ],
+                        },
+                    ],
+                }
+            }
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.grid_x = 4
+        player.grid_y = 6
+        player.facing = "right"
+        lever = _make_runtime_entity(
+            "lever",
+            kind="lever",
+            events={
+                "interact": EntityEvent(
+                    commands=[
+                        {
+                            "type": "set_world_var",
+                            "name": "adjacent_interaction_triggered",
+                            "value": True,
+                        }
+                    ]
+                )
+            },
+        )
+        lever.grid_x = 5
+        lever.grid_y = 6
+        world.add_entity(player)
+        world.add_entity(lever)
+        registry, context = self._make_command_context(project=project, world=world)
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "run_named_command",
+                "command_id": "interact_one_tile",
+            },
+            base_params={
+                "source_entity_id": "player",
+                "actor_entity_id": "player",
+            },
+        )
+        while not handle.complete:
+            handle.update(0.0)
+        self.assertTrue(world.variables["adjacent_interaction_triggered"])
 
     def test_explicit_entity_var_primitives_manage_values_and_branching(self) -> None:
         world = World()
@@ -1888,6 +2157,14 @@ class StrictContentIdTests(unittest.TestCase):
             (
                 "query_facing_state",
                 {"entity_id": "self", "store_state_var": "move_attempt_state"},
+            ),
+            (
+                "run_facing_event",
+                {"entity_id": "self", "event_id": "interact"},
+            ),
+            (
+                "interact_facing",
+                {"entity_id": "self"},
             ),
         ):
             with self.subTest(command_name=command_name):

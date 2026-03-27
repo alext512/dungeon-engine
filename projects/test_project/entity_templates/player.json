@@ -52,8 +52,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "interact_facing",
-          "entity_id": "self"
+          "type": "run_named_command",
+          "command_id": "interact_one_tile"
         }
       ]
     },

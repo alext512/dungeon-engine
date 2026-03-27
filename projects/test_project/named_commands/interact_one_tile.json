@@ -1,0 +1,82 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "interact_self_ref",
+      "value": {
+        "$entity_ref": {
+          "entity_id": "$self_id"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "interact_offset",
+      "value": {
+        "$collection_item": {
+          "value": {
+            "up": { "x": 0, "y": -1 },
+            "down": { "x": 0, "y": 1 },
+            "left": { "x": -1, "y": 0 },
+            "right": { "x": 1, "y": 0 }
+          },
+          "key": "$self.interact_self_ref.facing",
+          "default": { "x": 0, "y": 0 }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "interact_target_x",
+      "value": {
+        "$sum": [
+          "$self.interact_self_ref.grid_x",
+          "$self.interact_offset.x"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "interact_target_y",
+      "value": {
+        "$sum": [
+          "$self.interact_self_ref.grid_y",
+          "$self.interact_offset.y"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "interact_target",
+      "value": {
+        "$entity_at": {
+          "x": "$self.interact_target_x",
+          "y": "$self.interact_target_y",
+          "index": 0,
+          "default": null
+        }
+      }
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
+      "name": "interact_target",
+      "op": "neq",
+      "value": null,
+      "then": [
+        {
+          "type": "run_event",
+          "entity_id": "$self.interact_target.entity_id",
+          "event_id": "interact",
+          "actor_entity_id": "$self_id"
+        }
+      ]
+    }
+  ]
+}

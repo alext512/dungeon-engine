@@ -417,40 +417,6 @@ def _get_facing_tile(entity, direction: str | None = None) -> tuple[int, int, st
     return entity.grid_x + delta_x, entity.grid_y + delta_y, resolved_direction
 
 
-def _get_facing_target_entity(
-    *,
-    world: Any,
-    collision_system: Any,
-    actor_entity_id: str,
-    direction: str | None = None,
-    prefer_blocking: bool = False,
-):
-    """Return the topmost entity ahead of the actor, optionally preferring blockers."""
-    actor = world.get_entity(actor_entity_id)
-    if actor is None:
-        raise KeyError(f"Cannot resolve facing target for missing entity '{actor_entity_id}'.")
-
-    target_x, target_y, _ = _get_facing_tile(actor, direction)
-    if prefer_blocking:
-        blocking_entity = collision_system.get_blocking_entity(
-            target_x,
-            target_y,
-            ignore_entity_id=actor.entity_id,
-        )
-        if blocking_entity is not None:
-            return blocking_entity
-
-    for entity in reversed(
-        world.get_entities_at(
-            target_x,
-            target_y,
-            exclude_entity_id=actor.entity_id,
-        )
-    ):
-        return entity
-    return None
-
-
 def _normalize_input_map(value: Any) -> dict[str, str]:
     """Convert JSON-like input-map data into a stable string-to-string mapping."""
     if not isinstance(value, dict):
@@ -863,51 +829,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             entity_id=entity_id,
             field_name="facing",
             value=direction,
-        )
-
-    @registry.register("run_facing_event")
-    def run_facing_event(
-        context: CommandContext,
-        *,
-        entity_id: str,
-        event_id: str,
-        direction: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Run a named event on the entity directly in front of an actor."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("run_facing_event: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        target_entity = _get_facing_target_entity(
-            world=context.world,
-            collision_system=context.collision_system,
-            actor_entity_id=resolved_id,
-            direction=direction,
-            prefer_blocking=True,
-        )
-        if target_entity is None:
-            return ImmediateHandle()
-        event = target_entity.get_event(event_id)
-        if not target_entity.has_enabled_event(event_id) or event is None or not event.commands:
-            return ImmediateHandle()
-        return SequenceCommandHandle(
-            registry,
-            context,
-            event.commands,
-            base_params={
-                "source_entity_id": target_entity.entity_id,
-                "actor_entity_id": resolved_id,
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
         )
 
     @registry.register("move_entity_one_tile")
@@ -1379,47 +1300,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             base_params={
                 **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
                 **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
-        )
-
-    @registry.register("interact_facing")
-    def interact_facing(
-        context: CommandContext,
-        *,
-        entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Activate the first enabled interact target in front of an actor."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("interact_facing: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        target_entity = context.interaction_system.get_facing_target(resolved_id)
-        if target_entity is None:
-            return ImmediateHandle()
-        interact_event = target_entity.get_event("interact")
-        if (
-            not target_entity.has_enabled_event("interact")
-            or interact_event is None
-            or not interact_event.commands
-        ):
-            return ImmediateHandle()
-        return SequenceCommandHandle(
-            registry,
-            context,
-            interact_event.commands,
-            base_params={
-                "source_entity_id": target_entity.entity_id,
-                "actor_entity_id": resolved_id,
                 **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
             },
         )
