@@ -11,7 +11,7 @@
   "commands": [
     {
       "type": "set_entity_field",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "field_name": "facing",
       "value": "$direction"
     },

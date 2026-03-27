@@ -439,6 +439,11 @@ def _require_exact_entity(context: CommandContext, entity_id: str) -> Any:
     resolved_id = str(entity_id).strip()
     if not resolved_id:
         raise ValueError("Entity-targeted primitive commands require a non-blank entity_id.")
+    if resolved_id in {"self", "actor", "caller"}:
+        raise ValueError(
+            "Entity-targeted primitive commands require an explicit entity_id; "
+            "use '$self_id', '$actor_id', or '$caller_id' in a higher-level command first."
+        )
     entity = context.world.get_entity(resolved_id)
     if entity is None:
         raise KeyError(f"Entity '{resolved_id}' not found.")
@@ -792,30 +797,16 @@ _COMPARE_OPS: dict[str, Any] = {
 def register_builtin_commands(registry: CommandRegistry) -> None:
     """Register the minimal command set needed for the first movement slice."""
 
-    def _set_entity_field_handle(
+    def _set_exact_entity_field_handle(
         context: CommandContext,
         *,
         entity_id: str,
         field_name: str,
         value: Any,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
     ) -> CommandHandle:
         """Apply one generic entity field mutation through the shared helper."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("set_entity_field: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set field on missing entity '{resolved_id}'.")
+        entity = _require_exact_entity(context, entity_id)
         persisted_field_name, persisted_value = _apply_entity_field_value(
             entity,
             str(field_name),
@@ -824,7 +815,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if persistent:
             _persist_entity_field(
                 context,
-                entity_id=resolved_id,
+                entity_id=entity.entity_id,
                 field_name=persisted_field_name,
                 value=persisted_value,
                 entity=entity,
@@ -2260,29 +2251,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         event_id: str,
         enabled: bool,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Enable or disable a named event on an entity."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("set_event_enabled: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set event enabled state on missing entity '{resolved_id}'.")
+        entity = _require_exact_entity(context, entity_id)
         entity.set_event_enabled(event_id, enabled)
         if persistent:
             _persist_entity_event_enabled(
                 context,
-                entity_id=resolved_id,
+                entity_id=entity.entity_id,
                 event_id=event_id,
                 enabled=enabled,
                 entity=entity,
@@ -2296,21 +2272,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         enabled: bool,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Enable or disable all named events on an entity at once."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name="events_enabled",
             value=enabled,
             persistent=persistent,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("set_input_target")
@@ -2319,19 +2288,10 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         action: str,
         entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Route one logical input action to a specific entity or clear it."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        ) if entity_id not in (None, "") else None
-        context.world.set_input_target(str(action), resolved_id)
+        resolved_entity_id = None if entity_id in (None, "") else _require_exact_entity(context, entity_id).entity_id
+        context.world.set_input_target(str(action), resolved_entity_id)
         return ImmediateHandle()
 
     @registry.register("set_entity_field")
@@ -2342,21 +2302,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         field_name: str,
         value: Any,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Change one supported runtime field on an entity."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name=field_name,
             value=value,
             persistent=persistent,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("route_inputs_to_entity")
@@ -2365,22 +2318,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str | None = None,
         actions: list[str] | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Route selected logical inputs, or all inputs, to one entity."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        ) if entity_id not in (None, "") else None
-        if resolved_id in (None, ""):
+        if entity_id in (None, ""):
             context.world.route_inputs_to_entity(None, actions=actions)
             return ImmediateHandle()
-        context.world.route_inputs_to_entity(resolved_id, actions=actions)
+        context.world.route_inputs_to_entity(
+            _require_exact_entity(context, entity_id).entity_id,
+            actions=actions,
+        )
         return ImmediateHandle()
 
     @registry.register("push_input_routes")
@@ -2910,21 +2856,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         visible: bool,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Change whether an entity is rendered and targetable."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name="visible",
             value=visible,
             persistent=persistent,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("set_solid")
@@ -2934,21 +2873,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         solid: bool,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Change whether an entity blocks movement."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name="solid",
             value=solid,
             persistent=persistent,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("set_present")
@@ -2958,21 +2890,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         present: bool,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Change whether an entity participates in the current scene."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name="present",
             value=present,
             persistent=persistent,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("set_color")
@@ -2982,21 +2907,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         color: list[int],
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Change an entity's debug-render color."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name="color",
             value=color,
             persistent=persistent,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("destroy_entity")
@@ -3005,27 +2923,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         persistent: bool = False,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Destroy an entity instance completely."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("destroy_entity: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot destroy missing entity '{resolved_id}'.")
-        context.world.remove_entity(resolved_id)
+        entity = _require_exact_entity(context, entity_id)
+        context.world.remove_entity(entity.entity_id)
         if persistent and context.persistence_runtime is not None:
-            context.persistence_runtime.remove_entity(resolved_id, entity=entity)
+            context.persistence_runtime.remove_entity(entity.entity_id, entity=entity)
         return ImmediateHandle()
 
     @registry.register("spawn_entity")

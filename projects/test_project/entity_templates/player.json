@@ -32,7 +32,7 @@
         },
         {
           "type": "set_event_enabled",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "event_id": "play_bump_sound",
           "enabled": false
         },
@@ -42,7 +42,7 @@
         },
         {
           "type": "set_event_enabled",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "event_id": "play_bump_sound",
           "enabled": true
         }

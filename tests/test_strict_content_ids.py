@@ -667,6 +667,34 @@ class StrictContentIdTests(unittest.TestCase):
                     )
                 )
 
+    def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "bad_primitive.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "set_entity_field",
+                            "entity_id": "self",
+                            "field_name": "visible",
+                            "value": False,
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(NamedCommandValidationError) as raised:
+            validate_project_named_commands(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'self' with strict primitive 'set_entity_field'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
     def test_set_var_from_json_file_loads_project_relative_dialogue_data(self) -> None:
         _, project = self._make_project(
             dialogues={
@@ -1268,6 +1296,32 @@ class StrictContentIdTests(unittest.TestCase):
                         for issue in raised.exception.issues
                     )
                 )
+
+    def test_area_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "route_inputs_to_entity",
+                            "entity_id": "actor",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'actor' with strict primitive 'route_inputs_to_entity'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
 
     def test_area_validation_rejects_on_complete_in_entity_event(self) -> None:
         _, project = self._make_project(
@@ -2346,7 +2400,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
-    def test_set_entity_field_supports_caller_reference(self) -> None:
+    def test_set_entity_field_supports_caller_token_via_run_commands(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -2356,12 +2410,17 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_entity_field",
+            "run_commands",
             {
-                "entity_id": "caller",
-                "field_name": "visuals.main.tint",
-                "value": [5, 6, 7],
                 "caller_entity_id": "lever",
+                "commands": [
+                    {
+                        "type": "set_entity_field",
+                        "entity_id": "$caller_id",
+                        "field_name": "visuals.main.tint",
+                        "value": [5, 6, 7],
+                    }
+                ],
             },
         )
         handle.update(0.0)
@@ -2369,7 +2428,7 @@ class StrictContentIdTests(unittest.TestCase):
         caller_visual = world.get_entity("lever").require_visual("main")  # type: ignore[union-attr]
         self.assertEqual(caller_visual.tint, (5, 6, 7))
 
-    def test_route_inputs_to_entity_command_supports_actor_reference(self) -> None:
+    def test_route_inputs_to_entity_command_supports_actor_token_via_run_commands(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -2386,10 +2445,15 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "route_inputs_to_entity",
+            "run_commands",
             {
-                "entity_id": "actor",
                 "actor_entity_id": "player",
+                "commands": [
+                    {
+                        "type": "route_inputs_to_entity",
+                        "entity_id": "$actor_id",
+                    }
+                ],
             },
         )
         handle.update(0.0)
@@ -2425,6 +2489,42 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
         self.assertEqual(world.get_input_target_id("interact"), "player")
+
+    def test_strict_entity_primitives_reject_raw_symbolic_entity_refs(self) -> None:
+        world = World(default_input_targets={"interact": "player"})
+        world.add_entity(_make_runtime_entity("player", kind="player", with_visual=True))
+        registry, context = self._make_command_context(world=world)
+
+        for command_name, params in (
+            (
+                "set_entity_field",
+                {
+                    "entity_id": "self",
+                    "field_name": "visible",
+                    "value": False,
+                },
+            ),
+            (
+                "set_input_target",
+                {
+                    "action": "interact",
+                    "entity_id": "actor",
+                },
+            ),
+            (
+                "set_event_enabled",
+                {
+                    "entity_id": "caller",
+                    "event_id": "interact",
+                    "enabled": False,
+                },
+            ),
+        ):
+            with self.subTest(command_name=command_name):
+                with self.assertRaises(CommandExecutionError) as raised:
+                    execute_registered_command(registry, context, command_name, params)
+                self.assertIsNotNone(raised.exception.__cause__)
+                self.assertIn("use '$self_id', '$actor_id', or '$caller_id'", str(raised.exception.__cause__))
 
     def test_push_and_pop_input_routes_restore_nested_snapshots(self) -> None:
         world = World(

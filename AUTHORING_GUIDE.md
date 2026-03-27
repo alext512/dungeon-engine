@@ -433,7 +433,7 @@ Example:
 }
 ```
 
-For the strict primitive variable commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings.
+For the strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, and `route_inputs_to_entity`.
 
 ## Ordinary JSON Dialogue Data
 
