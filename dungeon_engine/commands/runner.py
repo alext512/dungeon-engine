@@ -40,7 +40,6 @@ class CommandContext:
     audio_player: Any | None = None
     screen_manager: Any | None = None
     command_runner: Any | None = None
-    input_handler: Any | None = None
     persistence_runtime: Any | None = None
     request_area_change: Callable[["AreaTransitionRequest"], None] | None = None
     request_new_game: Callable[["AreaTransitionRequest"], None] | None = None

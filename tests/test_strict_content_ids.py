@@ -768,6 +768,38 @@ class StrictContentIdTests(unittest.TestCase):
                     )
                 )
 
+    def test_entity_template_validation_rejects_removed_raw_input_wait_commands(self) -> None:
+        for command_name, extra_params in (
+            ("wait_for_action_press", {}),
+            ("wait_for_direction_release", {"direction": "down"}),
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    entity_templates={
+                        "legacy_input_wait.json": {
+                            "kind": "system",
+                            "events": {
+                                "interact": [
+                                    {
+                                        "type": command_name,
+                                        **extra_params,
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                )
+
+                with self.assertRaises(EntityTemplateValidationError) as raised:
+                    validate_project_entity_templates(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
+
     def test_entity_template_validation_rejects_removed_set_camera_follow_player_command(self) -> None:
         _, project = self._make_project(
             entity_templates={
@@ -935,6 +967,36 @@ class StrictContentIdTests(unittest.TestCase):
                 _, project = self._make_project(
                     commands={
                         "legacy_helper.json": {
+                            "params": [],
+                            "commands": [
+                                {
+                                    "type": command_name,
+                                    **extra_params,
+                                }
+                            ],
+                        }
+                    }
+                )
+
+                with self.assertRaises(NamedCommandValidationError) as raised:
+                    validate_project_named_commands(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
+
+    def test_named_command_validation_rejects_removed_raw_input_wait_commands(self) -> None:
+        for command_name, extra_params in (
+            ("wait_for_action_press", {}),
+            ("wait_for_direction_release", {"direction": "down"}),
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    commands={
+                        "legacy_input_wait.json": {
                             "params": [],
                             "commands": [
                                 {
@@ -1169,12 +1231,15 @@ class StrictContentIdTests(unittest.TestCase):
             "read_text_session",
             "advance_text_session",
             "reset_text_session",
+            "wait_for_action_press",
+            "wait_for_direction_release",
             "set_var_from_json_file",
             "set_var_from_wrapped_lines",
             "set_var_from_text_window",
         ):
             with self.assertRaises(CommandExecutionError) as raised:
-                execute_registered_command(registry, context, command_name, {})
+                params = {"direction": "down"} if command_name == "wait_for_direction_release" else {}
+                execute_registered_command(registry, context, command_name, params)
             self.assertIsNotNone(raised.exception.__cause__)
             self.assertIn("was removed", str(raised.exception.__cause__))
 
@@ -1699,6 +1764,36 @@ class StrictContentIdTests(unittest.TestCase):
                 "set_var_from_text_window",
                 {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
             ),
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    areas={
+                        "test_room.json": {
+                            **_minimal_area(),
+                            "enter_commands": [
+                                {
+                                    "type": command_name,
+                                    **extra_params,
+                                }
+                            ],
+                        }
+                    }
+                )
+
+                with self.assertRaises(AreaValidationError) as raised:
+                    validate_project_areas(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
+
+    def test_area_validation_rejects_removed_raw_input_wait_commands(self) -> None:
+        for command_name, extra_params in (
+            ("wait_for_action_press", {}),
+            ("wait_for_direction_release", {"direction": "down"}),
         ):
             with self.subTest(command_name=command_name):
                 _, project = self._make_project(

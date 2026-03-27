@@ -212,7 +212,6 @@ class Game:
             audio_player=self.audio_player,
             screen_manager=self.screen_manager,
             command_runner=None,
-            input_handler=None,
             persistence_runtime=self.persistence_runtime,
             request_area_change=self.request_area_change,
             request_new_game=self.request_new_game,
@@ -226,7 +225,6 @@ class Game:
             self.world,
             debug_inspection_enabled=self.debug_inspection_enabled,
         )
-        command_context.input_handler = self.input_handler
 
     def request_area_change(self, request: AreaTransitionRequest) -> None:
         """Queue a transition into another authored area by area id."""
