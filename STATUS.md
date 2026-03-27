@@ -72,7 +72,7 @@ If you only need the current reality quickly:
 - authored area `entry_points` plus transfer-aware area changes and fresh-session starts
 - traveler persistence for cross-area entities, including non-duplication on room re-entry
 - explicit camera runtime state with follow entity/input-target modes, offsets, bounds, deadzones, and save/load restore
-- explicit camera query primitives through `set_world_var_from_camera` and `set_entity_var_from_camera`
+- explicit camera runtime tokens such as `$camera.x`, `$camera.follow_entity_id`, `$camera.bounds`, and `$camera.has_bounds`
 - project-scoped JSON save slots rooted in each project's `saves/` folder
 - persistent spawned-entity and persistent destruction support in save data
 

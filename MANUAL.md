@@ -319,7 +319,7 @@ Important command families already in the engine:
 - persistence/flow: `change_area`, `new_game`, `save_game`, `load_game`, `quit_game`
 - input routing: `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, `pop_input_routes`
 - generic text/data helpers: `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_world_var`, `append_entity_var`, `pop_world_var`, `pop_entity_var`
-- camera: `set_camera_follow_entity`, `set_camera_follow_input_target`, `clear_camera_follow`, `set_camera_bounds_rect`, `clear_camera_bounds`, `set_camera_deadzone`, `clear_camera_deadzone`, `set_world_var_from_camera`, `set_entity_var_from_camera`, `move_camera`, `teleport_camera`
+- camera: `set_camera_follow_entity`, `set_camera_follow_input_target`, `clear_camera_follow`, `set_camera_bounds_rect`, `clear_camera_bounds`, `set_camera_deadzone`, `clear_camera_deadzone`, `move_camera`, `teleport_camera`
 
 ### Special entity references
 
@@ -333,7 +333,7 @@ These are resolved by the command system before execution.
 
 Important nuance:
 
-- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_var_from_camera`, `set_facing`, `move_entity_one_tile`, `move_entity`, `teleport_entity`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
+- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_facing`, `move_entity_one_tile`, `move_entity`, `teleport_entity`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
 - higher-level orchestration commands such as `run_event` and `run_named_command` still carry richer runtime context internally
 
 ### Runtime tokens
@@ -495,7 +495,7 @@ Commands can then retarget or refine that state during play:
 - apply follow offsets
 - clamp the camera to a bounds rectangle
 - keep the followed target inside a deadzone rectangle
-- query the current follow target, offsets, position, and bounds state into variables through `set_world_var_from_camera` or `set_entity_var_from_camera`
+- query the current follow target, offsets, position, and bounds state through runtime tokens like `$camera.x`, `$camera.follow_entity_id`, `$camera.bounds`, and `$camera.has_bounds`, then store them with normal explicit variable commands
 
 Current camera state is saved and restored with the session.
 

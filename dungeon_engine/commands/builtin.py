@@ -2541,33 +2541,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.camera.update(context.world, advance_tick=False)
         return ImmediateHandle()
 
-    def _read_camera_field_value(
-        context: CommandContext,
-        *,
-        field: str,
-    ) -> Any:
-        """Return one copied camera state field value."""
-        if context.camera is None:
-            raise ValueError("Cannot read camera state without an active camera.")
-        camera_state = context.camera.to_state_dict()
-        camera_fields = {
-            "mode": camera_state.get("follow_mode"),
-            "follow_mode": camera_state.get("follow_mode"),
-            "follow_entity_id": camera_state.get("follow_entity_id"),
-            "follow_input_action": camera_state.get("follow_input_action"),
-            "x": camera_state.get("x"),
-            "y": camera_state.get("y"),
-            "follow_offset_x": camera_state.get("follow_offset_x"),
-            "follow_offset_y": camera_state.get("follow_offset_y"),
-            "bounds": camera_state.get("bounds"),
-            "deadzone": camera_state.get("deadzone"),
-            "has_bounds": camera_state.get("bounds") is not None,
-            "has_deadzone": camera_state.get("deadzone") is not None,
-        }
-        if field not in camera_fields:
-            raise ValueError(f"Unknown camera field '{field}'.")
-        return copy.deepcopy(camera_fields[field])
-
     @registry.register("set_var_from_camera")
     def set_var_from_camera(
         *args: Any,
@@ -2576,46 +2549,34 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         """Reject the removed broad camera-to-variable helper."""
         _ = args, kwargs
         raise ValueError(
-            "set_var_from_camera was removed; use 'set_world_var_from_camera' "
-            "or 'set_entity_var_from_camera' instead."
+            "set_var_from_camera was removed; read camera values through "
+            "runtime tokens like '$camera.x' and store them with explicit "
+            "variable commands."
         )
 
     @registry.register("set_world_var_from_camera")
     def set_world_var_from_camera(
-        context: CommandContext,
-        *,
-        name: str,
-        field: str,
-        persistent: bool = False,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Copy one camera state field into one explicit world variable."""
-        value = _read_camera_field_value(context, field=field)
-        context.world.variables[name] = value
-        if persistent:
-            _persist_world_variable_value(context, name=name, value=value)
-        return ImmediateHandle()
+        """Reject the transitional explicit camera-to-world-variable helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_world_var_from_camera was removed; use 'set_world_var' with "
+            "a runtime token like '$camera.x' instead."
+        )
 
     @registry.register("set_entity_var_from_camera")
     def set_entity_var_from_camera(
-        context: CommandContext,
-        *,
-        entity_id: str,
-        name: str,
-        field: str,
-        persistent: bool = False,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Copy one camera state field into one explicit entity variable."""
-        value = _read_camera_field_value(context, field=field)
-        variables = _require_exact_entity_variables(context, entity_id)
-        variables[name] = value
-        if persistent:
-            _persist_exact_entity_variable_value(
-                context,
-                entity_id=entity_id,
-                name=name,
-                value=value,
-            )
-        return ImmediateHandle()
+        """Reject the transitional explicit camera-to-entity-variable helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_entity_var_from_camera was removed; use 'set_entity_var' with "
+            "a runtime token like '$camera.follow_entity_id' instead."
+        )
 
     @registry.register("move_camera")
     def move_camera(

@@ -310,6 +310,26 @@ def _resolve_runtime_token(
             raise KeyError("No active project context for $project lookup.")
         return copy.deepcopy(context.project.resolve_shared_variable(tail))
 
+    if head == "camera":
+        if context.camera is None:
+            raise KeyError("No active camera context for $camera lookup.")
+        camera_state = context.camera.to_state_dict()
+        camera_state.setdefault("follow_mode", "none")
+        camera_state.setdefault("follow_entity_id", None)
+        camera_state.setdefault("follow_input_action", None)
+        camera_state.setdefault("x", None)
+        camera_state.setdefault("y", None)
+        camera_state.setdefault("follow_offset_x", 0.0)
+        camera_state.setdefault("follow_offset_y", 0.0)
+        camera_state.setdefault("bounds", None)
+        camera_state.setdefault("deadzone", None)
+        camera_state["has_bounds"] = camera_state.get("bounds") is not None
+        camera_state["has_deadzone"] = camera_state.get("deadzone") is not None
+        camera_state["mode"] = camera_state.get("follow_mode")
+        if not tail:
+            return copy.deepcopy(camera_state)
+        return copy.deepcopy(_lookup_nested_value(camera_state, tail))
+
     if head == "world":
         return copy.deepcopy(_lookup_nested_value(context.world.variables, tail))
 

@@ -626,7 +626,12 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
         if command_type == "set_var_from_camera":
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'set_var_from_camera'; "
-                "use 'set_world_var_from_camera' or 'set_entity_var_from_camera' instead."
+                "use explicit variable commands with runtime tokens like '$camera.x' instead."
+            )
+        if command_type in {"set_world_var_from_camera", "set_entity_var_from_camera"}:
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command '{command_type}'; "
+                "use explicit variable commands with runtime tokens like '$camera.x' instead."
             )
         if command_type == "if_var":
             raise ValueError(
