@@ -160,6 +160,123 @@ class _RecordingAnimationSystem:
         return False
 
 
+class _RecordingMovementSystem:
+    def __init__(self) -> None:
+        self.grid_steps: list[tuple[str, str, float | None, int | None, float | None, str, bool]] = []
+        self.move_to_positions: list[
+            tuple[str, float, float, float | None, int | None, float | None, str, int | None, int | None]
+        ] = []
+        self.move_by_offsets: list[
+            tuple[str, float, float, float | None, int | None, float | None, str, int | None, int | None]
+        ] = []
+        self.move_to_grid_positions: list[tuple[str, int, int, float | None, int | None, float | None, str]] = []
+        self.move_by_grid_offsets: list[tuple[str, int, int, float | None, int | None, float | None, str]] = []
+        self.teleport_grid_positions: list[tuple[str, int, int]] = []
+        self.teleport_positions: list[tuple[str, float, float, int | None, int | None]] = []
+        self.moving_entities: set[str] = set()
+
+    def request_grid_step(
+        self,
+        entity_id: str,
+        direction: str,
+        *,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        grid_sync: str = "immediate",
+        allow_push: bool = True,
+    ) -> list[str]:
+        self.grid_steps.append(
+            (entity_id, direction, duration, frames_needed, speed_px_per_second, grid_sync, allow_push)
+        )
+        return [entity_id]
+
+    def request_move_to_position(
+        self,
+        entity_id: str,
+        x: float,
+        y: float,
+        *,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        grid_sync: str = "none",
+        target_grid_x: int | None = None,
+        target_grid_y: int | None = None,
+    ) -> list[str]:
+        self.move_to_positions.append(
+            (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync, target_grid_x, target_grid_y)
+        )
+        return [entity_id]
+
+    def request_move_by_offset(
+        self,
+        entity_id: str,
+        x: float,
+        y: float,
+        *,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        grid_sync: str = "none",
+        target_grid_x: int | None = None,
+        target_grid_y: int | None = None,
+    ) -> list[str]:
+        self.move_by_offsets.append(
+            (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync, target_grid_x, target_grid_y)
+        )
+        return [entity_id]
+
+    def request_move_to_grid_position(
+        self,
+        entity_id: str,
+        x: int,
+        y: int,
+        *,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        grid_sync: str = "on_complete",
+    ) -> list[str]:
+        self.move_to_grid_positions.append(
+            (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync)
+        )
+        return [entity_id]
+
+    def request_move_by_grid_offset(
+        self,
+        entity_id: str,
+        x: int,
+        y: int,
+        *,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        grid_sync: str = "on_complete",
+    ) -> list[str]:
+        self.move_by_grid_offsets.append(
+            (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync)
+        )
+        return [entity_id]
+
+    def teleport_to_grid_position(self, entity_id: str, x: int, y: int) -> None:
+        self.teleport_grid_positions.append((entity_id, x, y))
+
+    def teleport_to_position(
+        self,
+        entity_id: str,
+        x: float,
+        y: float,
+        *,
+        target_grid_x: int | None = None,
+        target_grid_y: int | None = None,
+    ) -> None:
+        self.teleport_positions.append((entity_id, x, y, target_grid_x, target_grid_y))
+
+    def is_entity_moving(self, entity_id: str) -> bool:
+        return entity_id in self.moving_entities
+
+
 class _RecordingCamera:
     def __init__(self) -> None:
         self.follow_mode: str | None = None
@@ -744,6 +861,33 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "must not use symbolic entity id 'caller' with strict primitive 'play_animation'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
+    def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_movement_primitives(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "bad_move_primitive.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "move_entity_one_tile",
+                            "entity_id": "actor",
+                            "direction": "down",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(NamedCommandValidationError) as raised:
+            validate_project_named_commands(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'actor' with strict primitive 'move_entity_one_tile'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -1423,6 +1567,32 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "must not use symbolic entity id 'self' with strict primitive 'set_visual_frame'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
+    def test_area_validation_rejects_symbolic_entity_refs_for_strict_movement_primitives(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "wait_for_move",
+                            "entity_id": "caller",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'caller' with strict primitive 'wait_for_move'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -2638,6 +2808,13 @@ class StrictContentIdTests(unittest.TestCase):
                     "frame": 2,
                 },
             ),
+            (
+                "move_entity_one_tile",
+                {
+                    "entity_id": "caller",
+                    "direction": "down",
+                },
+            ),
         ):
             with self.subTest(command_name=command_name):
                 with self.assertRaises(CommandExecutionError) as raised:
@@ -2771,6 +2948,39 @@ class StrictContentIdTests(unittest.TestCase):
             [("lever", [1, 2, 3], "main", 2, False)],
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
+
+    def test_move_entity_one_tile_supports_caller_token_via_run_commands(self) -> None:
+        caller = _make_runtime_entity("lever", kind="lever")
+        world = World()
+        world.add_entity(caller)
+        registry, context = self._make_command_context(world=world)
+        movement_system = _RecordingMovementSystem()
+        context.movement_system = movement_system
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "run_commands",
+            {
+                "caller_entity_id": "lever",
+                "commands": [
+                    {
+                        "type": "move_entity_one_tile",
+                        "entity_id": "$caller_id",
+                        "direction": "right",
+                        "frames_needed": 8,
+                        "allow_push": False,
+                        "wait": False,
+                    }
+                ],
+            },
+        )
+        handle.update(0.0)
+
+        self.assertEqual(
+            movement_system.grid_steps,
+            [("lever", "right", None, 8, None, "immediate", False)],
+        )
 
     def test_set_camera_follow_entity_supports_caller_token_via_run_commands(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")

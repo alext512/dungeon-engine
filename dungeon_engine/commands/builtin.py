@@ -826,9 +826,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         direction: str,
         duration: float | None = None,
         frames_needed: int | None = None,
@@ -838,15 +835,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("move_entity_one_tile: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         moved_entity_ids = context.movement_system.request_grid_step(
             resolved_id,
             direction,  # type: ignore[arg-type]
@@ -866,9 +855,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         target_x: float,
         target_y: float,
         duration: float | None = None,
@@ -880,15 +866,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("move_entity: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         moved_entity_ids = context.movement_system.request_move_to_position(
             resolved_id,
             target_x,
@@ -910,9 +888,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         x: int | float,
         y: int | float,
         space: str = "pixel",
@@ -926,15 +901,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("move_entity: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         if space not in {"pixel", "grid"}:
             raise ValueError(f"Unknown movement space '{space}'.")
         if mode not in {"absolute", "relative"}:
@@ -950,9 +917,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 entity_id=resolved_id,
                 target_x=float(x),
                 target_y=float(y),
-                source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
                 duration=duration,
                 frames_needed=frames_needed,
                 speed_px_per_second=speed_px_per_second,
@@ -1015,9 +979,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         x: int | float,
         y: int | float,
         space: str = "pixel",
@@ -1026,32 +987,19 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         target_grid_y: int | None = None,
         **_: Any,
     ) -> CommandHandle:
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("teleport_entity: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        entity = _require_exact_entity(context, entity_id)
+        resolved_id = entity.entity_id
         if space not in {"pixel", "grid"}:
             raise ValueError(f"Unknown teleport space '{space}'.")
         if mode not in {"absolute", "relative"}:
             raise ValueError(f"Unknown teleport mode '{mode}'.")
 
         if space == "grid":
-            entity = context.world.get_entity(resolved_id)
-            if entity is None:
-                raise KeyError(f"Cannot teleport missing entity '{resolved_id}'.")
             grid_x = int(x) if mode == "absolute" else entity.grid_x + int(x)
             grid_y = int(y) if mode == "absolute" else entity.grid_y + int(y)
             context.movement_system.teleport_to_grid_position(resolved_id, grid_x, grid_y)
             return ImmediateHandle()
 
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot teleport missing entity '{resolved_id}'.")
         pixel_x = float(x) if mode == "absolute" else entity.pixel_x + float(x)
         pixel_y = float(y) if mode == "absolute" else entity.pixel_y + float(y)
         context.movement_system.teleport_to_position(
@@ -1219,9 +1167,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         direction: str,
         duration: float | None = None,
         frames_needed: int | None = None,
@@ -1235,9 +1180,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         return _step_entity(
             context,
             entity_id=entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
             direction=direction,
             duration=duration,
             frames_needed=frames_needed,
@@ -1252,9 +1194,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         x: int | float,
         y: int | float,
         space: str = "pixel",
@@ -1272,9 +1211,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         return _move_entity(
             context,
             entity_id=entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
             x=x,
             y=y,
             space=space,
@@ -1293,9 +1229,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         x: int | float,
         y: int | float,
         space: str = "pixel",
@@ -1308,9 +1241,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         return _teleport_entity(
             context,
             entity_id=entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
             x=x,
             y=y,
             space=space,
@@ -1324,22 +1254,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Block the command lane until the requested entity stops moving."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("wait_for_move: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         if not context.movement_system.is_entity_moving(resolved_id):
             return ImmediateHandle()
         return MovementCommandHandle(context, [resolved_id])

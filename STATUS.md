@@ -62,7 +62,7 @@ If you only need the current reality quickly:
 - runtime entity references through `self`, `actor`, `caller`, plus `$self_id`, `$actor_id`, and `$caller_id`
 - generic `set_entity_field` command for safe runtime entity-field mutation, including nested visual paths such as `visuals.main.tint`
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
-- strict primitive entity-target commands now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
+- strict primitive entity-target commands across variables, input routing, camera follow/query, movement, and visual/animation control now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
 - controller-driven dialogue/menu flow with entity-owned state and stack snapshots on the controller entity
 - generic JSON/text helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_world_var`, `append_entity_var`, `pop_world_var`, and `pop_entity_var` for entity-authored dialogue logic
 - reusable dialogue/menu data stored as ordinary JSON under the sample project's `dialogues/` folder
