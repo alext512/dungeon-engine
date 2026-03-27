@@ -126,7 +126,7 @@
       "commands": [
         {
           "type": "set_visual_flip_x",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "flip_x": "$flip_x"
         },
         {

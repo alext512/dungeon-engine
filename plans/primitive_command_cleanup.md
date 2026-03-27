@@ -15,6 +15,11 @@ This file should be deleted once:
 - entity-target mutation and input-routing primitives were tightened next:
   - strict primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, and `route_inputs_to_entity` now require explicit ids or resolved `$..._id` tokens
   - raw symbolic `self` / `actor` / `caller` ids are now rejected at startup validation and runtime for those primitives
+- camera follow/query primitives were tightened after that:
+  - `set_camera_follow_entity` now uses the same explicit-id rule
+  - broad `set_var_from_camera` was replaced by `set_world_var_from_camera` and `set_entity_var_from_camera`
+- visual/animation primitives were tightened next:
+  - strict primitives such as `set_facing`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` now also require explicit ids or resolved `$..._id` tokens
 
 The remaining work is about the other primitive families, not these completed slices.
 

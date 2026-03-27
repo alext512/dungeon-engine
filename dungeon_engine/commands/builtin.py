@@ -1063,13 +1063,10 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         )
         return ImmediateHandle()
 
-    def _play_animation(
+    def _play_exact_animation(
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         frame_sequence: list[int],
         frames_per_sprite_change: int = 1,
@@ -1077,15 +1074,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("play_animation: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         context.animation_system.start_frame_animation(
             resolved_id,
             frame_sequence,
@@ -1103,20 +1092,13 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         direction: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Set an entity's facing direction without moving it."""
-        return _set_entity_field_handle(
+        return _set_exact_entity_field_handle(
             context,
             entity_id=entity_id,
             field_name="facing",
             value=direction,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
 
     @registry.register("query_facing_state")
@@ -1367,9 +1349,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         frame_sequence: list[int],
         frames_per_sprite_change: int = 1,
@@ -1378,12 +1357,9 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Play a one-shot sprite frame sequence on an entity."""
-        return _play_animation(
+        return _play_exact_animation(
             context,
             entity_id=entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
             visual_id=visual_id,
             frame_sequence=frame_sequence,
             frames_per_sprite_change=frames_per_sprite_change,
@@ -1396,22 +1372,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Block the command lane until the requested entity stops animating."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("wait_for_animation: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         if not context.animation_system.is_entity_animating(resolved_id, visual_id=visual_id):
             return ImmediateHandle()
         return AnimationCommandHandle(context, [resolved_id], visual_id=visual_id)
@@ -1421,23 +1386,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         reset_to_default: bool = False,
         **_: Any,
     ) -> CommandHandle:
         """Stop command-driven animation playback on an entity."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("stop_animation: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         context.animation_system.stop_animation(
             resolved_id,
             visual_id=visual_id,
@@ -1450,29 +1404,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         frame: int,
         **_: Any,
     ) -> CommandHandle:
         """Set the currently displayed visual frame directly."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("set_visual_frame: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set visual frame on missing entity '{resolved_id}'.")
+        entity = _require_exact_entity(context, entity_id)
         visual = entity.require_visual(visual_id) if visual_id is not None else entity.get_primary_visual()
         if visual is None:
-            raise KeyError(f"Entity '{resolved_id}' has no visual to set a frame on.")
+            raise KeyError(f"Entity '{entity.entity_id}' has no visual to set a frame on.")
         visual.current_frame = int(frame)
         return ImmediateHandle()
 
@@ -1481,29 +1421,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext,
         *,
         entity_id: str,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         visual_id: str | None = None,
         flip_x: bool,
         **_: Any,
     ) -> CommandHandle:
         """Set whether an entity's visual should be mirrored horizontally."""
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("set_visual_flip_x: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
-        if entity is None:
-            raise KeyError(f"Cannot set visual flip_x on missing entity '{resolved_id}'.")
+        entity = _require_exact_entity(context, entity_id)
         visual = entity.require_visual(visual_id) if visual_id is not None else entity.get_primary_visual()
         if visual is None:
-            raise KeyError(f"Entity '{resolved_id}' has no visual to set flip_x on.")
+            raise KeyError(f"Entity '{entity.entity_id}' has no visual to set flip_x on.")
         visual.flip_x = bool(flip_x)
         return ImmediateHandle()
 

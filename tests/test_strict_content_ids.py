@@ -722,6 +722,33 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
+    def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_visual_primitives(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "bad_visual_primitive.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "play_animation",
+                            "entity_id": "caller",
+                            "frame_sequence": [1, 2],
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(NamedCommandValidationError) as raised:
+            validate_project_named_commands(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'caller' with strict primitive 'play_animation'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
     def test_set_var_from_json_file_loads_project_relative_dialogue_data(self) -> None:
         _, project = self._make_project(
             dialogues={
@@ -1369,6 +1396,33 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "must not use symbolic entity id 'actor' with strict primitive 'route_inputs_to_entity'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
+    def test_area_validation_rejects_symbolic_entity_refs_for_strict_visual_primitives(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "set_visual_frame",
+                            "entity_id": "self",
+                            "frame": 2,
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'self' with strict primitive 'set_visual_frame'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -2577,6 +2631,13 @@ class StrictContentIdTests(unittest.TestCase):
                     "entity_id": "actor",
                 },
             ),
+            (
+                "set_visual_frame",
+                {
+                    "entity_id": "self",
+                    "frame": 2,
+                },
+            ),
         ):
             with self.subTest(command_name=command_name):
                 with self.assertRaises(CommandExecutionError) as raised:
@@ -2658,7 +2719,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {},
             )
 
-    def test_animation_commands_accept_visual_id_and_caller_reference(self) -> None:
+    def test_animation_commands_accept_visual_id_and_caller_token_via_run_commands(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -2670,15 +2731,20 @@ class StrictContentIdTests(unittest.TestCase):
         play_handle = execute_registered_command(
             registry,
             context,
-            "play_animation",
+            "run_commands",
             {
-                "entity_id": "caller",
                 "caller_entity_id": "lever",
-                "visual_id": "main",
-                "frame_sequence": [1, 2, 3],
-                "frames_per_sprite_change": 2,
-                "hold_last_frame": False,
-                "wait": False,
+                "commands": [
+                    {
+                        "type": "play_animation",
+                        "entity_id": "$caller_id",
+                        "visual_id": "main",
+                        "frame_sequence": [1, 2, 3],
+                        "frames_per_sprite_change": 2,
+                        "hold_last_frame": False,
+                        "wait": False,
+                    }
+                ],
             },
         )
         play_handle.update(0.0)
@@ -2686,11 +2752,16 @@ class StrictContentIdTests(unittest.TestCase):
         wait_handle = execute_registered_command(
             registry,
             context,
-            "wait_for_animation",
+            "run_commands",
             {
-                "entity_id": "caller",
                 "caller_entity_id": "lever",
-                "visual_id": "main",
+                "commands": [
+                    {
+                        "type": "wait_for_animation",
+                        "entity_id": "$caller_id",
+                        "visual_id": "main",
+                    }
+                ],
             },
         )
         wait_handle.update(0.0)
@@ -2926,8 +2997,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_visual_frame",
             {
-                "entity_id": "self",
-                "source_entity_id": "lever",
+                "entity_id": "lever",
                 "frame": 2,
             },
         )
@@ -2947,8 +3017,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_visual_flip_x",
             {
-                "entity_id": "self",
-                "source_entity_id": "lever",
+                "entity_id": "lever",
                 "flip_x": True,
             },
         )
