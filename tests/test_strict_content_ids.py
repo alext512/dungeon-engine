@@ -8,7 +8,7 @@ from pathlib import Path
 
 import run_editor
 import run_game
-from dungeon_engine.commands.builtin import _find_dialogue_handle, register_builtin_commands
+from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import (
     NamedCommandValidationError,
     validate_project_named_commands,
@@ -21,10 +21,6 @@ from dungeon_engine.commands.runner import (
     SequenceCommandHandle,
     _resolve_runtime_values,
     execute_registered_command,
-)
-from dungeon_engine.dialogue_library import (
-    DialogueValidationError,
-    validate_project_dialogues,
 )
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import Entity, EntityEvent, EntityVisual
@@ -253,14 +249,11 @@ class _RecordingCamera:
         return data
 
 
-class _StubDialogueHandle:
-    def __init__(self) -> None:
-        self.closed = False
-
-    def close_dialogue(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
+class _StubTextRenderer:
+    def wrap_lines(self, text: str, max_width: int, *, font_id: str = "") -> list[str]:
+        _ = max_width
+        _ = font_id
+        return [part for part in str(text).split(" ") if part]
 
 
 class StrictContentIdTests(unittest.TestCase):
@@ -283,7 +276,6 @@ class StrictContentIdTests(unittest.TestCase):
             "area_paths": ["areas/"],
             "entity_template_paths": ["entity_templates/"],
             "named_command_paths": ["named_commands/"],
-            "dialogue_paths": ["dialogues/"],
             "shared_variables_path": "shared_variables.json",
         }
         if startup_area is not None:
@@ -385,7 +377,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "type": "run_event",
                 "entity_id": "dialogue_controller",
                 "event_id": "open_dialogue",
-                "dialogue_id": "system/title_menu",
+                "dialogue_path": "dialogues/system/title_menu.json",
                 "segment_hooks": [
                     {
                         "option_commands_by_id": {
@@ -401,7 +393,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(len(area.enter_commands), 1)
         self.assertEqual(area.enter_commands[0]["type"], "run_event")
         self.assertEqual(area.enter_commands[0]["entity_id"], "dialogue_controller")
-        self.assertEqual(area.enter_commands[0]["dialogue_id"], "system/title_menu")
+        self.assertEqual(area.enter_commands[0]["dialogue_path"], "dialogues/system/title_menu.json")
 
     def test_area_loader_and_serializer_round_trip_entry_points(self) -> None:
         _, project = self._make_project()
@@ -515,7 +507,7 @@ class StrictContentIdTests(unittest.TestCase):
                         "interact": [
                             {
                                 "type": "run_dialogue",
-                                "dialogue_id": "system/title_menu",
+                                "dialogue_path": "dialogues/system/title_menu.json",
                             }
                         ]
                     },
@@ -644,50 +636,201 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
-    def test_dialogue_validation_rejects_authored_id(self) -> None:
+    def test_set_var_from_json_file_loads_project_relative_dialogue_data(self) -> None:
         _, project = self._make_project(
             dialogues={
-                "signs/gate_hint.json": {
-                    "id": "signs/gate_hint",
+                "menus/test.json": {
                     "segments": [
                         {
                             "type": "text",
                             "text": "Gate is closed.",
                         }
                     ],
+                    "font_id": "pixelbet",
                 }
             }
         )
-
-        with self.assertRaises(DialogueValidationError) as raised:
-            validate_project_dialogues(project)
-
-        self.assertTrue(
-            any("must not declare 'id'" in issue for issue in raised.exception.issues)
+        world = World()
+        world.add_entity(
+            _make_runtime_entity(
+                "dialogue_controller",
+                kind="system",
+                space="screen",
+            )
         )
+        registry, context = self._make_command_context(project=project, world=world)
 
-    def test_dialogue_validation_rejects_mixed_option_ids(self) -> None:
+        handle = execute_registered_command(
+            registry,
+            context,
+            "set_var_from_json_file",
+            {
+                "scope": "entity",
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_definition",
+                "path": "dialogues/menus/test.json",
+            },
+        )
+        handle.update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(
+            controller.variables["dialogue_definition"]["segments"][0]["text"],
+            "Gate is closed.",
+        )
+        self.assertEqual(controller.variables["dialogue_definition"]["font_id"], "pixelbet")
+
+    def test_entity_template_validation_rejects_removed_start_dialogue_session_command(self) -> None:
         _, project = self._make_project(
-            dialogues={
-                "menus/test.json": {
-                    "segments": [
-                        {
-                            "type": "choice",
-                            "options": [
-                                {"text": "Yes", "option_id": "yes"},
-                                {"text": "No"},
-                            ],
-                        }
-                    ]
+            entity_templates={
+                "legacy_sign.json": {
+                    "kind": "sign",
+                    "events": {
+                        "interact": [
+                            {
+                                "type": "start_dialogue_session",
+                                "dialogue_path": "dialogues/system/title_menu.json",
+                            }
+                        ]
+                    },
                 }
             }
         )
 
-        with self.assertRaises(DialogueValidationError) as raised:
-            validate_project_dialogues(project)
+        with self.assertRaises(EntityTemplateValidationError) as raised:
+            validate_project_entity_templates(project)
 
         self.assertTrue(
-            any("either give every option an 'option_id' or omit them all" in issue for issue in raised.exception.issues)
+            any("uses removed command 'start_dialogue_session'" in issue for issue in raised.exception.issues)
+        )
+
+    def test_removed_text_session_commands_raise_clear_runtime_errors(self) -> None:
+        registry, context = self._make_command_context()
+        for command_name in (
+            "prepare_text_session",
+            "read_text_session",
+            "advance_text_session",
+            "reset_text_session",
+        ):
+            with self.assertRaises(CommandExecutionError) as raised:
+                execute_registered_command(registry, context, command_name, {})
+            self.assertIsNotNone(raised.exception.__cause__)
+            self.assertIn("was removed", str(raised.exception.__cause__))
+
+    def test_removed_dialogue_runtime_commands_raise_clear_errors(self) -> None:
+        registry, context = self._make_command_context()
+        for command_name in (
+            "start_dialogue_session",
+            "dialogue_advance",
+            "dialogue_move_selection",
+            "dialogue_confirm_choice",
+            "dialogue_cancel",
+            "close_dialogue",
+        ):
+            with self.assertRaises(CommandExecutionError) as raised:
+                execute_registered_command(registry, context, command_name, {})
+            self.assertIsNotNone(raised.exception.__cause__)
+            self.assertIn("was removed", str(raised.exception.__cause__))
+
+    def test_set_var_from_wrapped_lines_and_text_window_store_visible_text(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+        context.text_renderer = _StubTextRenderer()
+
+        wrapped_handle = execute_registered_command(
+            registry,
+            context,
+            "set_var_from_wrapped_lines",
+            {
+                "scope": "entity",
+                "entity_id": "dialogue_controller",
+                "name": "wrapped_lines",
+                "text": "one two three four",
+                "max_width": 64,
+            },
+        )
+        wrapped_handle.update(0.0)
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+
+        window_handle = execute_registered_command(
+            registry,
+            context,
+            "set_var_from_text_window",
+            {
+                "scope": "entity",
+                "entity_id": "dialogue_controller",
+                "name": "visible_text",
+                "lines": controller.variables["wrapped_lines"],
+                "start": 1,
+                "max_lines": 2,
+                "store_has_more_var": "has_more",
+                "store_total_var": "total_lines",
+            },
+        )
+        window_handle.update(0.0)
+
+        self.assertEqual(controller.variables["wrapped_lines"], ["one", "two", "three", "four"])
+        self.assertEqual(controller.variables["visible_text"], "two\nthree")
+        self.assertTrue(controller.variables["has_more"])
+        self.assertEqual(controller.variables["total_lines"], 4)
+
+    def test_append_and_pop_var_support_nested_dialogue_snapshots(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        append_parent = execute_registered_command(
+            registry,
+            context,
+            "append_to_var",
+            {
+                "scope": "entity",
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_state_stack",
+                "value": {"dialogue_path": "dialogues/system/title_menu.json", "choice_index": 1},
+            },
+        )
+        append_parent.update(0.0)
+
+        append_child = execute_registered_command(
+            registry,
+            context,
+            "append_to_var",
+            {
+                "scope": "entity",
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_state_stack",
+                "value": {"dialogue_path": "dialogues/system/save_prompt.json", "choice_index": 0},
+            },
+        )
+        append_child.update(0.0)
+
+        pop_handle = execute_registered_command(
+            registry,
+            context,
+            "pop_var",
+            {
+                "scope": "entity",
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_state_stack",
+                "store_var": "restored_snapshot",
+                "default": {},
+            },
+        )
+        pop_handle.update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(
+            controller.variables["dialogue_state_stack"],
+            [{"dialogue_path": "dialogues/system/title_menu.json", "choice_index": 1}],
+        )
+        self.assertEqual(
+            controller.variables["restored_snapshot"],
+            {"dialogue_path": "dialogues/system/save_prompt.json", "choice_index": 0},
         )
 
     def test_area_validation_rejects_legacy_interact_commands(self) -> None:
@@ -723,7 +866,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "enter_commands": [
                         {
                             "type": "run_dialogue",
-                            "dialogue_id": "system/title_menu",
+                            "dialogue_path": "dialogues/system/title_menu.json",
                         }
                     ],
                 }
@@ -1192,23 +1335,20 @@ class StrictContentIdTests(unittest.TestCase):
         for _ in range(3):
             game._advance_simulation_tick(1 / 60)
 
-        dialogue_handle = _find_dialogue_handle(game.command_runner.active_handle)
-        assert dialogue_handle is not None
-        self.assertEqual(dialogue_handle.current_choice_index, 0)
+        controller = game.world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertTrue(controller.variables["dialogue_open"])
+        self.assertEqual(controller.variables["dialogue_choice_index"], 0)
 
         game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)])
         game._advance_simulation_tick(1 / 60)
 
-        dialogue_handle = _find_dialogue_handle(game.command_runner.active_handle)
-        assert dialogue_handle is not None
-        self.assertEqual(dialogue_handle.current_choice_index, 1)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 1)
 
         game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP)])
         game._advance_simulation_tick(1 / 60)
 
-        dialogue_handle = _find_dialogue_handle(game.command_runner.active_handle)
-        assert dialogue_handle is not None
-        self.assertEqual(dialogue_handle.current_choice_index, 0)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 0)
 
         game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
         for _ in range(6):
@@ -1217,32 +1357,113 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.area.area_id, "village_square")
         self.assertIsNone(game.command_runner.last_error_notice)
 
-    def test_close_dialogue_does_not_change_input_targets(self) -> None:
-        world = World()
-        world.add_entity(_make_runtime_entity("player", kind="player"))
-        world.add_entity(
-            _make_runtime_entity(
-                "dialogue_controller",
-                kind="system",
-                space="screen",
-                scope="global",
-            )
-        )
-        world.route_inputs_to_entity("dialogue_controller")
-        registry, context = self._make_command_context(world=world)
-        dialogue_handle = _StubDialogueHandle()
+    def test_controller_owned_dialogue_restores_nested_snapshot_and_input_routes(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
 
-        handle = SequenceCommandHandle(
-            registry,
-            context,
-            [{"type": "close_dialogue"}],
-            base_params={"_dialogue_handle": dialogue_handle},
-        )
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
 
-        self.assertTrue(handle.complete)
-        self.assertTrue(dialogue_handle.closed)
-        for action in world.list_input_actions():
-            self.assertEqual(world.get_input_target_id(action), "dialogue_controller")
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        controller = game.world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertFalse(controller.variables["dialogue_open"])
+        self.assertEqual(game.world.get_input_target_id("interact"), "player")
+        self.assertEqual(game.world.get_input_target_id("move_up"), "player")
+        self.assertEqual(game.world.get_input_target_id("menu"), "pause_controller")
+
+        game.command_runner.enqueue(
+            "run_commands",
+            commands=[
+                {
+                    "type": "run_event",
+                    "entity_id": "dialogue_controller",
+                    "event_id": "open_dialogue",
+                    "dialogue_path": "dialogues/system/title_menu.json",
+                    "dialogue_on_start": [],
+                    "dialogue_on_end": [],
+                    "segment_hooks": [],
+                    "allow_cancel": False,
+                },
+                {
+                    "type": "run_event",
+                    "entity_id": "dialogue_controller",
+                    "event_id": "open_dialogue",
+                    "dialogue_path": "dialogues/system/save_prompt.json",
+                    "dialogue_on_start": [],
+                    "dialogue_on_end": [],
+                    "segment_hooks": [],
+                    "allow_cancel": True,
+                },
+            ],
+            actor_entity_id="player",
+            caller_entity_id="lever",
+        )
+        for _ in range(6):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertTrue(controller.variables["dialogue_open"])
+        self.assertEqual(controller.variables["dialogue_path"], "dialogues/system/save_prompt.json")
+        self.assertEqual(controller.variables["dialogue_actor_id"], "player")
+        self.assertEqual(controller.variables["dialogue_caller_id"], "lever")
+        self.assertEqual(len(controller.variables["dialogue_state_stack"]), 1)
+        parent_snapshot = controller.variables["dialogue_state_stack"][0]
+        self.assertEqual(parent_snapshot["dialogue_path"], "dialogues/system/title_menu.json")
+        self.assertEqual(parent_snapshot["dialogue_on_end"], [])
+        self.assertEqual(parent_snapshot["dialogue_segment_hooks"], [])
+        self.assertFalse(parent_snapshot["dialogue_allow_cancel"])
+        self.assertEqual(parent_snapshot["dialogue_actor_id"], "player")
+        self.assertEqual(parent_snapshot["dialogue_caller_id"], "lever")
+        self.assertEqual(parent_snapshot["dialogue_segment_index"], 0)
+        self.assertEqual(parent_snapshot["dialogue_source_page_index"], 0)
+        self.assertEqual(parent_snapshot["dialogue_text_line_offset"], 0)
+        self.assertEqual(parent_snapshot["dialogue_choice_index"], 0)
+        self.assertIsNone(parent_snapshot["dialogue_current_speaker_id"])
+        self.assertIn("segments", parent_snapshot["dialogue_definition"])
+        for action in ("interact", "menu", "move_up", "move_down", "move_left", "move_right"):
+            self.assertEqual(game.world.get_input_target_id(action), "dialogue_controller")
+
+        game.command_runner.enqueue(
+            "run_named_command",
+            command_id="dialogue/close_current_dialogue",
+            source_entity_id="dialogue_controller",
+            actor_entity_id="player",
+            caller_entity_id="lever",
+        )
+        for _ in range(4):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertTrue(controller.variables["dialogue_open"])
+        self.assertEqual(controller.variables["dialogue_path"], "dialogues/system/title_menu.json")
+        self.assertEqual(controller.variables["dialogue_actor_id"], "player")
+        self.assertEqual(controller.variables["dialogue_caller_id"], "lever")
+        self.assertEqual(controller.variables["dialogue_state_stack"], [])
+        self.assertEqual(game.world.get_input_target_id("interact"), "dialogue_controller")
+        self.assertEqual(game.world.get_input_target_id("menu"), "dialogue_controller")
+
+        game.command_runner.enqueue(
+            "run_named_command",
+            command_id="dialogue/close_current_dialogue",
+            source_entity_id="dialogue_controller",
+            actor_entity_id="player",
+            caller_entity_id="lever",
+        )
+        for _ in range(4):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertFalse(controller.variables["dialogue_open"])
+        self.assertEqual(game.world.get_input_target_id("interact"), "player")
+        self.assertEqual(game.world.get_input_target_id("move_up"), "player")
+        self.assertEqual(game.world.get_input_target_id("menu"), "pause_controller")
+        self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_save_game_after_returning_inputs_persists_player_input_targets(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -1312,7 +1533,6 @@ class StrictContentIdTests(unittest.TestCase):
             persistence_runtime=game.persistence_runtime,
             save_game=game.save_game,
         )
-        dialogue_handle = _StubDialogueHandle()
 
         handle = SequenceCommandHandle(
             registry,
@@ -1320,18 +1540,13 @@ class StrictContentIdTests(unittest.TestCase):
             [
                 {"type": "push_input_routes"},
                 {"type": "route_inputs_to_entity", "entity_id": "dialogue_controller"},
-                {"type": "close_dialogue"},
                 {"type": "pop_input_routes"},
                 {"type": "save_game", "save_path": str(save_path)},
             ],
-            base_params={
-                "_dialogue_handle": dialogue_handle,
-                "actor_entity_id": "player",
-            },
+            base_params={"actor_entity_id": "player"},
         )
 
         self.assertTrue(handle.complete)
-        self.assertTrue(dialogue_handle.closed)
         for action in game.world.list_input_actions():
             self.assertEqual(game.world.get_input_target_id(action), "player")
 

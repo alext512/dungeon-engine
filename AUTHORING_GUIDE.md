@@ -12,7 +12,7 @@ It focuses on:
 - entity template JSON
 - named command JSON
 - dialogue JSON
-- the current controller-driven dialogue pattern
+- the current controller-owned dialogue/menu pattern
 
 ## Mental Model
 
@@ -23,7 +23,7 @@ The engine is built from a few content layers:
 3. `areas/*.json`
 4. `entity_templates/*.json`
 5. `named_commands/*.json`
-6. `dialogues/*.json`
+6. ordinary project JSON data such as `dialogues/*.json`
 
 The engine provides primitive commands. Your project combines them into behavior using JSON.
 
@@ -31,7 +31,8 @@ Important clarification:
 
 - these category names are meaningful
 - the exact folder names are just conventions
-- the manifest paths decide what gets loaded
+- the manifest paths decide what gets indexed automatically
+- ordinary JSON data can still live anywhere inside the project and be loaded by relative path
 
 ## A Minimal Project
 
@@ -44,7 +45,7 @@ my_project/
     areas/
     entity_templates/
     named_commands/
-    dialogues/
+    dialogues/                  # Optional ordinary JSON data
     assets/
 ```
 
@@ -62,7 +63,6 @@ Example:
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "named_command_paths": ["named_commands/"],
-  "dialogue_paths": ["dialogues/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
@@ -99,8 +99,6 @@ Example:
   Folders containing area JSON files.
 - `named_command_paths`
   Folders containing reusable named command JSON files.
-- `dialogue_paths`
-  Folders containing reusable dialogue JSON files.
 - `shared_variables_path`
   Project-wide shared variable file.
 - `global_entities`
@@ -274,7 +272,7 @@ Example:
           "type": "run_event",
           "entity_id": "dialogue_controller",
           "event_id": "open_dialogue",
-          "dialogue_id": "$dialogue_id",
+          "dialogue_path": "$dialogue_path",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
           "segment_hooks": [],
@@ -361,7 +359,7 @@ Example:
 ```json
 {
   "input_map": {
-    "interact": "dialogue_advance"
+    "interact": "interact"
   }
 }
 ```
@@ -436,9 +434,9 @@ Example:
 }
 ```
 
-## Dialogue Assets
+## Ordinary JSON Dialogue Data
 
-Dialogue definitions live under `dialogues/`.
+The sample project keeps dialogue/menu definitions under `dialogues/`, but that folder is only a convention. These files are ordinary JSON data loaded by controller commands.
 
 Example:
 
@@ -466,7 +464,7 @@ Example:
 }
 ```
 
-### Dialogue fields
+### Common fields
 
 - `participants`
   Optional portrait/name map.
@@ -492,13 +490,13 @@ Example:
 
 ## Starting Dialogue
 
-The old authored `run_dialogue` path is removed. Startup validation rejects it before launch.
+The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are removed. Startup validation rejects them before launch.
 
 Current pattern:
 
 1. call `run_event` on the dialogue controller entity
-2. let that event call `start_dialogue_session`
-3. pass any behavior hooks through the event parameters
+2. let that event load JSON dialogue data and store the session state on the controller entity
+3. let controller-owned named commands redraw the UI and react to later input
 
 Practical rule:
 
@@ -514,7 +512,7 @@ Example caller command:
   "type": "run_event",
   "entity_id": "dialogue_controller",
   "event_id": "open_dialogue",
-  "dialogue_id": "system/pause_menu",
+  "dialogue_path": "dialogues/system/pause_menu.json",
   "dialogue_on_start": [
     {
       "type": "set_var",
@@ -557,7 +555,8 @@ Example caller command:
       "option_commands_by_id": {
         "continue": [
           {
-            "type": "close_dialogue"
+            "type": "run_named_command",
+            "command_id": "dialogue/close_current_dialogue"
           }
         ],
         "load": [
@@ -569,7 +568,8 @@ Example caller command:
             "value": "load"
           },
           {
-            "type": "close_dialogue"
+            "type": "run_named_command",
+            "command_id": "dialogue/close_current_dialogue"
           }
         ],
         "exit": [
@@ -581,7 +581,8 @@ Example caller command:
             "value": "exit"
           },
           {
-            "type": "close_dialogue"
+            "type": "run_named_command",
+            "command_id": "dialogue/close_current_dialogue"
           }
         ]
       }

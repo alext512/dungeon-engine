@@ -33,7 +33,7 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 | `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
 | `MANUAL.md` | Practical guide for running the engine and authoring project content |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
-| `CONTENT_TYPES.md` | Cross-cutting explanation of project search paths, path-derived IDs, and how areas/entity templates/named commands/dialogues/assets relate |
+| `CONTENT_TYPES.md` | Cross-cutting explanation of project search paths, path-derived IDs, and how areas/entity templates/named commands/assets plus ordinary JSON data relate |
 | `functionality.md` | Plain-language feature list by priority tier |
 | `architecture.md` | Design philosophy, tech stack, command system, entity/component model |
 | `CONTRIBUTING.md` | Working rules and project direction |
@@ -85,8 +85,9 @@ dungeon_engine/
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
 - **Shared data model across apps**: The standalone game and standalone editor both read the same area/entity JSON format.
-- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `named_command_paths`, `dialogue_paths`, and `shared_variables_path`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
-- **Path-derived reusable IDs**: Areas, entity templates, named commands, and dialogue assets derive identity from their path under the configured search roots instead of authored `id` fields.
+- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `named_command_paths`, `shared_variables_path`, and project-level settings such as `global_entities`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Path-derived reusable IDs**: Areas, entity templates, and named commands derive identity from their path under the configured search roots instead of authored `id` fields.
+- **Project JSON data**: Reusable dialogue/menu data is now just ordinary project-relative JSON. The sample project keeps it under `dialogues/`, but that folder is conventional rather than a manifest-indexed content category.
 - **Tileset discovery**: The editor browses PNG assets recursively from the active project's asset paths, but a room only stores the tilesets it actually uses.
 - **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
 

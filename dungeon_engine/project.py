@@ -11,7 +11,6 @@ Example ``project.json``::
         "asset_paths": ["assets/"],
         "area_paths": ["areas/"],
         "named_command_paths": ["named_commands/"],
-        "dialogue_paths": ["dialogues/"],
         "shared_variables_path": "shared_variables.json",
         "startup_area": "title_screen",
         "input_targets": {
@@ -34,7 +33,6 @@ the selected project root:
 - ``assets/``
 - ``areas/``
 - ``named_commands/``
-- ``dialogues/``
 """
 
 from __future__ import annotations
@@ -62,7 +60,6 @@ class ProjectContext:
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
     named_command_paths: list[Path] = field(default_factory=list)
-    dialogue_paths: list[Path] = field(default_factory=list)
     shared_variables_path: Path | None = None
     global_entities: list[dict[str, Any]] = field(default_factory=list)
     startup_area: str | None = None
@@ -228,85 +225,6 @@ class ProjectContext:
             match_list = ", ".join(str(path) for path in matches)
             raise ValueError(
                 f"Duplicate command definition lookup for '{command_id}'. Matches: {match_list}"
-            )
-        return matches[0]
-
-    # ------------------------------------------------------------------
-    # Dialogue definition discovery
-    # ------------------------------------------------------------------
-
-    def dialogue_definition_id(self, dialogue_path: Path) -> str:
-        """Return the canonical dialogue id for a dialogue-definition file."""
-        resolved = dialogue_path.resolve()
-        for directory in self.dialogue_paths:
-            try:
-                relative = resolved.relative_to(directory.resolve())
-                return str(relative.with_suffix("")).replace("\\", "/")
-            except ValueError:
-                continue
-        return dialogue_path.stem
-
-    def find_dialogue_definition_matches(self, dialogue_id: str) -> list[Path]:
-        """Return all matching dialogue-definition JSON files for the requested id."""
-        normalized_id = str(dialogue_id).replace("\\", "/").strip()
-        if not normalized_id:
-            return []
-
-        relative_id = Path(normalized_id)
-        matches: list[Path] = []
-        seen: set[Path] = set()
-
-        def _record(candidate: Path) -> None:
-            resolved = candidate.resolve()
-            if resolved in seen:
-                return
-            seen.add(resolved)
-            matches.append(candidate)
-
-        for directory in self.dialogue_paths:
-            direct_candidate = directory / relative_id
-            if direct_candidate.suffix.lower() != ".json":
-                direct_candidate = direct_candidate.with_suffix(".json")
-            if direct_candidate.exists():
-                _record(direct_candidate)
-
-            for candidate in directory.rglob("*.json"):
-                relative_candidate = self.dialogue_definition_id(candidate)
-                if relative_candidate == normalized_id:
-                    _record(candidate)
-        return matches
-
-    def list_dialogue_definition_files(self) -> list[Path]:
-        """Return all dialogue-definition JSON files across all dialogue paths."""
-        files: list[Path] = []
-        seen: set[Path] = set()
-        for directory in self.dialogue_paths:
-            if not directory.is_dir():
-                continue
-            for file_path in sorted(directory.rglob("*.json")):
-                resolved = file_path.resolve()
-                if resolved in seen:
-                    continue
-                seen.add(resolved)
-                files.append(file_path)
-        return files
-
-    def list_dialogue_definition_ids(self) -> list[str]:
-        """Return sorted unique dialogue ids from all dialogue paths."""
-        ids: set[str] = set()
-        for dialogue_path in self.list_dialogue_definition_files():
-            ids.add(self.dialogue_definition_id(dialogue_path))
-        return sorted(ids)
-
-    def find_dialogue_definition(self, dialogue_id: str) -> Path | None:
-        """Return the single matching dialogue-definition JSON file, or *None*."""
-        matches = self.find_dialogue_definition_matches(dialogue_id)
-        if not matches:
-            return None
-        if len(matches) > 1:
-            match_list = ", ".join(str(path) for path in matches)
-            raise ValueError(
-                f"Duplicate dialogue definition lookup for '{dialogue_id}'. Matches: {match_list}"
             )
         return matches[0]
 
@@ -534,7 +452,6 @@ def load_project(project_path: Path) -> ProjectContext:
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
         named_command_paths=_resolve_paths("named_command_paths", "named_commands"),
-        dialogue_paths=_resolve_paths("dialogue_paths", "dialogues"),
         shared_variables_path=shared_variables_path,
         global_entities=_resolve_global_entities(raw.get("global_entities")),
         startup_area=_optional_manifest_str(raw.get("startup_area")),

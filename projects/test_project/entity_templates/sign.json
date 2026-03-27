@@ -18,7 +18,7 @@
           "type": "run_event",
           "entity_id": "dialogue_controller",
           "event_id": "open_dialogue",
-          "dialogue_id": "$dialogue_id",
+          "dialogue_path": "$dialogue_path",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
           "segment_hooks": [],

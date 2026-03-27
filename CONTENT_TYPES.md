@@ -9,7 +9,7 @@ runtime.
 ## Project Entry Point
 
 Every project starts with a `project.json` manifest. It declares the search
-roots the engine should use for each content category.
+roots the engine should use for the indexed content categories.
 
 Example:
 
@@ -19,7 +19,6 @@ Example:
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "named_command_paths": ["named_commands/"],
-  "dialogue_paths": ["dialogues/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
@@ -45,7 +44,6 @@ The engine expects these manifest keys:
 | `entity_template_paths` | Where to find entity template JSON files |
 | `area_paths` | Where to find area JSON files |
 | `named_command_paths` | Where to find named command JSON files |
-| `dialogue_paths` | Where to find dialogue JSON files |
 | `asset_paths` | Where to find images, sounds, and fonts |
 | `shared_variables_path` | The shared variable JSON file |
 | `global_entities` | Project-level entity instances installed into every runtime world |
@@ -54,7 +52,7 @@ The keys are fixed, but the folders they point to are configurable.
 
 ## Path-Derived IDs
 
-Areas, entity templates, named commands, and dialogues derive identity from
+Areas, entity templates, and named commands derive identity from
 their file path under the configured search roots.
 
 Examples if `named_command_paths` includes `named_commands/`:
@@ -66,7 +64,7 @@ Examples if `named_command_paths` includes `named_commands/`:
 
 Rules:
 
-- do not author top-level `id` fields for named commands or dialogues
+- do not author top-level `id` fields for named commands
 - do not author `area_id` inside area files
 - moving a file within a search root changes its id
 - duplicate ids across search roots are reported at startup
@@ -82,7 +80,7 @@ The current project model is easiest to understand as seven categories:
 | Areas | `area_paths` | Yes | Tilemaps, room variables, entry markers, placed entities, enter hooks |
 | Entity templates | `entity_template_paths` | Yes | Reusable entity definitions |
 | Named commands | `named_command_paths` | Yes | Reusable command chains |
-| Dialogues | `dialogue_paths` | Yes | Reusable segmented text/choice definitions |
+| Ordinary JSON data | n/a | No | Reusable project data blobs loaded by commands/controllers |
 | Assets | `asset_paths` | Asset path string | PNGs, fonts, sounds, tilesets |
 
 ## Areas
@@ -205,9 +203,9 @@ Example:
       "enabled": true,
       "commands": [
         {
-          "type": "start_dialogue_session",
-          "dialogue_id": "$dialogue_id",
-          "controller_entity_id": "self"
+          "type": "run_named_command",
+          "command_id": "dialogue/open",
+          "dialogue_path": "$dialogue_path"
         }
       ]
     }
@@ -254,10 +252,12 @@ They are useful when:
 - a longer behavior should be split out of an event
 - you want one stable, testable behavior id
 
-## Dialogues
+## Ordinary JSON Data
 
-Dialogue files define reusable segmented text and choice flow. They do not
-directly mutate gameplay state by themselves.
+The sample project keeps reusable dialogue/menu data under `dialogues/`, but
+those files are no longer a special manifest-indexed content type. They are
+ordinary JSON files loaded through generic commands such as
+`set_var_from_json_file`.
 
 Top-level fields:
 
@@ -278,16 +278,17 @@ Segment fields:
 - `advance_mode`
 - `advance_seconds`
 
-The supported dialogue flow is:
+The supported controller pattern is:
 
 1. send an event to a controller entity
-2. that event calls `start_dialogue_session`
-3. the caller passes optional `on_start`, `on_end`, and `segment_hooks`
+2. controller-owned commands load the JSON data and store the active state in entity variables
+3. the caller passes optional `dialogue_on_start`, `dialogue_on_end`, and `segment_hooks`
 4. the controller borrows its needed inputs through `push_input_routes`
 5. the controller restores those routes through `pop_input_routes`
-6. post-close behavior such as `save_game`, `load_game`, or `new_game` runs from `dialogue_on_end`
+6. nested state restore comes from the controller's own `dialogue_state_stack`
+7. post-close behavior such as `save_game`, `load_game`, or `new_game` runs from `dialogue_on_end`
 
-The old authored `run_dialogue` path is intentionally removed.
+The old authored `run_dialogue`, `start_dialogue_session`, `dialogue_*`, and text-session commands are intentionally removed.
 
 ## Shared Variables
 
@@ -323,7 +324,7 @@ The categories connect through a few common references:
 |---|---|---|
 | Area entity instance | Entity template id | `"template": "lever_toggle"` |
 | Command | Named command id | `"command_id": "attempt_move_one_tile"` |
-| Command | Dialogue id | `"dialogue_id": "system/pause_menu"` |
+| Command | Project-relative JSON path | `"dialogue_path": "dialogues/system/pause_menu.json"` |
 | Entity visual | Asset path | `"path": "assets/project/sprites/sign.png"` |
 | Command token | Shared variable path | `"$project.movement.ticks_per_tile"` |
 
@@ -354,7 +355,6 @@ project.json
 |-- points to areas/
 |-- points to entity_templates/
 |-- points to named_commands/
-|-- points to dialogues/
 |-- points to assets/
 |-- points to shared_variables.json
 `-- instantiates global_entities
@@ -370,8 +370,8 @@ entity templates
 |-- call named commands
 `-- call controller events to start dialogues
 
-dialogues
-`-- provide reusable text/choice content
+ordinary JSON data
+`-- provide reusable dialogue/menu content or any other project-specific payloads
 
 named commands
 `-- provide reusable behavior chains

@@ -1,0 +1,76 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_var_length",
+      "name": "dialogue_current_source_page_count",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_current_segment_pages"
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_current_source_page_count",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "gt",
+      "value": 0,
+      "then": [
+        {
+          "type": "set_var_from_collection_item",
+          "name": "dialogue_current_source_text",
+          "scope": "entity",
+          "entity_id": "self",
+          "value": "$self.dialogue_current_segment_pages",
+          "index": "$self.dialogue_source_page_index",
+          "default": ""
+        }
+      ],
+      "else": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_current_source_text",
+          "value": "$self.dialogue_current_segment_text"
+        }
+      ]
+    },
+    {
+      "type": "set_var_from_wrapped_lines",
+      "name": "dialogue_current_wrapped_lines",
+      "scope": "entity",
+      "entity_id": "self",
+      "text": "$self.dialogue_current_source_text",
+      "max_width": "$self.text_box_width",
+      "font_id": "$self.dialogue_font_id"
+    },
+    {
+      "type": "set_var_from_text_window",
+      "name": "dialogue_current_visible_text",
+      "scope": "entity",
+      "entity_id": "self",
+      "lines": "$self.dialogue_current_wrapped_lines",
+      "start": "$self.dialogue_text_line_offset",
+      "max_lines": "$self.dialogue_max_lines",
+      "store_has_more_var": "dialogue_current_has_more_text",
+      "store_total_var": "dialogue_current_wrapped_line_count"
+    },
+    {
+      "type": "show_screen_text",
+      "element_id": "$self.text_element_id",
+      "text": "$self.dialogue_current_visible_text",
+      "x": "$self.text_box_x",
+      "y": "$self.text_box_y",
+      "layer": "$self.text_layer",
+      "anchor": "topleft",
+      "color": "$self.dialogue_text_color",
+      "font_id": "$self.dialogue_font_id",
+      "max_width": "$self.text_box_width"
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/clear_choice_elements"
+    }
+  ]
+}

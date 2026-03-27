@@ -32,7 +32,6 @@ class CommandContext:
     project: Any | None = None
     asset_manager: Any | None = None
     text_renderer: Any | None = None
-    text_session_manager: Any | None = None
     camera: Any | None = None
     audio_player: Any | None = None
     screen_manager: Any | None = None
@@ -383,6 +382,31 @@ def _resolve_runtime_values(
     return value
 
 
+def _resolve_deferred_runtime_value(
+    value: Any,
+    context: CommandContext,
+    runtime_params: dict[str, Any],
+) -> Any:
+    """Resolve one top-level token while leaving nested command specs untouched."""
+    if isinstance(value, str):
+        token = None
+        if value.startswith("${") and value.endswith("}"):
+            token = value[2:-1]
+        elif value.startswith("$"):
+            token = value[1:]
+        if token is not None:
+            return _resolve_runtime_token(token, context, runtime_params)
+    return copy.deepcopy(value)
+
+
+_DEFERRED_RUNTIME_COMMAND_KEYS: dict[str, set[str]] = {
+    "check_var": {"then", "else"},
+    "run_commands": {"commands"},
+    "run_detached_commands": {"commands"},
+    "run_commands_for_collection": {"commands"},
+}
+
+
 def execute_registered_command(
     registry: Any,
     context: CommandContext,
@@ -435,7 +459,18 @@ def execute_command_spec(
 ) -> CommandHandle:
     """Execute a single command spec with optional inherited base parameters."""
     inherited_params = dict(base_params or {})
-    spec = _resolve_runtime_values(dict(command_spec), context, inherited_params)
+    raw_spec = dict(command_spec)
+    command_name = str(raw_spec.get("type", ""))
+    deferred_keys = _DEFERRED_RUNTIME_COMMAND_KEYS.get(command_name, set())
+    if deferred_keys:
+        spec = {
+            key: _resolve_deferred_runtime_value(value, context, inherited_params)
+            if key in deferred_keys
+            else _resolve_runtime_values(value, context, inherited_params)
+            for key, value in raw_spec.items()
+        }
+    else:
+        spec = _resolve_runtime_values(raw_spec, context, inherited_params)
     command_name = str(spec.pop("type"))
     params = dict(inherited_params)
     params.update(spec)

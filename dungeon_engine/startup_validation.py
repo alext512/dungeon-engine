@@ -7,11 +7,6 @@ from dungeon_engine.commands.library import (
     log_named_command_validation_error,
     validate_project_named_commands,
 )
-from dungeon_engine.dialogue_library import (
-    DialogueValidationError,
-    log_dialogue_validation_error,
-    validate_project_dialogues,
-)
 from dungeon_engine.world.loader import (
     AreaValidationError,
     EntityTemplateValidationError,
@@ -31,7 +26,6 @@ def validate_project_startup(
     NamedCommandValidationError
     | EntityTemplateValidationError
     | AreaValidationError
-    | DialogueValidationError
     | None
 ):
     """Validate project content and report any startup-blocking errors."""
@@ -51,17 +45,6 @@ def validate_project_startup(
         validate_project_areas(project)
     except AreaValidationError as error:
         log_area_validation_error(error)
-        message = error.format_user_message()
-        print(message)
-        if show_dialog:
-            _show_error_dialog(ui_title, message)
-        return error
-
-    # Validate dialogues.
-    try:
-        validate_project_dialogues(project)
-    except DialogueValidationError as error:
-        log_dialogue_validation_error(error)
         message = error.format_user_message()
         print(message)
         if show_dialog:

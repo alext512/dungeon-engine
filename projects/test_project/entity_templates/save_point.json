@@ -18,7 +18,7 @@
           "type": "run_event",
           "entity_id": "dialogue_controller",
           "event_id": "open_dialogue",
-          "dialogue_id": "system/save_prompt",
+          "dialogue_path": "dialogues/system/save_prompt.json",
           "dialogue_on_start": [
             {
               "type": "set_var",
@@ -51,7 +51,7 @@
             }
           ],
           "segment_hooks": [
-            null,
+            {},
             {
               "option_commands_by_id": {
                 "save": [
@@ -61,14 +61,6 @@
                     "entity_id": "self",
                     "name": "pending_save_prompt_action",
                     "value": "save"
-                  },
-                  {
-                    "type": "close_dialogue"
-                  }
-                ],
-                "cancel": [
-                  {
-                    "type": "close_dialogue"
                   }
                 ]
               }

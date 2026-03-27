@@ -1,0 +1,149 @@
+{
+  "params": [
+    "dialogue_path",
+    "dialogue_on_start",
+    "dialogue_on_end",
+    "segment_hooks",
+    "allow_cancel"
+  ],
+  "commands": [
+    {
+      "type": "check_var",
+      "name": "dialogue_open",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "append_to_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_state_stack",
+          "value": {
+            "dialogue_path": "$self.dialogue_path",
+            "dialogue_definition": "$self.dialogue_definition",
+            "dialogue_on_end": "$self.dialogue_on_end",
+            "dialogue_segment_hooks": "$self.dialogue_segment_hooks",
+            "dialogue_allow_cancel": "$self.dialogue_allow_cancel",
+            "dialogue_actor_id": "$self.dialogue_actor_id",
+            "dialogue_caller_id": "$self.dialogue_caller_id",
+            "dialogue_segment_index": "$self.dialogue_segment_index",
+            "dialogue_source_page_index": "$self.dialogue_source_page_index",
+            "dialogue_text_line_offset": "$self.dialogue_text_line_offset",
+            "dialogue_choice_index": "$self.dialogue_choice_index",
+            "dialogue_current_speaker_id": "$self.dialogue_current_speaker_id"
+          }
+        }
+      ],
+      "else": [
+        {
+          "type": "push_input_routes"
+        },
+        {
+          "type": "route_inputs_to_entity",
+          "entity_id": "self"
+        }
+      ]
+    },
+    {
+      "type": "set_var_from_json_file",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_definition",
+      "path": "$dialogue_path"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_open",
+      "value": true
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_path",
+      "value": "$dialogue_path"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_on_end",
+      "value": "$dialogue_on_end"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_segment_hooks",
+      "value": "$segment_hooks"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_allow_cancel",
+      "value": "$allow_cancel"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_actor_id",
+      "value": "$actor_entity_id"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_caller_id",
+      "value": "$caller_entity_id"
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_segment_index",
+      "value": 0
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_source_page_index",
+      "value": 0
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_text_line_offset",
+      "value": 0
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_choice_index",
+      "value": 0
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_current_speaker_id",
+      "value": null
+    },
+    {
+      "type": "run_commands",
+      "commands": "$dialogue_on_start"
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/show_current_segment"
+    }
+  ]
+}

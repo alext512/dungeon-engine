@@ -1,0 +1,49 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/clear_choice_elements"
+    },
+    {
+      "type": "run_commands_for_collection",
+      "value": "$self.dialogue_current_segment_options",
+      "commands": [
+        {
+          "type": "set_var_from_collection_item",
+          "name": "dialogue_render_option_element_id",
+          "scope": "entity",
+          "entity_id": "self",
+          "value": "$self.option_element_ids",
+          "index": "$index",
+          "default": ""
+        },
+        {
+          "type": "set_var_from_collection_item",
+          "name": "dialogue_render_option_row_y",
+          "scope": "entity",
+          "entity_id": "self",
+          "value": "$self.option_rows_y",
+          "index": "$index",
+          "default": 154
+        },
+        {
+          "type": "show_screen_text",
+          "element_id": "$self.dialogue_render_option_element_id",
+          "text": "$item.text",
+          "x": "$self.choice_text_x",
+          "y": "$self.dialogue_render_option_row_y",
+          "layer": "$self.text_layer",
+          "anchor": "topleft",
+          "color": "$self.choice_text_color",
+          "font_id": "$self.dialogue_font_id",
+          "max_width": "$self.choice_width"
+        }
+      ]
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/render_choice_cursor"
+    }
+  ]
+}

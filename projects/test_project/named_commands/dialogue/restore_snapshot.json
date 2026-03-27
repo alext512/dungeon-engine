@@ -1,0 +1,131 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_open",
+      "value": true
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_path",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_path",
+      "default": ""
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_definition",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_definition",
+      "default": {}
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_on_end",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_on_end",
+      "default": []
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_segment_hooks",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_segment_hooks",
+      "default": []
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_allow_cancel",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_allow_cancel",
+      "default": false
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_actor_id",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_actor_id",
+      "default": null
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_caller_id",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_caller_id",
+      "default": null
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_segment_index",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_segment_index",
+      "default": 0
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_source_page_index",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_source_page_index",
+      "default": 0
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_text_line_offset",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_text_line_offset",
+      "default": 0
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_choice_index",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_choice_index",
+      "default": 0
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_current_speaker_id",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_restored_state",
+      "key": "dialogue_current_speaker_id",
+      "default": null
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_restored_state",
+      "value": {}
+    },
+    {
+      "type": "run_named_command",
+      "command_id": "dialogue/load_and_render_segment"
+    }
+  ]
+}

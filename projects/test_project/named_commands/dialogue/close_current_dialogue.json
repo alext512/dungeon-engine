@@ -1,0 +1,170 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "increment_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_revision",
+      "amount": 1
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_pending_on_end",
+      "value": "$self.dialogue_on_end"
+    },
+    {
+      "type": "set_var_length",
+      "name": "dialogue_stack_count",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_state_stack"
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_stack_count",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "gt",
+      "value": 0,
+      "then": [
+        {
+          "type": "pop_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_state_stack",
+          "store_var": "dialogue_restored_state",
+          "default": {}
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/restore_snapshot"
+        },
+        {
+          "type": "run_commands",
+          "commands": "$self.dialogue_pending_on_end"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_pending_on_end",
+          "value": []
+        }
+      ],
+      "else": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/clear_ui"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_open",
+          "value": false
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_path",
+          "value": ""
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_definition",
+          "value": {}
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_on_end",
+          "value": []
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_segment_hooks",
+          "value": []
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_allow_cancel",
+          "value": false
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_actor_id",
+          "value": null
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_caller_id",
+          "value": null
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_segment_index",
+          "value": 0
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_source_page_index",
+          "value": 0
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_text_line_offset",
+          "value": 0
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_choice_index",
+          "value": 0
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_current_speaker_id",
+          "value": null
+        },
+        {
+          "type": "pop_input_routes"
+        },
+        {
+          "type": "run_commands",
+          "commands": "$self.dialogue_pending_on_end"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_pending_on_end",
+          "value": []
+        }
+      ]
+    }
+  ]
+}

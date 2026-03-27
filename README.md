@@ -1,6 +1,6 @@
 # Dungeon Engine
 
-A command-driven 2D puzzle/RPG engine in Python with JSON-authored gameplay, a standalone level editor, reusable entity templates, and controller-driven dialogue.
+A command-driven 2D puzzle/RPG engine in Python with JSON-authored gameplay, a standalone level editor, reusable entity templates, and entity-owned dialogue/menu flow.
 
 ## What It Is
 
@@ -18,13 +18,13 @@ The repo includes a working sample project under [projects/test_project](./proje
 ## Current Features
 
 - standalone game launcher and standalone level editor
-- project manifests with configurable search paths for areas, entity templates, named commands, dialogues, assets, shared variables, and project-level `global_entities`
-- path-derived IDs for areas, entity templates, named commands, and dialogues
+- project manifests with configurable search paths for areas, entity templates, named commands, assets, shared variables, and project-level `global_entities`
+- path-derived IDs for areas, entity templates, and named commands
 - layered tilemaps with separate walkability data
 - reusable entity templates with per-instance parameters
 - entities with `visuals`, `space`, `scope`, `input_map`, events, and variables
 - command-driven movement, interaction, pushing, animation, and persistence
-- controller-driven dialogue sessions using reusable dialogue assets plus caller-supplied segment hooks
+- controller-driven dialogue and menu flow using entity-owned state, ordinary project JSON data, generic text helpers, and stack-based input restore
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
 - transfer-aware `change_area` and `new_game` flow using authored area `entry_points`
 - traveler persistence so transferred entities exist in one area at a time and do not duplicate on re-entry
@@ -148,7 +148,7 @@ my_project/
     areas/
     entity_templates/
     named_commands/
-    dialogues/
+    dialogues/                  # Optional ordinary JSON data used by your commands/controllers
     assets/
 ```
 

@@ -3,7 +3,6 @@
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "named_command_paths": ["named_commands/"],
-  "dialogue_paths": ["dialogues/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {

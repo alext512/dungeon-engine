@@ -50,7 +50,7 @@
       "type": "run_event",
       "entity_id": "dialogue_controller",
       "event_id": "open_dialogue",
-      "dialogue_id": "system/title_menu",
+      "dialogue_path": "dialogues/system/title_menu.json",
       "dialogue_on_start": [
         {
           "type": "set_var",
@@ -121,9 +121,6 @@
                 "entity_id": "self",
                 "name": "pending_title_menu_action",
                 "value": "new_game"
-              },
-              {
-                "type": "close_dialogue"
               }
             ],
             "load_game": [
@@ -133,9 +130,6 @@
                 "entity_id": "self",
                 "name": "pending_title_menu_action",
                 "value": "load_game"
-              },
-              {
-                "type": "close_dialogue"
               }
             ],
             "exit": [
@@ -145,9 +139,6 @@
                 "entity_id": "self",
                 "name": "pending_title_menu_action",
                 "value": "exit"
-              },
-              {
-                "type": "close_dialogue"
               }
             ]
           }

@@ -13,7 +13,7 @@ Historical note:
 
 - Parts of the progress log below describe intermediate slices that have since been superseded.
 - The current runtime no longer uses authored `run_dialogue`.
-- The active dialogue/input model is controller-driven `start_dialogue_session` plus per-action `input_targets` and modal route restore through `push_input_routes` / `pop_input_routes`.
+- The active dialogue/input model is controller-owned state on screen-space entities plus per-action `input_targets`, an engine-owned route stack, and ordinary project JSON dialogue/menu data loaded by commands.
 - The active runtime now also has authored area `entry_points`, transfer-aware area transitions, traveler persistence for moved entities, and explicit command-addressable camera state with saved follow/bounds/deadzone data.
 
 ## Current progress
@@ -128,8 +128,9 @@ Implemented in the first movement-foundation slice:
   - wraps text by measured pixel width
   - paginates wrapped text by configured `max_lines`
   - advances pages on action-button presses
-- Projects can now also store reusable dialogue content in `dialogues/` JSON
-  files and invoke them by `dialogue_id` from `run_dialogue`.
+- Historical note from an older slice: projects had begun storing reusable dialogue content in `dialogues/` JSON
+  files and invoking it through `run_dialogue`. The active runtime has since replaced that with ordinary JSON data
+  loaded by controller-owned commands.
 - The sample project now handles panel images, portraits, and dialogue choices
   outside `run_dialogue` through normal screen-space commands plus a hidden
   `dialogue_controller` entity that receives dialogue input through events.
