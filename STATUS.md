@@ -1,4 +1,4 @@
-# Project Status
+﻿# Project Status
 
 ## Current State
 
@@ -63,7 +63,8 @@ If you only need the current reality quickly:
 - explicit variable primitives such as `set_world_var`, `set_entity_var`, `increment_world_var`, `increment_entity_var`, `check_world_var`, and `check_entity_var`
 - runtime entity references through `self`, `actor`, `caller`, plus `$self_id`, `$actor_id`, and `$caller_id`
 - generic `set_entity_field` command for safe runtime entity-field mutation, including nested visual paths such as `visuals.main.tint`
-- generic per-command lifecycle wrapper fields `on_start` / `on_end` are removed from the active command surface; explicit sequencing now goes through `run_commands` and overlapping work through `run_detached_commands`
+- generic per-command lifecycle wrapper fields `on_start` / `on_end` are removed from the active command surface; explicit sequencing now goes through `run_sequence`, grouped parallel work goes through `run_parallel`, and fire-and-forget overlap goes through `spawn_flow`
+- the command runner now executes independent top-level flows by default instead of privileging one main lane plus detached/background exceptions
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
 - strict primitive entity-target commands across variables, input routing, camera follow, movement, and visual/animation control now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
 - strict primitive command execution now injects only the engine services named in each primitive's Python signature instead of handing the full runtime service bag to those primitive implementations; orchestration commands still use richer runner context where needed
@@ -126,3 +127,4 @@ Expected behavior:
 - build more real JSON content and let authoring pressure reveal the next engine changes
 - improve the editor's parameter editing and room-creation workflows
 - revisit movement/render feel and finish the pixel-perfect quality pass
+

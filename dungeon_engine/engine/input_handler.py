@@ -81,10 +81,7 @@ class InputHandler:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.menu_press_count += 1
-                    if self._can_route_input_while_busy() and self._enqueue_action_if_mapped("menu"):
-                        continue
-                    if not self.command_runner.has_pending_work() and self._enqueue_action_if_mapped("menu"):
-                        continue
+                    self._enqueue_action_if_mapped("menu")
                     continue
 
                 debug_action_name = {
@@ -94,18 +91,12 @@ class InputHandler:
                     pygame.K_RIGHTBRACKET: "debug_zoom_in",
                 }.get(event.key)
                 if debug_action_name is not None:
-                    if self._can_route_input_while_busy():
-                        self._enqueue_action_if_mapped(debug_action_name)
-                    elif not self.command_runner.has_pending_work():
-                        self._enqueue_action_if_mapped(debug_action_name)
+                    self._enqueue_action_if_mapped(debug_action_name)
                     continue
 
                 if event.key in ACTION_KEYS:
                     self.action_press_count += 1
-                    if self._can_route_input_while_busy():
-                        self._enqueue_action_if_mapped("interact")
-                    elif not self.command_runner.has_pending_work():
-                        self._enqueue_action_if_mapped("interact")
+                    self._enqueue_action_if_mapped("interact")
                     continue
 
                 direction = KEY_TO_DIRECTION.get(event.key)
@@ -158,21 +149,13 @@ class InputHandler:
             return
 
     def _enqueue_direction_press(self, direction: str) -> None:
-        """Dispatch the first key press immediately when the runner can accept it."""
+        """Dispatch the first key press immediately."""
         self._reset_direction_repeat(direction)
         action_name = f"move_{direction}"
-        if self._can_route_input_while_busy():
-            self._enqueue_action_if_mapped(action_name)
-            return
-        if not self.command_runner.has_pending_work():
-            self._enqueue_action_if_mapped(action_name)
+        self._enqueue_action_if_mapped(action_name)
 
     def _enqueue_held_direction_if_possible(self, action_name: str) -> bool:
-        """Dispatch one held directional action when the current lane can accept it."""
-        if self._can_route_input_while_busy():
-            return self._enqueue_action_if_mapped(action_name)
-        if self.command_runner.has_pending_work():
-            return False
+        """Dispatch one held directional action using the normal routed flow model."""
         return self._enqueue_action_if_mapped(action_name)
 
     def _reset_direction_repeat(self, direction: str) -> None:
@@ -221,11 +204,4 @@ class InputHandler:
         if event_name is not None:
             return str(event_name).strip()
         return ""
-
-    def _can_route_input_while_busy(self) -> bool:
-        """Return True when logical actions should still go to routed entities."""
-        if not self.command_runner.has_pending_work():
-            return True
-        active_handle = self.command_runner.active_handle
-        return bool(active_handle is not None and active_handle.allow_entity_input)
 

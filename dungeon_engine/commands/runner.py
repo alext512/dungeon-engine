@@ -82,8 +82,6 @@ class CommandHandle:
 
     def __init__(self) -> None:
         self.complete = False
-        self.captures_menu_input = False
-        self.allow_entity_input = False
 
     def update(self, dt: float) -> None:
         """Advance the command handle toward completion."""
@@ -651,14 +649,14 @@ def execute_registered_command(
         if forbidden == ["on_complete"]:
             message = (
                 f"Command '{name}' must not use 'on_complete'; "
-                "use explicit sequencing with 'run_commands' instead."
+                "use explicit sequencing with 'run_sequence' instead."
             )
         else:
             formatted = ", ".join(f"'{key}'" for key in forbidden)
             message = (
                 f"Command '{name}' must not use lifecycle wrapper field(s) {formatted}; "
-                "use explicit sequencing with 'run_commands' or overlapping work with "
-                "'run_detached_commands' instead."
+                "use explicit sequencing with 'run_sequence', grouped overlap with "
+                "'run_parallel', or fire-and-forget overlap with 'spawn_flow' instead."
             )
         raise ValueError(message)
     trace_entry = _describe_command(name, command_params)
@@ -744,12 +742,8 @@ class SequenceCommandHandle(CommandHandle):
 
         if self.current_handle is not None:
             self.current_handle.update(dt)
-            self.captures_menu_input = self.current_handle.captures_menu_input
-            self.allow_entity_input = self.current_handle.allow_entity_input
             if self.current_handle.complete:
                 self.current_handle = None
-                self.captures_menu_input = False
-                self.allow_entity_input = False
 
         while self.current_handle is None and self.current_index < len(self.commands):
             command_spec = dict(self.commands[self.current_index])
@@ -762,27 +756,21 @@ class SequenceCommandHandle(CommandHandle):
             )
             if self.current_handle.complete:
                 self.current_handle = None
-                self.captures_menu_input = False
-                self.allow_entity_input = False
-            else:
-                self.captures_menu_input = self.current_handle.captures_menu_input
-                self.allow_entity_input = self.current_handle.allow_entity_input
 
         if self.current_handle is None and self.current_index >= len(self.commands):
             self.complete = True
-            self.captures_menu_input = False
-            self.allow_entity_input = False
 
 
 class CommandRunner:
-    """A small single-lane command queue suitable for the first prototype."""
+    """Execute pending commands as independent root flows."""
 
     def __init__(self, registry: Any, context: CommandContext) -> None:
         self.registry = registry
         self.context = context
         self.pending: deque[QueuedCommand] = deque()
-        self.active_handle: CommandHandle | None = None
-        self.background_handles: list[CommandHandle] = []
+        self.root_handles: list[CommandHandle] = []
+        self._pending_spawned_root_handles: list[CommandHandle] = []
+        self._updating_root_handles = False
         self.last_error_notice: str | None = None
         self.context.command_runner = self
 
@@ -797,7 +785,7 @@ class CommandRunner:
         *,
         actor_entity_id: str | None = None,
     ) -> bool:
-        """Run one routed input event now when the active handle allows it, else queue it."""
+        """Queue one routed input event as an ordinary root flow."""
         params: dict[str, Any] = {
             "entity_id": entity_id,
             "event_id": event_id,
@@ -805,50 +793,44 @@ class CommandRunner:
         if actor_entity_id is not None:
             params["actor_entity_id"] = actor_entity_id
 
-        if self.active_handle is not None and self.active_handle.allow_entity_input:
-            return self._execute_background_command("run_event", params)
-
         self.enqueue("run_event", **params)
         return True
 
     def has_pending_work(self) -> bool:
         """Return True when a command is queued or still running."""
-        return (
-            self.active_handle is not None
-            or bool(self.background_handles)
-            or bool(self.pending)
-        )
+        return bool(self.pending or self.root_handles or self._pending_spawned_root_handles)
 
-    def spawn_background_handle(self, handle: CommandHandle) -> None:
-        """Run a handle in parallel with the main command lane."""
+    def spawn_root_handle(self, handle: CommandHandle) -> None:
+        """Run one handle as an independent root flow."""
         if handle.complete:
             return
-        self.background_handles.append(handle)
+        if self._updating_root_handles:
+            self._pending_spawned_root_handles.append(handle)
+            return
+        self.root_handles.append(handle)
 
     def update(self, dt: float) -> None:
-        """Advance the active command and start the next queued command when possible."""
+        """Advance all root flows and materialize queued dispatches."""
         try:
-            if self.background_handles:
-                remaining_handles: list[CommandHandle] = []
-                for handle in self.background_handles:
-                    handle.update(dt)
-                    if not handle.complete:
-                        remaining_handles.append(handle)
-                self.background_handles = remaining_handles
+            self._materialize_pending_commands()
 
-            if self.active_handle is not None:
-                self.active_handle.update(dt)
-                if self.active_handle.complete:
-                    self.active_handle = None
+            if self.root_handles:
+                self._updating_root_handles = True
+                try:
+                    remaining_handles: list[CommandHandle] = []
+                    for handle in self.root_handles:
+                        handle.update(dt)
+                        if not handle.complete:
+                            remaining_handles.append(handle)
+                    self.root_handles = remaining_handles
+                finally:
+                    self._updating_root_handles = False
 
-            if self.active_handle is None and self.pending:
-                queued_command = self.pending.popleft()
-                self.active_handle = execute_registered_command(
-                    self.registry,
-                    self.context,
-                    queued_command.name,
-                    queued_command.params,
-                )
+            if self._pending_spawned_root_handles:
+                self.root_handles.extend(self._pending_spawned_root_handles)
+                self._pending_spawned_root_handles.clear()
+
+            self._materialize_pending_commands()
         except CommandExecutionError as exc:
             self._handle_command_error(exc)
         except Exception as exc:
@@ -872,35 +854,22 @@ class CommandRunner:
             exc.params,
             exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
         )
-        self.active_handle = None
-        self.background_handles.clear()
+        self.root_handles.clear()
+        self._pending_spawned_root_handles.clear()
+        self._updating_root_handles = False
         self.pending.clear()
         self.context.command_trace.clear()
         self.last_error_notice = "Command error: see logs/error.log"
 
-    def _execute_background_command(self, name: str, params: dict[str, Any]) -> bool:
-        """Execute one command immediately and keep any async work alongside the main lane."""
-        try:
+    def _materialize_pending_commands(self) -> None:
+        """Turn queued requests into root flows or immediate effects."""
+        while self.pending:
+            queued_command = self.pending.popleft()
             handle = execute_registered_command(
                 self.registry,
                 self.context,
-                name,
-                dict(params),
+                queued_command.name,
+                queued_command.params,
             )
-        except CommandExecutionError as exc:
-            self._handle_command_error(exc)
-            return False
-        except Exception as exc:
-            wrapped = CommandExecutionError(
-                f"Command '{name}' failed.",
-                command_name=name,
-                params=dict(params),
-                trace=list(self.context.command_trace),
-            )
-            wrapped.__cause__ = exc
-            self._handle_command_error(wrapped)
-            return False
-
-        self.spawn_background_handle(handle)
-        return True
+            self.spawn_root_handle(handle)
 

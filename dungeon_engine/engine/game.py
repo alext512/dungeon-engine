@@ -281,16 +281,14 @@ class Game:
         for _ in range(8):
             before_state = (
                 len(self.command_runner.pending),
-                len(self.command_runner.background_handles),
-                id(self.command_runner.active_handle) if self.command_runner.active_handle else 0,
-                bool(self.command_runner.active_handle),
+                len(self.command_runner.root_handles),
+                tuple(id(handle) for handle in self.command_runner.root_handles),
             )
             self.command_runner.update(0.0)
             after_state = (
                 len(self.command_runner.pending),
-                len(self.command_runner.background_handles),
-                id(self.command_runner.active_handle) if self.command_runner.active_handle else 0,
-                bool(self.command_runner.active_handle),
+                len(self.command_runner.root_handles),
+                tuple(id(handle) for handle in self.command_runner.root_handles),
             )
             if not self.command_runner.has_pending_work():
                 break
@@ -450,7 +448,7 @@ class Game:
         if self.command_runner is None or not self.area.enter_commands:
             return
         self.command_runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=copy.deepcopy(self.area.enter_commands),
         )
 

@@ -50,7 +50,7 @@
           "command_id": "dialogue/restore_snapshot"
         },
         {
-          "type": "run_commands",
+          "type": "run_sequence",
           "commands": "$self.dialogue_pending_on_end",
           "actor_entity_id": "$self.dialogue_pending_actor_id",
           "caller_entity_id": "$self.dialogue_pending_caller_id"
@@ -161,7 +161,7 @@
           "type": "pop_input_routes"
         },
         {
-          "type": "run_commands",
+          "type": "run_sequence",
           "commands": "$self.dialogue_pending_on_end",
           "actor_entity_id": "$self.dialogue_pending_actor_id",
           "caller_entity_id": "$self.dialogue_pending_caller_id"
@@ -188,3 +188,4 @@
     }
   ]
 }
+

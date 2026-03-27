@@ -20,6 +20,7 @@ from dungeon_engine.commands.runner import (
     ImmediateHandle,
     SequenceCommandHandle,
     WaitFramesHandle,
+    execute_command_spec,
 )
 from dungeon_engine.world.entity import DIRECTION_VECTORS
 from dungeon_engine.world.loader import instantiate_entity
@@ -148,13 +149,9 @@ class ForEachCommandHandle(CommandHandle):
 
         if self.current_handle is not None:
             self.current_handle.update(dt)
-            self.captures_menu_input = self.current_handle.captures_menu_input
-            self.allow_entity_input = self.current_handle.allow_entity_input
             if not self.current_handle.complete:
                 return
             self.current_handle = None
-            self.captures_menu_input = False
-            self.allow_entity_input = False
 
         while self.current_handle is None and self.current_index < len(self.items):
             item_index = self.current_index
@@ -171,8 +168,6 @@ class ForEachCommandHandle(CommandHandle):
             if self.current_handle.complete:
                 self.current_handle = None
                 continue
-            self.captures_menu_input = self.current_handle.captures_menu_input
-            self.allow_entity_input = self.current_handle.allow_entity_input
             return
 
         if self.current_handle is None and self.current_index >= len(self.items):
@@ -202,13 +197,9 @@ class NamedCommandHandle(CommandHandle):
             return
 
         self.sequence_handle.update(dt)
-        self.captures_menu_input = self.sequence_handle.captures_menu_input
-        self.allow_entity_input = self.sequence_handle.allow_entity_input
         if self.sequence_handle.complete:
             self._pop_stack()
             self.complete = True
-            self.captures_menu_input = False
-            self.allow_entity_input = False
 
     def _push_stack(self) -> None:
         """Record entry into a named-command invocation."""
@@ -224,6 +215,128 @@ class NamedCommandHandle(CommandHandle):
         if self.context.named_command_stack and self.context.named_command_stack[-1] == self.command_id:
             self.context.named_command_stack.pop()
         self._stack_pushed = False
+
+
+class ParallelCommandHandle(CommandHandle):
+    """Run several command branches together with explicit completion rules."""
+
+    def __init__(
+        self,
+        registry: CommandRegistry,
+        context: CommandContext,
+        *,
+        command_specs: list[dict[str, Any]],
+        completion: dict[str, Any] | None = None,
+        base_params: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__()
+        self.registry = registry
+        self.context = context
+        self.base_params = dict(base_params or {})
+        self.children: list[dict[str, Any]] = []
+        self.completion_mode = "all"
+        self.completion_child_id: str | None = None
+        self.remaining_policy = "keep_running"
+        self._completion_triggered = False
+        self._configure_completion(completion)
+        self._build_children(command_specs)
+        self.update(0.0)
+
+    def _configure_completion(self, completion: dict[str, Any] | None) -> None:
+        """Validate and store one explicit parallel completion policy."""
+        if completion is None:
+            return
+        if not isinstance(completion, dict):
+            raise TypeError("run_parallel completion must be a JSON object or null.")
+        self.completion_mode = str(completion.get("mode", "all")).strip() or "all"
+        if self.completion_mode not in {"all", "any", "child"}:
+            raise ValueError(
+                "run_parallel completion.mode must be 'all', 'any', or 'child'."
+            )
+        if self.completion_mode == "child":
+            child_id = str(completion.get("child_id", "")).strip()
+            if not child_id:
+                raise ValueError(
+                    "run_parallel completion.mode 'child' requires a non-empty child_id."
+                )
+            self.completion_child_id = child_id
+        remaining_policy = str(completion.get("remaining", "keep_running")).strip() or "keep_running"
+        if remaining_policy != "keep_running":
+            raise ValueError(
+                "run_parallel currently only supports completion.remaining = 'keep_running'."
+            )
+        self.remaining_policy = remaining_policy
+
+    def _build_children(self, command_specs: list[dict[str, Any]]) -> None:
+        """Create child handles from authored command specs."""
+        seen_ids: set[str] = set()
+        for raw_command in command_specs:
+            child_spec = dict(raw_command)
+            child_id = str(child_spec.pop("id", "")).strip() or None
+            if child_id is not None:
+                if child_id in seen_ids:
+                    raise ValueError(f"run_parallel child id '{child_id}' is duplicated.")
+                seen_ids.add(child_id)
+            handle = execute_command_spec(
+                self.registry,
+                self.context,
+                child_spec,
+                base_params=self.base_params,
+            )
+            self.children.append(
+                {
+                    "id": child_id,
+                    "handle": handle,
+                    "promoted": False,
+                }
+            )
+        if self.completion_mode == "child" and self.completion_child_id not in seen_ids:
+            raise ValueError(
+                f"run_parallel completion child_id '{self.completion_child_id}' does not match any child id."
+            )
+
+    def update(self, dt: float) -> None:
+        """Advance child handles and complete according to the configured policy."""
+        if self.complete:
+            return
+
+        for child in self.children:
+            handle = child["handle"]
+            if not handle.complete:
+                handle.update(dt)
+
+        if self._completion_triggered:
+            return
+
+        should_complete = False
+        if self.completion_mode == "all":
+            should_complete = all(child["handle"].complete for child in self.children)
+        elif self.completion_mode == "any":
+            should_complete = any(child["handle"].complete for child in self.children)
+        elif self.completion_mode == "child":
+            should_complete = any(
+                child["id"] == self.completion_child_id and child["handle"].complete
+                for child in self.children
+            )
+
+        if not should_complete:
+            return
+
+        self._completion_triggered = True
+        if self.completion_mode != "all":
+            self._promote_remaining_children()
+        self.complete = True
+
+    def _promote_remaining_children(self) -> None:
+        """Let unfinished non-waited children continue as independent root flows."""
+        if self.context.command_runner is None:
+            raise ValueError("Cannot keep parallel children running without an active command runner.")
+        for child in self.children:
+            handle = child["handle"]
+            if child["promoted"] or handle.complete:
+                continue
+            child["promoted"] = True
+            self.context.command_runner.spawn_root_handle(handle)
 
 
 def _resolve_entity_id(
@@ -1211,34 +1324,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         """Pause the current command lane for a fixed amount of elapsed time."""
         return WaitSecondsHandle(float(seconds))
 
-    @registry.register("run_detached_commands", deferred_params={"commands"})
-    def run_detached_commands(
-        context: CommandContext,
-        *,
-        commands: list[dict[str, Any]],
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Run a command list in the background without blocking the main lane."""
-        if context.command_runner is None:
-            raise ValueError("Cannot run detached commands without an active command runner.")
-        handle = SequenceCommandHandle(
-            registry,
-            context,
-            commands,
-            base_params={
-                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
-                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
-        )
-        context.command_runner.spawn_background_handle(handle)
-        return ImmediateHandle()
-
-    @registry.register("run_commands", deferred_params={"commands"})
-    def run_commands(
+    @registry.register("spawn_flow", deferred_params={"commands"})
+    def spawn_flow(
         context: CommandContext,
         *,
         commands: list[dict[str, Any]] | dict[str, Any] | None = None,
@@ -1247,19 +1334,70 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         caller_entity_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
-        """Run an inline command list on the main lane."""
-        if not commands:
+        """Start one independent flow and return immediately."""
+        if context.command_runner is None:
+            raise ValueError("Cannot spawn a flow without an active command runner.")
+        normalized_commands = _normalize_command_specs(commands)
+        if not normalized_commands:
             return ImmediateHandle()
-        if isinstance(commands, dict):
-            normalized_commands = [dict(commands)]
-        elif isinstance(commands, list):
-            normalized_commands = [dict(command) for command in commands]
-        else:
-            raise TypeError("run_commands requires a dict, list of dicts, or null.")
+        handle = SequenceCommandHandle(
+            registry,
+            context,
+            normalized_commands,
+            base_params={
+                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
+                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
+                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
+            },
+        )
+        context.command_runner.spawn_root_handle(handle)
+        return ImmediateHandle()
+
+    @registry.register("run_sequence", deferred_params={"commands"})
+    def run_sequence(
+        context: CommandContext,
+        *,
+        commands: list[dict[str, Any]] | dict[str, Any] | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        caller_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Run an inline command list in order, waiting for each child as needed."""
+        normalized_commands = _normalize_command_specs(commands)
+        if not normalized_commands:
+            return ImmediateHandle()
         return SequenceCommandHandle(
             registry,
             context,
             normalized_commands,
+            base_params={
+                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
+                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
+                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
+            },
+        )
+
+    @registry.register("run_parallel", deferred_params={"commands"})
+    def run_parallel(
+        context: CommandContext,
+        *,
+        commands: list[dict[str, Any]] | dict[str, Any] | None = None,
+        completion: dict[str, Any] | None = None,
+        source_entity_id: str | None = None,
+        actor_entity_id: str | None = None,
+        caller_entity_id: str | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Start several child commands together with explicit completion semantics."""
+        normalized_commands = _normalize_command_specs(commands)
+        if not normalized_commands:
+            return ImmediateHandle()
+        return ParallelCommandHandle(
+            registry,
+            context,
+            command_specs=normalized_commands,
+            completion=copy.deepcopy(completion),
             base_params={
                 **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
                 **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
