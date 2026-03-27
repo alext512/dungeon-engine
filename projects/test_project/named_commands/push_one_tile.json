@@ -5,10 +5,21 @@
   ],
   "commands": [
     {
-      "type": "query_facing_state",
-      "entity_id": "self",
-      "direction": "$direction",
-      "store_state_var": "push_attempt_state"
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_attempt_info",
+      "value": {
+        "$facing_state": {
+          "entity_id": "$self_id",
+          "direction": "$direction"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_attempt_state",
+      "value": "$self.push_attempt_info.state"
     },
     {
       "type": "check_entity_var",

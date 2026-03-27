@@ -15,6 +15,7 @@ from dungeon_engine.systems.interaction import InteractionSystem
 from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.systems.movement import MovementSystem
 from dungeon_engine.world.area import Area
+from dungeon_engine.world.entity import DIRECTION_VECTORS
 from dungeon_engine.world.world import World
 from dungeon_engine.logging_utils import get_logger
 
@@ -315,6 +316,63 @@ def _build_text_window(
     }
 
 
+def _resolve_facing_state_value(context: CommandContext, resolved_source: Any) -> dict[str, Any]:
+    """Return the state of the tile directly in front of one entity."""
+    if context.collision_system is None:
+        raise ValueError("Cannot resolve facing state without an active collision system.")
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$facing_state value source requires a JSON object.")
+
+    entity_id = str(resolved_source.get("entity_id", "")).strip()
+    if not entity_id:
+        raise ValueError("$facing_state value source requires a non-empty entity_id.")
+
+    actor = context.world.get_entity(entity_id)
+    if actor is None:
+        raise KeyError(f"Cannot resolve facing state for missing entity '{entity_id}'.")
+
+    resolved_direction = str(resolved_source.get("direction") or actor.facing)
+    if resolved_direction not in DIRECTION_VECTORS:
+        raise ValueError(f"Unknown direction '{resolved_direction}'.")
+
+    delta_x, delta_y = DIRECTION_VECTORS[resolved_direction]
+    target_x = actor.grid_x + delta_x
+    target_y = actor.grid_y + delta_y
+    blocking_entity = context.collision_system.get_blocking_entity(
+        target_x,
+        target_y,
+        ignore_entity_id=entity_id,
+    )
+    if blocking_entity is None:
+        state = (
+            "free"
+            if context.collision_system.can_move_to(
+                target_x,
+                target_y,
+                ignore_entity_id=entity_id,
+            )
+            else "blocked"
+        )
+        blocking_entity_id = ""
+    else:
+        blocking_entity_id = blocking_entity.entity_id
+        movable_event_id = resolved_source.get("movable_event_id")
+        if movable_event_id and blocking_entity.has_enabled_event(str(movable_event_id)):
+            state = "movable"
+        elif blocking_entity.pushable:
+            state = "movable"
+        else:
+            state = "blocked"
+
+    return {
+        "state": state,
+        "entity_id": blocking_entity_id,
+        "target_x": target_x,
+        "target_y": target_y,
+        "direction": resolved_direction,
+    }
+
+
 def _resolve_runtime_value_source(
     source_name: str,
     source_value: Any,
@@ -349,6 +407,9 @@ def _resolve_runtime_value_source(
             max_lines=int(resolved_source.get("max_lines", 1)),
             separator=str(resolved_source.get("separator", "\n")),
         )
+
+    if source_name == "$facing_state":
+        return _resolve_facing_state_value(context, resolved_source)
 
     raise KeyError(f"Unknown value source '{source_name}'.")
 
@@ -476,6 +537,7 @@ def _resolve_runtime_values(
                 "$json_file",
                 "$wrapped_lines",
                 "$text_window",
+                "$facing_state",
             }:
                 return _resolve_runtime_value_source(
                     source_name,

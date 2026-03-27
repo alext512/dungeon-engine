@@ -276,6 +276,7 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
             "set_var_from_json_file",
             "set_var_from_wrapped_lines",
             "set_var_from_text_window",
+            "query_facing_state",
         }:
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command '{command_type}'; "
