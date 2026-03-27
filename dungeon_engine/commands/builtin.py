@@ -2562,25 +2562,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         offset_x: int | float = 0,
         offset_y: int | float = 0,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Make the camera follow a specific entity."""
         if context.camera is None:
             raise ValueError("Cannot change camera follow without an active camera.")
-        resolved_id = _resolve_entity_id(
-            entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if not resolved_id:
-            logger.warning("set_camera_follow_entity: skipping because entity_id resolved to blank.")
-            return ImmediateHandle()
-        if context.world.get_entity(resolved_id) is None:
-            raise KeyError(f"Cannot follow missing entity '{resolved_id}'.")
+        resolved_id = _require_exact_entity(context, entity_id).entity_id
         context.camera.follow_entity(
             resolved_id,
             offset_x=float(offset_x),
@@ -2710,21 +2696,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.camera.update(context.world, advance_tick=False)
         return ImmediateHandle()
 
-    @registry.register("set_var_from_camera")
-    def set_var_from_camera(
+    def _read_camera_field_value(
         context: CommandContext,
         *,
-        name: str,
         field: str,
-        scope: str = "world",
-        entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        persistent: bool = False,
-        **_: Any,
-    ) -> CommandHandle:
-        """Copy one camera state field into a world/entity variable."""
+    ) -> Any:
+        """Return one copied camera state field value."""
         if context.camera is None:
             raise ValueError("Cannot read camera state without an active camera.")
         camera_state = context.camera.to_state_dict()
@@ -2744,38 +2721,55 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         }
         if field not in camera_fields:
             raise ValueError(f"Unknown camera field '{field}'.")
-        value = copy.deepcopy(camera_fields[field])
-        variables = _resolve_variables(
-            context,
-            scope=scope,
-            entity_id=entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
+        return copy.deepcopy(camera_fields[field])
+
+    @registry.register("set_var_from_camera")
+    def set_var_from_camera(
+        *args: Any,
+        **kwargs: Any,
+    ) -> CommandHandle:
+        """Reject the removed broad camera-to-variable helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_var_from_camera was removed; use 'set_world_var_from_camera' "
+            "or 'set_entity_var_from_camera' instead."
         )
+
+    @registry.register("set_world_var_from_camera")
+    def set_world_var_from_camera(
+        context: CommandContext,
+        *,
+        name: str,
+        field: str,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Copy one camera state field into one explicit world variable."""
+        value = _read_camera_field_value(context, field=field)
+        context.world.variables[name] = value
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=value)
+        return ImmediateHandle()
+
+    @registry.register("set_entity_var_from_camera")
+    def set_entity_var_from_camera(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        field: str,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Copy one camera state field into one explicit entity variable."""
+        value = _read_camera_field_value(context, field=field)
+        variables = _require_exact_entity_variables(context, entity_id)
         variables[name] = value
-        if persistent and context.persistence_runtime is not None:
-            if scope == "world":
-                context.persistence_runtime.set_world_variable(name, value)
-            else:
-                if entity_id is None:
-                    raise ValueError("Persistent camera variable set requires entity_id.")
-                resolved_id = _resolve_entity_id(
-                    entity_id,
-                    source_entity_id=source_entity_id,
-                    actor_entity_id=actor_entity_id,
-                    caller_entity_id=caller_entity_id,
-                )
-                entity = context.world.get_entity(resolved_id)
-                if entity is None:
-                    raise KeyError(f"Cannot persist variable on missing entity '{resolved_id}'.")
-                context.persistence_runtime.set_entity_variable(
-                    resolved_id,
-                    name,
-                    value,
-                    entity=entity,
-                    tile_size=context.area.tile_size,
-                )
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=value,
+            )
         return ImmediateHandle()
 
     @registry.register("move_camera")

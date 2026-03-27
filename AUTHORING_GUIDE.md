@@ -652,9 +652,10 @@ Useful commands:
 - `clear_camera_bounds`
 - `set_camera_deadzone`
 - `clear_camera_deadzone`
-- `set_var_from_camera`
+- `set_world_var_from_camera`
+- `set_entity_var_from_camera`
 
-Follow commands support `offset_x` and `offset_y`. Bounds and deadzone commands accept `space: "pixel"` or `space: "grid"`.
+Follow commands support `offset_x` and `offset_y`. Bounds and deadzone commands accept `space: "pixel"` or `space: "grid"`. Camera query writes now use the explicit world/entity forms instead of the removed broad `set_var_from_camera`.
 
 ## Persistence Notes
 

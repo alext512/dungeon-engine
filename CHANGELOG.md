@@ -4,6 +4,15 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Primitive Command Cleanup
+
+- Removed the broad variable primitives (`set_var`, `increment_var`, `set_var_length`, `append_to_var`, `pop_var`, `set_var_from_collection_item`, `check_var`) in favor of explicit world/entity forms
+- Tightened strict entity-target mutation and input-routing primitives so they now require explicit ids or resolved `$..._id` tokens instead of raw symbolic `self` / `actor` / `caller` ids
+- Tightened `set_camera_follow_entity` the same way, so camera follow targeting now matches the strict primitive model
+- Removed the broad `set_var_from_camera` helper in favor of explicit `set_world_var_from_camera` and `set_entity_var_from_camera`
+- Added startup validation and runtime fail-fast errors for the removed broad forms and for raw symbolic ids on strict primitives
+- Updated the sample content, tests, and active docs to describe the stricter primitive-command model
+
 ## Entity-Owned Dialogue State
 
 - Removed manifest-level `dialogue_paths` and the old dialogue-definition lookup layer; reusable dialogue/menu content is now just ordinary project-relative JSON loaded by commands

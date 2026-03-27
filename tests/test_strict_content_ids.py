@@ -637,6 +637,33 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
+    def test_named_command_validation_rejects_removed_set_var_from_camera_command(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "camera_query.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "set_var_from_camera",
+                            "scope": "world",
+                            "name": "camera_x",
+                            "field": "x",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(NamedCommandValidationError) as raised:
+            validate_project_named_commands(project)
+
+        self.assertTrue(
+            any(
+                "uses removed command 'set_var_from_camera'" in issue
+                for issue in raised.exception.issues
+            )
+        )
+
     def test_named_command_validation_rejects_removed_broad_variable_commands(self) -> None:
         for command_name in (
             "set_var",
@@ -1240,6 +1267,30 @@ class StrictContentIdTests(unittest.TestCase):
                 "uses removed command 'set_camera_follow_player'" in issue
                 for issue in raised.exception.issues
             )
+        )
+
+    def test_area_validation_rejects_removed_set_var_from_camera_command(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "set_var_from_camera",
+                            "scope": "world",
+                            "name": "camera_x",
+                            "field": "x",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any("uses removed command 'set_var_from_camera'" in issue for issue in raised.exception.issues)
         )
 
     def test_area_validation_rejects_removed_if_var_command(self) -> None:
@@ -2494,6 +2545,7 @@ class StrictContentIdTests(unittest.TestCase):
         world = World(default_input_targets={"interact": "player"})
         world.add_entity(_make_runtime_entity("player", kind="player", with_visual=True))
         registry, context = self._make_command_context(world=world)
+        context.camera = _RecordingCamera()
 
         for command_name, params in (
             (
@@ -2517,6 +2569,12 @@ class StrictContentIdTests(unittest.TestCase):
                     "entity_id": "caller",
                     "event_id": "interact",
                     "enabled": False,
+                },
+            ),
+            (
+                "set_camera_follow_entity",
+                {
+                    "entity_id": "actor",
                 },
             ),
         ):
@@ -2643,7 +2701,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
 
-    def test_set_camera_follow_entity_supports_caller_reference(self) -> None:
+    def test_set_camera_follow_entity_supports_caller_token_via_run_commands(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -2654,10 +2712,15 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_camera_follow_entity",
+            "run_commands",
             {
-                "entity_id": "caller",
                 "caller_entity_id": "lever",
+                "commands": [
+                    {
+                        "type": "set_camera_follow_entity",
+                        "entity_id": "$caller_id",
+                    }
+                ],
             },
         )
         handle.update(0.0)
@@ -2714,6 +2777,27 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertIsNotNone(raised.exception.__cause__)
         self.assertIn("set_camera_follow_player is removed", str(raised.exception.__cause__))
 
+    def test_set_var_from_camera_is_removed(self) -> None:
+        world = World()
+        registry, context = self._make_command_context(world=world)
+        camera = _RecordingCamera()
+        context.camera = camera
+
+        with self.assertRaises(CommandExecutionError) as raised:
+            execute_registered_command(
+                registry,
+                context,
+                "set_var_from_camera",
+                {
+                    "scope": "world",
+                    "name": "camera_x",
+                    "field": "x",
+                },
+            )
+
+        self.assertIsNotNone(raised.exception.__cause__)
+        self.assertIn("set_var_from_camera was removed", str(raised.exception.__cause__))
+
     def test_camera_bounds_deadzone_and_query_commands(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
@@ -2759,9 +2843,8 @@ class StrictContentIdTests(unittest.TestCase):
         query_handle = execute_registered_command(
             registry,
             context,
-            "set_var_from_camera",
+            "set_world_var_from_camera",
             {
-                "scope": "world",
                 "name": "camera_bounds",
                 "field": "bounds",
             },
@@ -2771,6 +2854,22 @@ class StrictContentIdTests(unittest.TestCase):
             world.variables["camera_bounds"],
             {"x": 16.0, "y": 32.0, "width": 48.0, "height": 64.0},
         )
+
+        entity_query_handle = execute_registered_command(
+            registry,
+            context,
+            "set_entity_var_from_camera",
+            {
+                "entity_id": "player",
+                "name": "camera_has_bounds",
+                "field": "has_bounds",
+            },
+        )
+        entity_query_handle.update(0.0)
+
+        player = world.get_entity("player")
+        assert player is not None
+        self.assertTrue(player.variables["camera_has_bounds"])
 
     def test_save_game_restores_explicit_camera_state(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")

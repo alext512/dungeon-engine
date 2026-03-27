@@ -43,6 +43,8 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_input_target",
     "set_entity_field",
     "route_inputs_to_entity",
+    "set_camera_follow_entity",
+    "set_entity_var_from_camera",
     "set_visible",
     "set_solid",
     "set_present",
@@ -610,6 +612,11 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'set_camera_follow_player'; "
                 "use 'set_camera_follow_input_target' or 'set_camera_follow_entity' instead."
+            )
+        if command_type == "set_var_from_camera":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_var_from_camera'; "
+                "use 'set_world_var_from_camera' or 'set_entity_var_from_camera' instead."
             )
         if command_type == "if_var":
             raise ValueError(
