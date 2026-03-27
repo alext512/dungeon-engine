@@ -135,15 +135,19 @@ class EditorApp:
         # ESC-to-quit confirmation when dirty
         self._esc_quit_pending = False
 
-    def run(self) -> None:
+    def run(self, max_frames: int | None = None) -> None:
         """Main editor loop."""
         self.running = True
+        frame_count = 0
         while self.running:
             dt = self.clock.tick(config.FPS) / 1000.0
             events = pygame.event.get()
             self._handle_events(events, dt)
             self._render()
             pygame.display.flip()
+            frame_count += 1
+            if max_frames is not None and frame_count >= max_frames:
+                self.running = False
         pygame.quit()
 
     # ------------------------------------------------------------------
@@ -509,7 +513,7 @@ class EditorApp:
                 return
 
             btn_x -= 24
-            if local_x >= btn_x and entity.entity_id != self.editor.world.player_id:
+            if local_x >= btn_x:
                 self.editor.world.remove_entity(entity.entity_id)
                 self.editor._sync_selected_entity_to_cell()
                 self.editor._mark_dirty(f"Removed {entity.entity_id}")
@@ -906,13 +910,30 @@ class EditorApp:
             sx = self._world_x_to_screen(entity.pixel_x)
             sy = self._world_y_to_screen(entity.pixel_y)
 
-            if entity.sprite_path:
-                sprite = self.asset_manager.get_frame(entity.sprite_path, entity.sprite_frame_width, entity.sprite_frame_height, entity.current_frame)
-                if entity.color != (255, 255, 255):
+            primary_visual = entity.get_primary_visual()
+            if primary_visual is not None and primary_visual.path:
+                sprite = self.asset_manager.get_frame(
+                    primary_visual.path,
+                    primary_visual.frame_width,
+                    primary_visual.frame_height,
+                    primary_visual.current_frame,
+                )
+                if entity.color != (255, 255, 255) or primary_visual.tint != (255, 255, 255):
                     sprite = sprite.copy()
-                    sprite.fill((*entity.color, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                    combined_tint = (
+                        entity.color[0] * primary_visual.tint[0] // 255,
+                        entity.color[1] * primary_visual.tint[1] // 255,
+                        entity.color[2] * primary_visual.tint[2] // 255,
+                    )
+                    sprite.fill((*combined_tint, 255), special_flags=pygame.BLEND_RGBA_MULT)
                 if zoom != 1:
-                    sprite = pygame.transform.scale(sprite, (entity.sprite_frame_width * zoom, entity.sprite_frame_height * zoom))
+                    sprite = pygame.transform.scale(
+                        sprite,
+                        (
+                            primary_visual.frame_width * zoom,
+                            primary_visual.frame_height * zoom,
+                        ),
+                    )
                 self.display.blit(sprite, (sx, sy))
             else:
                 inset = (2 if entity.kind == "player" else 3) * zoom
@@ -1156,11 +1177,8 @@ class EditorApp:
             btn_x -= 40
             self._draw_text_small("Move", btn_x, ry + 3)
 
-            if entity.entity_id != self.editor.world.player_id:
-                btn_x -= 20
-                self._draw_text_small("X", btn_x, ry + 3)
-            else:
-                btn_x -= 20
+            btn_x -= 20
+            self._draw_text_small("X", btn_x, ry + 3)
 
             btn_x -= 16
             self._draw_text_small("v", btn_x, ry + 3)

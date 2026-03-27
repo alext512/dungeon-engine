@@ -54,14 +54,14 @@
       "direction": "$direction",
       "frames_needed": "$frames_needed",
       "allow_push": false,
-      "on_complete": [
+      "on_end": [
         {
           "type": "stop_animation",
           "entity_id": "self",
           "reset_to_default": false
         },
         {
-          "type": "set_sprite_frame",
+          "type": "set_visual_frame",
           "entity_id": "self",
           "frame": "$idle_frame"
         }

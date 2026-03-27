@@ -1,0 +1,28 @@
+{
+  "kind": "door",
+  "solid": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/doorway.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0]
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "change_area",
+          "area_id": "$target_area",
+          "entry_id": "$target_entry",
+          "transfer_entity_ids": ["actor"],
+          "camera_follow_entity_id": "actor"
+        }
+      ]
+    }
+  }
+}
+

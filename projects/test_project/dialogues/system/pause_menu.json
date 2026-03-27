@@ -1,0 +1,21 @@
+{
+  "segments": [
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Continue",
+          "option_id": "continue"
+        },
+        {
+          "text": "Load",
+          "option_id": "load"
+        },
+        {
+          "text": "Exit",
+          "option_id": "exit"
+        }
+      ]
+    }
+  ]
+}

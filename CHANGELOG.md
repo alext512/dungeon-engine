@@ -4,11 +4,42 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Transfer-Aware Area Flow + Explicit Camera State
+
+- Added authored area `entry_points` and transfer-aware `change_area` / `new_game` payloads so projects can move one or more live entities into named destinations instead of relying on player-specific area assumptions
+- Added traveler persistence so transferred entities keep one live session identity, suppress their authored origin placeholder while away, and restore correctly across save/load and room re-entry
+- Removed the runtime `input_targets` fallback to `player_id`; omitted actions now stay unrouted unless project defaults, area overrides, or runtime commands assign them
+- Removed authored area `player_id` from the active schema and made old uses fail fast during validation
+- Added explicit camera runtime state with authored area defaults, follow offsets, bounds rectangles, deadzones, query support through `set_var_from_camera`, and save/load restore of the current camera
+- Removed the legacy player-specific camera follow command so authored camera control now uses explicit entity or input-target references
+- Fixed routed controller input during active dialogue/menu sessions so opted-in input events execute alongside the active handle instead of deadlocking behind it
+- Replaced leftover sample-project `if_var` usage with `check_var` and made `if_var` fail fast during startup validation
+- Updated the sample project doors, startup flow, and showcase areas to use entry markers, actor transfer, and explicit camera follow requests
+
+## Input Route Stack + Modal Controller Cleanup
+
+- Added engine-managed `push_input_routes` and `pop_input_routes` so modal controllers can borrow and restore exact per-action input routing without a single active-entity concept
+- Changed project-level `input_targets` handling to stay partial, so omitted actions fall back to the loaded area's `player_id` instead of hardcoding `"player"`
+- Added a project-level `pause_controller` sample entity and moved `Escape` handling off the player template
+- Reworked the sample title menu, pause menu, and save prompt so post-close actions run from `dialogue_on_end` after input routes are restored
+- Kept current logical input targets in save/load, while intentionally leaving the transient route stack out of save data
+
+## Strict Visuals + Global Dialogue Controller Refactor
+
+- Replaced legacy single-`sprite` entity authoring with the strict `visuals` array model in runtime validation and sample content
+- Added explicit entity `space` (`world` or `screen`) and `scope` (`area` or `global`) to the active data model
+- Added `project.json`-level `global_entities` and moved the sample dialogue controller to that project-owned global entity layer
+- Removed authored `run_dialogue` usage from the sample project and made the command name fail fast so old content does not silently keep working
+- Standardized controller-driven dialogue flow around `start_dialogue_session` plus `dialogue_advance`, `dialogue_move_selection`, `dialogue_confirm_choice`, and `dialogue_cancel`
+- Added caller-facing runtime references `self`, `actor`, and `caller`, plus `$self_id`, `$actor_id`, and `$caller_id`
+- Reworked the sample title screen, pause menu, save prompt, signs, and lever puzzle to route through the shared `dialogue_controller`
+- Kept area-level `enter_commands` as the way authored areas trigger startup behavior such as the title menu
+
 ## Title Screen, Save Slots, and Connected Showcase Areas
 
-- Added generic `change_area`, `save_game`, `load_game`, and `quit_game` primitives so project JSON can drive area travel, save/load, and quitting without hardcoded project logic
+- Added generic `change_area`, `new_game`, `save_game`, `load_game`, and `quit_game` primitives so project JSON can drive area travel, fresh-session resets, save/load, and quitting without hardcoded project logic
 - Moved save/load to project-scoped JSON slots rooted in each project's `saves/` folder and removed the old `F5` / `F9` debug-only save flow
-- Updated save data to record the current area, active entity, persistent per-area diffs, and an exact diff for the currently loaded area
+- Updated save data to record the current area, current logical input-target routing, persistent per-area diffs, and an exact diff for the currently loaded area
 - Added one-time restore of the saved current area so temporary room changes come back on load but still disappear after the player leaves that room again
 - Added support for persistent spawned entities and persistent deletion in area-diff save data
 - Reworked the sample project to start in a title-screen area with authored `New Game`, `Load`, and `Exit` menu options
@@ -17,7 +48,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 ## Named Command Startup Database
 
 - Build a full in-memory named-command database per project at startup instead of rediscovering command files during gameplay
-- Reuse that startup-built database for runtime `run_named_command` lookups so frequent movement/interaction command chains no longer rescan `command_paths`
+- Reuse that startup-built database for runtime `run_named_command` lookups so frequent movement/interaction command chains no longer rescan `named_command_paths`
 - Keep startup validation aligned with the same database-building path so malformed files, duplicate ids, and literal missing references are still caught before launch
 
 ## Dialogue UI Sample Refactor
@@ -26,16 +57,16 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Migrated the sample sign and blue-guide NPC onto the new text-session-driven dialogue flow
 - Added a second sample NPC that demonstrates more than three choices, visible menu scrolling, and marquee-style long option text
 
-## Active Entity Input Maps
+## Input Routing Maps
 
 - Added text-session primitives for UI entities: `prepare_text_session`, `read_text_session`, `advance_text_session`, and `reset_text_session`
 - Added engine-managed page and marquee text processing so UI entities can own dialogue/choice flow while still using shared text-layout services
 - Added generic `set_entity_field` support for safe runtime entity-field mutation, including focused input maps and the common visibility/solidity/color-style fields
 - Collapsed the older field-specific setter commands onto the generic field-mutation path while keeping their command names available
-- Added entity-owned `input_map` support so the focused entity can decide which named events handle logical inputs
-- Updated input dispatch to resolve the active entity's mapping first, while keeping project-level `input_events` as fallback defaults
+- Added entity-owned `input_map` support so routed entities can decide which named events handle logical inputs
+- Updated input dispatch to resolve each logical action through routed `input_targets`, while keeping project-level `input_events` as fallback defaults
 - Authored the sample player and dialogue controller with explicit input maps to make control ownership visible in project content
-- Added `push_active_entity` / `pop_active_entity` commands plus a runtime active-entity stack for temporary UI/controller focus handoff
+- Added per-action input routing through project/area `input_targets` plus runtime `route_inputs_to_entity` / `set_input_target`
 
 ## Standalone Editor + Project Manifests
 
@@ -84,7 +115,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Interactable entity command chains (`interact_commands`)
 - Lever/gate example using `set_visible`, `set_solid`, `set_enabled`, `set_color` commands
 - Pushable block behavior via collision system
-- Simple player sprite animation while moving
+- Simple player visual animation while moving
 - Held movement that chains steps seamlessly
 
 ## Early Editor

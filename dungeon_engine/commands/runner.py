@@ -39,7 +39,8 @@ class CommandContext:
     command_runner: Any | None = None
     input_handler: Any | None = None
     persistence_runtime: Any | None = None
-    request_area_change: Callable[[str], None] | None = None
+    request_area_change: Callable[["AreaTransitionRequest"], None] | None = None
+    request_new_game: Callable[["AreaTransitionRequest"], None] | None = None
     request_load_game: Callable[[str | None], None] | None = None
     save_game: Callable[[str | None], bool] | None = None
     request_quit: Callable[[], None] | None = None
@@ -47,11 +48,34 @@ class CommandContext:
     command_trace: list[str] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class CameraFollowRequest:
+    """Requested camera follow state to apply after a transition completes."""
+
+    mode: str = "preserve"
+    entity_id: str | None = None
+    input_action: str | None = None
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+
+@dataclass(slots=True)
+class AreaTransitionRequest:
+    """One deferred area transition plus optional entity/camera transfer data."""
+
+    area_id: str
+    entry_id: str | None = None
+    transfer_entity_ids: list[str] = field(default_factory=list)
+    camera_follow: CameraFollowRequest | None = None
+
+
 class CommandHandle:
     """Base handle for commands that may take more than one frame to finish."""
 
     def __init__(self) -> None:
         self.complete = False
+        self.captures_menu_input = False
+        self.allow_entity_input = False
 
     def update(self, dt: float) -> None:
         """Advance the command handle toward completion."""
@@ -111,15 +135,16 @@ def _normalize_command_list(commands: Any) -> list[dict[str, Any]]:
     raise TypeError("Command list must be a dict or list of dicts.")
 
 
-class CompletionChainHandle(CommandHandle):
-    """Run a follow-up command list after a primary handle completes."""
+class LifecycleChainHandle(CommandHandle):
+    """Run optional on_start/on_end command lists around a primary handle."""
 
     def __init__(
         self,
         registry: Any,
         context: CommandContext,
         primary_handle: CommandHandle,
-        on_complete: list[dict[str, Any]] | dict[str, Any] | None,
+        on_start: list[dict[str, Any]] | dict[str, Any] | None,
+        on_end: list[dict[str, Any]] | dict[str, Any] | None,
         *,
         base_params: dict[str, Any] | None = None,
     ) -> None:
@@ -127,36 +152,73 @@ class CompletionChainHandle(CommandHandle):
         self.registry = registry
         self.context = context
         self.primary_handle = primary_handle
-        self.on_complete_commands = _normalize_command_list(on_complete)
+        self.on_start_commands = _normalize_command_list(on_start)
+        self.on_end_commands = _normalize_command_list(on_end)
         self.base_params = dict(base_params or {})
-        self.follow_up_handle: CommandHandle | None = None
+        self.start_handle: CommandHandle | None = None
+        self.end_handle: CommandHandle | None = None
+        self._start_finished = False
+        self._primary_finished = False
+        if self.on_start_commands:
+            self.start_handle = SequenceCommandHandle(
+                self.registry,
+                self.context,
+                self.on_start_commands,
+                base_params=self.base_params,
+            )
+        else:
+            self._start_finished = True
         self.update(0.0)
 
     def update(self, dt: float) -> None:
-        """Advance the primary handle, then its completion chain."""
+        """Advance the on_start hooks, primary handle, then on_end hooks."""
         if self.complete:
             return
 
-        if self.follow_up_handle is None:
+        if not self._start_finished:
+            assert self.start_handle is not None
+            self.start_handle.update(dt)
+            self.captures_menu_input = self.start_handle.captures_menu_input
+            self.allow_entity_input = self.start_handle.allow_entity_input
+            if not self.start_handle.complete:
+                return
+            self.start_handle = None
+            self._start_finished = True
+
+        if not self._primary_finished:
             self.primary_handle.update(dt)
+            self.captures_menu_input = self.primary_handle.captures_menu_input
+            self.allow_entity_input = self.primary_handle.allow_entity_input
             if not self.primary_handle.complete:
                 return
-            if not self.on_complete_commands:
+            self._primary_finished = True
+            if not self.on_end_commands:
                 self.complete = True
+                self.captures_menu_input = False
+                self.allow_entity_input = False
                 return
-            self.follow_up_handle = SequenceCommandHandle(
+            self.end_handle = SequenceCommandHandle(
                 self.registry,
                 self.context,
-                self.on_complete_commands,
+                self.on_end_commands,
                 base_params=self.base_params,
             )
-            if self.follow_up_handle.complete:
+            self.captures_menu_input = self.end_handle.captures_menu_input
+            self.allow_entity_input = self.end_handle.allow_entity_input
+            if self.end_handle.complete:
                 self.complete = True
+                self.captures_menu_input = False
+                self.allow_entity_input = False
                 return
 
-        self.follow_up_handle.update(dt)
-        if self.follow_up_handle.complete:
+        assert self.end_handle is not None
+        self.end_handle.update(dt)
+        self.captures_menu_input = self.end_handle.captures_menu_input
+        self.allow_entity_input = self.end_handle.allow_entity_input
+        if self.end_handle.complete:
             self.complete = True
+            self.captures_menu_input = False
+            self.allow_entity_input = False
 
 
 @dataclass(slots=True)
@@ -218,6 +280,24 @@ def _resolve_runtime_token(
     if token in runtime_params:
         return copy.deepcopy(runtime_params[token])
 
+    if token == "self_id":
+        entity_id = runtime_params.get("source_entity_id")
+        if not entity_id:
+            raise KeyError("Token '$self_id' requires a source entity context.")
+        return str(entity_id)
+
+    if token == "actor_id":
+        entity_id = runtime_params.get("actor_entity_id")
+        if not entity_id:
+            raise KeyError("Token '$actor_id' requires an actor entity context.")
+        return str(entity_id)
+
+    if token == "caller_id":
+        entity_id = runtime_params.get("caller_entity_id")
+        if not entity_id:
+            raise KeyError("Token '$caller_id' requires a caller entity context.")
+        return str(entity_id)
+
     parts = [part for part in token.split(".") if part]
     if not parts:
         raise KeyError("Empty runtime token.")
@@ -234,7 +314,16 @@ def _resolve_runtime_token(
     if head == "world":
         return copy.deepcopy(_lookup_nested_value(context.world.variables, tail))
 
-    if head in {"self", "source"}:
+    if head == "entity":
+        if len(parts) < 3:
+            raise KeyError(f"Token '${token}' requires an entity id and variable path.")
+        entity_id = parts[1]
+        entity = context.world.get_entity(str(entity_id))
+        if entity is None:
+            raise KeyError(f"Token '${token}' references missing entity '{entity_id}'.")
+        return copy.deepcopy(_lookup_nested_value(entity.variables, parts[2:]))
+
+    if head == "self":
         entity_id = runtime_params.get("source_entity_id")
         if not entity_id:
             raise KeyError(f"Token '${token}' requires a source entity context.")
@@ -250,6 +339,15 @@ def _resolve_runtime_token(
         entity = context.world.get_entity(str(entity_id))
         if entity is None:
             raise KeyError(f"Token '${token}' references missing actor entity '{entity_id}'.")
+        return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
+
+    if head == "caller":
+        entity_id = runtime_params.get("caller_entity_id")
+        if not entity_id:
+            raise KeyError(f"Token '${token}' requires a caller entity context.")
+        entity = context.world.get_entity(str(entity_id))
+        if entity is None:
+            raise KeyError(f"Token '${token}' references missing caller entity '{entity_id}'.")
         return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
 
     raise KeyError(f"Unknown runtime token '${token}'.")
@@ -293,7 +391,12 @@ def execute_registered_command(
 ) -> CommandHandle:
     """Execute a named command and wrap any generic completion chain."""
     command_params = dict(params)
-    on_complete = command_params.pop("on_complete", None)
+    if "on_complete" in command_params:
+        raise ValueError(
+            f"Command '{name}' must not use 'on_complete'; use 'on_start' and 'on_end'."
+        )
+    on_start = command_params.pop("on_start", None)
+    on_end = command_params.pop("on_end", None)
     trace_entry = _describe_command(name, command_params)
     context.command_trace.append(trace_entry)
     try:
@@ -311,12 +414,13 @@ def execute_registered_command(
     finally:
         if context.command_trace and context.command_trace[-1] == trace_entry:
             context.command_trace.pop()
-    if on_complete:
-        return CompletionChainHandle(
+    if on_start or on_end:
+        return LifecycleChainHandle(
             registry,
             context,
             handle,
-            on_complete,
+            on_start,
+            on_end,
             base_params=command_params,
         )
     return handle
@@ -372,8 +476,12 @@ class SequenceCommandHandle(CommandHandle):
 
         if self.current_handle is not None:
             self.current_handle.update(dt)
+            self.captures_menu_input = self.current_handle.captures_menu_input
+            self.allow_entity_input = self.current_handle.allow_entity_input
             if self.current_handle.complete:
                 self.current_handle = None
+                self.captures_menu_input = False
+                self.allow_entity_input = False
 
         while self.current_handle is None and self.current_index < len(self.commands):
             command_spec = dict(self.commands[self.current_index])
@@ -386,9 +494,16 @@ class SequenceCommandHandle(CommandHandle):
             )
             if self.current_handle.complete:
                 self.current_handle = None
+                self.captures_menu_input = False
+                self.allow_entity_input = False
+            else:
+                self.captures_menu_input = self.current_handle.captures_menu_input
+                self.allow_entity_input = self.current_handle.allow_entity_input
 
         if self.current_handle is None and self.current_index >= len(self.commands):
             self.complete = True
+            self.captures_menu_input = False
+            self.allow_entity_input = False
 
 
 class CommandRunner:
@@ -407,9 +522,34 @@ class CommandRunner:
         """Add a command request to the end of the queue."""
         self.pending.append(QueuedCommand(name=name, params=params))
 
+    def dispatch_input_event(
+        self,
+        entity_id: str,
+        event_id: str,
+        *,
+        actor_entity_id: str | None = None,
+    ) -> bool:
+        """Run one routed input event now when the active handle allows it, else queue it."""
+        params: dict[str, Any] = {
+            "entity_id": entity_id,
+            "event_id": event_id,
+        }
+        if actor_entity_id is not None:
+            params["actor_entity_id"] = actor_entity_id
+
+        if self.active_handle is not None and self.active_handle.allow_entity_input:
+            return self._execute_background_command("run_event", params)
+
+        self.enqueue("run_event", **params)
+        return True
+
     def has_pending_work(self) -> bool:
         """Return True when a command is queued or still running."""
-        return self.active_handle is not None or bool(self.pending)
+        return (
+            self.active_handle is not None
+            or bool(self.background_handles)
+            or bool(self.pending)
+        )
 
     def spawn_background_handle(self, handle: CommandHandle) -> None:
         """Run a handle in parallel with the main command lane."""
@@ -469,4 +609,30 @@ class CommandRunner:
         self.pending.clear()
         self.context.command_trace.clear()
         self.last_error_notice = "Command error: see logs/error.log"
+
+    def _execute_background_command(self, name: str, params: dict[str, Any]) -> bool:
+        """Execute one command immediately and keep any async work alongside the main lane."""
+        try:
+            handle = execute_registered_command(
+                self.registry,
+                self.context,
+                name,
+                dict(params),
+            )
+        except CommandExecutionError as exc:
+            self._handle_command_error(exc)
+            return False
+        except Exception as exc:
+            wrapped = CommandExecutionError(
+                f"Command '{name}' failed.",
+                command_name=name,
+                params=dict(params),
+                trace=list(self.context.command_trace),
+            )
+            wrapped.__cause__ = exc
+            self._handle_command_error(wrapped)
+            return False
+
+        self.spawn_background_handle(handle)
+        return True
 

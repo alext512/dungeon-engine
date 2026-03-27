@@ -57,6 +57,18 @@ class TileLayer:
 
 
 @dataclass(slots=True)
+class AreaEntryPoint:
+    """One authored destination marker for cross-area entity transfers."""
+
+    entry_id: str
+    grid_x: int
+    grid_y: int
+    facing: str | None = None
+    pixel_x: float | None = None
+    pixel_y: float | None = None
+
+
+@dataclass(slots=True)
 class Area:
     """A loaded room with layered tiles and separate per-cell flags.
 
@@ -71,6 +83,9 @@ class Area:
     tilesets: list[Tileset]
     tile_layers: list[TileLayer]
     cell_flags: list[list[dict[str, Any]]]
+    entry_points: dict[str, AreaEntryPoint] = field(default_factory=dict)
+    camera_defaults: dict[str, Any] = field(default_factory=dict)
+    enter_commands: list[dict[str, Any]] = field(default_factory=list)
 
     # Reverse lookup built by the loader after tilesets are populated.
     # Maps GID -> (tileset_index) for fast resolution.

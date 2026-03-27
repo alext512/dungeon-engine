@@ -1,4 +1,26 @@
 {
-  "text": "Workshop note: The push block in this room is temporary. Move it around, leave the house, and it resets to its authored position."
+  "participants": {
+    "guide": {
+      "name": "Guide",
+      "portrait_path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+      "portrait_frame_width": 16,
+      "portrait_frame_height": 16,
+      "portrait_frame": 1
+    }
+  },
+  "segments": [
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "pages": [
+        "Workshop note: The push block in this room is temporary.",
+        "Move it around, leave the house, and it resets to its authored position."
+      ]
+    },
+    {
+      "type": "text",
+      "text": "This second segment inherits the same speaker without repeating speaker_id."
+    }
+  ]
 }
 

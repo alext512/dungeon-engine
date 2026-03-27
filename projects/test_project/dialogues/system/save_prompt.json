@@ -1,0 +1,21 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "This little record shrine can write your progress into a save file."
+    },
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Save the game.",
+          "option_id": "save"
+        },
+        {
+          "text": "Keep going.",
+          "option_id": "cancel"
+        }
+      ]
+    }
+  ]
+}

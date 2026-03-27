@@ -5,15 +5,8 @@
     "internal_height": 192
   },
   "dialogue": {
-    "_comment_max_lines": "Maximum wrapped dialogue lines shown per page before advancing to the next page.",
     "panel_path": "assets/project/ui/dialogue_panel.png",
-    "padding_left": 8,
-    "padding_right": 8,
-    "padding_top": 6,
-    "padding_bottom": 6,
-    "portrait_gap": 6,
     "max_lines": 3,
-    "hint_text": "",
     "plain_box": {
       "x": 8,
       "y": 154,
@@ -29,26 +22,15 @@
       "y": 154
     },
     "choice_box": {
-      "marker_x": 56,
-      "text_x": 64,
+      "x": 64,
       "width": 180
     },
     "plain_choice_box": {
-      "marker_x": 8,
-      "text_x": 16,
+      "x": 16,
       "width": 232
     },
-    "choice_rows_y": [154, 164, 174],
-    "choice_more_top": {
-      "x": 238,
-      "y": 146
-    },
-    "choice_more_bottom": {
-      "x": 238,
-      "y": 178
-    }
+    "choice_rows_y": [154, 164, 174]
   },
-  "choice_marquee_frames": 10,
   "movement": {
     "_comment_ticks_per_tile": "Recommended to keep this even so the sprite change lands halfway through a tile move.",
     "ticks_per_tile": 16

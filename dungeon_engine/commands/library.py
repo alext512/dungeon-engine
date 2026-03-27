@@ -108,10 +108,10 @@ def build_named_command_database(
 def _scan_named_command_database(
     project: ProjectContext,
 ) -> tuple[NamedCommandDatabase, list[str]]:
-    """Scan command files into an in-memory database plus any validation issues."""
+    """Scan named-command files into an in-memory database plus any validation issues."""
     known_ids: dict[str, list[Path]] = {}
-    for command_path in project.list_command_definition_files():
-        command_id = project.command_definition_id(command_path)
+    for command_path in project.list_named_command_files():
+        command_id = project.named_command_id(command_path)
         known_ids.setdefault(command_id, []).append(command_path)
 
     issues: list[str] = []
@@ -164,7 +164,7 @@ def _load_named_command_definition_from_path(
     if not isinstance(raw, dict):
         raise ValueError(f"Command definition '{resolved_command_id}' must be a JSON object.")
 
-    expected_id = project.command_definition_id(command_path)
+    expected_id = project.named_command_id(command_path)
     if "id" in raw:
         raise ValueError(
             f"Command definition '{expected_id}' must not declare 'id'; command ids are path-derived."
@@ -185,11 +185,16 @@ def _load_named_command_definition_from_path(
     raw_commands = raw.get("commands")
     if not isinstance(raw_commands, list):
         raise ValueError(f"Command definition '{resolved_id}' must use a list for 'commands'.")
-    for command in raw_commands:
+    for index, command in enumerate(raw_commands):
         if not isinstance(command, dict):
             raise ValueError(
                 f"Command definition '{resolved_id}' must use JSON objects inside 'commands'."
             )
+        _validate_command_tree(
+            command,
+            source_name=f"Command definition '{resolved_id}'",
+            location=f"commands[{index}]",
+        )
 
     return NamedCommandDefinition(
         command_id=resolved_id,
@@ -197,6 +202,78 @@ def _load_named_command_definition_from_path(
         commands=[dict(command) for command in raw_commands],
         source_path=command_path,
     )
+
+
+def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
+    """Reject removed command-shape fields anywhere inside named-command content."""
+    if isinstance(value, dict):
+        if "on_complete" in value:
+            raise ValueError(
+                f"{source_name} command '{location}' must not use 'on_complete'; "
+                "use 'on_start' and 'on_end' instead."
+            )
+        command_type = value.get("type")
+        if command_type == "run_dialogue":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'run_dialogue'; "
+                "start dialogues by sending an event to the dialogue controller entity "
+                "and using 'start_dialogue_session'."
+            )
+        if command_type == "set_sprite_frame":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_sprite_frame'; "
+                "use 'set_visual_frame' instead."
+            )
+        if command_type == "set_sprite_flip_x":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_sprite_flip_x'; "
+                "use 'set_visual_flip_x' instead."
+            )
+        if command_type == "set_active_entity":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_active_entity'; "
+                "route inputs explicitly with 'set_input_target' or 'route_inputs_to_entity'."
+            )
+        if command_type == "push_active_entity":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'push_active_entity'; "
+                "route inputs explicitly with 'set_input_target' or 'route_inputs_to_entity'."
+            )
+        if command_type == "pop_active_entity":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'pop_active_entity'; "
+                "route inputs explicitly with 'set_input_target' or 'route_inputs_to_entity'."
+            )
+        if command_type == "set_camera_follow_active_entity":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_camera_follow_active_entity'; "
+                "use 'set_camera_follow_input_target' or 'set_camera_follow_entity'."
+            )
+        if command_type == "set_camera_follow_player":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_camera_follow_player'; "
+                "use 'set_camera_follow_input_target' or 'set_camera_follow_entity'."
+            )
+        if command_type == "if_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'if_var'; "
+                "use 'check_var' instead."
+            )
+        for key, item in value.items():
+            _validate_command_tree(
+                item,
+                source_name=source_name,
+                location=f"{location}.{key}",
+            )
+        return
+
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_command_tree(
+                item,
+                source_name=source_name,
+                location=f"{location}[{index}]",
+            )
 
 
 def instantiate_named_command_commands(
@@ -274,7 +351,7 @@ def _validate_literal_named_command_references(
         try:
             raw = json.loads(source_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            if source_path.suffix.lower() == ".json" and not _path_is_under_roots(source_path, project.command_paths):
+            if source_path.suffix.lower() == ".json" and not _path_is_under_roots(source_path, project.named_command_paths):
                 issues.append(
                     f"{source_path}: invalid JSON while validating named-command references "
                     f"({exc.msg} at line {exc.lineno}, column {exc.colno})."
@@ -311,9 +388,9 @@ def _iter_named_command_reference_files(project: ProjectContext) -> list[Path]:
             seen.add(resolved)
             files.append(file_path)
 
-    for root in project.command_paths:
+    for root in project.named_command_paths:
         _add_files(root)
-    for root in project.entity_paths:
+    for root in project.entity_template_paths:
         _add_files(root)
     for root in project.area_paths:
         _add_files(root)

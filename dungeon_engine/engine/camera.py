@@ -1,9 +1,10 @@
-"""Camera utilities for following the player around an area."""
+"""Camera utilities for following explicit runtime targets around an area."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from dungeon_engine import config
 from dungeon_engine.world.area import Area
@@ -22,6 +23,24 @@ class CameraMotionState:
     target_y: float = 0.0
     elapsed_ticks: int = 0
     total_ticks: int = 0
+
+
+@dataclass(slots=True)
+class CameraRect:
+    """One rectangle used for camera bounds or deadzone policies."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+    @property
+    def right(self) -> float:
+        return self.x + self.width
+
+    @property
+    def bottom(self) -> float:
+        return self.y + self.height
 
 
 class Camera:
@@ -43,8 +62,13 @@ class Camera:
         self.y = 0.0
         self.render_x = 0.0
         self.render_y = 0.0
-        self.follow_mode: str = "active_entity"
+        self.follow_mode: str = "none"
         self.follow_entity_id: str | None = None
+        self.follow_input_action: str | None = None
+        self.follow_offset_x = 0.0
+        self.follow_offset_y = 0.0
+        self.bounds_rect: CameraRect | None = None
+        self.deadzone_rect: CameraRect | None = None
         self.motion = CameraMotionState()
 
     def set_area(self, area: Area) -> None:
@@ -54,14 +78,7 @@ class Camera:
 
     def set_position(self, x: float, y: float) -> None:
         """Set the camera position directly while respecting area bounds."""
-        if self.clamp_to_area:
-            max_x = max(0, self.area.pixel_width - self.viewport_width)
-            max_y = max(0, self.area.pixel_height - self.viewport_height)
-            self.x = min(max(x, 0), max_x)
-            self.y = min(max(y, 0), max_y)
-        else:
-            self.x = x
-            self.y = y
+        self.x, self.y = self._clamp_position(float(x), float(y))
         self._update_render_position()
 
     def pan(self, delta_x: float, delta_y: float) -> None:
@@ -74,7 +91,11 @@ class Camera:
             self._advance_motion_tick()
 
         if not self.motion.active:
-            self._follow_target(self._resolve_follow_target(world))
+            target = self._resolve_follow_target(world)
+            if target is None:
+                self._update_render_position()
+            else:
+                self._follow_target(target)
         else:
             self._update_render_position()
 
@@ -82,22 +103,119 @@ class Camera:
         """Return True when the camera is in a manual interpolated move."""
         return self.motion.active
 
-    def follow_active_entity(self) -> None:
-        """Bind the camera to whichever entity currently receives direct input."""
-        self.follow_mode = "active_entity"
+    def follow_input_target(
+        self,
+        action: str,
+        *,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+    ) -> None:
+        """Bind the camera to whichever entity currently receives one input action."""
+        self.follow_mode = "input_target"
         self.follow_entity_id = None
+        self.follow_input_action = str(action).strip()
+        self.follow_offset_x = float(offset_x)
+        self.follow_offset_y = float(offset_y)
         self.motion.active = False
 
-    def follow_entity(self, entity_id: str) -> None:
+    def follow_entity(
+        self,
+        entity_id: str,
+        *,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+    ) -> None:
         """Bind the camera to a specific entity id."""
         self.follow_mode = "entity"
         self.follow_entity_id = str(entity_id)
+        self.follow_input_action = None
+        self.follow_offset_x = float(offset_x)
+        self.follow_offset_y = float(offset_y)
         self.motion.active = False
 
     def clear_follow(self) -> None:
         """Stop automatically following any entity."""
         self.follow_mode = "none"
         self.follow_entity_id = None
+        self.follow_input_action = None
+        self.follow_offset_x = 0.0
+        self.follow_offset_y = 0.0
+
+    def set_bounds_rect(self, x: float, y: float, width: float, height: float) -> None:
+        """Clamp camera motion/follow to one world-space rectangle."""
+        if width <= 0 or height <= 0:
+            raise ValueError("Camera bounds width and height must be positive.")
+        self.bounds_rect = CameraRect(float(x), float(y), float(width), float(height))
+        self.set_position(self.x, self.y)
+
+    def clear_bounds(self) -> None:
+        """Remove any extra camera bounds beyond the area limits."""
+        self.bounds_rect = None
+        self.set_position(self.x, self.y)
+
+    def set_deadzone_rect(self, x: float, y: float, width: float, height: float) -> None:
+        """Keep followed targets inside one viewport-space deadzone rectangle."""
+        if width <= 0 or height <= 0:
+            raise ValueError("Camera deadzone width and height must be positive.")
+        self.deadzone_rect = CameraRect(float(x), float(y), float(width), float(height))
+
+    def clear_deadzone(self) -> None:
+        """Remove any active follow deadzone."""
+        self.deadzone_rect = None
+
+    def get_followed_entity_id(self) -> str | None:
+        """Return the explicit entity id currently followed, when any."""
+        if self.follow_mode == "entity":
+            return self.follow_entity_id
+        return None
+
+    def to_state_dict(self) -> dict[str, Any]:
+        """Serialize the current runtime camera policy/state into plain data."""
+        data: dict[str, Any] = {
+            "x": self.x,
+            "y": self.y,
+            "follow_mode": self.follow_mode,
+            "follow_offset_x": self.follow_offset_x,
+            "follow_offset_y": self.follow_offset_y,
+        }
+        if self.follow_entity_id is not None:
+            data["follow_entity_id"] = self.follow_entity_id
+        if self.follow_input_action is not None:
+            data["follow_input_action"] = self.follow_input_action
+        if self.bounds_rect is not None:
+            data["bounds"] = self._rect_to_dict(self.bounds_rect)
+        if self.deadzone_rect is not None:
+            data["deadzone"] = self._rect_to_dict(self.deadzone_rect)
+        return data
+
+    def apply_state_dict(self, state: dict[str, Any], world: World | None) -> None:
+        """Restore one serialized runtime camera policy/state."""
+        self.motion.active = False
+        self.bounds_rect = self._rect_from_dict(state.get("bounds"))
+        self.deadzone_rect = self._rect_from_dict(state.get("deadzone"))
+        mode = str(state.get("follow_mode", "none")).strip() or "none"
+        offset_x = float(state.get("follow_offset_x", 0.0))
+        offset_y = float(state.get("follow_offset_y", 0.0))
+        saved_x = float(state.get("x", self.x))
+        saved_y = float(state.get("y", self.y))
+        if mode == "entity":
+            entity_id = str(state.get("follow_entity_id", "")).strip()
+            if entity_id:
+                self.set_position(saved_x, saved_y)
+                self.follow_entity(entity_id, offset_x=offset_x, offset_y=offset_y)
+                self.update(world, advance_tick=False)
+                return
+        elif mode == "input_target":
+            action = str(state.get("follow_input_action", "")).strip()
+            if action:
+                self.set_position(saved_x, saved_y)
+                self.follow_input_target(action, offset_x=offset_x, offset_y=offset_y)
+                self.update(world, advance_tick=False)
+                return
+        self.clear_follow()
+        self.follow_offset_x = offset_x
+        self.follow_offset_y = offset_y
+        self.set_position(saved_x, saved_y)
 
     def start_move_to(
         self,
@@ -142,28 +260,37 @@ class Camera:
         if target is None:
             return
 
-        target_center_x = target.pixel_x + (self.area.tile_size / 2)
-        target_center_y = target.pixel_y + (self.area.tile_size / 2)
+        target_world_x = target.pixel_x + (self.area.tile_size / 2) + self.follow_offset_x
+        target_world_y = target.pixel_y + (self.area.tile_size / 2) + self.follow_offset_y
 
-        desired_x = target_center_x - (self.viewport_width / 2)
-        desired_y = target_center_y - (self.viewport_height / 2)
+        if self.deadzone_rect is None:
+            desired_x = target_world_x - (self.viewport_width / 2)
+            desired_y = target_world_y - (self.viewport_height / 2)
+            self.set_position(desired_x, desired_y)
+            return
 
-        if self.clamp_to_area:
-            max_x = max(0, self.area.pixel_width - self.viewport_width)
-            max_y = max(0, self.area.pixel_height - self.viewport_height)
-            self.x = min(max(desired_x, 0), max_x)
-            self.y = min(max(desired_y, 0), max_y)
-        else:
-            self.x = desired_x
-            self.y = desired_y
-        self._update_render_position()
+        desired_x = self.x
+        desired_y = self.y
+        target_screen_x = target_world_x - self.x
+        target_screen_y = target_world_y - self.y
+        if target_screen_x < self.deadzone_rect.x:
+            desired_x = target_world_x - self.deadzone_rect.x
+        elif target_screen_x > self.deadzone_rect.right:
+            desired_x = target_world_x - self.deadzone_rect.right
+
+        if target_screen_y < self.deadzone_rect.y:
+            desired_y = target_world_y - self.deadzone_rect.y
+        elif target_screen_y > self.deadzone_rect.bottom:
+            desired_y = target_world_y - self.deadzone_rect.bottom
+
+        self.set_position(desired_x, desired_y)
 
     def _resolve_follow_target(self, world: World | None) -> Entity | None:
         """Return the entity the camera should follow right now, if any."""
         if world is None:
             return None
-        if self.follow_mode == "active_entity":
-            return world.get_active_entity()
+        if self.follow_mode == "input_target" and self.follow_input_action:
+            return world.get_input_target(self.follow_input_action)
         if self.follow_mode == "entity" and self.follow_entity_id:
             return world.get_entity(self.follow_entity_id)
         return None
@@ -229,4 +356,53 @@ class Camera:
         if seconds <= 0 or config.FPS <= 0:
             return 0
         return max(1, round(seconds * config.FPS))
+
+    def _clamp_position(self, x: float, y: float) -> tuple[float, float]:
+        """Clamp one logical camera position to area and optional extra bounds."""
+        min_x = 0.0
+        min_y = 0.0
+        max_x = max(0.0, float(self.area.pixel_width - self.viewport_width))
+        max_y = max(0.0, float(self.area.pixel_height - self.viewport_height))
+        if self.bounds_rect is not None:
+            min_x = max(min_x, self.bounds_rect.x)
+            min_y = max(min_y, self.bounds_rect.y)
+            max_x = min(max_x, self.bounds_rect.right - self.viewport_width)
+            max_y = min(max_y, self.bounds_rect.bottom - self.viewport_height)
+
+        if self.clamp_to_area:
+            if max_x < min_x:
+                x = (min_x + max_x) / 2
+            else:
+                x = min(max(x, min_x), max_x)
+            if max_y < min_y:
+                y = (min_y + max_y) / 2
+            else:
+                y = min(max(y, min_y), max_y)
+            return x, y
+
+        return x, y
+
+    def _rect_to_dict(self, rect: CameraRect) -> dict[str, float]:
+        """Serialize one camera rectangle into plain numeric data."""
+        return {
+            "x": rect.x,
+            "y": rect.y,
+            "width": rect.width,
+            "height": rect.height,
+        }
+
+    def _rect_from_dict(self, raw_rect: Any) -> CameraRect | None:
+        """Parse one camera rectangle payload from plain data."""
+        if not isinstance(raw_rect, dict):
+            return None
+        width = float(raw_rect.get("width", 0.0))
+        height = float(raw_rect.get("height", 0.0))
+        if width <= 0 or height <= 0:
+            return None
+        return CameraRect(
+            x=float(raw_rect.get("x", 0.0)),
+            y=float(raw_rect.get("y", 0.0)),
+            width=width,
+            height=height,
+        )
 

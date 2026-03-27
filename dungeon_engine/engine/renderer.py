@@ -60,8 +60,9 @@ class Renderer:
         """Render the current area and all visible entities."""
         self.internal_surface.fill(config.COLOR_BACKGROUND)
         self._draw_tile_layers(area, camera, draw_above_entities=False)
-        self._draw_entities(area, world, camera)
+        self._draw_world_entities(area, world, camera)
         self._draw_tile_layers(area, camera, draw_above_entities=True)
+        self._draw_screen_entities(world)
         if screen_elements is not None:
             self._draw_screen_elements(screen_elements)
 
@@ -105,49 +106,86 @@ class Renderer:
                     )
                     self.internal_surface.blit(frame_surface, (screen_x, screen_y))
 
-    def _draw_entities(self, area: Area, world: World, camera: Camera) -> None:
+    def _draw_world_entities(self, area: Area, world: World, camera: Camera) -> None:
         tile_size = area.tile_size
         for entity in sorted(
-            world.iter_entities(),
+            world.iter_entities_in_space("world"),
             key=lambda item: (item.layer, item.pixel_y, item.stack_order, item.pixel_x, item.entity_id),
         ):
             if not entity.visible:
                 continue
-
-            if entity.sprite_path:
-                sprite_surface = self.asset_manager.get_frame(
-                    entity.sprite_path,
-                    entity.sprite_frame_width,
-                    entity.sprite_frame_height,
-                    entity.current_frame,
-                )
-                if entity.sprite_flip_x:
-                    sprite_surface = pygame.transform.flip(sprite_surface, True, False)
-                sprite_surface = self._apply_tint(sprite_surface, entity.color)
-                screen_x, screen_y = self._world_to_screen(
-                    entity.pixel_x,
-                    entity.pixel_y,
-                    camera,
-                )
-                self.internal_surface.blit(
-                    sprite_surface,
-                    (screen_x, screen_y),
-                )
+            if self._draw_entity_visuals(entity, camera=camera):
                 continue
+            screen_x, screen_y = self._world_to_screen(entity.pixel_x, entity.pixel_y, camera)
+            self._draw_entity_fallback(tile_size, entity, screen_x, screen_y)
 
-            inset = 2 if entity.kind == "player" else 3
-            screen_x, screen_y = self._world_to_screen(
-                entity.pixel_x,
-                entity.pixel_y,
-                camera,
+    def _draw_screen_entities(self, world: World) -> None:
+        """Draw screen-space entities above the world."""
+        for entity in sorted(
+            world.iter_entities_in_space("screen"),
+            key=lambda item: (item.layer, item.stack_order, item.entity_id),
+        ):
+            if not entity.visible:
+                continue
+            if self._draw_entity_visuals(entity, camera=None):
+                continue
+            self._draw_entity_fallback(
+                config.DEFAULT_TILE_SIZE,
+                entity,
+                round(entity.pixel_x),
+                round(entity.pixel_y),
             )
-            rect = pygame.Rect(
-                screen_x + inset,
-                screen_y + inset,
-                tile_size - (inset * 2),
-                tile_size - (inset * 2),
+
+    def _draw_entity_visuals(
+        self,
+        entity,
+        *,
+        camera: Camera | None,
+    ) -> bool:
+        """Draw one entity's visuals and return True when anything was rendered."""
+        visuals = sorted(entity.visuals, key=lambda item: (item.draw_order, item.visual_id))
+        drew_anything = False
+        for visual in visuals:
+            if not visual.visible:
+                continue
+            sprite_surface = self.asset_manager.get_frame(
+                visual.path,
+                visual.frame_width,
+                visual.frame_height,
+                visual.current_frame,
             )
-            pygame.draw.rect(self.internal_surface, entity.color, rect, border_radius=2)
+            if visual.flip_x:
+                sprite_surface = pygame.transform.flip(sprite_surface, True, False)
+            sprite_surface = self._apply_tint(sprite_surface, visual.tint)
+            base_x = entity.pixel_x + visual.offset_x
+            base_y = entity.pixel_y + visual.offset_y
+            if camera is not None:
+                draw_x, draw_y = self._world_to_screen(base_x, base_y, camera)
+            else:
+                draw_x, draw_y = (
+                    round(base_x) if config.PIXEL_ART_MODE else int(base_x),
+                    round(base_y) if config.PIXEL_ART_MODE else int(base_y),
+                )
+            self.internal_surface.blit(sprite_surface, (draw_x, draw_y))
+            drew_anything = True
+        return drew_anything
+
+    def _draw_entity_fallback(
+        self,
+        tile_size: int,
+        entity,
+        screen_x: int,
+        screen_y: int,
+    ) -> None:
+        """Draw the simple rectangle fallback when an entity has no visuals."""
+        inset = 2 if entity.kind == "player" else 3
+        rect = pygame.Rect(
+            screen_x + inset,
+            screen_y + inset,
+            tile_size - (inset * 2),
+            tile_size - (inset * 2),
+        )
+        pygame.draw.rect(self.internal_surface, entity.color, rect, border_radius=2)
 
     def _world_to_screen(
         self,

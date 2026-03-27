@@ -68,16 +68,18 @@ Input should request top-level commands.
 Example:
 
 - pressing Up does not directly move an entity
-- it queues a `run_event` request for the active entity's configured `move_up` event
+- it queues a `run_event` request for the currently routed `move_up` target's configured event
 - that event can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
 
 Control routing is layered:
 
 - the project defines fallback input event names
-- the project can also define a default active entity id
-- an area may override the active entity id
-- active entities may define their own `input_map`
-- runtime commands may switch the active entity temporarily, including stack-style handoff through `push_active_entity` / `pop_active_entity`
+- the project can also define default `input_targets`
+- an area may override `input_targets`
+- actions omitted by both stay unrouted until runtime commands assign them
+- the routed entity for each logical action may define its own `input_map`
+- runtime commands may reroute one action or many through `set_input_target` / `route_inputs_to_entity`
+- modal controllers may snapshot and restore borrowed routes through `push_input_routes` / `pop_input_routes`
 - the project may enable or disable debug inspection controls such as zoom/pause/step through `project.json`
 
 This keeps player input, AI behavior, and cinematics aligned around the same action model.
@@ -160,7 +162,7 @@ Use a lightweight entity/component style world model. It does not need to be a s
 Typical state buckets:
 
 - position and facing
-- sprite and animation state
+- visual and animation state
 - collision and pushability
 - authored tags used for grouping, selection, and reset targeting
 - interaction command chains
@@ -188,10 +190,13 @@ Systems should not become giant one-off gameplay scripts. If a behavior is conte
 
 The camera should be command-addressable too:
 
-- it can follow the active entity by default
-- commands can retarget it to a specific entity
+- authored areas can provide initial camera defaults such as `follow_entity_id`
+- commands can retarget it to a specific entity or to the current recipient of one routed input action
+- follow state should include offsets, so content can frame a target intentionally
+- commands can apply or clear bounds and deadzone policies
 - commands can clear follow mode for manual framing
 - commands can move or teleport it independently for cutscenes and inspection
+- save/load and transfer flow should preserve explicit camera state rather than inferring it from a privileged player entity
 
 ## Command Architecture
 
@@ -261,12 +266,12 @@ Movement should follow the same spirit.
 
 Example movement chain:
 
-1. receive `run_event(entity_id=active_entity, event_id=configured_move_right_event)`
+1. receive `run_event(entity_id=input_target_for_move_right, event_id=configured_move_right_event)`
 2. start any project-authored walk animation
 3. call `move_entity_one_tile(direction=right)`
 4. if blocked by pushable object, try push chain
 5. if passable, animate and move
-6. run any `on_complete` cleanup such as restoring the idle frame
+6. run any authored cleanup command such as restoring the idle frame
 7. finish
 
 ## World Data
@@ -276,9 +281,9 @@ The source of truth for content should be JSON files.
 Expected content groups:
 
 - `areas/`
-- `entities/`
+- `entity_templates/`
 - `items/`
-- `dialogue/` if dialogue is split out
+- `dialogues/` if dialogue is split out
 
 The editor should read and write these files.
 
@@ -290,10 +295,11 @@ The first versions can keep the schemas simple. They do not need to predict ever
 projects/
     test_project/                # Versioned sample project content (optional location)
         project.json
+        shared_variables.json
         areas/
-        entities/
+        entity_templates/
         assets/
-        commands/
+        named_commands/
 
 dungeon_engine/
     config.py
@@ -378,12 +384,14 @@ Current practical split:
 
 So the intended dialogue pattern is:
 
-1. hand input to a focused UI entity
-2. show panel image through screen-space commands
-3. optionally show portrait image
-4. prepare and read a text session for the current page or choice row
-5. render the returned text through normal screen-text commands
-6. let the UI entity decide whether input advances text, changes selection, resets marquee text, or closes the dialogue
+1. push the currently borrowed input routes
+2. reroute those actions to a UI entity
+3. show panel image through screen-space commands
+4. optionally show portrait image
+5. prepare and read a text session for the current page or choice row
+6. render the returned text through normal screen-text commands
+7. let the UI entity decide whether input advances text, changes selection, opens another dialogue, or closes the dialogue
+8. pop the borrowed routes to restore the exact previous input ownership
 
 This keeps dialogue aligned with the general command architecture instead of
 turning it into a separate hardcoded menu system.
@@ -407,6 +415,8 @@ Persistence should support:
 - current area
 - inventory
 - persistent area state
+- transferred cross-area traveler state
+- current camera state when exact session restore matters
 - entity visibility/enabled changes
 - puzzle state changes
 

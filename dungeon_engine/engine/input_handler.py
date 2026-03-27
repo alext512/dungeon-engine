@@ -67,6 +67,13 @@ class InputHandler:
         }
         self.direction_priority = ["up", "down", "left", "right"]
         self.action_press_count = 0
+        self.menu_press_count = 0
+        self.direction_press_counts: dict[str, int] = {
+            "up": 0,
+            "down": 0,
+            "left": 0,
+            "right": 0,
+        }
 
     def handle_events(self, events: list[pygame.event.Event]) -> InputFrameResult:
         """Update held input state and report high-level play actions."""
@@ -78,7 +85,12 @@ class InputHandler:
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    self.menu_press_count += 1
+                    if self._can_route_input_while_busy() and self._enqueue_action_if_mapped("menu"):
+                        continue
                     if not self.command_runner.has_pending_work() and self._enqueue_action_if_mapped("menu"):
+                        continue
+                    if self.command_runner.has_pending_work():
                         continue
                     result.should_quit = True
                     continue
@@ -101,13 +113,21 @@ class InputHandler:
 
                 if event.key in ACTION_KEYS:
                     self.action_press_count += 1
-                    if not self.command_runner.has_pending_work():
+                    if self._can_route_input_while_busy():
+                        self._enqueue_action_if_mapped("interact")
+                    elif not self.command_runner.has_pending_work():
                         self._enqueue_action_if_mapped("interact")
                     continue
 
                 direction = KEY_TO_DIRECTION.get(event.key)
                 if direction is not None:
                     self.held_directions[direction] = True
+                    self.direction_press_counts[direction] += 1
+                    action_name = f"move_{direction}"
+                    if self._can_route_input_while_busy():
+                        self._enqueue_action_if_mapped(action_name)
+                    elif not self.command_runner.has_pending_work():
+                        self._enqueue_action_if_mapped(action_name)
                 continue
 
             if event.type == pygame.KEYUP:
@@ -140,6 +160,16 @@ class InputHandler:
         """Return how many action-button keydown events have occurred."""
         return int(self.action_press_count)
 
+    def get_menu_press_count(self) -> int:
+        """Return how many menu-button keydown events have occurred."""
+        return int(self.menu_press_count)
+
+    def get_direction_press_count(self, direction: str) -> int:
+        """Return how many keydown events have occurred for one logical direction."""
+        if direction not in self.direction_press_counts:
+            raise KeyError(f"Unknown direction '{direction}'.")
+        return int(self.direction_press_counts[direction])
+
     def is_direction_held(self, direction: str) -> bool:
         """Return whether one logical direction is currently held."""
         if direction not in self.held_directions:
@@ -147,25 +177,30 @@ class InputHandler:
         return bool(self.held_directions[direction])
 
     def _enqueue_action_if_mapped(self, action_name: str) -> bool:
-        """Run the mapped event for the active entity when one exists."""
-        active_entity_id = self.world.get_active_entity().entity_id
-        event_name = self._resolve_active_entity_event_name(action_name)
+        """Run the mapped event for the routed entity when one exists."""
+        target_entity = self.world.get_input_target(action_name)
+        if target_entity is None:
+            return False
+        event_name = self._resolve_input_target_event_name(action_name, target_entity)
         if not event_name:
             return False
-        self.command_runner.enqueue(
-            "run_event",
-            entity_id=active_entity_id,
+        return self.command_runner.dispatch_input_event(
+            entity_id=target_entity.entity_id,
             event_id=event_name,
-            actor_entity_id=active_entity_id,
+            actor_entity_id=target_entity.entity_id,
         )
-        return True
 
-    def _resolve_active_entity_event_name(self, action_name: str) -> str:
-        """Resolve an input action to an event name on the current active entity."""
-        active_entity = self.world.get_active_entity()
-        if active_entity is not None:
-            event_name = active_entity.input_map.get(action_name)
-            if event_name is not None:
-                return str(event_name).strip()
+    def _resolve_input_target_event_name(self, action_name: str, target_entity) -> str:
+        """Resolve an input action to an event name on the routed entity."""
+        event_name = target_entity.input_map.get(action_name)
+        if event_name is not None:
+            return str(event_name).strip()
         return self.action_event_names.get(action_name, "").strip()
+
+    def _can_route_input_while_busy(self) -> bool:
+        """Return True when logical actions should still go to routed entities."""
+        if not self.command_runner.has_pending_work():
+            return True
+        active_handle = self.command_runner.active_handle
+        return bool(active_handle is not None and active_handle.allow_entity_input)
 

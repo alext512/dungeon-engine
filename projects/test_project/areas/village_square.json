@@ -1,7 +1,28 @@
 {
   "name": "Village Square",
   "tile_size": 16,
-  "player_id": "player",
+  "entry_points": {
+    "startup": {
+      "x": 8,
+      "y": 8,
+      "facing": "down"
+    },
+    "from_house": {
+      "x": 8,
+      "y": 6,
+      "facing": "down"
+    }
+  },
+  "camera": {
+    "follow_entity_id": "player"
+  },
+  "input_targets": {
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
   "variables": {},
   "tilesets": [
     {
@@ -83,12 +104,6 @@
   ],
   "entities": [
     {
-      "id": "dialogue_ui",
-      "x": 1,
-      "y": 1,
-      "template": "dialogue_ui"
-    },
-    {
       "id": "player",
       "x": 8,
       "y": 8,
@@ -115,7 +130,8 @@
       "y": 5,
       "template": "area_door",
       "parameters": {
-        "target_area": "village_house"
+        "target_area": "village_house",
+        "target_entry": "from_square"
       }
     }
   ]

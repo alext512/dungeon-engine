@@ -26,11 +26,9 @@ def serialize_area(
     project: ProjectContext,
 ) -> dict[str, Any]:
     """Convert the editable area and world state into JSON-serializable data."""
-    return {
+    data = {
         "name": area.name,
         "tile_size": area.tile_size,
-        "player_id": world.player_id,
-        "active_entity_id": world.active_entity_id,
         "variables": copy.deepcopy(world.variables),
         "tilesets": [
             _serialize_tileset(ts)
@@ -54,11 +52,23 @@ def serialize_area(
         "entities": [
             serialize_entity_instance(entity, area.tile_size, project=project)
             for entity in sorted(
-                world.iter_entities(include_absent=True),
+                world.iter_area_entities(include_absent=True),
                 key=world.entity_sort_key,
             )
         ],
     }
+    if world.default_input_targets != project.input_targets:
+        data["input_targets"] = copy.deepcopy(world.default_input_targets)
+    if area.entry_points:
+        data["entry_points"] = {
+            entry_id: _serialize_entry_point(entry_point)
+            for entry_id, entry_point in area.entry_points.items()
+        }
+    if area.camera_defaults:
+        data["camera"] = copy.deepcopy(area.camera_defaults)
+    if area.enter_commands:
+        data["enter_commands"] = copy.deepcopy(area.enter_commands)
+    return data
 
 
 def _serialize_tileset(tileset: Any) -> dict[str, Any]:
@@ -73,6 +83,21 @@ def _serialize_tileset(tileset: Any) -> dict[str, Any]:
         "tile_width": tileset.tile_width,
         "tile_height": tileset.tile_height,
     }
+
+
+def _serialize_entry_point(entry_point: Any) -> dict[str, Any]:
+    """Serialize one authored area-entry marker."""
+    data: dict[str, Any] = {
+        "x": int(entry_point.grid_x),
+        "y": int(entry_point.grid_y),
+    }
+    if entry_point.facing is not None:
+        data["facing"] = str(entry_point.facing)
+    if entry_point.pixel_x is not None:
+        data["pixel_x"] = _serialize_number(entry_point.pixel_x)
+    if entry_point.pixel_y is not None:
+        data["pixel_y"] = _serialize_number(entry_point.pixel_y)
+    return data
 
 
 def _serialize_cell_flags(cell_flags: dict[str, Any]) -> bool | dict[str, Any]:
@@ -91,9 +116,10 @@ def serialize_entity_instance(
     """Persist either a template instance or a fully inline entity definition."""
     data: dict[str, Any] = {
         "id": entity.entity_id,
-        "x": entity.grid_x,
-        "y": entity.grid_y,
     }
+    if entity.space == "world":
+        data["x"] = entity.grid_x
+        data["y"] = entity.grid_y
     data.update(_serialize_pixel_position_fields(entity, tile_size))
 
     if entity.template_id:
@@ -105,9 +131,9 @@ def serialize_entity_instance(
 
     data.update(_serialize_runtime_entity_fields(entity, tile_size))
 
-    sprite_data = _serialize_sprite_data(entity)
-    if sprite_data is not None:
-        data["sprite"] = sprite_data
+    visuals_data = _serialize_visuals(entity)
+    if visuals_data:
+        data["visuals"] = visuals_data
     return data
 
 
@@ -124,13 +150,25 @@ def _serialize_template_entity_overrides(
     parameters, not the authored room instance.
     """
     reference_entity = instantiate_entity(
-        {
-            "id": entity.entity_id,
-            "template": entity.template_id,
-            "x": entity.grid_x,
-            "y": entity.grid_y,
-            "parameters": copy.deepcopy(entity.template_parameters),
-        },
+        (
+            {
+                "id": entity.entity_id,
+                "template": entity.template_id,
+                "x": entity.grid_x,
+                "y": entity.grid_y,
+                "parameters": copy.deepcopy(entity.template_parameters),
+            }
+            if entity.space == "world"
+            else {
+                "id": entity.entity_id,
+                "template": entity.template_id,
+                "pixel_x": _serialize_number(entity.pixel_x),
+                "pixel_y": _serialize_number(entity.pixel_y),
+                "space": entity.space,
+                "scope": entity.scope,
+                "parameters": copy.deepcopy(entity.template_parameters),
+            }
+        ),
         tile_size,
         project=project,
         source_name=f"template reference '{entity.entity_id}'",
@@ -143,17 +181,10 @@ def _serialize_template_entity_overrides(
         if value != reference_fields.get(key):
             overrides[key] = value
 
-    sprite_data = _serialize_sprite_data(entity)
-    reference_sprite_data = _serialize_sprite_data(reference_entity)
-    if sprite_data != reference_sprite_data:
-        overrides["sprite"] = sprite_data or {
-            "path": "",
-            "frame_width": entity.sprite_frame_width,
-            "frame_height": entity.sprite_frame_height,
-            "frames": list(entity.animation_frames),
-            "animation_fps": entity.animation_fps,
-            "animate_when_moving": entity.animate_when_moving,
-        }
+    visuals_data = _serialize_visuals(entity)
+    reference_visuals_data = _serialize_visuals(reference_entity)
+    if visuals_data != reference_visuals_data:
+        overrides["visuals"] = visuals_data
 
     return overrides
 
@@ -162,6 +193,8 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
     """Return only the safe authored override fields for template instances."""
     data = {
         "facing": entity.facing,
+        "space": entity.space,
+        "scope": entity.scope,
         "solid": entity.solid,
         "pushable": entity.pushable,
         "present": entity.present,
@@ -186,6 +219,8 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
     data = {
         "kind": entity.kind,
         "facing": entity.facing,
+        "space": entity.space,
+        "scope": entity.scope,
         "solid": entity.solid,
         "pushable": entity.pushable,
         "present": entity.present,
@@ -208,8 +243,8 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
 
 def _serialize_pixel_position_fields(entity: Any, tile_size: int) -> dict[str, Any]:
     """Serialize pixel position only when it differs from the tile-derived default."""
-    default_pixel_x = float(entity.grid_x * tile_size)
-    default_pixel_y = float(entity.grid_y * tile_size)
+    default_pixel_x = float(entity.grid_x * tile_size) if entity.space == "world" else 0.0
+    default_pixel_y = float(entity.grid_y * tile_size) if entity.space == "world" else 0.0
     data: dict[str, Any] = {}
     if not math.isclose(entity.pixel_x, default_pixel_x, abs_tol=0.001):
         data["pixel_x"] = _serialize_number(entity.pixel_x)
@@ -225,18 +260,28 @@ def _serialize_number(value: float) -> int | float:
     return float(value)
 
 
-def _serialize_sprite_data(entity: Any) -> dict[str, Any] | None:
-    """Serialize sprite data when an entity uses sprite rendering."""
-    if not entity.sprite_path:
-        return None
-    return {
-        "path": entity.sprite_path,
-        "frame_width": entity.sprite_frame_width,
-        "frame_height": entity.sprite_frame_height,
-        "frames": list(entity.animation_frames),
-        "animation_fps": entity.animation_fps,
-        "animate_when_moving": entity.animate_when_moving,
-    }
+def _serialize_visuals(entity: Any) -> list[dict[str, Any]]:
+    """Serialize an entity's visuals list."""
+    serialized: list[dict[str, Any]] = []
+    for visual in entity.visuals:
+        serialized.append(
+            {
+                "id": visual.visual_id,
+                "path": visual.path,
+                "frame_width": visual.frame_width,
+                "frame_height": visual.frame_height,
+                "frames": list(visual.frames),
+                "animation_fps": visual.animation_fps,
+                "animate_when_moving": visual.animate_when_moving,
+                "flip_x": visual.flip_x,
+                "visible": visual.visible,
+                "tint": list(visual.tint),
+                "offset_x": _serialize_number(visual.offset_x),
+                "offset_y": _serialize_number(visual.offset_y),
+                "draw_order": visual.draw_order,
+            }
+        )
+    return serialized
 
 
 def _serialize_events(entity: Any) -> dict[str, Any]:

@@ -1,4 +1,34 @@
 {
-  "text": "Village sign: This square is the new sample start area. Use the save point on the left to create a JSON save file, then interact with the house door to enter the connected interior."
+  "participants": {
+    "guide": {
+      "name": "Guide",
+      "portrait_path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+      "portrait_frame_width": 16,
+      "portrait_frame_height": 16,
+      "portrait_frame": 0
+    }
+  },
+  "segments": [
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "text": "Village sign: This square is the current sample start area."
+    },
+    {
+      "type": "text",
+      "speaker_id": null,
+      "text": "A cool breeze rolls across the courtyard.",
+      "advance": {
+        "mode": "timer",
+        "seconds": 1.2
+      }
+    },
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "show_portrait": false,
+      "text": "Use the save point on the left, the house door in the middle, and the lever inside the house to try the new dialogue flow."
+    }
+  ]
 }
 

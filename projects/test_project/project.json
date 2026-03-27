@@ -1,12 +1,24 @@
 {
-  "entity_paths": ["entities/"],
+  "entity_template_paths": ["entity_templates/"],
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
-  "command_paths": ["commands/"],
+  "named_command_paths": ["named_commands/"],
   "dialogue_paths": ["dialogues/"],
-  "variables_path": "variables.json",
+  "shared_variables_path": "shared_variables.json",
+  "global_entities": [
+    {
+      "id": "dialogue_controller",
+      "template": "dialogue_panel"
+    },
+    {
+      "id": "pause_controller",
+      "template": "pause_controller"
+    }
+  ],
   "startup_area": "title_screen",
-  "active_entity_id": "player",
+  "input_targets": {
+    "menu": "pause_controller"
+  },
   "debug_inspection_enabled": true,
   "input_events": {
     "move_up": "move_up",

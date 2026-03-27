@@ -18,8 +18,8 @@ from typing import Any
 
 from dungeon_engine import config
 from dungeon_engine.logging_utils import get_logger
-from dungeon_engine.world.area import Area, TileLayer, Tileset
-from dungeon_engine.world.entity import Entity, EntityEvent
+from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
+from dungeon_engine.world.entity import Entity, EntityEvent, EntityVisual
 from dungeon_engine.world.persistence import PersistentAreaState, apply_persistent_area_state
 from dungeon_engine.world.world import World
 
@@ -29,6 +29,7 @@ from dungeon_engine.project import ProjectContext
 logger = get_logger(__name__)
 
 _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
+_RESERVED_ENTITY_IDS = {"self", "actor", "caller"}
 
 
 def load_area(
@@ -98,6 +99,13 @@ def load_area_from_data(
     width = len(tile_layers[0].grid[0]) if tile_layers and tile_layers[0].grid else 0
     height = len(tile_layers[0].grid) if tile_layers else 0
     cell_flags = _parse_cell_flags(raw_data, width, height)
+    enter_commands = _parse_command_list(
+        raw_data.get("enter_commands"),
+        field_name="enter_commands",
+        source_name=source_name,
+    )
+    entry_points = _parse_entry_points(raw_data.get("entry_points"), source_name=source_name)
+    camera_defaults = _parse_camera_defaults(raw_data.get("camera"), source_name=source_name)
 
     area = Area(
         area_id=_derive_area_id(source_name=source_name, project=project, area_name=area_name),
@@ -106,24 +114,29 @@ def load_area_from_data(
         tilesets=tilesets,
         tile_layers=tile_layers,
         cell_flags=cell_flags,
+        entry_points=entry_points,
+        camera_defaults=camera_defaults,
+        enter_commands=enter_commands,
     )
     area.build_gid_lookup()
 
-    configured_player_id = _optional_string(
-        raw_data.get("player_id"),
-        field_name="player_id",
-        source_name=source_name,
-    ) or "player"
-    default_active_entity_id = str(project.active_entity_id or configured_player_id)
-    configured_active_entity_id = _optional_string(
-        raw_data.get("active_entity_id"),
-        field_name="active_entity_id",
-        source_name=source_name,
+    if "player_id" in raw_data:
+        raise ValueError(
+            f"Area '{source_name}' must not declare 'player_id'; use explicit "
+            "'input_targets', transfer payloads, and camera defaults instead."
+        )
+    if "active_entity_id" in raw_data:
+        raise ValueError(
+            f"Area '{source_name}' must not declare 'active_entity_id'; use 'input_targets' instead."
+        )
+    resolved_input_targets = copy.deepcopy(project.input_targets)
+    resolved_input_targets.update(
+        _parse_input_targets(
+            raw_data.get("input_targets"),
+            source_name=source_name,
+        )
     )
-    world = World(
-        player_id=configured_player_id,
-        active_entity_id=configured_active_entity_id or default_active_entity_id,
-    )
+    world = World(default_input_targets=resolved_input_targets)
     world.variables = copy.deepcopy(variables)
     for index, entity_instance in enumerate(raw_entities):
         entity = instantiate_entity(
@@ -158,24 +171,31 @@ def instantiate_entity(
         source_name=source_name,
     )
     entity_id = _require_non_empty_string(entity_data, "id", source_name=source_name)
+    if entity_id in _RESERVED_ENTITY_IDS:
+        reserved_names = ", ".join(sorted(_RESERVED_ENTITY_IDS))
+        raise ValueError(
+            f"{source_name} field 'id' must not use reserved runtime entity reference "
+            f"'{entity_id}' ({reserved_names})."
+        )
     kind = _require_non_empty_string(entity_data, "kind", source_name=source_name)
-    grid_x = _coerce_required_int(entity_data, "x", source_name=source_name)
-    grid_y = _coerce_required_int(entity_data, "y", source_name=source_name)
+    space = _parse_entity_space(entity_data, source_name=source_name)
+    scope = _parse_entity_scope(entity_data, source_name=source_name)
+    if space == "world":
+        grid_x = _coerce_required_int(entity_data, "x", source_name=source_name)
+        grid_y = _coerce_required_int(entity_data, "y", source_name=source_name)
+        default_pixel_x = float(grid_x * tile_size)
+        default_pixel_y = float(grid_y * tile_size)
+    else:
+        if "x" in entity_data or "y" in entity_data:
+            raise ValueError(
+                f"{source_name} screen-space entities must not declare 'x'/'y'; use 'pixel_x'/'pixel_y' or visual offsets."
+            )
+        grid_x = 0
+        grid_y = 0
+        default_pixel_x = 0.0
+        default_pixel_y = 0.0
 
-    sprite_raw = entity_data.get("sprite", {})
-    if sprite_raw is None:
-        sprite_raw = {}
-    if not isinstance(sprite_raw, dict):
-        raise ValueError(f"{source_name} field 'sprite' must be a JSON object when present.")
-    sprite_data = dict(sprite_raw)
-    raw_frames = sprite_data.get("frames", [0])
-    if not isinstance(raw_frames, list):
-        raise ValueError(f"{source_name} sprite field 'frames' must be a JSON array.")
-    animation_frames = [int(frame) for frame in raw_frames]
-    if not animation_frames:
-        raise ValueError(f"{source_name} sprite field 'frames' must not be empty.")
-    default_pixel_x = float(grid_x * tile_size)
-    default_pixel_y = float(grid_y * tile_size)
+    visuals = _parse_entity_visuals(entity_data, tile_size=tile_size, source_name=source_name)
     entity = Entity(
         entity_id=entity_id,
         kind=kind,
@@ -184,6 +204,8 @@ def instantiate_entity(
         pixel_x=float(entity_data.get("pixel_x", default_pixel_x)),
         pixel_y=float(entity_data.get("pixel_y", default_pixel_y)),
         facing=entity_data.get("facing", "down"),
+        space=space,
+        scope=scope,
         solid=bool(entity_data.get("solid", True)),
         pushable=bool(entity_data.get("pushable", False)),
         present=bool(entity_data.get("present", True)),
@@ -191,22 +213,103 @@ def instantiate_entity(
         events_enabled=bool(entity_data.get("events_enabled", True)),
         layer=int(entity_data.get("layer", 1)),
         stack_order=int(entity_data.get("stack_order", 0)),
-        color=_parse_color(entity_data.get("color"), sprite_data),
+        color=_parse_color(entity_data.get("color")),
         template_id=template_id,
         template_parameters=copy.deepcopy(entity_instance.get("parameters", {})),
         tags=_coerce_string_list(entity_data.get("tags", []), field_name="tags", source_name=source_name),
-        sprite_path=str(sprite_data.get("path", "")),
-        sprite_frame_width=int(sprite_data.get("frame_width", tile_size)),
-        sprite_frame_height=int(sprite_data.get("frame_height", tile_size)),
-        animation_frames=animation_frames,
-        animation_fps=float(sprite_data.get("animation_fps", 0.0)),
-        animate_when_moving=bool(sprite_data.get("animate_when_moving", False)),
-        current_frame=int(animation_frames[0]),
+        visuals=visuals,
         events=_parse_entity_events(entity_data),
         variables=copy.deepcopy(entity_data.get("variables", {})),
         input_map=_parse_input_map(entity_data.get("input_map")),
     )
     return entity
+
+
+def _parse_entity_space(entity_data: dict[str, Any], *, source_name: str) -> str:
+    """Parse one entity's spatial domain."""
+    space = str(entity_data.get("space", "world")).strip().lower()
+    if space not in {"world", "screen"}:
+        raise ValueError(f"{source_name} field 'space' must be 'world' or 'screen'.")
+    return space
+
+
+def _parse_entity_scope(entity_data: dict[str, Any], *, source_name: str) -> str:
+    """Parse one entity's lifetime scope."""
+    scope = str(entity_data.get("scope", "area")).strip().lower()
+    if scope not in {"area", "global"}:
+        raise ValueError(f"{source_name} field 'scope' must be 'area' or 'global'.")
+    return scope
+
+
+def _parse_entity_visuals(
+    entity_data: dict[str, Any],
+    *,
+    tile_size: int,
+    source_name: str,
+) -> list[EntityVisual]:
+    """Parse and validate one entity's visuals list."""
+    if "sprite" in entity_data:
+        raise ValueError(
+            f"{source_name} must not use 'sprite'; entities now define a 'visuals' array."
+        )
+
+    raw_visuals = entity_data.get("visuals", [])
+    if raw_visuals is None:
+        raw_visuals = []
+    if not isinstance(raw_visuals, list):
+        raise ValueError(f"{source_name} field 'visuals' must be a JSON array.")
+
+    visuals: list[EntityVisual] = []
+    seen_visual_ids: set[str] = set()
+    for index, raw_visual in enumerate(raw_visuals):
+        if not isinstance(raw_visual, dict):
+            raise ValueError(f"{source_name} visuals[{index}] must be a JSON object.")
+        visual_id = _require_non_empty_string(
+            raw_visual,
+            "id",
+            source_name=f"{source_name} visuals[{index}]",
+        )
+        if visual_id in seen_visual_ids:
+            raise ValueError(f"{source_name} uses duplicate visual id '{visual_id}'.")
+        seen_visual_ids.add(visual_id)
+
+        raw_frames = raw_visual.get("frames", [0])
+        if not isinstance(raw_frames, list):
+            raise ValueError(f"{source_name} visuals[{index}] field 'frames' must be a JSON array.")
+        frames = [int(frame) for frame in raw_frames]
+        if not frames:
+            raise ValueError(f"{source_name} visuals[{index}] field 'frames' must not be empty.")
+
+        frame_width = int(raw_visual.get("frame_width", tile_size))
+        frame_height = int(raw_visual.get("frame_height", tile_size))
+        if frame_width <= 0 or frame_height <= 0:
+            raise ValueError(f"{source_name} visuals[{index}] frame dimensions must be positive.")
+
+        tint = _parse_color(raw_visual.get("tint"))
+        visuals.append(
+            EntityVisual(
+                visual_id=visual_id,
+                path=_require_non_empty_string(
+                    raw_visual,
+                    "path",
+                    source_name=f"{source_name} visuals[{index}]",
+                ),
+                frame_width=frame_width,
+                frame_height=frame_height,
+                frames=frames,
+                animation_fps=float(raw_visual.get("animation_fps", 0.0)),
+                animate_when_moving=bool(raw_visual.get("animate_when_moving", False)),
+                current_frame=int(frames[0]),
+                flip_x=bool(raw_visual.get("flip_x", False)),
+                visible=bool(raw_visual.get("visible", True)),
+                tint=tint,
+                offset_x=float(raw_visual.get("offset_x", 0.0)),
+                offset_y=float(raw_visual.get("offset_y", 0.0)),
+                draw_order=int(raw_visual.get("draw_order", index)),
+            )
+        )
+
+    return visuals
 
 
 def list_entity_template_ids(project: ProjectContext) -> list[str]:
@@ -344,6 +447,145 @@ def _parse_cell_flags(
     return [[{"walkable": True} for _ in range(width)] for _ in range(height)]
 
 
+def _parse_command_list(
+    raw_commands: Any,
+    *,
+    field_name: str,
+    source_name: str,
+) -> list[dict[str, Any]]:
+    """Parse one optional command-list field with descriptive validation."""
+    if raw_commands is None:
+        return []
+    if not isinstance(raw_commands, list):
+        raise ValueError(f"{source_name} field '{field_name}' must be a JSON array.")
+
+    parsed: list[dict[str, Any]] = []
+    for index, command in enumerate(raw_commands):
+        if not isinstance(command, dict):
+            raise ValueError(
+                f"{source_name} field '{field_name}' must contain JSON objects "
+                f"(invalid entry at index {index})."
+            )
+        _validate_command_tree(
+            command,
+            source_name=source_name,
+            location=f"{field_name}[{index}]",
+        )
+        parsed.append(copy.deepcopy(command))
+    return parsed
+
+
+def _parse_entry_points(
+    raw_entry_points: Any,
+    *,
+    source_name: str,
+) -> dict[str, AreaEntryPoint]:
+    """Parse one optional mapping of authored area-entry markers."""
+    if raw_entry_points is None:
+        return {}
+    if not isinstance(raw_entry_points, dict):
+        raise ValueError(f"Area '{source_name}' field 'entry_points' must be a JSON object.")
+
+    parsed: dict[str, AreaEntryPoint] = {}
+    for raw_entry_id, raw_entry_data in raw_entry_points.items():
+        entry_id = str(raw_entry_id).strip()
+        if not entry_id:
+            raise ValueError(
+                f"Area '{source_name}' field 'entry_points' cannot use a blank entry id."
+            )
+        if not isinstance(raw_entry_data, dict):
+            raise ValueError(
+                f"Area '{source_name}' entry_points.{entry_id} must be a JSON object."
+            )
+        if entry_id in parsed:
+            raise ValueError(f"Area '{source_name}' uses duplicate entry point id '{entry_id}'.")
+
+        grid_x = _coerce_required_int(
+            raw_entry_data,
+            "x",
+            source_name=f"Area '{source_name}' entry_points.{entry_id}",
+        )
+        grid_y = _coerce_required_int(
+            raw_entry_data,
+            "y",
+            source_name=f"Area '{source_name}' entry_points.{entry_id}",
+        )
+        facing = _optional_string(
+            raw_entry_data.get("facing"),
+            field_name="facing",
+            source_name=f"Area '{source_name}' entry_points.{entry_id}",
+        )
+        pixel_x = raw_entry_data.get("pixel_x")
+        pixel_y = raw_entry_data.get("pixel_y")
+        parsed[entry_id] = AreaEntryPoint(
+            entry_id=entry_id,
+            grid_x=grid_x,
+            grid_y=grid_y,
+            facing=facing,
+            pixel_x=None if pixel_x is None else float(pixel_x),
+            pixel_y=None if pixel_y is None else float(pixel_y),
+        )
+    return parsed
+
+
+def _parse_camera_defaults(raw_camera_defaults: Any, *, source_name: str) -> dict[str, Any]:
+    """Parse one optional authored area-camera defaults object."""
+    if raw_camera_defaults is None:
+        return {}
+    if not isinstance(raw_camera_defaults, dict):
+        raise ValueError(f"Area '{source_name}' field 'camera' must be a JSON object.")
+    return copy.deepcopy(raw_camera_defaults)
+
+
+def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
+    """Reject removed command-shape fields anywhere inside authored command data."""
+    if isinstance(value, dict):
+        if "on_complete" in value:
+            raise ValueError(
+                f"{source_name} command '{location}' must not use 'on_complete'; "
+                "use 'on_start' and 'on_end' instead."
+            )
+        command_type = value.get("type")
+        if command_type == "run_dialogue":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'run_dialogue'; "
+                "start dialogues by sending an event to the dialogue controller entity "
+                "and using 'start_dialogue_session'."
+            )
+        if command_type == "set_sprite_frame":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_sprite_frame'; "
+                "use 'set_visual_frame' instead."
+            )
+        if command_type == "set_sprite_flip_x":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_sprite_flip_x'; "
+                "use 'set_visual_flip_x' instead."
+            )
+        if command_type == "set_camera_follow_player":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_camera_follow_player'; "
+                "use 'set_camera_follow_input_target' or 'set_camera_follow_entity' instead."
+            )
+        if command_type == "if_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'if_var'; "
+                "use 'check_var' instead."
+            )
+        for key, item in value.items():
+            child_location = f"{location}.{key}"
+            _validate_command_tree(item, source_name=source_name, location=child_location)
+        return
+
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_command_tree(
+                item,
+                source_name=source_name,
+                location=f"{location}[{index}]",
+            )
+
+
 def _resolve_entity_instance(
     instance_data: dict[str, Any],
     *,
@@ -459,9 +701,8 @@ def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
 
 def _parse_color(
     raw_color: list[int] | tuple[int, int, int] | None,
-    sprite_data: dict[str, Any],
 ) -> tuple[int, int, int]:
-    """Return a tint color, defaulting to white when a sprite is present."""
+    """Return one RGB color tuple."""
     if raw_color is None:
         return (255, 255, 255)
     return (int(raw_color[0]), int(raw_color[1]), int(raw_color[2]))
@@ -480,6 +721,11 @@ def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
     if isinstance(raw_events, dict):
         for event_id, raw_event in raw_events.items():
             if isinstance(raw_event, list):
+                _validate_command_tree(
+                    raw_event,
+                    source_name="Entity events",
+                    location=f"events.{event_id}",
+                )
                 parsed_events[str(event_id)] = EntityEvent(
                     enabled=True,
                     commands=copy.deepcopy(raw_event),
@@ -489,6 +735,11 @@ def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
             if not isinstance(raw_event, dict):
                 raise ValueError("Entity events must be objects or command lists.")
 
+            _validate_command_tree(
+                raw_event.get("commands", []),
+                source_name="Entity events",
+                location=f"events.{event_id}.commands",
+            )
             parsed_events[str(event_id)] = EntityEvent(
                 enabled=bool(raw_event.get("enabled", True)),
                 commands=copy.deepcopy(raw_event.get("commands", [])),
@@ -505,6 +756,26 @@ def _parse_input_map(raw_input_map: Any) -> dict[str, str]:
         str(action): str(event_name)
         for action, event_name in raw_input_map.items()
     }
+
+
+def _parse_input_targets(raw_input_targets: Any, *, source_name: str) -> dict[str, str]:
+    """Parse an optional area-owned logical-input target mapping."""
+    if raw_input_targets is None:
+        return {}
+    if not isinstance(raw_input_targets, dict):
+        raise ValueError(f"Area '{source_name}' field 'input_targets' must be a JSON object.")
+    parsed: dict[str, str] = {}
+    for raw_action, raw_entity_id in raw_input_targets.items():
+        action = str(raw_action).strip()
+        if not action:
+            raise ValueError(
+                f"Area '{source_name}' field 'input_targets' cannot use a blank action key."
+            )
+        if raw_entity_id in (None, ""):
+            parsed[action] = ""
+            continue
+        parsed[action] = str(raw_entity_id).strip()
+    return parsed
 
 
 def _derive_area_id(
@@ -634,10 +905,17 @@ def validate_project_entity_templates(project: ProjectContext) -> None:
             raw = json.loads(template_path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 issues.append(f"{template_path}: entity template must be a JSON object.")
+                continue
+            _validate_entity_template_raw(
+                raw,
+                source_name=str(template_path),
+            )
         except json.JSONDecodeError as exc:
             issues.append(
                 f"{template_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )
+        except Exception as exc:
+            issues.append(f"{template_path}: {exc}")
 
     if issues:
         raise EntityTemplateValidationError(project.project_root, issues)
@@ -651,6 +929,43 @@ def log_entity_template_validation_error(error: EntityTemplateValidationError) -
         len(error.issues),
         "\n".join(f"- {issue}" for issue in error.issues),
     )
+
+
+def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: str) -> None:
+    """Reject removed entity-template fields and command shapes before instantiation."""
+    if "sprite" in raw_template:
+        raise ValueError(
+            f"{source_name} must not use 'sprite'; entities now define a 'visuals' array."
+        )
+    if "interact_commands" in raw_template:
+        raise ValueError(
+            f"{source_name} must not use 'interact_commands'; define an 'events.interact' entry instead."
+        )
+
+    raw_events = raw_template.get("events", {})
+    if raw_events is None:
+        return
+    if not isinstance(raw_events, dict):
+        raise ValueError(f"{source_name} field 'events' must be a JSON object.")
+
+    for event_id, raw_event in raw_events.items():
+        if isinstance(raw_event, list):
+            _validate_command_tree(
+                raw_event,
+                source_name=source_name,
+                location=f"events.{event_id}",
+            )
+            continue
+        if not isinstance(raw_event, dict):
+            raise ValueError(f"{source_name} event '{event_id}' must be an object or command list.")
+        raw_commands = raw_event.get("commands", [])
+        if not isinstance(raw_commands, list):
+            raise ValueError(f"{source_name} event '{event_id}' field 'commands' must be a JSON array.")
+        _validate_command_tree(
+            raw_commands,
+            source_name=source_name,
+            location=f"events.{event_id}.commands",
+        )
 
 
 class AreaValidationError(ValueError):
@@ -687,6 +1002,8 @@ def validate_project_areas(project: ProjectContext) -> None:
         known_ids.setdefault(area_id, []).append(area_path)
 
     issues: list[str] = []
+    global_entity_ids, global_entity_issues = _validate_project_global_entities(project)
+    issues.extend(global_entity_issues)
     startup_area = getattr(project, "startup_area", None)
     if startup_area:
         resolved_startup_area = project.resolve_area_reference(startup_area)
@@ -704,7 +1021,21 @@ def validate_project_areas(project: ProjectContext) -> None:
         area_path = paths[0]
         try:
             raw = json.loads(area_path.read_text(encoding="utf-8"))
-            load_area_from_data(raw, source_name=str(area_path), asset_manager=None, project=project)
+            _, world = load_area_from_data(
+                raw,
+                source_name=str(area_path),
+                asset_manager=None,
+                project=project,
+            )
+            conflicting_global_ids = sorted(
+                entity_id
+                for entity_id in world.area_entities
+                if entity_id in global_entity_ids
+            )
+            for entity_id in conflicting_global_ids:
+                issues.append(
+                    f"{area_path}: area entity id '{entity_id}' conflicts with project.json global entity id '{entity_id}'."
+                )
         except json.JSONDecodeError as exc:
             issues.append(
                 f"{area_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
@@ -714,6 +1045,33 @@ def validate_project_areas(project: ProjectContext) -> None:
 
     if issues:
         raise AreaValidationError(project.project_root, issues)
+
+
+def _validate_project_global_entities(project: ProjectContext) -> tuple[set[str], list[str]]:
+    """Validate project-level global entity instances before runtime installation."""
+    global_entity_ids: set[str] = set()
+    issues: list[str] = []
+    for index, entity_data in enumerate(project.global_entities):
+        source_name = f"project.json global_entities[{index}]"
+        try:
+            entity = instantiate_entity(
+                {
+                    **copy.deepcopy(entity_data),
+                    "scope": "global",
+                },
+                config.DEFAULT_TILE_SIZE,
+                project=project,
+                source_name=source_name,
+            )
+        except Exception as exc:
+            issues.append(f"{source_name}: {exc}")
+            continue
+
+        if entity.entity_id in global_entity_ids:
+            issues.append(f"{source_name} uses duplicate entity id '{entity.entity_id}'.")
+            continue
+        global_entity_ids.add(entity.entity_id)
+    return global_entity_ids, issues
 
 
 def log_area_validation_error(error: AreaValidationError) -> None:

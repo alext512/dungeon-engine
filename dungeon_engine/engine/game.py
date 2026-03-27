@@ -11,7 +11,7 @@ from dungeon_engine import config
 from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import build_named_command_database
 from dungeon_engine.commands.registry import CommandRegistry
-from dungeon_engine.commands.runner import CommandContext, CommandRunner
+from dungeon_engine.commands.runner import AreaTransitionRequest, CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.camera import Camera
@@ -23,12 +23,16 @@ from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
 from dungeon_engine.systems.movement import MovementSystem
-from dungeon_engine.world.loader import load_area, load_area_from_data
+from dungeon_engine.world.loader import instantiate_entity, load_area, load_area_from_data
 from dungeon_engine.world.persistence import (
     PersistenceRuntime,
     ResetRequest,
+    apply_area_travelers,
+    apply_current_global_state,
     apply_persistent_area_state,
+    apply_persistent_global_state,
     capture_current_area_state,
+    capture_current_global_state,
     get_persistent_area_state,
     select_entity_ids_by_tags,
 )
@@ -84,7 +88,8 @@ class Game:
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
         self.text_session_manager: TextSessionManager | None = None
-        self._pending_area_change_path: Path | None = None
+        self._pending_area_change_request: AreaTransitionRequest | None = None
+        self._pending_new_game_request: AreaTransitionRequest | None = None
         self._pending_load_save_path: Path | None = None
         self._quit_requested = False
 
@@ -181,13 +186,13 @@ class Game:
         self.command_runner.update(0.0)
         self._apply_pending_reset_if_idle()
         self._apply_pending_load_if_idle()
+        self._apply_pending_new_game_if_idle()
         self._apply_pending_area_change_if_idle()
         self.simulation_tick_count += 1
 
     def _install_play_runtime(self) -> None:
         """Rebuild runtime systems around the current play world."""
         self.camera = Camera(self.internal_width, self.internal_height, self.area)
-        self.camera.follow_active_entity()
         self.camera.update(self.world, advance_tick=False)
         self.screen_manager.clear()
 
@@ -214,6 +219,7 @@ class Game:
             input_handler=None,
             persistence_runtime=self.persistence_runtime,
             request_area_change=self.request_area_change,
+            request_new_game=self.request_new_game,
             request_load_game=self.request_load_game,
             save_game=self.save_game,
             request_quit=self.request_quit,
@@ -228,9 +234,16 @@ class Game:
         )
         command_context.input_handler = self.input_handler
 
-    def request_area_change(self, area_id: str) -> None:
+    def request_area_change(self, request: AreaTransitionRequest) -> None:
         """Queue a transition into another authored area by area id."""
-        self._pending_area_change_path = self._resolve_area_path(area_id)
+        self._pending_area_change_request = copy.deepcopy(request)
+        self._pending_new_game_request = None
+        self._pending_load_save_path = None
+
+    def request_new_game(self, request: AreaTransitionRequest) -> None:
+        """Queue a fresh session reset and transition into another authored area."""
+        self._pending_new_game_request = copy.deepcopy(request)
+        self._pending_area_change_request = None
         self._pending_load_save_path = None
 
     def request_load_game(self, save_path: str | None = None) -> None:
@@ -243,7 +256,8 @@ class Game:
         if resolved_save_path is None:
             return
         self._pending_load_save_path = resolved_save_path
-        self._pending_area_change_path = None
+        self._pending_area_change_request = None
+        self._pending_new_game_request = None
 
     def save_game(self, save_path: str | None = None) -> bool:
         """Open a project-scoped save dialog or write to an explicit save path."""
@@ -261,7 +275,14 @@ class Game:
         """Ask the runtime loop to close the game at the end of the current frame."""
         self._quit_requested = True
 
-    def _load_area_runtime(self, area_path: Path | str) -> None:
+    def _load_area_runtime(
+        self,
+        area_path: Path | str,
+        *,
+        transferred_entities: list | None = None,
+        restored_input_targets: dict[str, str] | None = None,
+        transition_request: AreaTransitionRequest | None = None,
+    ) -> None:
         """Load one authored area plus any persistent overrides and rebuild runtime systems."""
         resolved_area_path = self._resolve_area_path(area_path)
         document_area, document_world = load_area(
@@ -277,6 +298,7 @@ class Game:
             asset_manager=self.asset_manager,
             project=self.project,
         )
+        self._install_project_global_entities(play_authored_world, play_authored_area.tile_size)
         self._apply_reentry_resets_for_area(play_authored_area.area_id, play_authored_world)
         area, world = load_area_from_data(
             copy.deepcopy(document_data),
@@ -287,6 +309,31 @@ class Game:
                 play_authored_area.area_id,
             ),
             project=self.project,
+        )
+        self._install_project_global_entities(world, area.tile_size)
+        apply_persistent_global_state(
+            area,
+            world,
+            self.persistence_runtime.save_data,
+            project=self.project,
+        )
+        transferred_session_entity_ids = {
+            str(entity.session_entity_id)
+            for entity in (transferred_entities or [])
+            if getattr(entity, "session_entity_id", None)
+        }
+        apply_area_travelers(
+            area,
+            world,
+            self.persistence_runtime.save_data,
+            project=self.project,
+            skip_session_entity_ids=transferred_session_entity_ids,
+        )
+        self._install_transferred_entities(
+            area,
+            world,
+            transferred_entities or [],
+            entry_id=None if transition_request is None else transition_request.entry_id,
         )
 
         self.area_path = resolved_area_path
@@ -300,6 +347,34 @@ class Game:
             authored_world=self.play_authored_world,
         )
         self._install_play_runtime()
+        self._apply_area_camera_defaults()
+        self.persistence_runtime.refresh_live_travelers(self.area, self.world)
+        if restored_input_targets:
+            self.world.set_input_targets(restored_input_targets, replace=False)
+        self._apply_transition_camera_follow(
+            None if transition_request is None else transition_request.camera_follow
+        )
+        self._queue_area_enter_commands()
+
+    def _install_project_global_entities(self, world, tile_size: int) -> None:
+        """Instantiate project-authored global entities into the current runtime world."""
+        for index, entity_data in enumerate(self.project.global_entities):
+            global_entity = instantiate_entity(
+                {
+                    **copy.deepcopy(entity_data),
+                    "scope": "global",
+                },
+                tile_size,
+                project=self.project,
+                source_name=f"project global_entities[{index}]",
+            )
+            existing_entity = world.get_entity(global_entity.entity_id)
+            if existing_entity is not None:
+                raise ValueError(
+                    f"project global_entities[{index}] entity id '{global_entity.entity_id}' "
+                    f"conflicts with existing {existing_entity.scope} entity '{existing_entity.entity_id}'."
+                )
+            world.add_entity(global_entity)
 
     def _resolve_area_path(self, area_path: Path | str) -> Path:
         """Resolve an area reference (ID or already-resolved path).
@@ -346,6 +421,15 @@ class Game:
         raise FileNotFoundError(
             f"Cannot resolve area reference '{area_path}'. "
             f"Searched: {searched_paths or '<none>'}."
+        )
+
+    def _queue_area_enter_commands(self) -> None:
+        """Queue area-authored enter commands so they run on the next simulation tick."""
+        if self.command_runner is None or not self.area.enter_commands:
+            return
+        self.command_runner.enqueue(
+            "run_commands",
+            commands=copy.deepcopy(self.area.enter_commands),
         )
 
     def _project_save_dir(self) -> Path:
@@ -455,7 +539,7 @@ class Game:
         self._update_window_caption()
 
     def _update_window_caption(self) -> None:
-        """Show zoom, simulation state, and active-entity details in the window title."""
+        """Show zoom, simulation state, and input-routing details in the window title."""
         if self.headless:
             return
 
@@ -470,21 +554,19 @@ class Game:
             pygame.display.set_caption(caption)
             return
 
-        active_entity = self.world.get_active_entity() if self.world is not None else None
-        active_summary = "none"
-        if active_entity is not None:
-            active_summary = (
-                f"{active_entity.entity_id} "
-                f"g({active_entity.grid_x},{active_entity.grid_y}) "
-                f"p({active_entity.pixel_x:.0f},{active_entity.pixel_y:.0f}) "
-                f"f{active_entity.current_frame}"
-            )
+        input_summary = "none"
+        if self.world is not None:
+            summary_parts: list[str] = []
+            for action in ("move_up", "interact", "menu"):
+                target_id = self.world.get_input_target_id(action)
+                summary_parts.append(f"{action}={target_id or '-'}")
+            input_summary = ", ".join(summary_parts)
 
         state_label = "PAUSED" if self.simulation_paused else "RUNNING"
         fps_text = f"{self.clock.get_fps():.1f}"
         caption = (
             f"{config.WINDOW_TITLE} | {state_label} | Zoom x{self.output_scale} | "
-            f"Render FPS {fps_text} | Tick {self.simulation_tick_count} | Active {active_summary}"
+            f"Render FPS {fps_text} | Tick {self.simulation_tick_count} | Inputs {input_summary}"
         )
         if error_notice:
             caption = f"{caption} | {error_notice}"
@@ -521,17 +603,30 @@ class Game:
         self._accumulated_time = 0.0
         self._load_save_slot(load_path)
 
+    def _apply_pending_new_game_if_idle(self) -> None:
+        """Apply a queued new-game request once the command lane is idle."""
+        if self.command_runner is None or self.command_runner.has_pending_work():
+            return
+        if self._pending_new_game_request is None:
+            return
+
+        request = self._pending_new_game_request
+        self._pending_new_game_request = None
+        self._accumulated_time = 0.0
+        self.persistence_runtime = PersistenceRuntime(project=self.project)
+        self._apply_area_transition_request(request)
+
     def _apply_pending_area_change_if_idle(self) -> None:
         """Apply a queued area transition once the main command lane is idle."""
         if self.command_runner is None or self.command_runner.has_pending_work():
             return
-        if self._pending_area_change_path is None:
+        if self._pending_area_change_request is None:
             return
 
-        next_area_path = self._pending_area_change_path
-        self._pending_area_change_path = None
+        request = self._pending_area_change_request
+        self._pending_area_change_request = None
         self._accumulated_time = 0.0
-        self._load_area_runtime(next_area_path)
+        self._apply_area_transition_request(request)
 
     def _apply_reentry_resets_for_area(self, area_id: str, authored_world) -> None:
         """Apply scheduled on-reentry persistent resets before constructing an area runtime."""
@@ -553,7 +648,7 @@ class Game:
             exclude_tags=request.exclude_tags,
         )
         if not request.include_tags and not request.exclude_tags:
-            self._rebuild_play_world(preserve_player=True)
+            self._rebuild_play_world()
             return
         if not selected_ids:
             return
@@ -573,7 +668,7 @@ class Game:
         """Build a fresh play world from authored data plus current persistent overrides."""
         if self.play_document_data is None:
             raise RuntimeError("Game runtime is missing the current play document.")
-        return load_area_from_data(
+        area, world = load_area_from_data(
             copy.deepcopy(self.play_document_data),
             source_name=str(self.area_path),
             asset_manager=self.asset_manager,
@@ -583,13 +678,146 @@ class Game:
             ),
             project=self.project,
         )
+        self._install_project_global_entities(world, area.tile_size)
+        apply_persistent_global_state(
+            area,
+            world,
+            self.persistence_runtime.save_data,
+            project=self.project,
+        )
+        return area, world
 
-    def _rebuild_play_world(self, *, preserve_player: bool) -> None:
+    def _apply_area_transition_request(self, request: AreaTransitionRequest) -> None:
+        """Apply one authored area transition, optionally carrying runtime entities with it."""
+        resolved_area_path = self._resolve_area_path(request.area_id)
+        transferred_entities = self._capture_transition_entities(request)
+        for entity in transferred_entities:
+            self.persistence_runtime.prepare_traveler_for_area(
+                entity,
+                destination_area_id=request.area_id,
+                tile_size=self.area.tile_size,
+            )
+        restored_input_targets = self._capture_transition_input_targets(transferred_entities)
+        self._load_area_runtime(
+            resolved_area_path,
+            transferred_entities=transferred_entities,
+            restored_input_targets=restored_input_targets,
+            transition_request=request,
+        )
+
+    def _capture_transition_entities(self, request: AreaTransitionRequest) -> list:
+        """Return detached entity copies that should move into the next area."""
+        transferred_entities: list = []
+        for entity_id in request.transfer_entity_ids:
+            entity = self.world.get_entity(entity_id)
+            if entity is None:
+                raise KeyError(
+                    f"Cannot transfer missing entity '{entity_id}' during area change to '{request.area_id}'."
+                )
+            if entity.scope != "area":
+                raise ValueError(
+                    f"Cannot transfer entity '{entity_id}' because only area-scoped entities can change areas."
+                )
+            transferred_entity = copy.deepcopy(entity)
+            transferred_entity.movement.active = False
+            for visual in transferred_entity.visuals:
+                visual.animation_playback.active = False
+            transferred_entities.append(transferred_entity)
+        return transferred_entities
+
+    def _capture_transition_input_targets(self, transferred_entities: list) -> dict[str, str]:
+        """Carry routed actions that currently target transferred entities into the next area."""
+        transferred_ids = {
+            entity.entity_id
+            for entity in transferred_entities
+        }
+        if not transferred_ids:
+            return {}
+        preserved_targets: dict[str, str] = {}
+        for action, target_id in self.world.input_targets.items():
+            if target_id in transferred_ids:
+                preserved_targets[action] = str(target_id)
+        return preserved_targets
+
+    def _install_transferred_entities(
+        self,
+        area,
+        world,
+        transferred_entities: list,
+        *,
+        entry_id: str | None,
+    ) -> None:
+        """Place transferred entities into the loaded destination area before runtime rebuild."""
+        if not transferred_entities:
+            return
+        entry_point = None
+        if entry_id:
+            entry_point = area.entry_points.get(entry_id)
+            if entry_point is None:
+                raise KeyError(
+                    f"Area '{area.area_id}' does not define entry point '{entry_id}'."
+                )
+
+        for entity in transferred_entities:
+            self._place_transferred_entity(area, entity, entry_point=entry_point)
+            world.add_entity(entity)
+
+    def _place_transferred_entity(self, area, entity, *, entry_point) -> None:
+        """Move one transferred entity onto the destination entry marker when provided."""
+        if entity.space != "world":
+            return
+        if entry_point is None:
+            entity.sync_pixel_position(area.tile_size)
+            return
+        entity.grid_x = int(entry_point.grid_x)
+        entity.grid_y = int(entry_point.grid_y)
+        if entry_point.facing is not None:
+            entity.facing = str(entry_point.facing)
+        entity.pixel_x = (
+            float(entry_point.pixel_x)
+            if entry_point.pixel_x is not None
+            else float(entity.grid_x * area.tile_size)
+        )
+        entity.pixel_y = (
+            float(entry_point.pixel_y)
+            if entry_point.pixel_y is not None
+            else float(entity.grid_y * area.tile_size)
+        )
+
+    def _apply_transition_camera_follow(self, camera_follow) -> None:
+        """Apply any authored camera-follow request after a transition rebuilds runtime state."""
+        if self.camera is None or camera_follow is None:
+            return
+        if camera_follow.mode == "entity" and camera_follow.entity_id:
+            if self.world.get_entity(camera_follow.entity_id) is None:
+                raise KeyError(
+                    f"Cannot follow missing transition camera entity '{camera_follow.entity_id}'."
+                )
+            self.camera.follow_entity(
+                camera_follow.entity_id,
+                offset_x=float(camera_follow.offset_x),
+                offset_y=float(camera_follow.offset_y),
+            )
+        elif camera_follow.mode == "input_target" and camera_follow.input_action:
+            self.camera.follow_input_target(
+                camera_follow.input_action,
+                offset_x=float(camera_follow.offset_x),
+                offset_y=float(camera_follow.offset_y),
+            )
+        elif camera_follow.mode == "none":
+            self.camera.clear_follow()
+        self.camera.update(self.world, advance_tick=False)
+
+    def _rebuild_play_world(self) -> None:
         """Rebuild the current play world from authored data plus persistent overrides."""
-        preserved_player = copy.deepcopy(self.world.get_player()) if preserve_player else None
+        self.persistence_runtime.refresh_live_travelers(self.area, self.world)
         self.area, self.world = self._build_current_play_reference()
-        if preserved_player is not None:
-            self.world.add_entity(preserved_player)
+        apply_area_travelers(
+            self.area,
+            self.world,
+            self.persistence_runtime.save_data,
+            project=self.project,
+        )
         self._install_play_runtime()
 
     def _capture_current_area_reference(self) -> str:
@@ -600,13 +828,24 @@ class Game:
 
     def _write_save_slot(self, save_path: Path) -> None:
         """Write the current persistent/session state to one explicit save slot."""
-        active_entity = self.world.get_active_entity()
+        self.persistence_runtime.refresh_live_travelers(self.area, self.world)
         _, persistent_reference_world = self._build_current_play_reference()
         self.persistence_runtime.save_data.current_area = self._capture_current_area_reference()
-        self.persistence_runtime.save_data.active_entity = (
-            active_entity.entity_id if active_entity is not None else ""
+        self.persistence_runtime.save_data.current_input_targets = copy.deepcopy(
+            self.world.input_targets
+        )
+        self.persistence_runtime.save_data.current_camera = (
+            None
+            if self.camera is None
+            else copy.deepcopy(self.camera.to_state_dict())
         )
         self.persistence_runtime.save_data.current_area_state = capture_current_area_state(
+            self.area,
+            persistent_reference_world,
+            self.world,
+            project=self.project,
+        )
+        self.persistence_runtime.save_data.current_global_entities = capture_current_global_state(
             self.area,
             persistent_reference_world,
             self.world,
@@ -617,7 +856,9 @@ class Game:
             self.persistence_runtime.flush(force=True)
         finally:
             # The exact saved room state is for file output and one-time load restore only.
+            self.persistence_runtime.save_data.current_camera = None
             self.persistence_runtime.save_data.current_area_state = None
+            self.persistence_runtime.save_data.current_global_entities = None
 
     def _load_save_slot(self, save_path: Path) -> None:
         """Load one explicit save slot and rebuild the runtime from its saved session."""
@@ -626,7 +867,19 @@ class Game:
             raise FileNotFoundError(f"Save file '{save_path}' was not found.")
 
         current_area_state = copy.deepcopy(self.persistence_runtime.save_data.current_area_state)
+        current_global_entities = copy.deepcopy(
+            self.persistence_runtime.save_data.current_global_entities
+        )
+        current_input_targets = copy.deepcopy(
+            self.persistence_runtime.save_data.current_input_targets
+        )
+        current_camera = copy.deepcopy(
+            self.persistence_runtime.save_data.current_camera
+        )
         self.persistence_runtime.save_data.current_area_state = None
+        self.persistence_runtime.save_data.current_global_entities = None
+        self.persistence_runtime.save_data.current_input_targets = None
+        self.persistence_runtime.save_data.current_camera = None
         target_area_path = self._resolve_saved_area_path()
         self._load_area_runtime(target_area_path)
         if current_area_state is not None:
@@ -636,7 +889,14 @@ class Game:
                 current_area_state,
                 project=self.project,
             )
-        self._apply_saved_active_entity()
+        apply_current_global_state(
+            self.area,
+            self.world,
+            current_global_entities,
+            project=self.project,
+        )
+        self._apply_saved_input_targets(current_input_targets)
+        self._apply_saved_camera_state(current_camera)
 
     def _resolve_saved_area_path(self) -> Path:
         """Resolve the saved session's current area reference, falling back safely."""
@@ -649,12 +909,32 @@ class Game:
             return self._resolve_area_path(startup_area)
         return self.area_path.resolve()
 
-    def _apply_saved_active_entity(self) -> None:
-        """Restore the saved active entity after the current room has been rebuilt."""
-        active_entity_id = str(self.persistence_runtime.save_data.active_entity).strip()
-        if active_entity_id and self.world.get_entity(active_entity_id) is not None:
-            self.world.set_active_entity(active_entity_id)
+    def _apply_saved_input_targets(self, saved_input_targets: dict[str, str] | None) -> None:
+        """Restore the saved logical-input routing after the current room is rebuilt."""
+        if saved_input_targets:
+            self.world.set_input_targets(saved_input_targets, replace=True)
 
-        if self.camera is not None:
-            self.camera.follow_active_entity()
-            self.camera.update(self.world, advance_tick=False)
+    def _apply_saved_camera_state(self, saved_camera_state: dict[str, object] | None) -> None:
+        """Restore the saved camera state after the current room is rebuilt."""
+        if saved_camera_state is None or self.camera is None:
+            return
+        self.camera.apply_state_dict(saved_camera_state, self.world)
+
+    def _apply_area_camera_defaults(self) -> None:
+        """Apply authored area camera defaults when the room has any."""
+        if self.camera is None or not self.area.camera_defaults:
+            return
+        self.camera.apply_state_dict(self._build_area_camera_state(), self.world)
+
+    def _build_area_camera_state(self) -> dict[str, object]:
+        """Translate one area's authored camera defaults into runtime camera state data."""
+        defaults = copy.deepcopy(self.area.camera_defaults)
+        if "follow_entity_id" in defaults:
+            defaults["follow_mode"] = "entity"
+            defaults.setdefault("follow_entity_id", defaults.get("follow_entity_id"))
+        elif "follow_input_action" in defaults:
+            defaults["follow_mode"] = "input_target"
+            defaults.setdefault("follow_input_action", defaults.get("follow_input_action"))
+        else:
+            defaults.setdefault("follow_mode", "none")
+        return defaults

@@ -1,4 +1,4 @@
-"""Project manifest: tells the engine where to find areas, entities, and assets.
+"""Project manifest: tells the engine where to find authored content and assets.
 
 A project is a folder containing a ``project.json`` file that declares search
 paths for game data. All paths inside the manifest are relative to the folder
@@ -7,14 +7,16 @@ that contains the ``project.json`` file.
 Example ``project.json``::
 
     {
-        "entity_paths": ["entities/"],
+        "entity_template_paths": ["entity_templates/"],
         "asset_paths": ["assets/"],
         "area_paths": ["areas/"],
-        "command_paths": ["commands/"],
+        "named_command_paths": ["named_commands/"],
         "dialogue_paths": ["dialogues/"],
-        "variables_path": "variables.json",
-        "startup_area": "test_room",
-        "active_entity_id": "player",
+        "shared_variables_path": "shared_variables.json",
+        "startup_area": "title_screen",
+        "input_targets": {
+            "menu": "pause_controller"
+        },
         "debug_inspection_enabled": true,
         "input_events": {
             "move_up": "move_up",
@@ -28,9 +30,10 @@ Example ``project.json``::
 If any section is omitted the engine falls back to conventional folders inside
 the selected project root:
 
-- ``entities/``
+- ``entity_templates/``
 - ``assets/``
 - ``areas/``
+- ``named_commands/``
 - ``dialogues/``
 """
 
@@ -49,21 +52,21 @@ DEFAULT_INPUT_EVENT_NAMES: dict[str, str] = {
     "move_right": "move_right",
     "interact": "interact",
 }
-
 @dataclass
 class ProjectContext:
     """Resolved search paths for a single project."""
 
     project_root: Path
     save_dir: Path
-    entity_paths: list[Path] = field(default_factory=list)
+    entity_template_paths: list[Path] = field(default_factory=list)
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
-    command_paths: list[Path] = field(default_factory=list)
+    named_command_paths: list[Path] = field(default_factory=list)
     dialogue_paths: list[Path] = field(default_factory=list)
-    variables_path: Path | None = None
+    shared_variables_path: Path | None = None
+    global_entities: list[dict[str, Any]] = field(default_factory=list)
     startup_area: str | None = None
-    active_entity_id: str = "player"
+    input_targets: dict[str, str] = field(default_factory=dict)
     debug_inspection_enabled: bool = False
     shared_variables: dict[str, Any] = field(default_factory=dict)
     internal_width: int = 320
@@ -84,7 +87,7 @@ class ProjectContext:
         normalized to forward slashes.
         """
         resolved = template_path.resolve()
-        for directory in self.entity_paths:
+        for directory in self.entity_template_paths:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return str(relative.with_suffix("")).replace("\\", "/")
@@ -96,7 +99,7 @@ class ProjectContext:
         """Return all entity-template JSON files across all entity paths."""
         files: list[Path] = []
         seen: set[Path] = set()
-        for directory in self.entity_paths:
+        for directory in self.entity_template_paths:
             if not directory.is_dir():
                 continue
             for file_path in sorted(directory.rglob("*.json")):
@@ -131,7 +134,7 @@ class ProjectContext:
             seen.add(resolved)
             matches.append(candidate)
 
-        for directory in self.entity_paths:
+        for directory in self.entity_template_paths:
             direct_candidate = directory / relative_id
             if direct_candidate.suffix.lower() != ".json":
                 direct_candidate = direct_candidate.with_suffix(".json")
@@ -157,13 +160,13 @@ class ProjectContext:
         return matches[0]
 
     # ------------------------------------------------------------------
-    # Command definition discovery
+    # Named command discovery
     # ------------------------------------------------------------------
 
-    def command_definition_id(self, command_path: Path) -> str:
-        """Return the canonical command id for a command-definition file."""
+    def named_command_id(self, command_path: Path) -> str:
+        """Return the canonical id for a named-command file."""
         resolved = command_path.resolve()
-        for directory in self.command_paths:
+        for directory in self.named_command_paths:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return str(relative.with_suffix("")).replace("\\", "/")
@@ -171,11 +174,11 @@ class ProjectContext:
                 continue
         return command_path.stem
 
-    def list_command_definition_files(self) -> list[Path]:
-        """Return all command-definition JSON files across all command paths."""
+    def list_named_command_files(self) -> list[Path]:
+        """Return all named-command JSON files across all named-command paths."""
         files: list[Path] = []
         seen: set[Path] = set()
-        for directory in self.command_paths:
+        for directory in self.named_command_paths:
             if not directory.is_dir():
                 continue
             for file_path in sorted(directory.rglob("*.json")):
@@ -186,8 +189,8 @@ class ProjectContext:
                 files.append(file_path)
         return files
 
-    def find_command_definition_matches(self, command_id: str) -> list[Path]:
-        """Return all matching command-definition JSON files for the requested id."""
+    def find_named_command_matches(self, command_id: str) -> list[Path]:
+        """Return all matching named-command JSON files for the requested id."""
         normalized_id = str(command_id).replace("\\", "/").strip()
         if not normalized_id:
             return []
@@ -203,7 +206,7 @@ class ProjectContext:
             seen.add(resolved)
             matches.append(candidate)
 
-        for directory in self.command_paths:
+        for directory in self.named_command_paths:
             direct_candidate = directory / relative_id
             if direct_candidate.suffix.lower() != ".json":
                 direct_candidate = direct_candidate.with_suffix(".json")
@@ -211,14 +214,14 @@ class ProjectContext:
                 _record(direct_candidate)
 
             for candidate in directory.rglob("*.json"):
-                relative_candidate = self.command_definition_id(candidate)
+                relative_candidate = self.named_command_id(candidate)
                 if relative_candidate == normalized_id:
                     _record(candidate)
         return matches
 
-    def find_command_definition(self, command_id: str) -> Path | None:
-        """Return the single matching command-definition JSON file, or *None*."""
-        matches = self.find_command_definition_matches(command_id)
+    def find_named_command(self, command_id: str) -> Path | None:
+        """Return the single matching named-command JSON file, or *None*."""
+        matches = self.find_named_command_matches(command_id)
         if not matches:
             return None
         if len(matches) > 1:
@@ -513,24 +516,29 @@ def load_project(project_path: Path) -> ProjectContext:
             return [fallback] if fallback.is_dir() else []
         return [(project_root / p).resolve() for p in entries]
 
-    variables_path = _resolve_optional_path(
+    shared_variables_path = _resolve_optional_path(
         project_root,
-        raw.get("variables_path"),
-        fallback_name="variables.json",
+        raw.get("shared_variables_path"),
+        fallback_name="shared_variables.json",
     )
-    shared_variables = _load_shared_variables(variables_path)
+    shared_variables = _load_shared_variables(shared_variables_path)
+    if "active_entity_id" in raw:
+        raise ValueError(
+            "project.json must not use 'active_entity_id'; use 'input_targets' instead."
+        )
 
     return ProjectContext(
         project_root=project_root,
         save_dir=(project_root / str(raw.get("save_dir", "saves"))).resolve(),
-        entity_paths=_resolve_paths("entity_paths", "entities"),
+        entity_template_paths=_resolve_paths("entity_template_paths", "entity_templates"),
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
-        command_paths=_resolve_paths("command_paths", "commands"),
+        named_command_paths=_resolve_paths("named_command_paths", "named_commands"),
         dialogue_paths=_resolve_paths("dialogue_paths", "dialogues"),
-        variables_path=variables_path,
+        shared_variables_path=shared_variables_path,
+        global_entities=_resolve_global_entities(raw.get("global_entities")),
         startup_area=_optional_manifest_str(raw.get("startup_area")),
-        active_entity_id=str(raw.get("active_entity_id", "player")),
+        input_targets=_resolve_input_targets(raw.get("input_targets")),
         debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
         shared_variables=shared_variables,
         internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
@@ -581,9 +589,41 @@ def _resolve_input_events(raw_input_events: Any) -> dict[str, str]:
     return resolved
 
 
+def _resolve_input_targets(raw_input_targets: Any) -> dict[str, str]:
+    """Normalize authored project-level input-target overrides."""
+    resolved: dict[str, str] = {}
+    if not isinstance(raw_input_targets, dict):
+        return resolved
+    for raw_action, raw_entity_id in raw_input_targets.items():
+        action = str(raw_action).strip()
+        if not action:
+            continue
+        if raw_entity_id in (None, ""):
+            resolved[action] = ""
+            continue
+        resolved[action] = str(raw_entity_id).strip()
+    return resolved
+
+
 def _optional_manifest_str(value: Any) -> str | None:
     """Normalize an optional manifest string field."""
     if value is None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _resolve_global_entities(raw_global_entities: Any) -> list[dict[str, Any]]:
+    """Return a normalized list of project-level global entity instances."""
+    if raw_global_entities is None:
+        return []
+    if not isinstance(raw_global_entities, list):
+        raise ValueError("project.json field 'global_entities' must be a JSON array.")
+    normalized: list[dict[str, Any]] = []
+    for index, entity_data in enumerate(raw_global_entities):
+        if not isinstance(entity_data, dict):
+            raise ValueError(
+                f"project.json field 'global_entities' must contain JSON objects (invalid entry at index {index})."
+            )
+        normalized.append(json.loads(json.dumps(entity_data)))
+    return normalized

@@ -6,20 +6,22 @@
     "move_down": "move_down",
     "move_left": "move_left",
     "move_right": "move_right",
-    "interact": "interact",
-    "menu": "open_pause_menu"
+    "interact": "interact"
   },
   "variables": {
     "walk_phase": 0
   },
-  "sprite": {
-    "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
-    "frame_width": 16,
-    "frame_height": 16,
-    "frames": [0],
-    "animation_fps": 0,
-    "animate_when_moving": false
-  },
+  "visuals": [
+    {
+      "id": "body",
+      "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0],
+      "animation_fps": 0,
+      "animate_when_moving": false
+    }
+  ],
   "events": {
     "play_bump_sound": {
       "enabled": true,
@@ -52,48 +54,6 @@
         {
           "type": "interact_facing",
           "entity_id": "self"
-        }
-      ]
-    },
-    "open_pause_menu": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "run_event",
-          "entity_id": "dialogue_ui",
-          "event_id": "show_choice_dialogue",
-          "prompt_dialogue_id": "",
-          "prompt_text": null,
-          "prompt_pages": null,
-          "choices": [
-            {
-              "text": "Continue",
-              "commands": []
-            },
-            {
-              "text": "Load",
-              "commands": [
-                {
-                  "type": "load_game"
-                }
-              ]
-            },
-            {
-              "text": "Exit",
-              "commands": [
-                {
-                  "type": "quit_game"
-                }
-              ]
-            }
-          ],
-          "portrait_path": "",
-          "portrait_frame_width": null,
-          "portrait_frame_height": null,
-          "portrait_frame": 0,
-          "on_start_commands": [],
-          "on_finish_commands": [],
-          "command_source_entity_id": "$source_entity_id"
         }
       ]
     },
@@ -165,7 +125,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_sprite_flip_x",
+          "type": "set_visual_flip_x",
           "entity_id": "self",
           "flip_x": "$flip_x"
         },
