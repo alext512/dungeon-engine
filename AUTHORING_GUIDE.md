@@ -603,6 +603,18 @@ Generic per-command lifecycle wrapper fields are removed from the active command
 - use `run_commands` when later commands should wait for an earlier long-running command to finish
 - use `run_detached_commands` when work should overlap in the background
 
+Generic tile-query value sources are also available for explicit spatial lookup:
+
+- `{"$entity_ref": {"entity_id": "$self_id"}}`
+- `{"$entities_at": {"x": ..., "y": ...}}`
+- `{"$entity_at": {"x": ..., "y": ..., "index": 0, "default": null}}`
+- `{"$sum": [base_x, delta_x]}`
+
+`$entity_ref` returns one plain runtime snapshot for an explicit entity id.
+`$entities_at` returns a stable list of plain entity refs for that tile.
+`$entity_at` returns one selected ref from the same stable ordering, including negative indexes such as `-1` for the last item.
+`$sum` is a small numeric helper for explicit authored coordinate math.
+
 ## Area Transfers
 
 `change_area` and `new_game` now support transfer-aware payloads.

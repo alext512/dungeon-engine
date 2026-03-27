@@ -169,27 +169,25 @@ Files:
 
 Current examples:
 
-- `run_facing_event`
-- `interact_facing`
+- none in the active runtime surface
 
 What is happening:
 
-- these commands combine several concerns:
-  - resolve a source entity
-  - inspect facing/collision/interactions
-  - sometimes write variables
-  - sometimes dispatch events
-- sample movement logic still depends on them heavily
+- the old smart facing helpers have been removed from the active runtime surface
+- explicit authored replacement is now available through:
+  - `"$entity_ref"` for runtime tile/facing data
+  - `"$entities_at"` / `"$entity_at"` for tile lookup
+  - `"$sum"` for small coordinate math
+  - explicit `run_event` for dispatch
 
 Why this might conflict with the spirit:
 
-- they may be too "smart" for true primitives
-- they look closer to high-level gameplay convenience than low-level runtime substrate
+- this bucket is now mostly aligned
+- the remaining risk is only where movement/push flows still use `"$facing_state"` as a convenience helper
 
-Open question:
+Residual note:
 
-- should these stay as acceptable high-level orchestration helpers
-- or be broken into smaller explicit primitives over time
+- `"$facing_state"` still keeps some facing-derived movement state in one helper value source, so this area is improved but not fully finished
 
 ### 7. Background command execution and input-while-busy are still hidden scheduling semantics
 

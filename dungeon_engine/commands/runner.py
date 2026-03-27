@@ -244,9 +244,96 @@ def _extract_collection_item(
     if not isinstance(value, (list, tuple)):
         raise TypeError("Collection item lookup with index requires a list or tuple value.")
     resolved_index = int(index)
+    if resolved_index < 0:
+        resolved_index += len(value)
     if 0 <= resolved_index < len(value):
         return copy.deepcopy(value[resolved_index])
     return extracted_value
+
+
+def _coerce_numeric_value(value: Any, *, source_name: str) -> int | float:
+    """Return one numeric value or raise a clear error for value-source math helpers."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{source_name} value source expects numeric values.")
+    return value
+
+
+def _serialize_entity_ref(entity: Any) -> dict[str, Any]:
+    """Return one small plain-data entity reference for authored queries."""
+    return {
+        "entity_id": entity.entity_id,
+        "kind": entity.kind,
+        "space": entity.space,
+        "scope": entity.scope,
+        "grid_x": entity.grid_x,
+        "grid_y": entity.grid_y,
+        "facing": entity.facing,
+        "solid": entity.solid,
+        "pushable": entity.pushable,
+        "present": entity.present,
+        "visible": entity.visible,
+        "events_enabled": entity.events_enabled,
+        "layer": entity.layer,
+        "stack_order": entity.stack_order,
+        "tags": list(entity.tags),
+    }
+
+
+def _resolve_entity_ref_value(context: CommandContext, resolved_source: Any) -> dict[str, Any] | None:
+    """Return one plain-data entity reference for an explicitly chosen entity id."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$entity_ref value source requires a JSON object.")
+    entity_id = str(resolved_source.get("entity_id", "")).strip()
+    if not entity_id:
+        raise ValueError("$entity_ref value source requires a non-empty entity_id.")
+    default = copy.deepcopy(resolved_source.get("default"))
+    entity = context.world.get_entity(entity_id)
+    if entity is None:
+        return default
+    return _serialize_entity_ref(entity)
+
+
+def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) -> list[dict[str, Any]]:
+    """Return plain-data refs for world-space entities at one tile."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$entities_at value source requires a JSON object.")
+    raw_x = resolved_source.get("x")
+    raw_y = resolved_source.get("y")
+    if raw_x is None or raw_y is None:
+        raise ValueError("$entities_at value source requires both x and y.")
+    exclude_entity_id = resolved_source.get("exclude_entity_id")
+    include_hidden = bool(resolved_source.get("include_hidden", False))
+    include_absent = bool(resolved_source.get("include_absent", False))
+    entities = context.world.get_entities_at(
+        int(raw_x),
+        int(raw_y),
+        exclude_entity_id=None if exclude_entity_id in (None, "") else str(exclude_entity_id),
+        include_hidden=include_hidden,
+        include_absent=include_absent,
+    )
+    return [_serialize_entity_ref(entity) for entity in entities]
+
+
+def _resolve_entity_at_value(context: CommandContext, resolved_source: Any) -> Any:
+    """Return one plain-data entity ref selected from a tile query."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$entity_at value source requires a JSON object.")
+    entities = _resolve_entities_at_value(context, resolved_source)
+    return _extract_collection_item(
+        entities,
+        index=resolved_source.get("index", 0),
+        default=resolved_source.get("default"),
+    )
+
+
+def _resolve_sum_value(resolved_source: Any) -> int | float:
+    """Return the numeric sum of a small authored value list."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$sum value source requires a list or tuple.")
+    numeric_values = [_coerce_numeric_value(value, source_name="$sum") for value in resolved_source]
+    if any(isinstance(value, float) for value in numeric_values):
+        return float(sum(float(value) for value in numeric_values))
+    return int(sum(int(value) for value in numeric_values))
 
 
 def _resolve_facing_state_value(context: CommandContext, resolved_source: Any) -> dict[str, Any]:
@@ -341,8 +428,20 @@ def _resolve_runtime_value_source(
             separator=str(resolved_source.get("separator", "\n")),
         )
 
+    if source_name == "$entity_ref":
+        return _resolve_entity_ref_value(context, resolved_source)
+
+    if source_name == "$sum":
+        return _resolve_sum_value(resolved_source)
+
     if source_name == "$facing_state":
         return _resolve_facing_state_value(context, resolved_source)
+
+    if source_name == "$entities_at":
+        return _resolve_entities_at_value(context, resolved_source)
+
+    if source_name == "$entity_at":
+        return _resolve_entity_at_value(context, resolved_source)
 
     if source_name == "$collection_item":
         if not isinstance(resolved_source, dict):
@@ -480,8 +579,12 @@ def _resolve_runtime_values(
                 "$json_file",
                 "$wrapped_lines",
                 "$text_window",
+                "$entity_ref",
                 "$facing_state",
+                "$entities_at",
+                "$entity_at",
                 "$collection_item",
+                "$sum",
             }:
                 return _resolve_runtime_value_source(
                     source_name,

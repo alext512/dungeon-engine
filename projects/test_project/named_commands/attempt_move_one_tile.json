@@ -59,9 +59,10 @@
           "value": "movable",
           "then": [
             {
-              "type": "run_facing_event",
-              "entity_id": "self",
-              "event_id": "$push_event_id"
+              "type": "run_event",
+              "entity_id": "$self.move_attempt_info.entity_id",
+              "event_id": "$push_event_id",
+              "actor_entity_id": "$self_id"
             },
             {
               "type": "set_entity_var",
