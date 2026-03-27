@@ -2,51 +2,45 @@
   "params": [],
   "commands": [
     {
-      "type": "set_var_from_collection_item",
+      "type": "set_entity_var_from_collection_item",
       "name": "dialogue_current_selected_option",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "value": "$self.dialogue_current_segment_options",
       "index": "$self.dialogue_choice_index",
       "default": {}
     },
     {
-      "type": "set_var_from_collection_item",
+      "type": "set_entity_var_from_collection_item",
       "name": "dialogue_current_selected_option_id",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "value": "$self.dialogue_current_selected_option",
       "key": "option_id",
       "default": ""
     },
     {
-      "type": "set_var_length",
+      "type": "set_entity_var_length",
       "name": "dialogue_current_option_commands_by_id_count",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "value": "$self.dialogue_current_option_commands_by_id"
     },
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_current_selected_option_id",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "neq",
       "value": "",
       "then": [
         {
-          "type": "check_var",
+          "type": "check_entity_var",
           "name": "dialogue_current_option_commands_by_id_count",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "op": "gt",
           "value": 0,
           "then": [
             {
-              "type": "set_var_from_collection_item",
+              "type": "set_entity_var_from_collection_item",
               "name": "dialogue_current_selected_option_commands",
-              "scope": "entity",
-              "entity_id": "self",
+              "entity_id": "$self_id",
               "value": "$self.dialogue_current_option_commands_by_id",
               "key": "$self.dialogue_current_selected_option_id",
               "default": []
@@ -54,10 +48,9 @@
           ],
           "else": [
             {
-              "type": "set_var_from_collection_item",
+              "type": "set_entity_var_from_collection_item",
               "name": "dialogue_current_selected_option_commands",
-              "scope": "entity",
-              "entity_id": "self",
+              "entity_id": "$self_id",
               "value": "$self.dialogue_current_option_commands",
               "index": "$self.dialogue_choice_index",
               "default": []
@@ -67,10 +60,9 @@
       ],
       "else": [
         {
-          "type": "set_var_from_collection_item",
+          "type": "set_entity_var_from_collection_item",
           "name": "dialogue_current_selected_option_commands",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "value": "$self.dialogue_current_option_commands",
           "index": "$self.dialogue_choice_index",
           "default": []
@@ -78,29 +70,28 @@
       ]
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_confirm_revision_snapshot",
       "value": "$self.dialogue_revision"
     },
     {
       "type": "run_commands",
-      "commands": "$self.dialogue_current_selected_option_commands"
+      "commands": "$self.dialogue_current_selected_option_commands",
+      "actor_entity_id": "$self.dialogue_actor_id",
+      "caller_entity_id": "$self.dialogue_caller_id"
     },
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_open",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "eq",
       "value": true,
       "then": [
         {
-          "type": "check_var",
+          "type": "check_entity_var",
           "name": "dialogue_revision",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "op": "eq",
           "value": "$self.dialogue_confirm_revision_snapshot",
           "then": [

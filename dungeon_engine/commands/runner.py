@@ -401,6 +401,9 @@ def _resolve_deferred_runtime_value(
 
 _DEFERRED_RUNTIME_COMMAND_KEYS: dict[str, set[str]] = {
     "check_var": {"then", "else"},
+    "check_world_var": {"then", "else"},
+    "check_entity_var": {"then", "else"},
+    "run_event": {"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
     "run_commands": {"commands"},
     "run_detached_commands": {"commands"},
     "run_commands_for_collection": {"commands"},

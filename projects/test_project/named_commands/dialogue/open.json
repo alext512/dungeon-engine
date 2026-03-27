@@ -8,17 +8,15 @@
   ],
   "commands": [
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_open",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "eq",
       "value": true,
       "then": [
         {
-          "type": "append_to_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "append_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_state_stack",
           "value": {
             "dialogue_path": "$self.dialogue_path",
@@ -54,86 +52,74 @@
       "path": "$dialogue_path"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_open",
       "value": true
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_path",
       "value": "$dialogue_path"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_on_end",
       "value": "$dialogue_on_end"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_segment_hooks",
       "value": "$segment_hooks"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_allow_cancel",
       "value": "$allow_cancel"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_actor_id",
       "value": "$actor_entity_id"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_caller_id",
       "value": "$caller_entity_id"
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_segment_index",
       "value": 0
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_source_page_index",
       "value": 0
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_text_line_offset",
       "value": 0
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_choice_index",
       "value": 0
     },
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_current_speaker_id",
       "value": null
     },

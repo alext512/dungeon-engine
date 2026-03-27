@@ -46,6 +46,7 @@ from dungeon_engine.world.persistence import (
     save_data_to_dict,
 )
 from dungeon_engine.engine.asset_manager import AssetManager
+from dungeon_engine.engine.text import TextRenderer
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -636,6 +637,36 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
+    def test_named_command_validation_rejects_removed_broad_variable_commands(self) -> None:
+        for command_name in (
+            "set_var",
+            "increment_var",
+            "set_var_length",
+            "append_to_var",
+            "pop_var",
+            "set_var_from_collection_item",
+            "check_var",
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    commands={
+                        "legacy_var.json": {
+                            "params": [],
+                            "commands": [{"type": command_name}],
+                        }
+                    }
+                )
+
+                with self.assertRaises(NamedCommandValidationError) as raised:
+                    validate_project_named_commands(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
+
     def test_set_var_from_json_file_loads_project_relative_dialogue_data(self) -> None:
         _, project = self._make_project(
             dialogues={
@@ -777,7 +808,289 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(controller.variables["has_more"])
         self.assertEqual(controller.variables["total_lines"], 4)
 
-    def test_append_and_pop_var_support_nested_dialogue_snapshots(self) -> None:
+    def test_explicit_entity_var_primitives_manage_values_and_branching(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "mode",
+                "value": "menu",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "increment_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "choice_index",
+                "amount": 2,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "append_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_state_stack",
+                "value": {"dialogue_path": "dialogues/system/title_menu.json"},
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "append_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_state_stack",
+                "value": {"dialogue_path": "dialogues/system/save_prompt.json"},
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var_length",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "stack_count",
+                "value": [{"a": 1}, {"b": 2}],
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var_from_collection_item",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "selected_option",
+                "value": [
+                    {"option_id": "new_game"},
+                    {"option_id": "load_game"},
+                ],
+                "index": 1,
+                "default": {},
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "pop_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "dialogue_state_stack",
+                "store_var": "restored_snapshot",
+                "default": {},
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "check_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "mode",
+                "op": "eq",
+                "value": "menu",
+                "then": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "dialogue_controller",
+                        "name": "branch_hit",
+                        "value": True,
+                    }
+                ],
+            },
+        ).update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(controller.variables["mode"], "menu")
+        self.assertEqual(controller.variables["choice_index"], 2)
+        self.assertEqual(controller.variables["stack_count"], 2)
+        self.assertEqual(controller.variables["selected_option"], {"option_id": "load_game"})
+        self.assertEqual(
+            controller.variables["dialogue_state_stack"],
+            [{"dialogue_path": "dialogues/system/title_menu.json"}],
+        )
+        self.assertEqual(
+            controller.variables["restored_snapshot"],
+            {"dialogue_path": "dialogues/system/save_prompt.json"},
+        )
+        self.assertTrue(controller.variables["branch_hit"])
+
+    def test_explicit_world_var_primitives_manage_values_and_branching(self) -> None:
+        registry, context = self._make_command_context()
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_world_var",
+            {
+                "name": "mode",
+                "value": "play",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "increment_world_var",
+            {
+                "name": "turn_count",
+                "amount": 3,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "append_world_var",
+            {
+                "name": "visited_rooms",
+                "value": "village_square",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "append_world_var",
+            {
+                "name": "visited_rooms",
+                "value": "village_house",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_world_var_length",
+            {
+                "name": "visited_room_count",
+                "value": context.world.variables["visited_rooms"],
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_world_var_from_collection_item",
+            {
+                "name": "latest_room",
+                "value": context.world.variables["visited_rooms"],
+                "index": 1,
+                "default": "",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "pop_world_var",
+            {
+                "name": "visited_rooms",
+                "store_var": "popped_room",
+                "default": "",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "check_world_var",
+            {
+                "name": "mode",
+                "op": "eq",
+                "value": "play",
+                "then": [
+                    {
+                        "type": "set_world_var",
+                        "name": "world_branch_hit",
+                        "value": True,
+                    }
+                ],
+            },
+        ).update(0.0)
+
+        self.assertEqual(context.world.variables["mode"], "play")
+        self.assertEqual(context.world.variables["turn_count"], 3)
+        self.assertEqual(context.world.variables["visited_room_count"], 2)
+        self.assertEqual(context.world.variables["latest_room"], "village_house")
+        self.assertEqual(context.world.variables["visited_rooms"], ["village_square"])
+        self.assertEqual(context.world.variables["popped_room"], "village_house")
+        self.assertTrue(context.world.variables["world_branch_hit"])
+
+    def test_explicit_var_primitives_persist_when_requested(self) -> None:
+        _, project = self._make_project()
+        authored_world = World()
+        authored_world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("test_room", authored_world=authored_world)
+
+        live_world = World()
+        live_world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_world_var",
+            {
+                "name": "door_open",
+                "value": True,
+                "persistent": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "mode",
+                "value": "choice",
+                "persistent": True,
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertTrue(area_state.variables["door_open"])
+        self.assertEqual(
+            area_state.entities["dialogue_controller"].overrides["variables"]["mode"],
+            "choice",
+        )
+
+    def test_registry_filters_inherited_runtime_params_for_explicit_primitives(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "mode",
+                "value": "nested_dialogue",
+                "source_entity_id": "dialogue_controller",
+                "actor_entity_id": "player",
+                "caller_entity_id": "lever",
+                "scope": "entity",
+                "unused_named_param": 42,
+            },
+        ).update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(controller.variables["mode"], "nested_dialogue")
+
+    def test_append_and_pop_entity_var_support_nested_dialogue_snapshots(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
         registry, context = self._make_command_context(world=world)
@@ -785,9 +1098,8 @@ class StrictContentIdTests(unittest.TestCase):
         append_parent = execute_registered_command(
             registry,
             context,
-            "append_to_var",
+            "append_entity_var",
             {
-                "scope": "entity",
                 "entity_id": "dialogue_controller",
                 "name": "dialogue_state_stack",
                 "value": {"dialogue_path": "dialogues/system/title_menu.json", "choice_index": 1},
@@ -798,9 +1110,8 @@ class StrictContentIdTests(unittest.TestCase):
         append_child = execute_registered_command(
             registry,
             context,
-            "append_to_var",
+            "append_entity_var",
             {
-                "scope": "entity",
                 "entity_id": "dialogue_controller",
                 "name": "dialogue_state_stack",
                 "value": {"dialogue_path": "dialogues/system/save_prompt.json", "choice_index": 0},
@@ -811,9 +1122,8 @@ class StrictContentIdTests(unittest.TestCase):
         pop_handle = execute_registered_command(
             registry,
             context,
-            "pop_var",
+            "pop_entity_var",
             {
-                "scope": "entity",
                 "entity_id": "dialogue_controller",
                 "name": "dialogue_state_stack",
                 "store_var": "restored_snapshot",
@@ -928,6 +1238,36 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(
             any("uses removed command 'if_var'" in issue for issue in raised.exception.issues)
         )
+
+    def test_area_validation_rejects_removed_broad_variable_commands(self) -> None:
+        for command_name in (
+            "set_var",
+            "increment_var",
+            "set_var_length",
+            "append_to_var",
+            "pop_var",
+            "set_var_from_collection_item",
+            "check_var",
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    areas={
+                        "test_room.json": {
+                            **_minimal_area(),
+                            "enter_commands": [{"type": command_name}],
+                        }
+                    }
+                )
+
+                with self.assertRaises(AreaValidationError) as raised:
+                    validate_project_areas(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
 
     def test_area_validation_rejects_on_complete_in_entity_event(self) -> None:
         _, project = self._make_project(
@@ -1234,6 +1574,25 @@ class StrictContentIdTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             asset_manager.get_image("assets/project/missing.png")
 
+    def test_sample_pixelbet_font_includes_choice_cursor_glyphs(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        self.addCleanup(pygame.quit)
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        asset_manager = AssetManager(project)
+        text_renderer = TextRenderer(asset_manager)
+
+        font = text_renderer.get_font("pixelbet")
+
+        self.assertIn(">", font.glyphs)
+        self.assertIn("<", font.glyphs)
+        self.assertGreater(text_renderer.measure_text("><", font_id="pixelbet")[0], 0)
+
     def test_save_data_ignores_removed_legacy_session_fields(self) -> None:
         save_data = save_data_from_dict(
             {
@@ -1355,6 +1714,145 @@ class StrictContentIdTests(unittest.TestCase):
             game._advance_simulation_tick(1 / 60)
 
         self.assertEqual(game.area.area_id, "village_square")
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_title_screen_dialogue_held_direction_repeats_after_delay(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        title_area_path = project.resolve_area_reference("title_screen")
+        assert title_area_path is not None
+
+        game = Game(area_path=title_area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        controller = game.world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(controller.variables["dialogue_choice_index"], 0)
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)])
+        game._advance_simulation_tick(1 / 60)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 1)
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)])
+        game._advance_simulation_tick(1 / 60)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 1)
+
+        for _ in range(5):
+            game._advance_simulation_tick(1 / 60)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 1)
+
+        for _ in range(7):
+            game._advance_simulation_tick(1 / 60)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 2)
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYUP, key=pygame.K_DOWN)])
+        for _ in range(10):
+            game._advance_simulation_tick(1 / 60)
+        self.assertEqual(controller.variables["dialogue_choice_index"], 2)
+
+    def test_sample_timer_dialogue_segment_advances_without_input(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        controller = game.world.get_entity("dialogue_controller")
+        assert controller is not None
+
+        game.command_runner.enqueue(
+            "run_event",
+            entity_id="dialogue_controller",
+            event_id="open_dialogue",
+            dialogue_path="dialogues/showcase/village_square_note.json",
+            dialogue_on_start=[],
+            dialogue_on_end=[],
+            segment_hooks=[],
+            allow_cancel=False,
+            actor_entity_id="player",
+            caller_entity_id="player",
+        )
+        for _ in range(4):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertEqual(controller.variables["dialogue_segment_index"], 0)
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+        game._advance_simulation_tick(1 / 60)
+
+        self.assertEqual(controller.variables["dialogue_segment_index"], 1)
+        self.assertIn("cool breeze", controller.variables["dialogue_current_visible_text"])
+
+        for _ in range(80):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertEqual(controller.variables["dialogue_segment_index"], 2)
+        self.assertIn("Use the save point", controller.variables["dialogue_current_visible_text"])
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_sample_lever_dialogue_segment_hook_uses_stored_caller_context(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_house")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        lever = game.world.get_entity("house_lever")
+        gate = game.world.get_entity("house_gate")
+        controller = game.world.get_entity("dialogue_controller")
+        assert lever is not None
+        assert gate is not None
+        assert controller is not None
+
+        game.command_runner.enqueue(
+            "run_event",
+            entity_id="house_lever",
+            event_id="interact",
+            actor_entity_id="player",
+        )
+        for _ in range(4):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertTrue(controller.variables["dialogue_open"])
+        self.assertEqual(controller.variables["dialogue_caller_id"], "house_lever")
+
+        for _ in range(2):
+            game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+            game._advance_simulation_tick(1 / 60)
+
+        for _ in range(4):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertFalse(controller.variables["dialogue_open"])
+        self.assertTrue(lever.variables["toggled"])
+        self.assertFalse(gate.visible)
+        self.assertFalse(gate.solid)
+        self.assertEqual(lever.require_visual("main").tint, (150, 150, 150))
         self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_controller_owned_dialogue_restores_nested_snapshot_and_input_routes(self) -> None:
@@ -1757,9 +2255,8 @@ class StrictContentIdTests(unittest.TestCase):
                 "open_dialogue": EntityEvent(
                     commands=[
                         {
-                            "type": "set_var",
-                            "scope": "entity",
-                            "entity_id": "caller",
+                            "type": "set_entity_var",
+                            "entity_id": "$caller_id",
                             "name": "toggled",
                             "value": True,
                         }
@@ -1794,9 +2291,8 @@ class StrictContentIdTests(unittest.TestCase):
                     "params": [],
                     "commands": [
                         {
-                            "type": "set_var",
-                            "scope": "entity",
-                            "entity_id": "caller",
+                            "type": "set_entity_var",
+                            "entity_id": "$caller_id",
                             "name": "toggled",
                             "value": True,
                         }
@@ -1837,9 +2333,8 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "commands": [
                     {
-                        "type": "set_var",
-                        "scope": "entity",
-                        "entity_id": "caller",
+                        "type": "set_entity_var",
+                        "entity_id": "$caller_id",
                         "name": "toggled",
                         "value": True,
                     }

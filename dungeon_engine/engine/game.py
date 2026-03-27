@@ -173,7 +173,7 @@ class Game:
         if self.animation_system is None:
             raise RuntimeError("Game runtime is missing an animation system.")
 
-        self.input_handler.enqueue_held_movement_if_idle()
+        self.input_handler.update_held_direction_repeat(dt)
         self.command_runner.update(0.0)
         self.movement_system.update_tick()
         self.animation_system.update_tick(dt)

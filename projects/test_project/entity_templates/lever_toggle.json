@@ -10,7 +10,9 @@
       "path": "assets/project/sprites/object_sheet.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frames": [1]
+      "frames": [
+        1
+      ]
     }
   ],
   "events": {
@@ -18,9 +20,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
           "name": "toggled",
           "op": "eq",
           "value": false,
@@ -54,9 +55,8 @@
                 {
                   "on_end": [
                     {
-                      "type": "set_var",
-                      "scope": "entity",
-                      "entity_id": "caller",
+                      "type": "set_entity_var",
+                      "entity_id": "$caller_id",
                       "name": "toggled",
                       "value": true,
                       "persistent": true
@@ -79,7 +79,11 @@
                       "type": "set_entity_field",
                       "entity_id": "caller",
                       "field_name": "visuals.main.tint",
-                      "value": [150, 150, 150],
+                      "value": [
+                        150,
+                        150,
+                        150
+                      ],
                       "persistent": true
                     }
                   ]
@@ -120,9 +124,8 @@
                 {
                   "on_end": [
                     {
-                      "type": "set_var",
-                      "scope": "entity",
-                      "entity_id": "caller",
+                      "type": "set_entity_var",
+                      "entity_id": "$caller_id",
                       "name": "toggled",
                       "value": false,
                       "persistent": true
@@ -145,7 +148,11 @@
                       "type": "set_entity_field",
                       "entity_id": "caller",
                       "field_name": "visuals.main.tint",
-                      "value": [255, 255, 255],
+                      "value": [
+                        255,
+                        255,
+                        255
+                      ],
                       "persistent": true
                     }
                   ]

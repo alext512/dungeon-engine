@@ -2,10 +2,9 @@
   "params": [],
   "commands": [
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_allow_cancel",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "eq",
       "value": true,
       "then": [

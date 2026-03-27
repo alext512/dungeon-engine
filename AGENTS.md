@@ -30,6 +30,7 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 
 | File | What It Tells You |
 |---|---|
+| `PROJECT_SPIRIT.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
 | `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
 | `MANUAL.md` | Practical guide for running the engine and authoring project content |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |

@@ -282,7 +282,42 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
         if command_type == "if_var":
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'if_var'; "
-                "use 'check_var' instead."
+                "use 'check_world_var' or 'check_entity_var' instead."
+            )
+        if command_type == "set_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_var'; "
+                "use 'set_world_var' or 'set_entity_var' instead."
+            )
+        if command_type == "increment_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'increment_var'; "
+                "use 'increment_world_var' or 'increment_entity_var' instead."
+            )
+        if command_type == "set_var_length":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_var_length'; "
+                "use 'set_world_var_length' or 'set_entity_var_length' instead."
+            )
+        if command_type == "append_to_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'append_to_var'; "
+                "use 'append_world_var' or 'append_entity_var' instead."
+            )
+        if command_type == "pop_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'pop_var'; "
+                "use 'pop_world_var' or 'pop_entity_var' instead."
+            )
+        if command_type == "set_var_from_collection_item":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'set_var_from_collection_item'; "
+                "use 'set_world_var_from_collection_item' or 'set_entity_var_from_collection_item' instead."
+            )
+        if command_type == "check_var":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'check_var'; "
+                "use 'check_world_var' or 'check_entity_var' instead."
             )
         for key, item in value.items():
             _validate_command_tree(

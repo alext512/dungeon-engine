@@ -18,18 +18,16 @@
           "dialogue_path": "dialogues/system/pause_menu.json",
           "dialogue_on_start": [
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "pending_pause_menu_action",
               "value": ""
             }
           ],
           "dialogue_on_end": [
             {
-              "type": "check_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
               "name": "pending_pause_menu_action",
               "op": "eq",
               "value": "load",
@@ -40,9 +38,8 @@
               ]
             },
             {
-              "type": "check_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
               "name": "pending_pause_menu_action",
               "op": "eq",
               "value": "exit",
@@ -53,9 +50,8 @@
               ]
             },
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "pending_pause_menu_action",
               "value": ""
             }
@@ -66,18 +62,16 @@
                 "continue": [],
                 "load": [
                   {
-                    "type": "set_var",
-                    "scope": "entity",
-                    "entity_id": "self",
+                    "type": "set_entity_var",
+                    "entity_id": "$self_id",
                     "name": "pending_pause_menu_action",
                     "value": "load"
                   }
                 ],
                 "exit": [
                   {
-                    "type": "set_var",
-                    "scope": "entity",
-                    "entity_id": "self",
+                    "type": "set_entity_var",
+                    "entity_id": "$self_id",
                     "name": "pending_pause_menu_action",
                     "value": "exit"
                   }
