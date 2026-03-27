@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import copy
-import json
 import logging
-from pathlib import Path
 from typing import Any
 
 from dungeon_engine import config
@@ -27,8 +25,6 @@ from dungeon_engine.world.entity import DIRECTION_VECTORS
 from dungeon_engine.world.loader import instantiate_entity
 
 logger = logging.getLogger(__name__)
-
-_JSON_FILE_CACHE: dict[Path, Any] = {}
 
 
 class MovementCommandHandle(CommandHandle):
@@ -538,26 +534,6 @@ def _extract_collection_item(
     if 0 <= resolved_index < len(value):
         return copy.deepcopy(value[resolved_index])
     return extracted_value
-
-
-def _resolve_json_file_path(context: CommandContext, path: str) -> Path:
-    """Resolve one JSON file path relative to the active project when needed."""
-    resolved_path = Path(str(path).strip())
-    if not resolved_path.is_absolute():
-        if context.project is not None:
-            resolved_path = context.project.project_root / resolved_path
-        else:
-            resolved_path = Path.cwd() / resolved_path
-    return resolved_path.resolve()
-
-
-def _load_json_file(path: Path) -> Any:
-    """Load one JSON file through a small in-memory cache."""
-    cached = _JSON_FILE_CACHE.get(path)
-    if cached is None:
-        cached = json.loads(path.read_text(encoding="utf-8"))
-        _JSON_FILE_CACHE[path] = cached
-    return copy.deepcopy(cached)
 
 
 def _resolve_facing_direction(entity, direction: str | None) -> str:
@@ -1477,193 +1453,39 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("set_var_from_json_file")
     def set_var_from_json_file(
-        context: CommandContext,
-        *,
-        name: str,
-        path: str,
-        scope: str = "entity",
-        persistent: bool = False,
-        entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Load one JSON file into an entity/world variable."""
-        resolved_path = _resolve_json_file_path(context, str(path))
-        value = _load_json_file(resolved_path)
-        _store_variable(
-            context,
-            scope=scope,
-            entity_id=entity_id,
-            name=name,
-            value=value,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
+        """Reject the removed JSON-file-to-var helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_var_from_json_file was removed; use explicit variable commands with "
+            "value sources like {'$json_file': 'dialogues/menu.json'} instead."
         )
-        if persistent:
-            _persist_variable_value(
-                context,
-                scope=scope,
-                entity_id=entity_id,
-                name=name,
-                value=value,
-                source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
-            )
-        return ImmediateHandle()
 
     @registry.register("set_var_from_wrapped_lines")
     def set_var_from_wrapped_lines(
-        context: CommandContext,
-        *,
-        name: str,
-        text: str | None = None,
-        max_width: int,
-        font_id: str = config.DEFAULT_UI_FONT_ID,
-        scope: str = "entity",
-        persistent: bool = False,
-        entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Wrap text into individual lines and store the resulting list."""
-        if context.text_renderer is None:
-            raise ValueError("Cannot wrap text without an active text renderer.")
-        wrapped_lines = context.text_renderer.wrap_lines(
-            "" if text is None else str(text),
-            int(max_width),
-            font_id=str(font_id),
+        """Reject the removed wrapped-lines-to-var helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_var_from_wrapped_lines was removed; use explicit variable commands with "
+            "value sources like {'$wrapped_lines': {...}} instead."
         )
-        _store_variable(
-            context,
-            scope=scope,
-            entity_id=entity_id,
-            name=name,
-            value=wrapped_lines,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        if persistent:
-            _persist_variable_value(
-                context,
-                scope=scope,
-                entity_id=entity_id,
-                name=name,
-                value=wrapped_lines,
-                source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
-            )
-        return ImmediateHandle()
 
     @registry.register("set_var_from_text_window")
     def set_var_from_text_window(
-        context: CommandContext,
-        *,
-        name: str,
-        lines: Any = None,
-        start: int = 0,
-        max_lines: int = 1,
-        separator: str = "\n",
-        store_has_more_var: str | None = None,
-        store_total_var: str | None = None,
-        scope: str = "entity",
-        persistent: bool = False,
-        entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Store one visible text window and optional metadata from a wrapped line list."""
-        if lines is None:
-            normalized_lines: list[str] = []
-        elif isinstance(lines, str):
-            normalized_lines = [str(lines)]
-        elif isinstance(lines, (list, tuple)):
-            normalized_lines = [str(item) for item in lines]
-        else:
-            raise TypeError("set_var_from_text_window requires lines to be a list, tuple, string, or null.")
-
-        resolved_start = max(0, int(start))
-        resolved_max_lines = max(0, int(max_lines))
-        visible_lines = normalized_lines[resolved_start : resolved_start + resolved_max_lines]
-        visible_text = str(separator).join(visible_lines)
-        has_more = resolved_start + resolved_max_lines < len(normalized_lines)
-
-        _store_variable(
-            context,
-            scope=scope,
-            entity_id=entity_id,
-            name=name,
-            value=visible_text,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
+        """Reject the removed text-window-to-var helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "set_var_from_text_window was removed; use explicit variable commands with "
+            "value sources like {'$text_window': {...}} instead."
         )
-        if store_has_more_var:
-            _store_variable(
-                context,
-                scope=scope,
-                entity_id=entity_id,
-                name=store_has_more_var,
-                value=has_more,
-                source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
-            )
-        if store_total_var:
-            _store_variable(
-                context,
-                scope=scope,
-                entity_id=entity_id,
-                name=store_total_var,
-                value=len(normalized_lines),
-                source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
-            )
-
-        if persistent:
-            _persist_variable_value(
-                context,
-                scope=scope,
-                entity_id=entity_id,
-                name=name,
-                value=visible_text,
-                source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
-            )
-            if store_has_more_var:
-                _persist_variable_value(
-                    context,
-                    scope=scope,
-                    entity_id=entity_id,
-                    name=store_has_more_var,
-                    value=has_more,
-                    source_entity_id=source_entity_id,
-                    actor_entity_id=actor_entity_id,
-                    caller_entity_id=caller_entity_id,
-                )
-            if store_total_var:
-                _persist_variable_value(
-                    context,
-                    scope=scope,
-                    entity_id=entity_id,
-                    name=store_total_var,
-                    value=len(normalized_lines),
-                    source_entity_id=source_entity_id,
-                    actor_entity_id=actor_entity_id,
-                    caller_entity_id=caller_entity_id,
-                )
-        return ImmediateHandle()
 
     @registry.register("play_screen_animation")
     def play_screen_animation(

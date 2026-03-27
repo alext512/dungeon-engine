@@ -256,8 +256,8 @@ They are useful when:
 
 The sample project keeps reusable dialogue/menu data under `dialogues/`, but
 those files are no longer a special manifest-indexed content type. They are
-ordinary JSON files loaded through generic commands such as
-`set_var_from_json_file`.
+ordinary JSON files loaded through explicit variable commands with value
+sources such as `{"$json_file": "dialogues/system/pause_menu.json"}`.
 
 Top-level fields:
 
