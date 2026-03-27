@@ -9,6 +9,13 @@ gameplay behaviors can be authored as reusable JSON commands.
 This note is intentionally concrete enough to survive context compression or a
 handoff to another agent.
 
+Historical note:
+
+- Parts of the progress log below describe intermediate slices that have since been superseded.
+- The current runtime no longer uses authored `run_dialogue`.
+- The active dialogue/input model is controller-driven `start_dialogue_session` plus per-action `input_targets` and modal route restore through `push_input_routes` / `pop_input_routes`.
+- The active runtime now also has authored area `entry_points`, transfer-aware area transitions, traveler persistence for moved entities, and explicit command-addressable camera state with saved follow/bounds/deadzone data.
+
 ## Current progress
 
 Implemented in the first movement-foundation slice:
@@ -57,7 +64,8 @@ Implemented in the first movement-foundation slice:
   - `set_event_enabled`
   - `set_events_enabled`
 - Built-in input/control primitives now include:
-  - `set_active_entity`
+  - `set_input_target`
+  - `route_inputs_to_entity`
   - `set_input_event_name`
 - Built-in entity lifecycle primitives now include:
   - `set_present`
@@ -65,13 +73,14 @@ Implemented in the first movement-foundation slice:
   - `destroy_entity`
 - Input now drives project-authored player movement events instead of a
   hardcoded engine movement command.
-- The world now tracks `active_entity_id`, so inputs are routed to the current
-  active entity rather than being inherently player-specific.
-- Project manifests now define the default `active_entity_id` and default
-  `input_events`, while areas may still override `active_entity_id`.
-- Project manifests now also define `command_paths`, and `run_named_command`
+- The world now tracks per-action `input_targets`, so inputs are routed to the
+  currently configured target for each logical action rather than being inherently
+  player-specific.
+- Project manifests now define default `input_targets` and default
+  `input_events`, while areas may still override `input_targets`.
+- Project manifests now also define `named_command_paths`, and `run_named_command`
   loads reusable JSON command definitions from there on demand.
-- Command ids are now path-based relative to `command_paths`, so nested command
+- Command ids are now path-based relative to `named_command_paths`, so nested command
   folders stay unambiguous.
 - Named-command validation now runs at project startup for both the game and
   editor:
@@ -103,7 +112,7 @@ Implemented in the first movement-foundation slice:
   - a 16 px move over 16 ticks advances by exactly 1 px per simulation tick
 - Command-driven animation playback is now advanced by simulation ticks as
   well, matching the old project's `_physics_process` style more closely.
-- `test_project/entities/player.json` now owns the first project-authored move
+- `test_project/entity_templates/player.json` now owns the first project-authored move
   recipes through `move_up`, `move_down`, `move_left`, and `move_right`.
 - The runtime now also has a generic screen-space element layer with command
   primitives for:

@@ -1,56 +1,64 @@
 # Dungeon Engine
 
-A command-driven 2D puzzle/RPG engine in Python with JSON-authored gameplay, a built-in level editor, dialogue tools, and reusable entity/event systems.
+A command-driven 2D puzzle/RPG engine in Python with JSON-authored gameplay, a standalone level editor, reusable entity templates, and controller-driven dialogue.
 
 ## What It Is
 
 This project is a focused top-down puzzle/RPG engine built with `pygame-ce`.
 
-It is designed around a few core ideas:
+Core ideas:
 
-- gameplay is authored through JSON command chains instead of hardcoded one-off scripts
-- entities own reusable named events like `move_up`, `interact`, and custom behaviors
+- gameplay is authored through JSON command chains instead of one-off Python scripts
+- entities own named events such as `move_up`, `interact`, and custom behaviors
 - projects live outside the engine package and are loaded through `project.json`
-- the game and the editor share the same room/entity data model
+- the game and the editor share the same area/entity data model
 
 The repo includes a working sample project under [projects/test_project](./projects/test_project/).
 
 ## Current Features
 
 - standalone game launcher and standalone level editor
-- project manifests with configurable search paths for areas, entities, commands, dialogues, and assets
-- path-derived IDs for areas, named commands, and dialogue assets
+- project manifests with configurable search paths for areas, entity templates, named commands, dialogues, assets, shared variables, and project-level `global_entities`
+- path-derived IDs for areas, entity templates, named commands, and dialogues
 - layered tilemaps with separate walkability data
 - reusable entity templates with per-instance parameters
-- command runner with primitive engine commands plus reusable project-level named commands
-- command-driven grid movement, interaction, pushing, and animation
-- dialogue assets, screen-space UI elements, and entity-driven dialogue flow
-- text sessions for paged dialogue text and marquee-style long option text
-- entity-owned input maps plus active-entity focus handoff
-- startup validation for areas, entity templates, dialogues, and named command libraries
-- persistence foundation with save-slot overrides layered on top of authored room data
+- entities with `visuals`, `space`, `scope`, `input_map`, events, and variables
+- command-driven movement, interaction, pushing, animation, and persistence
+- controller-driven dialogue sessions using reusable dialogue assets plus caller-supplied segment hooks
+- per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
+- transfer-aware `change_area` and `new_game` flow using authored area `entry_points`
+- traveler persistence so transferred entities exist in one area at a time and do not duplicate on re-entry
+- explicit camera runtime state with authored area defaults, follow offsets, bounds, deadzones, and save/load restore
+- save-slot persistence layered on top of authored room data
 - standalone editor with paint/select workflow, tileset browser, layer management, and entity inspection
 
 ## Sample Project
 
-The included sample room currently demonstrates:
+The included sample project currently demonstrates:
 
+- a `title_screen` area that auto-opens a choice dialogue through an area `enter_commands` hook
+- connected showcase areas: `village_square` and `village_house`
+- project-level global `dialogue_controller` and `pause_controller` entities defined in `project.json`
 - player movement with authored walk animation timing
 - pushable blocks
-- lever/gate interaction
-- sign dialogue
-- portrait-backed NPC dialogue
-- dialogue choices, long-choice marquee text, and scrolling menus with more than three options
+- lever/gate interaction with persistent puzzle state
+- authored area `entry_points` and door-driven actor transfer between showcase areas
+- explicit per-area camera defaults that follow the transferred gameplay entity
+- signs, save prompts, pause menus, and title menus routed through controller entities with stack-based input restore
 
 Useful files to inspect:
 
 - [projects/test_project/project.json](./projects/test_project/project.json)
-- [projects/test_project/variables.json](./projects/test_project/variables.json)
+- [projects/test_project/shared_variables.json](./projects/test_project/shared_variables.json)
 - [projects/test_project/areas/title_screen.json](./projects/test_project/areas/title_screen.json)
 - [projects/test_project/areas/village_square.json](./projects/test_project/areas/village_square.json)
-- [projects/test_project/entities/player.json](./projects/test_project/entities/player.json)
-- [projects/test_project/entities/dialogue_ui.json](./projects/test_project/entities/dialogue_ui.json)
-- [projects/test_project/dialogues](./projects/test_project/dialogues)
+- [projects/test_project/areas/village_house.json](./projects/test_project/areas/village_house.json)
+- [projects/test_project/entity_templates/player.json](./projects/test_project/entity_templates/player.json)
+- [projects/test_project/entity_templates/dialogue_panel.json](./projects/test_project/entity_templates/dialogue_panel.json)
+- [projects/test_project/entity_templates/pause_controller.json](./projects/test_project/entity_templates/pause_controller.json)
+- [projects/test_project/entity_templates/lever_toggle.json](./projects/test_project/entity_templates/lever_toggle.json)
+- [projects/test_project/dialogues/system/title_menu.json](./projects/test_project/dialogues/system/title_menu.json)
+- [projects/test_project/dialogues/system/pause_menu.json](./projects/test_project/dialogues/system/pause_menu.json)
 
 ## Quick Start
 
@@ -94,9 +102,8 @@ On Windows, you can also use:
 ### Game
 
 - `WASD` or arrow keys: move
-- `Space` / `Enter`: interact
-- `F5`: write the current persistent state to the save slot
-- `F9`: reload persistent state from the save slot
+- `Space` or `Enter`: interact, advance dialogue, confirm choice
+- `Escape`: open the pause menu in playable areas
 
 If debug inspection is enabled in the active project's `project.json`:
 
@@ -113,42 +120,12 @@ If debug inspection is enabled in the active project's `project.json`:
 - middle mouse drag: pan the camera
 - mouse wheel over the left panel: scroll the tileset view
 - mouse wheel over the map: pan vertically
-- left panel top arrows: cycle available tilesets
 - toolbar buttons: `Save`, `Reload`, `Paint`, `Select`
 - left click in `Paint`: paint the selected tile or walkability brush
 - right click in `Paint`: erase tile data or apply the inverse walkability brush
-- drag with left/right mouse in `Paint`: paint continuously
-- left panel `Walkable` / `Blocked`: switch to walkability painting
 - left click in `Select`: select a cell
-- `Delete`: remove selected entity in `Select` mode
+- `Delete`: remove the selected entity in `Select` mode
 - `Escape`: cancel editing, deselect, or confirm quit when dirty
-- right panel in `Paint`: select layers, rename layers, toggle above/below-entity draw order, add/remove layers
-- right panel in `Select`: select, reorder, move, remove, or add entities on the selected cell
-- property rows in `Select`: toggle booleans, cycle facing, and edit simple parameter values
-
-## Editor Capabilities
-
-The current editor is intentionally simple.
-
-Right now it is mainly for:
-
-- creating and editing tilemaps
-- painting walkability
-- placing already-authored entity templates into a room
-- selecting, reordering, moving, and deleting placed entities
-- changing a few basic entity properties and template parameters
-- choosing from existing tilesets and room layers
-- saving and reloading room data
-
-It is not yet meant to be the main tool for creating new gameplay systems.
-
-More complex authoring is still primarily done directly in JSON files:
-
-- new entity templates
-- reusable command chains
-- dialogue assets
-- richer event logic
-- broader project structure changes
 
 ## Project Structure
 
@@ -167,41 +144,31 @@ Typical project content layout:
 ```text
 my_project/
     project.json
-    variables.json
+    shared_variables.json
     areas/
-    entities/
-    commands/
+    entity_templates/
+    named_commands/
     dialogues/
     assets/
 ```
 
 ## Documentation
 
-If you want the deeper internal docs, start here:
+If you want the deeper docs, start here:
 
 - [STATUS.md](./STATUS.md)
 - [MANUAL.md](./MANUAL.md)
 - [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
+- [CONTENT_TYPES.md](./CONTENT_TYPES.md)
 - [architecture.md](./architecture.md)
-- [roadmap.md](./roadmap.md)
 
 ## Current Limits
 
 - inventory and usable-item systems are still planned
-- game-facing save/load UX is still minimal
-- editor parameter editing is still basic
-- the editor is intentionally focused on room/tile/entity placement, not full high-level content authoring
+- save/load UX is functional but still basic
+- editor parameter editing is still minimal
 - external PNG import flow is not finished
 - movement/render feel should still be checked periodically on real hardware as the project grows
-
-## Roadmap Direction
-
-The next intended phase is to build a fuller playable project on top of the current engine:
-
-- title screen / intro flow
-- stronger example levels and cinematics
-- more authored entities and interactions
-- fuller save system and game-facing progression flow
 
 ## License
 

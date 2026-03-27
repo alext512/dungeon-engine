@@ -1,0 +1,21 @@
+{
+  "segments": [
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "New Game",
+          "option_id": "new_game"
+        },
+        {
+          "text": "Load Game",
+          "option_id": "load_game"
+        },
+        {
+          "text": "Exit",
+          "option_id": "exit"
+        }
+      ]
+    }
+  ]
+}

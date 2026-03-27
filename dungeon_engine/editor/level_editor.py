@@ -68,8 +68,8 @@ class LevelEditor:
     def __post_init__(self) -> None:
         self._normalize_all_stack_orders()
         self.refresh_catalogs()
-        player = self.world.get_player()
-        self.selected_cell = (player.grid_x, player.grid_y)
+        self.selected_cell = (0, 0) if self.area.width > 0 and self.area.height > 0 else None
+        self.selected_entity_id = None
         self._sync_selected_entity_to_cell()
         self._apply_mode_defaults()
 
@@ -330,8 +330,8 @@ class LevelEditor:
         )
         self._normalize_all_stack_orders()
         self.refresh_catalogs()
-        player = self.world.get_player()
-        self.selected_cell = (player.grid_x, player.grid_y)
+        self.selected_cell = (0, 0) if self.area.width > 0 and self.area.height > 0 else None
+        self.selected_entity_id = None
         self.hovered_cell = None
         self.last_drag_cell = None
         self.dirty = False
@@ -509,9 +509,7 @@ class LevelEditor:
         if any(entity.entity_id == self.selected_entity_id for entity in entities):
             return
 
-        removable = [entity for entity in entities if entity.entity_id != self.world.player_id]
-        chosen = removable[-1] if removable else entities[-1]
-        self.selected_entity_id = chosen.entity_id
+        self.selected_entity_id = entities[-1].entity_id
 
     def _set_cell_walkability(self, grid_x: int, grid_y: int, walkable: bool) -> None:
         """Write walkability to a specific cell independently from tile art."""
@@ -558,15 +556,6 @@ class LevelEditor:
         """Place a template-based entity at the requested cell."""
         template_id = self.current_template_id
         if not template_id:
-            return
-
-        if template_id == "player":
-            player = self.world.get_player()
-            player.grid_x = grid_x
-            player.grid_y = grid_y
-            player.sync_pixel_position(self.area.tile_size)
-            self.selected_entity_id = player.entity_id
-            self._mark_dirty("Moved player spawn")
             return
 
         entity_id = self.world.generate_entity_id(template_id)
@@ -653,24 +642,8 @@ class LevelEditor:
         if entity.color != old_entity.color:
             rebuilt_entity.color = tuple(entity.color)
 
-        sprite_overridden = any(
-            (
-                entity.sprite_path != old_entity.sprite_path,
-                entity.sprite_frame_width != old_entity.sprite_frame_width,
-                entity.sprite_frame_height != old_entity.sprite_frame_height,
-                entity.animation_frames != old_entity.animation_frames,
-                entity.animation_fps != old_entity.animation_fps,
-                entity.animate_when_moving != old_entity.animate_when_moving,
-            )
-        )
-        if sprite_overridden:
-            rebuilt_entity.sprite_path = entity.sprite_path
-            rebuilt_entity.sprite_frame_width = entity.sprite_frame_width
-            rebuilt_entity.sprite_frame_height = entity.sprite_frame_height
-            rebuilt_entity.animation_frames = list(entity.animation_frames)
-            rebuilt_entity.animation_fps = entity.animation_fps
-            rebuilt_entity.animate_when_moving = entity.animate_when_moving
-            rebuilt_entity.current_frame = entity.current_frame
+        if entity.visuals != old_entity.visuals:
+            rebuilt_entity.visuals = [visual.clone() for visual in entity.visuals]
 
         rebuilt_entity.stack_order = entity.stack_order
         rebuilt_entity.sync_pixel_position(self.area.tile_size)
@@ -700,18 +673,12 @@ class LevelEditor:
                 (
                     entity
                     for entity in candidates
-                    if entity.entity_id == self.selected_entity_id and entity.entity_id != self.world.player_id
+                    if entity.entity_id == self.selected_entity_id
                 ),
                 None,
             )
         if entity_to_remove is None:
-            removable = [entity for entity in candidates if entity.entity_id != self.world.player_id]
-            if removable:
-                entity_to_remove = removable[-1]
-
-        if entity_to_remove is None:
-            self.status_message = "Player can't be removed"
-            return
+            entity_to_remove = candidates[-1]
 
         self.world.remove_entity(entity_to_remove.entity_id)
         self._sync_selected_entity_to_cell()
@@ -721,9 +688,6 @@ class LevelEditor:
         """Remove the currently selected stacked entity from the inspector."""
         if self.selected_entity_id is None:
             self.status_message = "No entity selected"
-            return
-        if self.selected_entity_id == self.world.player_id:
-            self.status_message = "Player can't be removed"
             return
 
         entity = self.world.get_entity(self.selected_entity_id)

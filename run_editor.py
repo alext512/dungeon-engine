@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 
@@ -20,11 +21,27 @@ def parse_args() -> argparse.Namespace:
         help="Path to a project folder or project.json. "
              "If omitted, opens a picker starting from the last project location.",
     )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Use SDL's dummy video driver for automated editor smoke tests.",
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=None,
+        help="Stop automatically after the given number of frames.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.headless:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        if args.project is None:
+            print("Headless mode requires --project. Pass an area id too, or define startup_area in project.json.")
+            return 1
 
     from dungeon_engine import config
     from dungeon_engine.display_setup import configure_process_dpi_awareness
@@ -33,7 +50,8 @@ def main() -> int:
     from dungeon_engine.project import load_project
     from dungeon_engine.startup_validation import validate_project_startup
 
-    configure_process_dpi_awareness()
+    if not args.headless:
+        configure_process_dpi_awareness()
 
     logger = install_exception_logging()
     launcher_state = load_launcher_state()
@@ -47,13 +65,18 @@ def main() -> int:
     validation_error = validate_project_startup(
         project,
         ui_title="Cannot open project",
-        show_dialog=True,
+        show_dialog=not args.headless,
     )
     if validation_error is not None:
         return 1
     update_launcher_state(last_project=str(project_path))
 
-    area_id = _choose_area_id(args.area, project, launcher_state.last_editor_area)
+    area_id = _choose_area_id(
+        args.area,
+        project,
+        launcher_state.last_editor_area,
+        allow_picker=not args.headless,
+    )
     if area_id is None:
         print("No area selected.")
         return 0
@@ -68,7 +91,7 @@ def main() -> int:
         from dungeon_engine.editor.editor_app import EditorApp
 
         app = EditorApp(area_path, project)
-        app.run()
+        app.run(max_frames=args.max_frames)
         return 0
     except Exception:
         logger.exception("Fatal error while running the editor")
@@ -86,7 +109,7 @@ def _choose_project_path(cli_project, launcher_state, fallback_dir) -> Path | No
     return _normalize_project_path(picked)
 
 
-def _choose_area_id(cli_area, project, remembered_area) -> str | None:
+def _choose_area_id(cli_area, project, remembered_area, allow_picker: bool = True) -> str | None:
     """Choose an area id from CLI, project startup area, or a file picker."""
     if cli_area:
         return _resolve_area_argument(project, cli_area)
@@ -94,6 +117,9 @@ def _choose_area_id(cli_area, project, remembered_area) -> str | None:
     startup_area_id = _resolve_project_startup_area(project)
     if startup_area_id is not None:
         return startup_area_id
+
+    if not allow_picker:
+        return None
 
     return _pick_area_id(project, _default_area_id(project, remembered_area))
 

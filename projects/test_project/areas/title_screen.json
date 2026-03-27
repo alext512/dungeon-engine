@@ -1,7 +1,14 @@
 {
   "name": "Title Screen",
   "tile_size": 16,
-  "player_id": "player",
+  "input_targets": {
+    "move_up": "dialogue_controller",
+    "move_down": "dialogue_controller",
+    "move_left": "dialogue_controller",
+    "move_right": "dialogue_controller",
+    "interact": "dialogue_controller",
+    "menu": "dialogue_controller"
+  },
   "variables": {},
   "tilesets": [],
   "tile_layers": [
@@ -38,11 +45,125 @@
     [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
     [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
   ],
+  "enter_commands": [
+    {
+      "type": "run_event",
+      "entity_id": "dialogue_controller",
+      "event_id": "open_dialogue",
+      "dialogue_id": "system/title_menu",
+      "dialogue_on_start": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "pending_title_menu_action",
+          "value": ""
+        }
+      ],
+      "dialogue_on_end": [
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "pending_title_menu_action",
+          "op": "eq",
+          "value": "new_game",
+          "then": [
+            {
+              "type": "new_game",
+              "area_id": "village_square",
+              "entry_id": "startup",
+              "camera_follow_entity_id": "player"
+            }
+          ]
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "pending_title_menu_action",
+          "op": "eq",
+          "value": "load_game",
+          "then": [
+            {
+              "type": "load_game"
+            }
+          ]
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "pending_title_menu_action",
+          "op": "eq",
+          "value": "exit",
+          "then": [
+            {
+              "type": "quit_game"
+            }
+          ]
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "pending_title_menu_action",
+          "value": ""
+        }
+      ],
+      "segment_hooks": [
+        {
+          "option_commands_by_id": {
+            "new_game": [
+              {
+                "type": "set_var",
+                "scope": "entity",
+                "entity_id": "self",
+                "name": "pending_title_menu_action",
+                "value": "new_game"
+              },
+              {
+                "type": "close_dialogue"
+              }
+            ],
+            "load_game": [
+              {
+                "type": "set_var",
+                "scope": "entity",
+                "entity_id": "self",
+                "name": "pending_title_menu_action",
+                "value": "load_game"
+              },
+              {
+                "type": "close_dialogue"
+              }
+            ],
+            "exit": [
+              {
+                "type": "set_var",
+                "scope": "entity",
+                "entity_id": "self",
+                "name": "pending_title_menu_action",
+                "value": "exit"
+              },
+              {
+                "type": "close_dialogue"
+              }
+            ]
+          }
+        }
+      ],
+      "allow_cancel": false,
+      "actor_entity_id": "dialogue_controller",
+      "caller_entity_id": "dialogue_controller"
+    }
+  ],
   "entities": [
     {
       "id": "title_backdrop",
-      "x": 0,
-      "y": 0,
+      "pixel_x": 0,
+      "pixel_y": 0,
+      "layer": 0,
       "template": "display_sprite",
       "parameters": {
         "sprite_path": "assets/project/ui/title/backdrop.png",
@@ -51,97 +172,6 @@
         "frames": [0],
         "animation_fps": 0
       }
-    },
-    {
-      "id": "title_logo",
-      "x": 2,
-      "y": 1,
-      "template": "display_sprite",
-      "parameters": {
-        "sprite_path": "assets/project/ui/title/logo.png",
-        "frame_width": 192,
-        "frame_height": 48,
-        "frames": [0],
-        "animation_fps": 0
-      }
-    },
-    {
-      "id": "title_sparkle_left",
-      "x": 1,
-      "y": 1,
-      "template": "display_sprite",
-      "parameters": {
-        "sprite_path": "assets/project/ui/title/sparkle.png",
-        "frame_width": 12,
-        "frame_height": 12,
-        "frames": [0, 1, 2, 3],
-        "animation_fps": 6
-      }
-    },
-    {
-      "id": "title_sparkle_right",
-      "x": 13,
-      "y": 2,
-      "template": "display_sprite",
-      "parameters": {
-        "sprite_path": "assets/project/ui/title/sparkle.png",
-        "frame_width": 12,
-        "frame_height": 12,
-        "frames": [0, 1, 2, 3],
-        "animation_fps": 6
-      }
-    },
-    {
-      "id": "menu_new_game",
-      "x": 2,
-      "y": 6,
-      "template": "display_sprite",
-      "parameters": {
-        "sprite_path": "assets/project/ui/title/new_game.png",
-        "frame_width": 112,
-        "frame_height": 20,
-        "frames": [1],
-        "animation_fps": 0
-      }
-    },
-    {
-      "id": "menu_load_game",
-      "x": 2,
-      "y": 7,
-      "template": "display_sprite",
-      "parameters": {
-        "sprite_path": "assets/project/ui/title/load_game.png",
-        "frame_width": 112,
-        "frame_height": 20,
-        "frames": [0],
-        "animation_fps": 0
-      }
-    },
-    {
-      "id": "menu_exit_game",
-      "x": 2,
-      "y": 8,
-      "template": "display_sprite",
-      "parameters": {
-        "sprite_path": "assets/project/ui/title/exit_game.png",
-        "frame_width": 112,
-        "frame_height": 20,
-        "frames": [0],
-        "animation_fps": 0
-      }
-    },
-    {
-      "id": "dialogue_ui",
-      "x": 1,
-      "y": 1,
-      "template": "dialogue_ui"
-    },
-    {
-      "id": "player",
-      "x": 8,
-      "y": 6,
-      "template": "title_player"
     }
   ]
 }
-

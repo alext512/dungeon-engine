@@ -2,12 +2,15 @@
   "kind": "block",
   "solid": true,
   "pushable": true,
-  "sprite": {
+  "visuals": [
+    {
+      "id": "main",
       "path": "assets/project/sprites/object_sheet.png",
-    "frame_width": 16,
-    "frame_height": 16,
-    "frames": [0]
-  },
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0]
+    }
+  ],
   "events": {
     "push_from_left": {
       "enabled": true,

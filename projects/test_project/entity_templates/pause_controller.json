@@ -1,0 +1,104 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "solid": false,
+  "visible": false,
+  "layer": 99,
+  "input_map": {
+    "menu": "open_pause_menu"
+  },
+  "events": {
+    "open_pause_menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "dialogue_controller",
+          "event_id": "open_dialogue",
+          "dialogue_id": "system/pause_menu",
+          "dialogue_on_start": [
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_pause_menu_action",
+              "value": ""
+            }
+          ],
+          "dialogue_on_end": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_pause_menu_action",
+              "op": "eq",
+              "value": "load",
+              "then": [
+                {
+                  "type": "load_game"
+                }
+              ]
+            },
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_pause_menu_action",
+              "op": "eq",
+              "value": "exit",
+              "then": [
+                {
+                  "type": "quit_game"
+                }
+              ]
+            },
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_pause_menu_action",
+              "value": ""
+            }
+          ],
+          "segment_hooks": [
+            {
+              "option_commands_by_id": {
+                "continue": [
+                  {
+                    "type": "close_dialogue"
+                  }
+                ],
+                "load": [
+                  {
+                    "type": "set_var",
+                    "scope": "entity",
+                    "entity_id": "self",
+                    "name": "pending_pause_menu_action",
+                    "value": "load"
+                  },
+                  {
+                    "type": "close_dialogue"
+                  }
+                ],
+                "exit": [
+                  {
+                    "type": "set_var",
+                    "scope": "entity",
+                    "entity_id": "self",
+                    "name": "pending_pause_menu_action",
+                    "value": "exit"
+                  },
+                  {
+                    "type": "close_dialogue"
+                  }
+                ]
+              }
+            }
+          ],
+          "allow_cancel": true,
+          "caller_entity_id": "$self_id"
+        }
+      ]
+    }
+  }
+}

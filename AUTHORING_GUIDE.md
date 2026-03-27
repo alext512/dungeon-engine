@@ -2,58 +2,36 @@
 
 ## Purpose
 
-This document explains how to use the engine as a content author.
+This document explains how to build project content for the engine without reading the Python code first.
 
 It focuses on:
 
-- project files
-- room JSON
-- entity JSON
-- command JSON
+- `project.json`
+- `shared_variables.json`
+- area JSON
+- entity template JSON
+- named command JSON
 - dialogue JSON
-- shared variables
-
-It does not require reading the Python code.
+- the current controller-driven dialogue pattern
 
 ## Mental Model
 
 The engine is built from a few content layers:
 
 1. `project.json`
-   Tells the engine where the project folders are.
-2. `variables.json`
-   Stores project-wide shared values.
+2. `shared_variables.json`
 3. `areas/*.json`
-   Define rooms.
-4. `entities/*.json`
-   Define reusable entity templates.
-5. `commands/*.json`
-   Define reusable command chains.
+4. `entity_templates/*.json`
+5. `named_commands/*.json`
 6. `dialogues/*.json`
-   Define reusable dialogue text.
+
+The engine provides primitive commands. Your project combines them into behavior using JSON.
 
 Important clarification:
 
 - these category names are meaningful
 - the exact folder names are just conventions
-
-The engine does not require literal folders named:
-
-- `areas/`
-- `entities/`
-- `commands/`
-- `dialogues/`
-- `assets/`
-
-What it really requires is:
-
-- a valid `project.json`
-- valid paths declared inside that manifest
-
-The most important idea is:
-
-- the engine provides primitive commands
-- your project combines them into behavior using JSON
+- the manifest paths decide what gets loaded
 
 ## A Minimal Project
 
@@ -62,47 +40,44 @@ Typical layout:
 ```text
 my_project/
     project.json
-    variables.json
+    shared_variables.json
     areas/
-    entities/
-    commands/
+    entity_templates/
+    named_commands/
     dialogues/
     assets/
 ```
 
-That layout is recommended, but it is not mandatory.
-
-For example, this would also be valid if `project.json` points to it correctly:
-
-```text
-my_project/
-    project.json
-    config/
-        shared_values.json
-    content/
-        rooms/
-        objects/
-        logic/
-        text/
-        assets/
-```
+That layout is recommended, but not mandatory.
 
 ## `project.json`
 
-This is the project manifest.
+This file is the project manifest.
 
 Example:
 
 ```json
 {
-  "entity_paths": ["entities/"],
+  "entity_template_paths": ["entity_templates/"],
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
-  "command_paths": ["commands/"],
+  "named_command_paths": ["named_commands/"],
   "dialogue_paths": ["dialogues/"],
-  "variables_path": "variables.json",
-  "startup_area": "test_room",
-  "active_entity_id": "player",
+  "shared_variables_path": "shared_variables.json",
+  "global_entities": [
+    {
+      "id": "dialogue_controller",
+      "template": "dialogue_panel"
+    },
+    {
+      "id": "pause_controller",
+      "template": "pause_controller"
+    }
+  ],
+  "startup_area": "title_screen",
+  "input_targets": {
+    "menu": "pause_controller"
+  },
   "debug_inspection_enabled": true,
   "input_events": {
     "move_up": "move_up",
@@ -116,33 +91,37 @@ Example:
 
 ### Important fields
 
-- `entity_paths`
+- `entity_template_paths`
   Folders containing entity templates.
 - `asset_paths`
   Folders containing images, sounds, fonts, and tilesets.
 - `area_paths`
-  Folders containing room JSON files.
-- `command_paths`
+  Folders containing area JSON files.
+- `named_command_paths`
   Folders containing reusable named command JSON files.
 - `dialogue_paths`
   Folders containing reusable dialogue JSON files.
-- `variables_path`
-  Project-wide shared variables file.
+- `shared_variables_path`
+  Project-wide shared variable file.
+- `global_entities`
+  Entity instances that should exist in every runtime world.
 - `startup_area`
-  Default room to open when only the project is selected. This must be a path-derived area id such as `test_room` or `town/inn`.
-- `active_entity_id`
-  Which entity starts as the direct input receiver.
+  Default area id to open when only the project is selected.
+- `input_targets`
+  Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
 - `input_events`
-  Fallback event names the engine uses when the active entity does not define its own `input_map`.
+  Fallback action-to-event mapping when the routed entity does not define its own `input_map`.
 
-So the real rule is:
-
-- the engine follows the paths declared in `project.json`
-- not a fixed folder layout
-
-## `variables.json`
+## `shared_variables.json`
 
 Use this for shared project values.
+
+Good use cases:
+
+- render resolution
+- movement timing like `ticks_per_tile`
+- dialogue layout defaults
+- common tuning values reused by multiple commands
 
 Example:
 
@@ -153,60 +132,52 @@ Example:
     "internal_height": 192
   },
   "movement": {
-    "_comment_ticks_per_tile": "Recommended to keep this even so the sprite change lands halfway through a tile move.",
     "ticks_per_tile": 16
   },
   "dialogue": {
-    "panel_path": "assets/project/ui/dialogue_panel.png",
-    "max_lines": 3,
-    "plain_box": {
-      "x": 8,
-      "y": 154,
-      "width": 240
-    },
-    "portrait_box": {
-      "x": 56,
-      "y": 154,
-      "width": 192
-    },
-    "portrait_position": {
-      "x": 8,
-      "y": 154
-    }
+    "max_lines": 3
   }
 }
 ```
 
-### When to use shared variables
+Read these values with tokens such as:
 
-Good use cases:
-
-- render resolution
-- movement timing like `ticks_per_tile`
-- dialogue layout values
-- common tuning values used by multiple commands
-
-Bad use cases:
-
-- unique per-entity data that only one object needs
-- temporary gameplay state
-- per-instance puzzle values
+- `$project.display.internal_width`
+- `$project.movement.ticks_per_tile`
+- `$project.dialogue.max_lines`
 
 ## Areas
 
-An area file defines one room.
+An area file defines one room or screen.
 
 Example structure:
 
 ```json
 {
-  "name": "Test Room",
+  "name": "Village Square",
   "tile_size": 16,
-  "player_id": "player",
+  "entry_points": {
+    "startup": {
+      "x": 8,
+      "y": 8,
+      "facing": "down"
+    }
+  },
+  "camera": {
+    "follow_entity_id": "player"
+  },
+  "input_targets": {
+    "interact": "player",
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player"
+  },
   "variables": {},
   "tilesets": [],
   "tile_layers": [],
   "cell_flags": [],
+  "enter_commands": [],
   "entities": []
 }
 ```
@@ -214,31 +185,42 @@ Example structure:
 ### Important fields
 
 - `name`
-  Human-readable room name.
+  Human-readable area name.
 - `tile_size`
   Tile size in pixels.
-- `player_id`
-  Which entity is the player entity for that room.
+- `entry_points`
+  Named destinations for `change_area` and `new_game`.
+- `camera`
+  Optional authored camera defaults for this area.
+- `input_targets`
+  Optional per-area overrides for which entity receives each logical input action.
 - `variables`
-  Room-level mutable variables.
+  Mutable area-level variables.
 - `tilesets`
-  Tileset definitions used by this room.
+  Tileset definitions used by the area.
 - `tile_layers`
   Visual tile layers.
 - `cell_flags`
   Walkability grid.
+- `enter_commands`
+  Optional command chain that runs immediately after the area loads.
 - `entities`
-  Placed entity instances.
+  Placed area-local entity instances.
 
-Important note:
+Important notes:
 
-- area ids are derived from the area file path relative to `area_paths`
-- do not author an `area_id` field inside area JSON
-- for example, `areas/test_room.json` becomes `test_room`
+- area ids are derived from file path
+- do not author an `id` or `area_id` field inside area JSON
+- do not author `player_id`; the engine now uses explicit input routing, transition payloads, and camera defaults instead
+- project-level global entities belong in `project.json`, not inside `entities`
+- area `camera` defaults are just initial runtime state; commands can replace them later
+- area `entry_points` are the intended targets for transfers instead of hardcoded spawn assumptions
 
-### Tilesets
+### Tilesets and layers
 
-Each tileset entry usually looks like:
+The runtime uses GIDs for visual tiles. `0` means empty.
+
+Example tileset entry:
 
 ```json
 {
@@ -249,50 +231,9 @@ Each tileset entry usually looks like:
 }
 ```
 
-### Tile layers
-
-Each visual layer has:
-
-- `name`
-- `draw_above_entities`
-- `grid`
-
-Example:
-
-```json
-{
-  "name": "layer_1",
-  "draw_above_entities": false,
-  "grid": [
-    [1, 1, 1],
-    [1, 0, 1],
-    [1, 1, 1]
-  ]
-}
-```
-
-Rules:
-
-- `0` means empty
-- nonzero values are GIDs from the room’s tileset list
-
-### Walkability
-
-`cell_flags` is a grid of booleans:
-
-- `true` = walkable
-- `false` = blocked
-
-This is separate from visual tiles.
-
-That means:
-
-- a tile may exist without blocking movement
-- a cell may block movement even if no visible tile is there
-
 ### Placed entities
 
-Each room instance usually looks like:
+Placed entities usually reference a template:
 
 ```json
 {
@@ -306,22 +247,9 @@ Each room instance usually looks like:
 }
 ```
 
-Common fields:
-
-- `id`
-  Stable entity id inside the room.
-- `x`, `y`
-  Grid position.
-- `template`
-  Which entity template to instantiate.
-- `parameters`
-  Template parameter values.
-- `pixel_x`, `pixel_y`
-  Optional starting transform override.
-
 ## Entity Templates
 
-Entity templates define reusable object types.
+Entity templates define reusable gameplay objects.
 
 Example:
 
@@ -329,19 +257,30 @@ Example:
 {
   "kind": "sign",
   "solid": true,
-  "sprite": {
-    "path": "assets/project/sprites/sign.png",
-    "frame_width": 16,
-    "frame_height": 16,
-    "frames": [0]
-  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/sign.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0]
+    }
+  ],
   "events": {
     "interact": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/sign_gate_hint"
+          "type": "run_event",
+          "entity_id": "dialogue_controller",
+          "event_id": "open_dialogue",
+          "dialogue_id": "$dialogue_id",
+          "dialogue_on_start": [],
+          "dialogue_on_end": [],
+          "segment_hooks": [],
+          "allow_cancel": false,
+          "actor_entity_id": "$actor_id",
+          "caller_entity_id": "$self_id"
         }
       ]
     }
@@ -349,158 +288,177 @@ Example:
 }
 ```
 
-### Common entity fields
+### Important entity fields
 
 - `kind`
-  Descriptive label for the entity type.
+- `visuals`
+- `space`
+- `scope`
 - `solid`
-  Whether it blocks movement.
-- `visible`
-  Whether it is drawn.
-- `present`
-  Whether it exists in the current scene at all.
 - `pushable`
-  Whether it can be pushed by movement logic.
+- `present`
+- `visible`
+- `layer`
+- `stack_order`
 - `variables`
-  Entity-local mutable variables.
 - `input_map`
-  Optional logical-input to event-name map owned by this entity.
-- `sprite`
-  Visual setup.
 - `events`
-  Named command chains.
 
-### Sprite block
+### `visuals`
+
+Every entity now uses a `visuals` array instead of `sprite`.
+
+Each visual can define:
+
+- `id`
+- `path`
+- `frame_width`
+- `frame_height`
+- `frames`
+- `animation_fps`
+- `animate_when_moving`
+- `flip_x`
+- `visible`
+- `tint`
+- `offset_x`
+- `offset_y`
+- `draw_order`
+
+If you still author `sprite`, loading fails on purpose.
+
+### `space`
+
+`space` controls the coordinate system:
+
+- `world`
+  Uses tile coordinates and participates in world lookup.
+- `screen`
+  Uses screen pixel coordinates.
+
+Rules:
+
+- world-space entities usually author `x` and `y`
+- screen-space entities must not author `x` / `y`
+- screen-space entities should use `pixel_x` / `pixel_y` or per-visual offsets
+
+### `scope`
+
+`scope` controls lifetime:
+
+- `area`
+  Normal area-local entity.
+- `global`
+  Project-level entity available in every runtime world.
+
+In practice, author global service/controller entities in `project.json`.
+
+### `input_map`
+
+`input_map` lets an entity decide which event handles a logical action.
 
 Example:
 
 ```json
 {
-  "path": "assets/project/sprites/sign.png",
-  "frame_width": 16,
-  "frame_height": 16,
-  "frames": [0]
-}
-```
-
-Important note:
-
-- command-driven animation usually controls the visible frame directly
-- built-in sprite animation is still possible, but the sample player currently uses command-driven animation instead
-
-### Variables
-
-Use entity variables for:
-
-- entity-local state
-- toggles
-- walk phase
-- puzzle state that belongs to that entity
-
-Example:
-
-```json
-"variables": {
-  "walk_phase": 0
-}
-```
-
-### `input_map`
-
-`input_map` lets the active entity decide which event handles each logical input.
-
-Example:
-
-```json
-"input_map": {
-  "move_up": "move_up",
-  "move_down": "move_down",
-  "move_left": "move_left",
-  "move_right": "move_right",
-  "interact": "interact"
-}
-```
-
-This means:
-
-- physical keys are still mapped by the engine
-- the active entity decides which event names those logical inputs should trigger
-- project-level `input_events` only serve as fallback defaults
-
-### Events
-
-Events are named command chains owned by the entity.
-
-Examples:
-
-- `move_up`
-- `move_down`
-- `interact`
-- `push_from_left`
-- `push`
-
-Each event usually looks like:
-
-```json
-"interact": {
-  "enabled": true,
-  "commands": [
-    {
-      "type": "run_named_command",
-      "command_id": "dialogue/sign_gate_hint"
-    }
-  ]
+  "input_map": {
+    "interact": "dialogue_advance"
+  }
 }
 ```
 
 ## Named Commands
 
-Reusable command chains live under `commands/`.
+Named commands are reusable command chains stored in separate files.
 
-They are identified by path relative to the command root, without `.json`.
-
-Examples:
-
-- `walk_one_tile`
-- `attempt_move_one_tile`
-- `dialogue/blue_guide_open`
-
-### Example named command
+Example:
 
 ```json
 {
-  "params": [
-    "direction",
-    "phase_a_frames",
-    "phase_b_frames",
-    "idle_frame",
-    "frames_per_sprite_change",
-    "frames_needed"
-  ],
+  "params": ["direction", "frames_needed"],
   "commands": [
     {
-      "type": "check_var",
-      "scope": "entity",
+      "type": "move_entity_one_tile",
       "entity_id": "self",
-      "name": "walk_phase",
-      "op": "eq",
-      "value": 1,
-      "then": [
+      "direction": "$direction",
+      "frames_needed": "$frames_needed"
+    }
+  ]
+}
+```
+
+Notes:
+
+- named-command ids are path-derived from file location
+- do not author a top-level `id`
+- use `run_named_command` to call them
+
+## Runtime References and Tokens
+
+Commands often need to refer to the current entity or interaction initiator.
+
+### Special `entity_id` values
+
+Use these in commands that accept `entity_id`:
+
+- `self`
+- `actor`
+- `caller`
+
+Meaning:
+
+- `self`: the entity that owns the current event
+- `actor`: the entity that initiated the current input or interaction flow
+- `caller`: a caller explicitly forwarded by another command chain
+
+### Tokens
+
+The command runner also resolves tokens such as:
+
+- `$self_id`
+- `$actor_id`
+- `$caller_id`
+- `$self.some_value`
+- `$actor.some_value`
+- `$caller.some_value`
+- `$project.some.path`
+- `$world.some_value`
+
+Example:
+
+```json
+{
+  "type": "set_var",
+  "scope": "entity",
+  "entity_id": "caller",
+  "name": "toggled",
+  "value": true,
+  "persistent": true
+}
+```
+
+## Dialogue Assets
+
+Dialogue definitions live under `dialogues/`.
+
+Example:
+
+```json
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "This little record shrine can write your progress into a save file."
+    },
+    {
+      "type": "choice",
+      "options": [
         {
-          "type": "play_animation",
-          "entity_id": "self",
-          "frame_sequence": "$phase_b_frames",
-          "frames_per_sprite_change": "$frames_per_sprite_change",
-          "wait": false
-        }
-      ],
-      "else": [
+          "text": "Save the game.",
+          "option_id": "save"
+        },
         {
-          "type": "play_animation",
-          "entity_id": "self",
-          "frame_sequence": "$phase_a_frames",
-          "frames_per_sprite_change": "$frames_per_sprite_change",
-          "wait": false
+          "text": "Keep going.",
+          "option_id": "cancel"
         }
       ]
     }
@@ -508,355 +466,219 @@ Examples:
 }
 ```
 
-### Important rules
+### Dialogue fields
 
-- command ids are path-based
-- do not author an `id` field inside command JSON
-- duplicate command ids are validation errors
-- command files are meant for reusable behavior, not single-instance content
+- `participants`
+  Optional portrait/name map.
+- `segments`
+  Required list of `text` and `choice` segments.
+- `font_id`
+  Optional font override.
+- `max_lines`
+  Optional per-dialogue page height override.
+- `text_color`
+  Optional RGB color override.
 
-## Runtime Tokens
+### Segment fields
 
-Commands can use `$...` tokens.
+- `type`
+- `text`
+- `pages`
+- `options`
+- `speaker_id`
+- `show_portrait`
+- `advance_mode`
+- `advance_seconds`
 
-Common examples:
+## Starting Dialogue
 
-- `$direction`
-- `$idle_frame`
-- `$project.movement.ticks_per_tile`
-- `$world.dialogue_choice_index`
-- `$self.walk_phase`
-- `$actor.some_value`
+The old authored `run_dialogue` path is removed. Startup validation rejects it before launch.
 
-The special helper currently used in the sample project is:
+Current pattern:
 
-- `$half:project.movement.ticks_per_tile`
+1. call `run_event` on the dialogue controller entity
+2. let that event call `start_dialogue_session`
+3. pass any behavior hooks through the event parameters
 
-That means:
+Practical rule:
 
-- resolve the value
-- divide by 2
+- use `dialogue_on_start` for setup that should happen after the controller borrows input
+- use `dialogue_on_end` for behavior that should happen after the controller restores input
+- do not rely on `actor` to restore input ownership
+- modal controllers should use `push_input_routes` / `pop_input_routes`
 
-## Dialogue Assets
-
-Dialogue text lives under `dialogues/`.
-
-Simple example:
+Example caller command:
 
 ```json
 {
-  "text": "Sign: The old path is sealed. Pull the lever to open the gate."
+  "type": "run_event",
+  "entity_id": "dialogue_controller",
+  "event_id": "open_dialogue",
+  "dialogue_id": "system/pause_menu",
+  "dialogue_on_start": [
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "pending_pause_menu_action",
+      "value": ""
+    }
+  ],
+  "dialogue_on_end": [
+    {
+    "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "pending_pause_menu_action",
+      "op": "eq",
+      "value": "load",
+      "then": [
+        {
+          "type": "load_game"
+        }
+      ]
+    },
+    {
+    "type": "check_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "pending_pause_menu_action",
+      "op": "eq",
+      "value": "exit",
+      "then": [
+        {
+          "type": "quit_game"
+        }
+      ]
+    }
+  ],
+  "segment_hooks": [
+    {
+      "option_commands_by_id": {
+        "continue": [
+          {
+            "type": "close_dialogue"
+          }
+        ],
+        "load": [
+          {
+            "type": "set_var",
+            "scope": "entity",
+            "entity_id": "self",
+            "name": "pending_pause_menu_action",
+            "value": "load"
+          },
+          {
+            "type": "close_dialogue"
+          }
+        ],
+        "exit": [
+          {
+            "type": "set_var",
+            "scope": "entity",
+            "entity_id": "self",
+            "name": "pending_pause_menu_action",
+            "value": "exit"
+          },
+          {
+            "type": "close_dialogue"
+          }
+        ]
+      }
+    }
+  ],
+  "allow_cancel": true,
+  "actor_entity_id": "$self_id",
+  "caller_entity_id": "$self_id"
 }
 ```
 
-Manual paging example:
+### Segment hooks
+
+Each `segment_hooks` entry matches one dialogue segment by index.
+
+A hook object can define:
+
+- `on_start`
+- `on_end`
+- `option_commands_by_id`
+- `option_commands`
+
+Use `option_commands_by_id` when your choice options have stable `option_id` values.
+
+If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. Optional `actor_entity_id` and `caller_entity_id` parameters can be passed at the call site when you need to preserve or override semantic context across dialogue-to-dialogue calls.
+
+## Area Transfers
+
+`change_area` and `new_game` now support transfer-aware payloads.
+
+Common fields:
+
+- `area_id`
+- `entry_id`
+- `transfer_entity_id`
+- `transfer_entity_ids`
+- `camera_follow_entity_id`
+- `camera_follow_input_action`
+- `camera_offset_x`
+- `camera_offset_y`
+
+Typical door example:
 
 ```json
 {
-  "pages": [
-    "Guide: First page.",
-    "Guide: Second page."
-  ]
+  "type": "change_area",
+  "area_id": "$target_area",
+  "entry_id": "$target_entry",
+  "transfer_entity_ids": ["actor"],
+  "camera_follow_entity_id": "actor"
 }
 ```
 
 Rules:
 
-- dialogue ids are derived from the file path under `dialogue_paths`
-- do not author an `id` field inside dialogue JSON
-- use `text` for one long block that should be auto-paginated
-- use `pages` when you want exact page boundaries
-- do not define both
+- use `entry_id` to land on an authored area entry point
+- use `transfer_entity_ids` when the live entity itself should travel to the new area
+- use one camera follow field or the other, not both
+- transferred entities persist as travelers and do not duplicate on re-entry
 
-## Text Sessions
+## Camera Control
 
-The current recommended dialogue flow is built around text sessions.
+Camera behavior is explicit runtime state controlled by commands.
 
-Primitive text-session commands:
+Useful commands:
 
-- `prepare_text_session`
-- `read_text_session`
-- `advance_text_session`
-- `reset_text_session`
+- `set_camera_follow_entity`
+- `set_camera_follow_input_target`
+- `clear_camera_follow`
+- `set_camera_bounds_rect`
+- `clear_camera_bounds`
+- `set_camera_deadzone`
+- `clear_camera_deadzone`
+- `set_var_from_camera`
 
-The engine owns:
+Follow commands support `offset_x` and `offset_y`. Bounds and deadzone commands accept `space: "pixel"` or `space: "grid"`.
 
-- text wrapping by pixel width
-- pagination by `max_lines`
-- single-line marquee windowing for long choice text
+## Persistence Notes
 
-Your project owns:
+If you want a gameplay change to survive save/load, use `persistent: true` on the relevant command when supported.
 
-- when a session opens
-- when it advances
-- how it is rendered
-- how input is handled
+Common examples:
 
-### Example: prepare paged dialogue text
+- `set_var` with `persistent: true`
+- `set_entity_field` with `persistent: true`
 
-```json
-{
-  "type": "prepare_text_session",
-  "entity_id": "self",
-  "session_id": "main_text",
-  "dialogue_id": "showcase/village_square_note",
-  "mode": "pages",
-  "max_width": "$project.dialogue.plain_box.width",
-  "max_lines": "$project.dialogue.max_lines"
-}
-```
+The sample lever/gate puzzle uses both.
 
-### Example: read current page into variables
+## Recommended Reading Order
 
-```json
-{
-  "type": "read_text_session",
-  "entity_id": "self",
-  "session_id": "main_text",
-  "scope": "entity",
-  "store_entity_id": "self",
-  "store_text_var": "visible_text",
-  "store_has_more_var": "text_has_more",
-  "store_position_var": "text_position",
-  "store_total_var": "text_total"
-}
-```
-
-### Example: advance to the next chunk
-
-```json
-{
-  "type": "advance_text_session",
-  "entity_id": "self",
-  "session_id": "main_text"
-}
-```
-
-## `run_dialogue`
-
-`run_dialogue` still exists as a simple text-only helper.
-
-It is still useful for:
-
-- quick text-only interactions
-- temporary prototypes
-
-But the sample project now uses a focused `dialogue_ui` entity with two high-level events instead:
-
-- `show_message`
-- `show_choice_dialogue`
-
-## Screen-Space Commands
-
-Use these for dialogue panels, portraits, and overlays.
-
-### Show an image
-
-```json
-{
-  "type": "show_screen_image",
-  "element_id": "dialogue_panel",
-  "path": "$project.dialogue.panel_path",
-  "x": 0,
-  "y": "$project.display.internal_height",
-  "anchor": "bottomleft",
-  "layer": 100
-}
-```
-
-### Show text
-
-```json
-{
-  "type": "show_screen_text",
-  "element_id": "dialogue_choice_0",
-  "text": "- Tell me about the lever.",
-  "x": "$project.dialogue.portrait_box.x",
-  "y": "$project.dialogue.portrait_box.y",
-  "layer": 101
-}
-```
-
-### Remove an element
-
-```json
-{
-  "type": "remove_screen_element",
-  "element_id": "dialogue_panel"
-}
-```
-
-## How The Sample Sign Works
-
-The sign template owns an `interact` event that calls `dialogue_ui.show_message`.
-
-That flow:
-
-1. calls `show_message` with a `dialogue_id`
-2. `dialogue_ui` chooses the portrait/plain text box layout
-3. `dialogue_ui` shows the panel and optional portrait
-4. `dialogue_ui` prepares and reads the text session
-5. `dialogue_ui.interact` advances pages until it finishes
-6. `dialogue_ui` closes and restores the previous active entity
-
-## How The Sample NPC Dialogue Works
-
-The blue NPC and bard flows use the shared `dialogue_ui` entity too.
-
-That entity:
-
-- owns the current dialogue state in its own variables
-- receives input through its own `input_map`
-- prepares and reads paged text sessions for dialogue pages
-- prepares and reads marquee text sessions for highlighted long choices
-- draws portrait, panel, and choice rows through normal screen commands
-- supports scrolling menus when there are more than three choices
-- accepts choices as a variable-length list instead of fixed `menu_choice_0...4` slots
-
-So:
-
-- menu flow stays in JSON
-- input ownership stays with a normal entity
-- the engine does not need a baked choice-menu subsystem
-
-## Movement Authoring Pattern
-
-The sample player does not duplicate full movement logic four times.
-
-Current pattern:
-
-- `move_up`, `move_down`, `move_left`, `move_right`
-  only pass direction-specific data
-- a shared `move` event calls the common movement command
-- shared speed comes from `variables.json`
-
-Example idea:
-
-```json
-{
-  "type": "run_event",
-  "entity_id": "self",
-  "event_id": "move",
-  "direction": "up",
-  "phase_a_frames": [5, 2],
-  "phase_b_frames": [8, 2],
-  "idle_frame": 2
-}
-```
-
-Then the common event handles:
-
-- flipping
-- movement timing
-- calling `attempt_move_one_tile`
-
-## Pushing Pattern
-
-The block template owns directional push events:
-
-- `push_from_left`
-- `push_from_right`
-- `push_from_up`
-- `push_from_down`
-
-Each one forwards into a shared `push` event that calls a named command.
-
-This means:
-
-- the actor delegates push behavior to the object in front
-- the pushed object decides how to respond
-
-This follows the spirit of the old Godot project.
-
-## Common Commands You Will Use A Lot
-
-Flow and state:
-
-- `run_event`
-- `run_named_command`
-- `set_var`
-- `increment_var`
-- `check_var`
-- `set_entity_field`
-- `set_event_enabled`
-- `set_active_entity`
-- `push_active_entity`
-- `pop_active_entity`
-
-Movement and animation:
-
-- `move_entity_one_tile`
-- `move_entity`
-- `teleport_entity`
-- `play_animation`
-- `stop_animation`
-- `set_sprite_frame`
-- `wait_for_move`
-
-Screen-space and dialogue:
-
-- `show_screen_image`
-- `show_screen_text`
-- `set_screen_text`
-- `remove_screen_element`
-- `prepare_text_session`
-- `read_text_session`
-- `advance_text_session`
-- `reset_text_session`
-- `run_dialogue`
-
-Audio:
-
-- `play_audio`
-
-Lifecycle and presence:
-
-- `set_present`
-- `destroy_entity`
-- `spawn_entity`
-
-## Good Authoring Habits
-
-- Keep shared tuning values in `variables.json`
-- Keep reusable behavior in `commands/`
-- Keep plain text content in `dialogues/`
-- Keep room files focused on layout and placed instances
-- Keep entity templates focused on reusable object behavior
-- Prefer events and named commands over duplicating long inline chains
-
-## Common Mistakes To Avoid
-
-- putting large dialogue text directly into entity files when it belongs in `dialogues/`
-- duplicating identical command chains in many entities instead of moving them to `commands/`
-- storing one-off runtime state in `variables.json`
-- treating room JSON as save data
-- baking screen layout into the engine when it belongs in project commands
-
-## Current Limits
-
-Important current limitations:
-
-- movement/render feel still needs a dedicated polish pass
-- there is not yet a full typewriter-style dialogue reveal
-- choice layout is still authored manually
-- there is not yet a visual command-chain editor
-- inventory/item systems are still planned
-- editor-side parameter editing is still basic
-
-## Recommended Reading Order For Authors
-
-If you want to learn by example, read:
+If you want a concrete example project, inspect these files next:
 
 1. `projects/test_project/project.json`
-2. `projects/test_project/variables.json`
-3. `projects/test_project/areas/title_screen.json`
-4. `projects/test_project/areas/village_square.json`
-5. `projects/test_project/areas/village_house.json`
-6. `projects/test_project/entities/player.json`
-7. `projects/test_project/entities/area_door.json`
-8. `projects/test_project/entities/sign.json`
-9. `projects/test_project/entities/dialogue_ui.json`
-10. `projects/test_project/commands/attempt_move_one_tile.json`
-11. `projects/test_project/commands/walk_one_tile.json`
-12. `projects/test_project/commands/push_one_tile.json`
-13. `projects/test_project/dialogues/`
+2. `projects/test_project/areas/title_screen.json`
+3. `projects/test_project/entity_templates/dialogue_panel.json`
+4. `projects/test_project/entity_templates/player.json`
+5. `projects/test_project/entity_templates/sign.json`
+6. `projects/test_project/entity_templates/lever_toggle.json`
+7. `projects/test_project/dialogues/system/title_menu.json`
+8. `projects/test_project/dialogues/system/save_prompt.json`

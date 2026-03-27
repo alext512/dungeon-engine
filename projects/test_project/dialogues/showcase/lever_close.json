@@ -1,0 +1,12 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "You reset the lever."
+    },
+    {
+      "type": "text",
+      "text": "The mechanism grinds back into place."
+    }
+  ]
+}

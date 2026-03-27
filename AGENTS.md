@@ -33,7 +33,7 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 | `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
 | `MANUAL.md` | Practical guide for running the engine and authoring project content |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
-| `CONTENT_TYPES.md` | Cross-cutting explanation of project search paths, path-derived IDs, and how areas/entities/commands/dialogues/assets relate |
+| `CONTENT_TYPES.md` | Cross-cutting explanation of project search paths, path-derived IDs, and how areas/entity templates/named commands/dialogues/assets relate |
 | `functionality.md` | Plain-language feature list by priority tier |
 | `architecture.md` | Design philosophy, tech stack, command system, entity/component model |
 | `CONTRIBUTING.md` | Working rules and project direction |
@@ -73,7 +73,7 @@ dungeon_engine/
         movement.py              # Grid movement execution
         collision.py             # Collision checks
         interaction.py           # Entity interaction resolution
-        animation.py             # Sprite animation
+        animation.py             # Entity visual animation
     commands/
         registry.py              # Command type registry
         runner.py                # Command chain executor
@@ -85,8 +85,8 @@ dungeon_engine/
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
 - **Shared data model across apps**: The standalone game and standalone editor both read the same area/entity JSON format.
-- **Project manifests**: `project.json` defines `entity_paths`, `asset_paths`, and `area_paths`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
-- **Path-derived reusable IDs**: Areas, named commands, and dialogue assets derive identity from their path under the configured search roots instead of authored `id` fields.
+- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `named_command_paths`, `dialogue_paths`, and `shared_variables_path`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Path-derived reusable IDs**: Areas, entity templates, named commands, and dialogue assets derive identity from their path under the configured search roots instead of authored `id` fields.
 - **Tileset discovery**: The editor browses PNG assets recursively from the active project's asset paths, but a room only stores the tilesets it actually uses.
 - **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
 
@@ -94,7 +94,7 @@ dungeon_engine/
 
 **Adding a new command type**: Implement it in `commands/builtin.py` inside `register_builtin_commands()` using the `@registry.register("name")` decorator. Follow the pattern of existing commands.
 
-**Adding a new entity template**: Create a JSON file in the active project's `entities/` folder (or another configured entity path), then place it through the editor.
+**Adding a new entity template**: Create a JSON file in the active project's `entity_templates/` folder (or another configured entity-template path), then place it through the editor.
 
 **Editing the editor UI**: Layout and input flow live in `editor/editor_app.py`. Editor data/document operations live in `editor/level_editor.py`.
 

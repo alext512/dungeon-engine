@@ -1,0 +1,17 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "solid": false,
+  "visible": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "$sprite_path",
+      "frame_width": "$frame_width",
+      "frame_height": "$frame_height",
+      "frames": "$frames",
+      "animation_fps": "$animation_fps",
+      "animate_when_moving": false
+    }
+  ]
+}

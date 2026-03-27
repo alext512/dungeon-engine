@@ -1,0 +1,84 @@
+{
+  "kind": "save_point",
+  "solid": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/sign.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0]
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "dialogue_controller",
+          "event_id": "open_dialogue",
+          "dialogue_id": "system/save_prompt",
+          "dialogue_on_start": [
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_save_prompt_action",
+              "value": ""
+            }
+          ],
+          "dialogue_on_end": [
+            {
+              "type": "check_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_save_prompt_action",
+              "op": "eq",
+              "value": "save",
+              "then": [
+                {
+                  "type": "save_game"
+                }
+              ]
+            },
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "pending_save_prompt_action",
+              "value": ""
+            }
+          ],
+          "segment_hooks": [
+            null,
+            {
+              "option_commands_by_id": {
+                "save": [
+                  {
+                    "type": "set_var",
+                    "scope": "entity",
+                    "entity_id": "self",
+                    "name": "pending_save_prompt_action",
+                    "value": "save"
+                  },
+                  {
+                    "type": "close_dialogue"
+                  }
+                ],
+                "cancel": [
+                  {
+                    "type": "close_dialogue"
+                  }
+                ]
+              }
+            }
+          ],
+          "allow_cancel": true,
+          "actor_entity_id": "$actor_id",
+          "caller_entity_id": "$self_id"
+        }
+      ]
+    }
+  }
+}

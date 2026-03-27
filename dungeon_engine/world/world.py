@@ -1,88 +1,222 @@
-"""World container for runtime entities in the current loaded area."""
+"""World container for runtime entities."""
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
 from dungeon_engine.world.entity import Entity
 
+DEFAULT_INPUT_ACTIONS: tuple[str, ...] = (
+    "move_up",
+    "move_down",
+    "move_left",
+    "move_right",
+    "interact",
+    "menu",
+)
+
 
 @dataclass(slots=True)
 class World:
-    """Store and query runtime entities for the current room."""
+    """Store and query runtime entities for the current play state."""
 
-    entities: dict[str, Entity] = field(default_factory=dict)
-    player_id: str = "player"
-    active_entity_id: str = "player"
-    active_entity_stack: list[str] = field(default_factory=list)
+    area_entities: dict[str, Entity] = field(default_factory=dict)
+    global_entities: dict[str, Entity] = field(default_factory=dict)
+    default_input_targets: dict[str, str] = field(default_factory=dict)
+    input_targets: dict[str, str] = field(default_factory=dict)
+    input_route_stack: list[dict[str, str]] = field(default_factory=list, repr=False)
     variables: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Normalize authored and runtime input-target maps."""
+        normalized_defaults = self._normalize_input_targets(self.default_input_targets)
+        self.default_input_targets = normalized_defaults
+
+        normalized_current = self._normalize_input_targets(self.input_targets)
+        if not normalized_current:
+            self.input_targets = copy.deepcopy(self.default_input_targets)
+            return
+
+        merged_targets = copy.deepcopy(self.default_input_targets)
+        merged_targets.update(normalized_current)
+        self.input_targets = merged_targets
 
     def add_entity(self, entity: Entity) -> None:
         """Insert or replace an entity by its stable identifier."""
-        self.entities[entity.entity_id] = entity
+        existing_entity = self.get_entity(entity.entity_id)
+        if existing_entity is not None and existing_entity.scope != entity.scope:
+            raise ValueError(
+                f"Entity id '{entity.entity_id}' already exists as a {existing_entity.scope}-scope "
+                f"entity and cannot be replaced by a {entity.scope}-scope entity."
+            )
+        if entity.scope == "global":
+            self.global_entities[entity.entity_id] = entity
+            return
+        self.area_entities[entity.entity_id] = entity
 
     def remove_entity(self, entity_id: str) -> None:
         """Remove an entity when it exists in the current room."""
-        self.entities.pop(entity_id, None)
-        self.active_entity_stack = [
-            stacked_entity_id
-            for stacked_entity_id in self.active_entity_stack
-            if stacked_entity_id != entity_id
-        ]
-        if self.active_entity_id == entity_id:
-            self.pop_active_entity()
+        self.area_entities.pop(entity_id, None)
+        self.global_entities.pop(entity_id, None)
+        for action, target_id in list(self.input_targets.items()):
+            if target_id != entity_id:
+                continue
+            default_target_id = self.default_input_targets.get(action, "")
+            self.input_targets[action] = "" if default_target_id == entity_id else default_target_id
 
     def get_entity(self, entity_id: str) -> Entity | None:
         """Return an entity when it exists in the current room."""
-        return self.entities.get(entity_id)
+        entity = self.area_entities.get(entity_id)
+        if entity is not None:
+            return entity
+        return self.global_entities.get(entity_id)
 
-    def get_player(self) -> Entity:
-        """Return the configured player entity."""
-        player = self.get_entity(self.player_id)
-        if player is None:
-            raise KeyError(f"Player entity '{self.player_id}' was not found in the world.")
-        return player
+    def list_input_actions(self) -> list[str]:
+        """Return every logical input action known to the current world."""
+        seen: set[str] = set()
+        ordered_actions: list[str] = []
+        for action in [*DEFAULT_INPUT_ACTIONS, *self.default_input_targets.keys(), *self.input_targets.keys()]:
+            if action in seen:
+                continue
+            seen.add(action)
+            ordered_actions.append(action)
+        return ordered_actions
 
-    def get_active_entity(self) -> Entity:
-        """Return the entity currently receiving direct input."""
-        active_entity = self.get_entity(self.active_entity_id)
-        if active_entity is not None:
-            return active_entity
-        return self.get_player()
+    def get_input_target_id(self, action: str) -> str | None:
+        """Return the current entity id routed for one logical input action."""
+        action_name = str(action).strip()
+        if not action_name:
+            return None
+        if action_name in self.input_targets:
+            current_target_id = str(self.input_targets.get(action_name, "")).strip()
+            if current_target_id and self.get_entity(current_target_id) is not None:
+                return current_target_id
+        default_target_id = str(self.default_input_targets.get(action_name, "")).strip()
+        if not default_target_id:
+            return None
+        if self.get_entity(default_target_id) is not None:
+            return default_target_id
+        return None
 
-    def set_active_entity(self, entity_id: str) -> None:
-        """Set which entity currently receives direct input."""
-        entity = self.get_entity(entity_id)
+    def get_input_target(self, action: str) -> Entity | None:
+        """Return the entity currently routed for one logical input action."""
+        target_id = self.get_input_target_id(action)
+        if target_id is None:
+            return None
+        return self.get_entity(target_id)
+
+    def set_input_target(self, action: str, entity_id: str | None) -> None:
+        """Route one logical input action to a specific entity or clear it."""
+        action_name = str(action).strip()
+        if not action_name:
+            raise ValueError("Input action names must be non-empty.")
+        if entity_id in (None, ""):
+            self.input_targets[action_name] = ""
+            return
+        entity = self.get_entity(str(entity_id))
         if entity is None:
-            raise KeyError(f"Active entity '{entity_id}' was not found in the world.")
-        self.active_entity_id = entity.entity_id
+            raise KeyError(f"Input target entity '{entity_id}' was not found in the world.")
+        self.input_targets[action_name] = entity.entity_id
 
-    def push_active_entity(self, entity_id: str) -> None:
-        """Remember the current active entity, then switch to a new one."""
-        self.active_entity_stack.append(self.get_active_entity().entity_id)
-        self.set_active_entity(entity_id)
+    def set_input_targets(self, targets: dict[str, str], *, replace: bool = False) -> None:
+        """Update or replace the current logical-input routing table."""
+        normalized_targets = self._normalize_input_targets(targets)
+        if replace:
+            next_targets = copy.deepcopy(self.default_input_targets)
+            next_targets.update(normalized_targets)
+            self.input_targets = next_targets
+            return
+        self.input_targets.update(normalized_targets)
 
-    def pop_active_entity(self) -> str:
-        """Restore the most recently pushed active entity, or fall back cleanly."""
-        while self.active_entity_stack:
-            candidate_id = self.active_entity_stack.pop()
-            entity = self.get_entity(candidate_id)
-            if entity is not None:
-                self.active_entity_id = entity.entity_id
-                return self.active_entity_id
+    def route_inputs_to_entity(
+        self,
+        entity_id: str | None,
+        *,
+        actions: list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        """Route selected logical inputs, or all inputs, to one entity."""
+        if entity_id in (None, ""):
+            selected_actions = self.list_input_actions() if actions is None else [str(action) for action in actions]
+            for action in selected_actions:
+                self.set_input_target(action, "")
+            return
+        resolved_entity = self.get_entity(str(entity_id))
+        if resolved_entity is None:
+            raise KeyError(f"Input target entity '{entity_id}' was not found in the world.")
+        selected_actions = self.list_input_actions() if actions is None else [str(action) for action in actions]
+        for action in selected_actions:
+            self.input_targets[str(action)] = resolved_entity.entity_id
 
-        self.active_entity_id = self._resolve_fallback_active_entity_id()
-        return self.active_entity_id
+    def push_input_routes(
+        self,
+        *,
+        actions: list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        """Remember the current routed targets for one set of logical actions."""
+        selected_actions = self.list_input_actions() if actions is None else [str(action) for action in actions]
+        snapshot: dict[str, str] = {}
+        for raw_action in selected_actions:
+            action = str(raw_action).strip()
+            if not action:
+                raise ValueError("Input action names must be non-empty.")
+            snapshot[action] = self.get_input_target_id(action) or ""
+        self.input_route_stack.append(snapshot)
+
+    def pop_input_routes(self) -> None:
+        """Restore the last remembered routed targets for one set of logical actions."""
+        if not self.input_route_stack:
+            raise ValueError("Cannot pop input routes because the input route stack is empty.")
+        snapshot = self.input_route_stack.pop()
+        for action, target_id in snapshot.items():
+            if target_id and self.get_entity(target_id) is not None:
+                self.input_targets[action] = target_id
+                continue
+            self.input_targets[action] = ""
 
     def iter_entities(self, *, include_absent: bool = False) -> list[Entity]:
-        """Return entities as a list, optionally including non-present ones."""
+        """Return all entities, optionally including non-present ones."""
+        entities = [*self.global_entities.values(), *self.area_entities.values()]
         if include_absent:
-            return list(self.entities.values())
+            return list(entities)
         return [
             entity
-            for entity in self.entities.values()
+            for entity in entities
             if entity.present
+        ]
+
+    def iter_area_entities(self, *, include_absent: bool = False) -> list[Entity]:
+        """Return only area-scoped entities."""
+        if include_absent:
+            return list(self.area_entities.values())
+        return [
+            entity
+            for entity in self.area_entities.values()
+            if entity.present
+        ]
+
+    def iter_global_entities(self, *, include_absent: bool = False) -> list[Entity]:
+        """Return only global entities."""
+        if include_absent:
+            return list(self.global_entities.values())
+        return [
+            entity
+            for entity in self.global_entities.values()
+            if entity.present
+        ]
+
+    def iter_entities_in_space(
+        self,
+        space: str,
+        *,
+        include_absent: bool = False,
+    ) -> list[Entity]:
+        """Return entities in one spatial domain."""
+        return [
+            entity
+            for entity in self.iter_entities(include_absent=include_absent)
+            if entity.space == space
         ]
 
     def entity_sort_key(self, entity: Entity) -> tuple[int, int, str]:
@@ -98,11 +232,12 @@ class World:
         include_hidden: bool = False,
         include_absent: bool = False,
     ) -> list[Entity]:
-        """Return entities that currently occupy the requested grid tile."""
+        """Return world-space entities that currently occupy the requested tile."""
         return sorted(
             [
                 entity
                 for entity in self.iter_entities(include_absent=include_absent)
+                if entity.space == "world"
                 if (include_hidden or entity.visible)
                 and entity.entity_id != exclude_entity_id
                 and entity.grid_x == grid_x
@@ -134,17 +269,21 @@ class World:
         """Return a stable unique entity id for editor-created instances."""
         candidate = base_name
         counter = 1
-        while candidate in self.entities:
+        while self.get_entity(candidate) is not None:
             counter += 1
             candidate = f"{base_name}_{counter}"
         return candidate
 
-    def _resolve_fallback_active_entity_id(self) -> str:
-        """Return the safest active-entity id when the requested one no longer exists."""
-        player = self.get_entity(self.player_id)
-        if player is not None:
-            return player.entity_id
-        if self.entities:
-            return sorted(self.entities.keys())[0]
-        return self.player_id
+    def _normalize_input_targets(self, targets: dict[str, str]) -> dict[str, str]:
+        """Convert authored/runtime input-target data into stable string mappings."""
+        normalized: dict[str, str] = {}
+        for raw_action, raw_target in dict(targets).items():
+            action = str(raw_action).strip()
+            if not action:
+                continue
+            if raw_target in (None, ""):
+                normalized[action] = ""
+                continue
+            normalized[action] = str(raw_target).strip()
+        return normalized
 

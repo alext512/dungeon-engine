@@ -1,0 +1,131 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "solid": false,
+  "visible": false,
+  "layer": 100,
+  "input_map": {
+    "interact": "interact",
+    "menu": "menu",
+    "move_up": "move_up",
+    "move_down": "move_down"
+  },
+  "variables": {
+    "panel_visual_id": "panel",
+    "portrait_visual_id": "portrait",
+    "plain_text_box_x": 8,
+    "plain_text_box_y": 154,
+    "plain_text_box_width": 240,
+    "plain_choice_text_x": 16,
+    "plain_choice_width": 232,
+    "portrait_text_box_x": 56,
+    "portrait_text_box_y": 154,
+    "portrait_text_box_width": 192,
+    "portrait_choice_text_x": 64,
+    "portrait_choice_width": 180,
+    "text_box_x": 8,
+    "text_box_y": 154,
+    "text_box_width": 240,
+    "choice_text_x": 16,
+    "choice_width": 232
+  },
+  "visuals": [
+    {
+      "id": "panel",
+      "path": "assets/project/ui/dialogue_panel.png",
+      "frame_width": 256,
+      "frame_height": 44,
+      "frames": [0],
+      "visible": false,
+      "offset_x": 0,
+      "offset_y": 148,
+      "draw_order": 0
+    },
+    {
+      "id": "portrait",
+      "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0],
+      "visible": false,
+      "offset_x": 8,
+      "offset_y": 154,
+      "draw_order": 1
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "dialogue_confirm_choice"
+        },
+        {
+          "type": "dialogue_advance"
+        }
+      ]
+    },
+    "menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "dialogue_cancel"
+        }
+      ]
+    },
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "dialogue_move_selection",
+          "direction": "up"
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "dialogue_move_selection",
+          "direction": "down"
+        }
+      ]
+    },
+    "open_dialogue": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "start_dialogue_session",
+          "dialogue_id": "$dialogue_id",
+          "controller_entity_id": "self",
+          "on_start": [
+            {
+              "type": "push_input_routes"
+            },
+            {
+              "type": "route_inputs_to_entity",
+              "entity_id": "self"
+            },
+            {
+              "type": "run_commands",
+              "commands": "$dialogue_on_start"
+            }
+          ],
+          "on_end": [
+            {
+              "type": "pop_input_routes"
+            },
+            {
+              "type": "run_commands",
+              "commands": "$dialogue_on_end"
+            }
+          ],
+          "segment_hooks": "$segment_hooks",
+          "allow_cancel": "$allow_cancel",
+          "actor_entity_id": "$actor_id",
+          "caller_entity_id": "$caller_id"
+        }
+      ]
+    }
+  }
+}

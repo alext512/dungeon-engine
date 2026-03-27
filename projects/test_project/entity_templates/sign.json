@@ -1,0 +1,32 @@
+{
+  "kind": "sign",
+  "solid": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/sign.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0]
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "dialogue_controller",
+          "event_id": "open_dialogue",
+          "dialogue_id": "$dialogue_id",
+          "dialogue_on_start": [],
+          "dialogue_on_end": [],
+          "segment_hooks": [],
+          "allow_cancel": false,
+          "actor_entity_id": "$actor_id",
+          "caller_entity_id": "$self_id"
+        }
+      ]
+    }
+  }
+}

@@ -6,14 +6,12 @@ This is the practical manual for the current Python engine.
 
 It explains:
 
-- what the engine is
 - how projects are structured
-- how to run the game and editor
-- how content is authored
-- how commands, movement, dialogue, and screen-space elements currently work
+- how runtime entities work
+- how input, commands, dialogue, and persistence currently behave
+- how the sample project is wired today
 
-This document is meant to describe the engine as it exists now, not just future
-ideas.
+This document describes the engine as it exists now.
 
 ## Five-Minute Catch-Up
 
@@ -22,114 +20,28 @@ If you are new to the codebase, this is the shortest accurate summary:
 - engine code lives in `dungeon_engine/`
 - sample project content lives in `projects/test_project/`
 - gameplay is command-driven through JSON
-- input triggers entity events like `move_up` and `interact`
-- the sample player movement is authored in `entities/player.json` plus named commands in `commands/`
-- `variables.json` currently owns shared values like render resolution, dialogue layout, and `movement.ticks_per_tile`
-- text sessions are the main dialogue text service:
-  - the engine wraps, paginates, and windows text
-  - UI entities decide when to read, advance, reset, and render it
-- `run_dialogue` still exists as a simple text-only helper
-- sample dialogue and choices are handled by a focused `dialogue_ui` entity with two public entry events: `show_message` and `show_choice_dialogue`
-- the project startup area id is `title_screen`
-- `New Game` leads into the area id `village_square`
-- `village_square` connects to the area id `village_house`
-- startup validation blocks launch on malformed or duplicate reusable content plus invalid startup-area ids
-- named commands are indexed into an in-memory project database at startup
-- `logs/error.log` is the main runtime/debug log
+- reusable content ids are path-derived from the project's search roots
+- entities use `visuals`, `space`, `scope`, `input_map`, events, and variables
+- input routes each logical action to its current target entity first
+- the sample project has global `dialogue_controller` and `pause_controller` entities declared in `project.json`
+- dialogue assets live in `dialogues/` and are played through `start_dialogue_session`
+- callers customize dialogue behavior through `on_start`, `on_end`, and `segment_hooks`
+- save data records diffs on top of authored area data instead of overwriting project JSON
 
 If you only need the most important files first, read these:
 
 1. `STATUS.md`
 2. `MANUAL.md`
 3. `projects/test_project/project.json`
-4. `projects/test_project/variables.json`
+4. `projects/test_project/shared_variables.json`
 5. `projects/test_project/areas/title_screen.json`
-6. `projects/test_project/entities/player.json`
-7. `projects/test_project/areas/village_square.json`
-8. `projects/test_project/areas/village_house.json`
-9. `projects/test_project/entities/dialogue_ui.json`
+6. `projects/test_project/entity_templates/player.json`
+7. `projects/test_project/entity_templates/dialogue_panel.json`
+8. `projects/test_project/entity_templates/lever_toggle.json`
+9. `projects/test_project/dialogues/system/title_menu.json`
 10. `dungeon_engine/commands/builtin.py`
 11. `dungeon_engine/commands/runner.py`
 12. `dungeon_engine/engine/game.py`
-
-## What This Project Is
-
-The engine is a focused Python + `pygame-ce` top-down puzzle/RPG framework.
-
-Important design choices:
-
-- gameplay is command-driven
-- projects are data-driven through JSON
-- the editor and the game share the same room/entity data model
-- the engine package is independent from any one project folder
-
-The active engine code lives in:
-
-- `dungeon_engine/`
-
-The repo-local sample project lives in:
-
-- `projects/test_project/`
-
-The old Godot project is reference only:
-
-- `../dungeon-puzzle-2/`
-
-## Quick Start
-
-From the repo root:
-
-```text
-cd python_puzzle_engine
-.venv/Scripts/python run_game.py
-.venv/Scripts/python run_editor.py
-```
-
-Windows launchers also exist:
-
-- `Run_Game.cmd`
-- `Run_Editor.cmd`
-
-Launcher behavior:
-
-- if you pass `--project`, that project is used directly
-- if you also pass an area id, that area opens directly
-- if you pass only a project, the engine uses the path-derived `startup_area` id from `project.json`
-- a valid `project.json` manifest is required; the launcher no longer invents a default project
-- if you pass nothing, the launcher opens file pickers rooted at the last used location
-
-Examples:
-
-```text
-.venv/Scripts/python run_game.py --project projects/test_project
-.venv/Scripts/python run_game.py --project projects/test_project title_screen
-.venv/Scripts/python run_game.py --project projects/test_project village_square
-.venv/Scripts/python run_editor.py --project projects/test_project
-```
-
-## Repo Layout
-
-```text
-python_puzzle_engine/
-    dungeon_engine/             # Engine package
-    projects/
-        test_project/           # Versioned sample project
-    run_game.py
-    run_editor.py
-    STATUS.md
-    architecture.md
-    functionality.md
-    roadmap.md
-    plans/
-```
-
-Important boundary:
-
-- `dungeon_engine/` = engine/editor/runtime code
-- `projects/<name>/` = project content
-
-Keeping a project inside this repo does not make it engine-owned content. It is
-just a convenient versioned project folder.
 
 ## Project Structure
 
@@ -140,26 +52,29 @@ Typical layout:
 ```text
 test_project/
     project.json
-    variables.json
+    shared_variables.json
     areas/
-    entities/
-    commands/
+    entity_templates/
+    named_commands/
     dialogues/
     assets/
 ```
+
+The folder names are conventional, not hardcoded. What matters is the manifest.
 
 ### `project.json`
 
 Current important fields:
 
-- `entity_paths`
+- `entity_template_paths`
 - `asset_paths`
 - `area_paths`
-- `command_paths`
+- `named_command_paths`
 - `dialogue_paths`
-- `variables_path`
+- `shared_variables_path`
+- `global_entities`
 - `startup_area`
-- `active_entity_id`
+- `input_targets`
 - `debug_inspection_enabled`
 - `input_events`
 
@@ -167,14 +82,26 @@ Example:
 
 ```json
 {
-  "entity_paths": ["entities/"],
+  "entity_template_paths": ["entity_templates/"],
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
-  "command_paths": ["commands/"],
+  "named_command_paths": ["named_commands/"],
   "dialogue_paths": ["dialogues/"],
-  "variables_path": "variables.json",
+  "shared_variables_path": "shared_variables.json",
+  "global_entities": [
+    {
+      "id": "dialogue_controller",
+      "template": "dialogue_panel"
+    },
+    {
+      "id": "pause_controller",
+      "template": "pause_controller"
+    }
+  ],
   "startup_area": "title_screen",
-  "active_entity_id": "player",
+  "input_targets": {
+    "menu": "pause_controller"
+  },
   "debug_inspection_enabled": true,
   "input_events": {
     "move_up": "move_up",
@@ -186,18 +113,21 @@ Example:
 }
 ```
 
-### `variables.json`
+Notes:
 
-This is the project-shared variable file.
+- all paths are relative to the folder containing `project.json`
+- `global_entities` are instantiated into every runtime world with `scope: "global"`
+- `startup_area` must be a path-derived area id such as `title_screen`
+- `input_targets` is merged with per-area routing; actions omitted by both the project and the area stay unrouted until runtime commands assign them
+- `input_events` are fallback logical actions; routed entities can override them through their own `input_map`
 
-Use it for values that belong to the project rather than to one specific
-entity.
+### `shared_variables.json`
 
-Current sample uses:
+This file stores shared project values such as:
 
-- internal render resolution
-- dialogue layout values
-- movement `ticks_per_tile`
+- render resolution
+- movement timing
+- dialogue layout defaults
 
 Example:
 
@@ -209,14 +139,18 @@ Example:
   },
   "movement": {
     "ticks_per_tile": 16
+  },
+  "dialogue": {
+    "max_lines": 3
   }
 }
 ```
 
-Commands can read these values through runtime tokens like:
+Commands can read these values with tokens such as:
 
 - `$project.display.internal_width`
 - `$project.movement.ticks_per_tile`
+- `$project.dialogue.max_lines`
 
 ## World Content
 
@@ -224,407 +158,371 @@ Commands can read these values through runtime tokens like:
 
 Area JSON stores:
 
-- area id
 - tile size
 - visual tile layers
 - walkability data
+- optional authored `entry_points`
+- optional authored `camera` defaults
 - placed entity instances
-- local/world variables
+- area variables
+- optional `enter_commands`
 
-Areas are authored data, not runtime save-state dumps.
+Important points:
+
+- area ids are path-derived, not authored in the JSON body
+- authored areas must not declare `player_id`; control ownership and camera setup are explicit now
+- area entities are serialized from `world.iter_area_entities()`
+- project global entities are not authored inside area files
+
+The sample areas show three useful patterns:
+
+- `input_targets` can point at a controller entity instead of a walking player
+- `entry_points` can give doors and fresh-session starts stable named destinations
+- `enter_commands` can auto-open a dialogue or menu when the area loads
 
 ### Entity Templates
 
-Entity JSON files under `entities/` define reusable entity templates.
+Entity templates live under `entity_templates/` and define reusable runtime objects.
 
-They can contain:
+Current entity model:
 
-- sprite info
-- flags like `solid`, `visible`, `present`, `pushable`
-- variables
-- named events
-- parameters/placeholders
+- `visuals`: persistent visual list
+- `space`: `world` or `screen`
+- `scope`: `area` or `global`
+- `input_map`: logical action to event-name mapping
+- `events`: named command chains
+- `variables`: mutable per-entity data
 
-Placed instances in rooms usually reference a template plus per-instance data.
+Important authoring rules:
+
+- legacy `sprite` blocks are rejected
+- `space: "world"` entities use `x` / `y`
+- `space: "screen"` entities use `pixel_x` / `pixel_y` and must not author `x` / `y`
+- `scope: "global"` is intended for project-level controller/service entities
+
+### Named Commands
+
+Reusable project commands live under `named_commands/`.
+
+They are:
+
+- loaded into an in-memory database at startup
+- addressed by path-derived id
+- executed through `run_named_command`
+
+The sample project uses named commands mainly for movement logic. Dialogue is now driven more directly by controller events plus dialogue assets.
 
 ### Dialogue Assets
 
-Dialogue text lives in dedicated JSON files under `dialogues/`.
+Dialogue text lives under `dialogues/`.
 
-Current dialogue assets may define:
+A dialogue asset is a reusable definition containing:
+
+- optional `participants`
+- a required `segments` list
+- optional `font_id`, `max_lines`, and `text_color`
+
+Segment types:
 
 - `text`
-- or `pages`
+- `choice`
 
-Example:
+Each segment can also define:
 
-```json
-{
-  "text": "Sign: The old path is sealed. Pull the lever to open the gate."
-}
-```
+- `speaker_id`
+- `show_portrait`
+- `advance_mode`
+- `advance_seconds`
 
-### Named Command Assets
+Dialogue assets do not directly own gameplay commands. Callers supply behavior through controller-level hooks when they start the dialogue session.
 
-Reusable project commands live under `commands/`.
-Entity-specific controller logic should stay on the entity itself as local events.
+## Runtime Entity Model
 
-These are JSON command libraries addressed by path-based ids, for example:
+### `visuals`
 
-- `attempt_move_one_tile`
-- `push_one_tile`
+Each entity owns a list of persistent visuals. Every visual has its own:
 
-The engine loads them through `run_named_command`.
+- `id`
+- `path`
+- `frame_width` / `frame_height`
+- `frames`
+- `animation_fps`
+- `animate_when_moving`
+- `flip_x`
+- `visible`
+- `tint`
+- `offset_x` / `offset_y`
+- `draw_order`
 
-At startup, the project builds an in-memory named-command database so runtime
-lookups do not rescan command folders during gameplay.
+The first visual is treated as the primary visual in many places, but commands can also target a specific visual path such as `visuals.main.tint`.
 
-## Command Model
+### `space`
 
-Gameplay is built out of command chains.
+`space` defines the coordinate system:
+
+- `world`: tile-aligned, participates in collision and interaction lookup
+- `screen`: positioned directly in screen pixels and rendered in screen space
+
+The dialogue controller is a screen-space entity. The player, signs, levers, and doors are world-space entities.
+
+### `scope`
+
+`scope` defines runtime lifetime:
+
+- `area`: normal area-owned entity
+- `global`: project-level entity added to every runtime world
+
+`World` keeps these in separate dictionaries:
+
+- `area_entities`
+- `global_entities`
+
+Queries like `world.get_entity()` and `world.get_input_target(action)` look across both sets.
+
+### Routed Input Targets
+
+Each logical action is routed independently.
+
+Current flow:
+
+1. the input handler resolves a logical action such as `move_up`, `interact`, or `menu`
+2. the world chooses the routed entity for that action from the current `input_targets`, using project defaults plus any area overrides
+3. that routed entity's `input_map` is checked first
+4. if no entity-specific mapping exists, the project-level `input_events` fallback is used
+5. the runner enqueues `run_event` on the routed entity
+
+This is what allows dialogue controllers, menus, and other service entities to temporarily own only the inputs they need without a single active-entity focus model.
+
+If an action is absent from both the project and the area routing maps, it is simply unrouted until a runtime command assigns it.
+
+For modal flows, the intended pattern is:
+
+1. `push_input_routes`
+2. reroute the borrowed actions to the modal controller
+3. later `pop_input_routes` to restore the exact previous routes
+
+The route stack is runtime-only control state. It is not saved.
+
+## Commands and Runtime References
+
+Gameplay is built from command chains.
 
 Broad split:
 
 - Python implements primitive engine commands
 - project JSON composes those primitives into behavior
 
-Examples of primitive commands already in the engine:
+Important command families already in the engine:
 
-- `run_event`
-- `run_named_command`
-- `set_var`
-- `increment_var`
-- `check_var`
-- `move_entity`
-- `move_entity_one_tile`
-- `teleport_entity`
-- `change_area`
-- `play_animation`
-- `stop_animation`
-- `set_sprite_frame`
-- `show_screen_image`
-- `show_screen_text`
-- `remove_screen_element`
-- `play_audio`
-- `run_dialogue`
-- `save_game`
-- `load_game`
-- `quit_game`
+- event dispatch: `run_event`, `run_named_command`
+- movement: `move_entity`, `move_entity_one_tile`, `teleport_entity`
+- variables: `set_var`, `increment_var`, `check_var`
+- entity mutation: `set_entity_field`, `set_event_enabled`
+- persistence/flow: `change_area`, `new_game`, `save_game`, `load_game`, `quit_game`
+- input routing: `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, `pop_input_routes`
+- dialogue: `start_dialogue_session`, `dialogue_advance`, `dialogue_move_selection`, `dialogue_confirm_choice`, `dialogue_cancel`
+- camera: `set_camera_follow_entity`, `set_camera_follow_input_target`, `clear_camera_follow`, `set_camera_bounds_rect`, `clear_camera_bounds`, `set_camera_deadzone`, `clear_camera_deadzone`, `set_var_from_camera`, `move_camera`, `teleport_camera`
 
-### Events
+### Special entity references
 
-Entities own named events such as:
+Many commands that accept `entity_id` also accept:
 
-- `move_up`
-- `move_down`
-- `interact`
-- `push_from_left`
+- `self`: the entity that owns the current event/command chain
+- `actor`: the entity that initiated the current interaction/input flow
+- `caller`: the caller explicitly forwarded into a deeper command chain
 
-The engine does not hardcode the player’s movement behavior. Input triggers the
-configured event names on the current active entity.
+These are resolved by the command system before execution.
 
-## Input Model
+### Runtime tokens
 
-The engine routes direct control to `world.active_entity_id`.
+The runner also supports tokens such as:
 
-By default:
+- `$self_id`
+- `$actor_id`
+- `$caller_id`
+- `$self.some_var`
+- `$actor.some_var`
+- `$caller.some_var`
+- `$project.dialogue.max_lines`
+- `$world.some_value`
 
-- `Up` / `W` -> active entity event `move_up`
-- `Down` / `S` -> `move_down`
-- `Left` / `A` -> `move_left`
-- `Right` / `D` -> `move_right`
-- `Space` / `Enter` -> `interact`
+These are especially useful when forwarding context into another entity's event.
 
-But:
+## Dialogue Model
 
-- active entities can define their own `input_map`
-- projects define fallback event names in `project.json`
-- commands can switch the active entity with `set_active_entity`, `push_active_entity`, and `pop_active_entity`
+### The old `run_dialogue` path
 
-This lets a room temporarily hand control to something other than the player.
+The old authored `run_dialogue` path is intentionally gone. Startup validation now rejects authored uses of it, and the runtime command name remains only as a fail-safe.
 
-## Movement and Animation
+Current rule:
 
-### Fixed Timestep
+- start dialogues by sending an event to a controller entity
+- let that event call `start_dialogue_session`
 
-Gameplay simulation runs on a fixed tick:
+## Session Flow
 
-- `1 / 60` second per tick
+- `change_area` moves into another authored area while keeping the current runtime session alive. It can target an authored `entry_id`, transfer one or more live entities, and request a post-load camera follow target.
+- `new_game` resets the current runtime session state and then enters the requested authored area. It uses the same transition payload shape as `change_area`, including optional `entry_id` and camera follow data.
+- `load_game` restores a save slot into the current runtime.
+- `save_game` writes the current runtime session to a save slot.
+- `quit_game` requests runtime shutdown.
 
-Rendering is separate from simulation timing.
+### Controller-driven dialogue
 
-### Player Step Timing
+The sample project's `dialogue_panel` template is the canonical example.
 
-The sample player uses:
+It does three jobs:
 
-- `movement.ticks_per_tile` from `variables.json`
+- owns the screen-space visuals used for the panel and portrait
+- owns the input map for confirm, cancel, and selection movement
+- exposes an `open_dialogue` event that calls `start_dialogue_session`
 
-Currently in the sample project:
+That event forwards:
 
-- `ticks_per_tile = 16`
+- `dialogue_id`
+- `dialogue_on_start`
+- `dialogue_on_end`
+- `segment_hooks`
+- `allow_cancel`
+- `actor_entity_id`
+- `caller_entity_id`
+
+When a dialogue starts:
+
+1. the controller's `on_start` commands reroute the needed logical inputs to the dialogue controller
+2. the controller becomes visible
+3. the dialogue handle renders wrapped text and options through the screen manager
+4. controller input routes to `dialogue_advance`, `dialogue_move_selection`, `dialogue_confirm_choice`, and `dialogue_cancel`
+5. when the session ends, the controller restores the borrowed routes through `pop_input_routes`
+6. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
+
+### Caller-supplied hooks
+
+`start_dialogue_session` supports three important extension points:
+
+- `on_start`: runs once before the first segment
+- `on_end`: runs once after the dialogue fully closes
+- `segment_hooks`: one optional hook object per segment
+
+Each segment hook can contain:
+
+- `on_start`
+- `on_end`
+- `option_commands_by_id`
+- `option_commands`
+
+This is how the sample lever, save point, pause menu, and title screen attach gameplay consequences to plain dialogue assets.
+
+When a choice needs to trigger something after the dialogue has fully closed, the reliable pattern is:
+
+1. store the selected result in a variable during a segment hook
+2. close the dialogue
+3. branch on that variable from `dialogue_on_end`
+
+That keeps post-close actions separate from the controller's input-restore bookkeeping.
+
+## Persistence and Area Changes
+
+Persistence stores playthrough-specific differences on top of authored area data.
+
+Key points:
+
+- authored project content stays as the source of truth
+- save slots live under the active project's `saves/` folder
+- save data records current area, current logical input-target routing, current camera state, traveler session state, per-area overrides, and an exact diff for the current loaded area
+- persistent commands can record entity-field and variable changes without rewriting authored JSON
+
+The sample lever/gate puzzle uses persistent field and variable writes to keep the puzzle state across save/load and room re-entry.
+
+### Area Entry Points
+
+Areas can author a top-level `entry_points` object containing named destinations:
+
+```json
+"entry_points": {
+  "from_house": {
+    "x": 8,
+    "y": 6,
+    "facing": "down"
+  }
+}
+```
+
+These are the stable targets for `change_area` and `new_game`. Each entry point can also provide optional `pixel_x` / `pixel_y` overrides when a transfer should land at a specific transform position.
+
+### Cross-Area Travelers
+
+Transferred entities are tracked as session travelers.
 
 That means:
 
-- one tile move = 16 simulation ticks
-- with a 16 px tile, movement is 1 px per tick
+- a transferred entity keeps one live identity across areas
+- its authored origin placeholder is suppressed while it is away
+- re-entering the origin area does not duplicate it
+- save/load restores the traveler in its current area
 
-### Where Animation Timing Is Determined
+The sample door template demonstrates the intended pattern:
 
-For the player, sprite-change timing is command-driven.
+```json
+{
+  "type": "change_area",
+  "area_id": "$target_area",
+  "entry_id": "$target_entry",
+  "transfer_entity_ids": ["actor"],
+  "camera_follow_entity_id": "actor"
+}
+```
 
-The player move event passes:
+### Camera State
 
-- `frames_needed = $project.movement.ticks_per_tile`
-- `frames_per_sprite_change = $half:project.movement.ticks_per_tile`
+Camera behavior is explicit runtime state, not an implicit player default.
 
-So if `ticks_per_tile = 16`:
+Areas can author camera defaults:
 
-- movement lasts 16 ticks
-- the walk sprite changes every 8 ticks
+```json
+"camera": {
+  "follow_entity_id": "player"
+}
+```
 
-### Walk Phase
+Commands can then retarget or refine that state during play:
 
-The sample player alternates between two half-cycles using an entity variable:
+- follow a specific entity or a routed input target
+- apply follow offsets
+- clamp the camera to a bounds rectangle
+- keep the followed target inside a deadzone rectangle
+- query the current follow target, offsets, position, and bounds state into variables through `set_var_from_camera`
 
-- `walk_phase`
+Current camera state is saved and restored with the session.
 
-That is authored in:
+## Controls
 
-- `commands/walk_one_tile.json`
+### Game
 
-### Pushing
+- `WASD` or arrow keys: move
+- `Space` or `Enter`: interact, advance dialogue, confirm choice
+- `Escape`: open the pause menu in playable areas
 
-Current pushing in the sample project works like this:
+If debug inspection is enabled:
 
-1. player attempts movement
-2. the command chain probes what is ahead
-3. if blocked by a movable object, it delegates to that object’s directional
-   push event
-4. the player re-checks the path
-5. only then does the player walk
+- `F6`: pause/resume simulation
+- `F7`: step one simulation tick
+- `[` / `]`: zoom out/in
 
-So the pushed object participates in the behavior instead of being only a
-passive hardcoded flag.
+### Editor
 
-## Screen-Space Elements
+- `Ctrl+S`: save
+- `Tab`: toggle `Paint` / `Select`
+- `[` / `]`: cycle the browsed tileset
+- `Escape`: cancel editing, deselect, or confirm quit when dirty
 
-The engine has a generic screen-space layer for overlays.
+## Verification
 
-Current primitives:
+Useful commands during refactor work:
 
-- `show_screen_image`
-- `show_screen_text`
-- `set_screen_text`
-- `remove_screen_element`
-- `clear_screen_elements`
-- `play_screen_animation`
-- `wait_for_screen_animation`
-
-This layer is meant for:
-
-- dialogue panels
-- portraits
-- title cards
-- overlays
-- later menu-like elements
-
-## Dialogue
-
-### Current Design
-
-The current engine keeps dialogue intentionally narrow and service-oriented.
-
-Engine-owned part:
-
-- text wrapping by measured pixel width
-- pagination by `max_lines`
-- single-line marquee windowing for long choice text
-- text-session storage and cursor state
-
-Project-authored part:
-
-- showing the panel image
-- showing a portrait image
-- deciding where the text box is
-- creating/removing choice text
-- deciding when text advances or resets
-- processing menu-like input through events and commands
-
-So the recommended flow is now:
-
-- a UI entity owns dialogue flow
-- text-session commands provide processed text
-- normal screen-space commands render the result
-
-### Current `run_dialogue`
-
-Important parameters:
-
-- `dialogue_id`
-- `text`
-- `pages`
-- `element_id`
-- `x`
-- `y`
-- `max_width`
-- `max_lines`
-- `layer`
-
-Use either:
-
-- one long `text` and let the engine paginate it
-- or explicit `pages` for manual control
-
-`run_dialogue` is still fine for simple blocking text, but the sample project now
-uses `prepare_text_session`, `read_text_session`, `advance_text_session`, and
-`reset_text_session` instead.
-
-### Dialogue Layout
-
-The sample project keeps shared dialogue layout values in `variables.json`,
-for example:
-
-- `dialogue.panel_path`
-- `dialogue.plain_box`
-- `dialogue.portrait_box`
-- `dialogue.portrait_position`
-- `dialogue.max_lines`
-
-That lets command chains reuse one consistent layout without baking that layout
-into the engine.
-
-### Choices
-
-Current choices are still JSON-authored in the sample project.
-
-The engine still does not own a baked generic choice-menu subsystem.
-
-Instead:
-
-- callers open the shared `dialogue_ui` entity through `show_choice_dialogue`
-- choices are passed as a JSON list of `{ "text", "commands" }` objects
-- `dialogue_ui` becomes the active input receiver while open
-- its local events handle selection, scrolling, marquee playback for long highlighted text, and confirmation
-
-## Audio
-
-The engine audio layer is intentionally minimal.
-
-The primitive is:
-
-- `play_audio`
-
-The engine does not currently distinguish between “music” and “sfx” in the
-command API.
-
-## Persistence
-
-Persistence is layered over authored data.
-
-Conceptual layers:
-
-- authored content
-- transient runtime state
-- persistent runtime overrides
-- save slot data
-
-Current save/load flow:
-
-- title-screen `Load` opens a native file chooser rooted at the active project's `saves/` folder
-- in-level save points open an authored yes/no prompt and then a save-file chooser rooted at the same folder
-- the in-level `Escape` menu is just normal dialogue UI and currently exposes `Continue`, `Load`, and `Exit`
-- save data records the current area, the current active entity, persistent diffs for visited areas, and the current area's full runtime diff
-- when a save is loaded, the active area's temporary changes are restored for that load, but they still reset after the player leaves that area again
-
-## Debug and Inspection
-
-If the project enables `debug_inspection_enabled`, play mode supports:
-
-- `F6` pause/resume simulation
-- `F7` advance one simulation tick
-- `[` / `]` zoom out/in
-
-This is useful for inspecting movement, animation, and dialogue timing.
-
-## Editor
-
-The editor is a separate application, not an in-game overlay.
-
-Current core use cases:
-
-- paint tiles
-- manage layers
-- place entities
-- inspect/edit a limited set of properties
-- save and reload room data
-
-The editor shares the same room/entity JSON model as play mode.
-
-For detailed controls, see `STATUS.md`.
-
-## Validation and Errors
-
-At startup, the engine validates:
-
-- malformed area files
-- duplicate area ids
-- invalid `startup_area` ids in `project.json`
-- malformed entity templates
-- malformed named-command files
-- duplicate command ids
-- malformed dialogue files
-- duplicate dialogue ids
-- literal missing command references where validation can prove they are missing
-
-Errors go to:
-
-- `logs/error.log`
-
-## Current Sample Project
-
-The sample project demonstrates:
-
-- a title screen authored as a normal area with animated screen-space art and button entities
-- generic area-to-area travel through a door entity and the `change_area` command
-- a tilemap-based outdoor area and a connected tilemap-based house interior
-- an authored save point that calls the project-scoped save dialog
-- an in-level `Escape` menu built as ordinary dialogue/options JSON
-- a persistent lever/gate example
-- a non-persistent push block that resets after area exit/re-entry
-- project-level variables for resolution, dialogue layout, and movement timing
-
-Useful sample files:
-
-- `projects/test_project/project.json`
-- `projects/test_project/variables.json`
-- `projects/test_project/areas/title_screen.json`
-- `projects/test_project/areas/village_square.json`
-- `projects/test_project/areas/village_house.json`
-- `projects/test_project/entities/player.json`
-- `projects/test_project/entities/area_door.json`
-- `projects/test_project/entities/save_point.json`
-- `projects/test_project/entities/dialogue_ui.json`
-- `projects/test_project/commands/`
-- `projects/test_project/dialogues/`
-
-## Current Limits
-
-Important current limitations:
-
-- movement/render feel still needs a dedicated polish pass
-- dialogue text is paginated, but there is no typewriter text yet
-- choice layout is still authored manually in commands
-- there is no visual command editor yet
-- editor parameter editing is still basic
-- inventory/item systems are still planned work
-
-## Suggested Reading Order
-
-For the repo docs:
-
-1. `STATUS.md`
-2. `MANUAL.md`
-3. `architecture.md`
-4. `functionality.md`
-5. `roadmap.md`
-6. `plans/`
+```text
+.venv/Scripts/python -m unittest discover -s tests -v
+.venv/Scripts/python run_game.py --project projects/test_project title_screen --headless --max-frames 2
+.venv/Scripts/python run_game.py --project projects/test_project village_square --headless --max-frames 2
+.venv/Scripts/python run_game.py --project projects/test_project village_house --headless --max-frames 2
+```

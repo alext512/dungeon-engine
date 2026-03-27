@@ -91,7 +91,7 @@
                   ]
                 },
                 {
-                  "type": "set_sprite_frame",
+                  "type": "set_visual_frame",
                   "entity_id": "self",
                   "frame": "$idle_frame"
                 }
@@ -110,7 +110,7 @@
               ]
             },
             {
-              "type": "set_sprite_frame",
+              "type": "set_visual_frame",
               "entity_id": "self",
               "frame": "$idle_frame"
             }
