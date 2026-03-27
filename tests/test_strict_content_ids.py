@@ -47,6 +47,7 @@ from dungeon_engine.world.persistence import (
     save_data_to_dict,
 )
 from dungeon_engine.engine.asset_manager import AssetManager
+from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.text import TextRenderer
 
 
@@ -375,6 +376,25 @@ class _StubTextRenderer:
         return [part for part in str(text).split(" ") if part]
 
 
+class _RecordingInputDispatchRunner:
+    def __init__(self) -> None:
+        self.dispatched: list[tuple[str, str, str | None]] = []
+        self.active_handle = None
+
+    def has_pending_work(self) -> bool:
+        return False
+
+    def dispatch_input_event(
+        self,
+        *,
+        entity_id: str,
+        event_id: str,
+        actor_entity_id: str | None = None,
+    ) -> bool:
+        self.dispatched.append((entity_id, event_id, actor_entity_id))
+        return True
+
+
 class StrictContentIdTests(unittest.TestCase):
     def _make_project(
         self,
@@ -569,6 +589,25 @@ class StrictContentIdTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             load_project(Path(temp_dir.name) / "project.json")
 
+    def test_load_project_rejects_removed_input_events_manifest_field(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        project_root = Path(temp_dir.name)
+        _write_json(
+            project_root / "project.json",
+            {
+                "area_paths": ["areas/"],
+                "entity_template_paths": ["entity_templates/"],
+                "named_command_paths": ["named_commands/"],
+                "input_events": {"interact": "confirm"},
+            },
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            load_project(project_root / "project.json")
+
+        self.assertIn("must not use 'input_events'", str(raised.exception))
+
     def test_area_loader_leaves_unassigned_project_input_targets_unrouted(self) -> None:
         _, project = self._make_project(
             input_targets={"menu": "pause_controller"},
@@ -597,6 +636,27 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertIsNone(world.get_input_target_id("move_up"))
         self.assertIsNone(world.get_input_target_id("interact"))
         self.assertEqual(world.get_input_target_id("menu"), "pause_controller")
+
+    def test_input_handler_only_dispatches_actions_with_explicit_input_map_entries(self) -> None:
+        import pygame
+
+        world = World(default_input_targets={"interact": "player"})
+        player = _make_runtime_entity("player", kind="player")
+        world.add_entity(player)
+        runner = _RecordingInputDispatchRunner()
+        input_handler = InputHandler(runner, world)
+
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE})]
+        )
+        self.assertEqual(runner.dispatched, [])
+
+        player.input_map["interact"] = "confirm"
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE})]
+        )
+
+        self.assertEqual(runner.dispatched, [("player", "confirm", "player")])
 
     def test_entity_template_validation_rejects_removed_sprite_field(self) -> None:
         _, project = self._make_project(
@@ -639,6 +699,34 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any("uses removed command 'run_dialogue'" in issue for issue in raised.exception.issues)
+        )
+
+    def test_entity_template_validation_rejects_removed_set_input_event_name_command(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "legacy_controller.json": {
+                    "kind": "system",
+                    "events": {
+                        "interact": [
+                            {
+                                "type": "set_input_event_name",
+                                "action": "interact",
+                                "event_id": "confirm",
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+
+        with self.assertRaises(EntityTemplateValidationError) as raised:
+            validate_project_entity_templates(project)
+
+        self.assertTrue(
+            any(
+                "uses removed command 'set_input_event_name'" in issue
+                for issue in raised.exception.issues
+            )
         )
 
     def test_entity_template_validation_rejects_removed_set_camera_follow_player_command(self) -> None:
@@ -791,6 +879,32 @@ class StrictContentIdTests(unittest.TestCase):
                     for issue in raised.exception.issues
                 )
             )
+
+    def test_named_command_validation_rejects_removed_set_input_event_name_command(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "legacy_input_event.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "set_input_event_name",
+                            "action": "interact",
+                            "event_id": "confirm",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(NamedCommandValidationError) as raised:
+            validate_project_named_commands(project)
+
+        self.assertTrue(
+            any(
+                "uses removed command 'set_input_event_name'" in issue
+                for issue in raised.exception.issues
+            )
+        )
 
     def test_named_command_validation_rejects_removed_broad_variable_commands(self) -> None:
         for command_name in (
@@ -1487,6 +1601,32 @@ class StrictContentIdTests(unittest.TestCase):
                     for issue in raised.exception.issues
                 )
             )
+
+    def test_area_validation_rejects_removed_set_input_event_name_command(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "set_input_event_name",
+                            "action": "interact",
+                            "event_id": "confirm",
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any(
+                "uses removed command 'set_input_event_name'" in issue
+                for issue in raised.exception.issues
+            )
+        )
 
     def test_area_validation_rejects_removed_if_var_command(self) -> None:
         _, project = self._make_project(
@@ -3102,6 +3242,24 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertIsNotNone(raised.exception.__cause__)
         self.assertIn("set_var_from_camera was removed", str(raised.exception.__cause__))
+
+    def test_set_input_event_name_is_removed(self) -> None:
+        world = World()
+        registry, context = self._make_command_context(world=world)
+
+        with self.assertRaises(CommandExecutionError) as raised:
+            execute_registered_command(
+                registry,
+                context,
+                "set_input_event_name",
+                {
+                    "action": "interact",
+                    "event_id": "confirm",
+                },
+            )
+
+        self.assertIsNotNone(raised.exception.__cause__)
+        self.assertIn("set_input_event_name was removed", str(raised.exception.__cause__))
 
     def test_explicit_camera_query_helpers_are_removed(self) -> None:
         world = World()

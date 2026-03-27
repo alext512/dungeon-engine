@@ -48,20 +48,12 @@ class InputHandler:
         self,
         command_runner: CommandRunner,
         world: World,
-        action_event_names: dict[str, str] | None = None,
         *,
         debug_inspection_enabled: bool = False,
     ) -> None:
         self.command_runner = command_runner
         self.world = world
         self.debug_inspection_enabled = bool(debug_inspection_enabled)
-        self.action_event_names: dict[str, str] = dict(action_event_names or {
-            "move_up": "move_up",
-            "move_down": "move_down",
-            "move_left": "move_left",
-            "move_right": "move_right",
-            "interact": "interact",
-        })
         self.held_directions: dict[str, bool] = {
             "up": False,
             "down": False,
@@ -201,12 +193,6 @@ class InputHandler:
             HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS
         )
 
-    def set_action_event_name(self, action: str, event_name: str) -> None:
-        """Change the fallback entity event for a named logical input action."""
-        if action not in self.action_event_names:
-            raise KeyError(f"Unknown input action '{action}'.")
-        self.action_event_names[action] = str(event_name)
-
     def get_action_press_count(self) -> int:
         """Return how many action-button keydown events have occurred."""
         return int(self.action_press_count)
@@ -246,7 +232,7 @@ class InputHandler:
         event_name = target_entity.input_map.get(action_name)
         if event_name is not None:
             return str(event_name).strip()
-        return self.action_event_names.get(action_name, "").strip()
+        return ""
 
     def _can_route_input_while_busy(self) -> bool:
         """Return True when logical actions should still go to routed entities."""

@@ -75,8 +75,6 @@ Current important fields:
 - `startup_area`
 - `input_targets`
 - `debug_inspection_enabled`
-- `input_events`
-
 Example:
 
 ```json
@@ -100,14 +98,7 @@ Example:
   "input_targets": {
     "menu": "pause_controller"
   },
-  "debug_inspection_enabled": true,
-  "input_events": {
-    "move_up": "move_up",
-    "move_down": "move_down",
-    "move_left": "move_left",
-    "move_right": "move_right",
-    "interact": "interact"
-  }
+  "debug_inspection_enabled": true
 }
 ```
 
@@ -117,7 +108,6 @@ Notes:
 - `global_entities` are instantiated into every runtime world with `scope: "global"`
 - `startup_area` must be a path-derived area id such as `title_screen`
 - `input_targets` is merged with per-area routing; actions omitted by both the project and the area stay unrouted until runtime commands assign them
-- `input_events` are fallback logical actions; routed entities can override them through their own `input_map`
 
 ### `shared_variables.json`
 
@@ -285,8 +275,8 @@ Current flow:
 
 1. the input handler resolves a logical action such as `move_up`, `interact`, or `menu`
 2. the world chooses the routed entity for that action from the current `input_targets`, using project defaults plus any area overrides
-3. that routed entity's `input_map` is checked first
-4. if no entity-specific mapping exists, the project-level `input_events` fallback is used
+3. that routed entity's `input_map` decides which event to run for that action
+4. if there is no mapping for that action, nothing is dispatched for that routed entity
 5. the runner enqueues `run_event` on the routed entity
 
 This is what allows dialogue controllers, menus, and other service entities to temporarily own only the inputs they need without a single active-entity focus model.

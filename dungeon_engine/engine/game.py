@@ -221,11 +221,9 @@ class Game:
             request_quit=self.request_quit,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
-        project_input_events = None if self.project is None else self.project.input_event_names
         self.input_handler = InputHandler(
             self.command_runner,
             self.world,
-            action_event_names=project_input_events,
             debug_inspection_enabled=self.debug_inspection_enabled,
         )
         command_context.input_handler = self.input_handler

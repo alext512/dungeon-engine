@@ -16,14 +16,7 @@ Example ``project.json``::
         "input_targets": {
             "menu": "pause_controller"
         },
-        "debug_inspection_enabled": true,
-        "input_events": {
-            "move_up": "move_up",
-            "move_down": "move_down",
-            "move_left": "move_left",
-            "move_right": "move_right",
-            "interact": "interact"
-        }
+        "debug_inspection_enabled": true
     }
 
 If any section is omitted the engine falls back to conventional folders inside
@@ -42,14 +35,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
-DEFAULT_INPUT_EVENT_NAMES: dict[str, str] = {
-    "move_up": "move_up",
-    "move_down": "move_down",
-    "move_left": "move_left",
-    "move_right": "move_right",
-    "interact": "interact",
-}
 @dataclass
 class ProjectContext:
     """Resolved search paths for a single project."""
@@ -68,9 +53,6 @@ class ProjectContext:
     shared_variables: dict[str, Any] = field(default_factory=dict)
     internal_width: int = 320
     internal_height: int = 240
-    input_event_names: dict[str, str] = field(
-        default_factory=lambda: dict(DEFAULT_INPUT_EVENT_NAMES)
-    )
 
     # ------------------------------------------------------------------
     # Entity template discovery
@@ -444,6 +426,11 @@ def load_project(project_path: Path) -> ProjectContext:
         raise ValueError(
             "project.json must not use 'active_entity_id'; use 'input_targets' instead."
         )
+    if "input_events" in raw:
+        raise ValueError(
+            "project.json must not use 'input_events'; routed entities should define explicit "
+            "'input_map' entries instead."
+        )
 
     return ProjectContext(
         project_root=project_root,
@@ -460,7 +447,6 @@ def load_project(project_path: Path) -> ProjectContext:
         shared_variables=shared_variables,
         internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
         internal_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
-        input_event_names=_resolve_input_events(raw.get("input_events")),
     )
 
 
@@ -494,17 +480,6 @@ def _resolve_project_dimension(shared_variables: dict[str, Any], key: str, defau
         return max(1, int(raw_value))
     except (TypeError, ValueError):
         return int(default)
-
-
-def _resolve_input_events(raw_input_events: Any) -> dict[str, str]:
-    """Merge authored input-event names with engine defaults."""
-    resolved = dict(DEFAULT_INPUT_EVENT_NAMES)
-    if not isinstance(raw_input_events, dict):
-        return resolved
-    for action, event_name in raw_input_events.items():
-        resolved[str(action)] = str(event_name)
-    return resolved
-
 
 def _resolve_input_targets(raw_input_targets: Any) -> dict[str, str]:
     """Normalize authored project-level input-target overrides."""

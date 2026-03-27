@@ -18,13 +18,6 @@
   "input_targets": {
     "menu": "pause_controller"
   },
-  "debug_inspection_enabled": true,
-  "input_events": {
-    "move_up": "move_up",
-    "move_down": "move_down",
-    "move_left": "move_left",
-    "move_right": "move_right",
-    "interact": "interact"
-  }
+  "debug_inspection_enabled": true
 }
 
