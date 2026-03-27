@@ -1592,6 +1592,20 @@ class StrictContentIdTests(unittest.TestCase):
         assert controller is not None
         self.assertEqual(controller.variables["mode"], "nested_dialogue")
 
+    def test_registry_declares_deferred_params_for_orchestration_commands(self) -> None:
+        registry = CommandRegistry()
+        register_builtin_commands(registry)
+
+        self.assertEqual(registry.get_deferred_params("run_commands"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("run_detached_commands"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("run_commands_for_collection"), {"commands"})
+        self.assertEqual(
+            registry.get_deferred_params("run_event"),
+            {"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
+        )
+        self.assertEqual(registry.get_deferred_params("check_world_var"), {"then", "else"})
+        self.assertEqual(registry.get_deferred_params("check_entity_var"), {"then", "else"})
+
     def test_append_and_pop_entity_var_support_nested_dialogue_snapshots(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))

@@ -1616,7 +1616,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             "reset_text_session was removed. Reset your entity-owned text state directly through normal commands."
         )
 
-    @registry.register("run_detached_commands")
+    @registry.register("run_detached_commands", deferred_params={"commands"})
     def run_detached_commands(
         context: CommandContext,
         *,
@@ -1642,7 +1642,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.command_runner.spawn_background_handle(handle)
         return ImmediateHandle()
 
-    @registry.register("run_commands")
+    @registry.register("run_commands", deferred_params={"commands"})
     def run_commands(
         context: CommandContext,
         *,
@@ -1672,7 +1672,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             },
         )
 
-    @registry.register("run_commands_for_collection")
+    @registry.register("run_commands_for_collection", deferred_params={"commands"})
     def run_commands_for_collection(
         context: CommandContext,
         *,
@@ -1750,7 +1750,10 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             },
         )
 
-    @registry.register("run_event")
+    @registry.register(
+        "run_event",
+        deferred_params={"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
+    )
     def run_event(
         context: CommandContext,
         *,
@@ -2839,7 +2842,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("check_world_var")
+    @registry.register("check_world_var", deferred_params={"then", "else"})
     def check_world_var(
         context: CommandContext,
         *,
@@ -2864,7 +2867,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             excluded_param_names={"name", "op", "value", "then", "else"},
         )
 
-    @registry.register("check_entity_var")
+    @registry.register("check_entity_var", deferred_params={"then", "else"})
     def check_entity_var(
         context: CommandContext,
         *,
@@ -3223,7 +3226,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 )
         return ImmediateHandle()
 
-    @registry.register("check_var")
+    @registry.register("check_var", deferred_params={"then", "else"})
     def check_var(
         context: CommandContext,
         *,

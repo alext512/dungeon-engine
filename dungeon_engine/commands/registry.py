@@ -17,10 +17,13 @@ class CommandRegistry:
     def __init__(self) -> None:
         self._commands: dict[str, Callable[..., CommandHandle | None]] = {}
         self._signatures: dict[str, inspect.Signature] = {}
+        self._deferred_params: dict[str, set[str]] = {}
 
     def register(
         self,
         name: str,
+        *,
+        deferred_params: set[str] | None = None,
     ) -> Callable[[Callable[..., CommandHandle | None]], Callable[..., CommandHandle | None]]:
         """Register a command function under a stable string key."""
 
@@ -29,9 +32,14 @@ class CommandRegistry:
         ) -> Callable[..., CommandHandle | None]:
             self._commands[name] = func
             self._signatures[name] = inspect.signature(func)
+            self._deferred_params[name] = set(deferred_params or set())
             return func
 
         return decorator
+
+    def get_deferred_params(self, name: str) -> set[str]:
+        """Return command params that should only resolve top-level runtime tokens."""
+        return set(self._deferred_params.get(name, set()))
 
     def execute(
         self,

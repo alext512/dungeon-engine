@@ -523,17 +523,6 @@ def _resolve_deferred_runtime_value(
     return copy.deepcopy(value)
 
 
-_DEFERRED_RUNTIME_COMMAND_KEYS: dict[str, set[str]] = {
-    "check_var": {"then", "else"},
-    "check_world_var": {"then", "else"},
-    "check_entity_var": {"then", "else"},
-    "run_event": {"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
-    "run_commands": {"commands"},
-    "run_detached_commands": {"commands"},
-    "run_commands_for_collection": {"commands"},
-}
-
-
 def execute_registered_command(
     registry: Any,
     context: CommandContext,
@@ -588,7 +577,9 @@ def execute_command_spec(
     inherited_params = dict(base_params or {})
     raw_spec = dict(command_spec)
     command_name = str(raw_spec.get("type", ""))
-    deferred_keys = _DEFERRED_RUNTIME_COMMAND_KEYS.get(command_name, set())
+    deferred_keys = set()
+    if hasattr(registry, "get_deferred_params"):
+        deferred_keys = registry.get_deferred_params(command_name)
     if deferred_keys:
         spec = {
             key: _resolve_deferred_runtime_value(value, context, inherited_params)
