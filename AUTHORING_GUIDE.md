@@ -425,14 +425,15 @@ Example:
 
 ```json
 {
-  "type": "set_var",
-  "scope": "entity",
-  "entity_id": "caller",
+  "type": "set_entity_var",
+  "entity_id": "$caller_id",
   "name": "toggled",
   "value": true,
   "persistent": true
 }
 ```
+
+For the strict primitive variable commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings.
 
 ## Ordinary JSON Dialogue Data
 
@@ -515,18 +516,16 @@ Example caller command:
   "dialogue_path": "dialogues/system/pause_menu.json",
   "dialogue_on_start": [
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "pending_pause_menu_action",
       "value": ""
     }
   ],
   "dialogue_on_end": [
     {
-    "type": "check_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
       "name": "pending_pause_menu_action",
       "op": "eq",
       "value": "load",
@@ -537,9 +536,8 @@ Example caller command:
       ]
     },
     {
-    "type": "check_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
       "name": "pending_pause_menu_action",
       "op": "eq",
       "value": "exit",
@@ -561,9 +559,8 @@ Example caller command:
         ],
         "load": [
           {
-            "type": "set_var",
-            "scope": "entity",
-            "entity_id": "self",
+            "type": "set_entity_var",
+            "entity_id": "$self_id",
             "name": "pending_pause_menu_action",
             "value": "load"
           },
@@ -574,9 +571,8 @@ Example caller command:
         ],
         "exit": [
           {
-            "type": "set_var",
-            "scope": "entity",
-            "entity_id": "self",
+            "type": "set_entity_var",
+            "entity_id": "$self_id",
             "name": "pending_pause_menu_action",
             "value": "exit"
           },
@@ -666,7 +662,8 @@ If you want a gameplay change to survive save/load, use `persistent: true` on th
 
 Common examples:
 
-- `set_var` with `persistent: true`
+- `set_world_var` with `persistent: true`
+- `set_entity_var` with `persistent: true`
 - `set_entity_field` with `persistent: true`
 
 The sample lever/gate puzzle uses both.

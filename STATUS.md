@@ -58,12 +58,12 @@ If you only need the current reality quickly:
 - reusable project-level named command libraries loaded from `named_command_paths`
 - startup validation for areas, entity templates, and named command libraries
 - startup-built in-memory named-command database reused by runtime `run_named_command` lookups
-- variable system with `set_var`, `increment_var`, and `check_var` commands for entity and world scopes
+- explicit variable primitives such as `set_world_var`, `set_entity_var`, `increment_world_var`, `increment_entity_var`, `check_world_var`, and `check_entity_var`
 - runtime entity references through `self`, `actor`, `caller`, plus `$self_id`, `$actor_id`, and `$caller_id`
 - generic `set_entity_field` command for safe runtime entity-field mutation, including nested visual paths such as `visuals.main.tint`
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
 - controller-driven dialogue/menu flow with entity-owned state and stack snapshots on the controller entity
-- generic JSON/text helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_to_var`, and `pop_var` for entity-authored dialogue logic
+- generic JSON/text helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_world_var`, `append_entity_var`, `pop_world_var`, and `pop_entity_var` for entity-authored dialogue logic
 - reusable dialogue/menu data stored as ordinary JSON under the sample project's `dialogues/` folder
 - transient and persistent room reset commands
 - persistent save-slot state layered over authored room data

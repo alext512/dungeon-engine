@@ -53,6 +53,8 @@
     "dialogue_open": false,
     "dialogue_state_stack": [],
     "dialogue_pending_on_end": [],
+    "dialogue_pending_actor_id": null,
+    "dialogue_pending_caller_id": null,
     "dialogue_restored_state": {},
     "dialogue_path": "",
     "dialogue_definition": {},

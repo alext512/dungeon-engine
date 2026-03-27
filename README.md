@@ -156,6 +156,7 @@ my_project/
 
 If you want the deeper docs, start here:
 
+- [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md)
 - [STATUS.md](./STATUS.md)
 - [MANUAL.md](./MANUAL.md)
 - [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)

@@ -22,9 +22,8 @@
       "store_state_var": "move_attempt_state"
     },
     {
-      "type": "check_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
       "name": "move_attempt_state",
       "op": "eq",
       "value": "free",
@@ -42,9 +41,8 @@
       ],
       "else": [
         {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
           "name": "move_attempt_state",
           "op": "eq",
           "value": "movable",
@@ -61,9 +59,8 @@
               "store_state_var": "move_attempt_state"
             },
             {
-              "type": "check_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
               "name": "move_attempt_state",
               "op": "eq",
               "value": "free",
@@ -120,4 +117,3 @@
     }
   ]
 }
-

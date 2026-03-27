@@ -9,9 +9,8 @@
   ],
   "commands": [
     {
-      "type": "check_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
       "name": "walk_phase",
       "op": "eq",
       "value": 1,
@@ -24,9 +23,8 @@
           "wait": false
         },
         {
-          "type": "set_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
           "name": "walk_phase",
           "value": 0
         }
@@ -40,9 +38,8 @@
           "wait": false
         },
         {
-          "type": "set_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
           "name": "walk_phase",
           "value": 1
         }
@@ -69,4 +66,3 @@
     }
   ]
 }
-

@@ -434,6 +434,107 @@ def _persist_variable_value(
     )
 
 
+def _require_exact_entity(context: CommandContext, entity_id: str) -> Any:
+    """Return one explicitly addressed entity or raise a clear error."""
+    resolved_id = str(entity_id).strip()
+    if not resolved_id:
+        raise ValueError("Entity-targeted primitive commands require a non-blank entity_id.")
+    entity = context.world.get_entity(resolved_id)
+    if entity is None:
+        raise KeyError(f"Entity '{resolved_id}' not found.")
+    return entity
+
+
+def _require_exact_entity_variables(context: CommandContext, entity_id: str) -> dict[str, Any]:
+    """Return the variables dict for one explicitly addressed entity."""
+    return _require_exact_entity(context, entity_id).variables
+
+
+def _persist_world_variable_value(
+    context: CommandContext,
+    *,
+    name: str,
+    value: Any,
+) -> None:
+    """Mirror one explicit world-variable write into persistence when available."""
+    if context.persistence_runtime is None:
+        return
+    context.persistence_runtime.set_world_variable(name, copy.deepcopy(value))
+
+
+def _persist_exact_entity_variable_value(
+    context: CommandContext,
+    *,
+    entity_id: str,
+    name: str,
+    value: Any,
+) -> None:
+    """Mirror one explicit entity-variable write into persistence when available."""
+    if context.persistence_runtime is None:
+        return
+    entity = _require_exact_entity(context, entity_id)
+    context.persistence_runtime.set_entity_variable(
+        str(entity_id).strip(),
+        name,
+        copy.deepcopy(value),
+        entity=entity,
+        tile_size=context.area.tile_size,
+    )
+
+
+def _branch_with_runtime_context(
+    registry: CommandRegistry,
+    context: CommandContext,
+    *,
+    condition_met: bool,
+    then: list[dict[str, Any]] | None = None,
+    else_branch: list[dict[str, Any]] | None = None,
+    runtime_params: dict[str, Any] | None = None,
+    excluded_param_names: set[str] | None = None,
+) -> CommandHandle:
+    """Run one command branch while preserving inherited runtime params when present."""
+    branch = then if condition_met else else_branch
+    if not branch:
+        return ImmediateHandle()
+
+    inherited_params = {
+        key: value
+        for key, value in dict(runtime_params or {}).items()
+        if key not in (excluded_param_names or set())
+    }
+    return SequenceCommandHandle(registry, context, branch, base_params=inherited_params)
+
+
+def _extract_collection_item(
+    value: Any = None,
+    *,
+    index: int | None = None,
+    key: str | None = None,
+    default: Any = None,
+) -> Any:
+    """Return one list/tuple or dict item with a consistent defaulting contract."""
+    extracted_value = copy.deepcopy(default)
+    if key is not None:
+        if value is None:
+            return extracted_value
+        if not isinstance(value, dict):
+            raise TypeError("Collection item lookup with key requires a dict value.")
+        if key in value:
+            return copy.deepcopy(value[key])
+        return extracted_value
+
+    if index is None:
+        raise ValueError("Collection item lookup requires either key or index.")
+    if value is None:
+        return extracted_value
+    if not isinstance(value, (list, tuple)):
+        raise TypeError("Collection item lookup with index requires a list or tuple value.")
+    resolved_index = int(index)
+    if 0 <= resolved_index < len(value):
+        return copy.deepcopy(value[resolved_index])
+    return extracted_value
+
+
 def _resolve_json_file_path(context: CommandContext, path: str) -> Path:
     """Resolve one JSON file path relative to the active project when needed."""
     resolved_path = Path(str(path).strip())
@@ -674,7 +775,7 @@ def _apply_entity_field_value(
 
     raise ValueError(
         f"Unsupported entity field '{field_name}'. "
-        "Use set_var for variables and dedicated commands for events/template rebuilds."
+        "Use set_world_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
     )
 
 
@@ -2983,6 +3084,359 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 tile_size=context.area.tile_size,
             )
         return ImmediateHandle()
+
+    @registry.register("set_world_var")
+    def set_world_var(
+        context: CommandContext,
+        *,
+        name: str,
+        value: Any,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Set one explicit world variable to a value."""
+        persisted_value = copy.deepcopy(value)
+        context.world.variables[name] = persisted_value
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=persisted_value)
+        return ImmediateHandle()
+
+    @registry.register("set_entity_var")
+    def set_entity_var(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        value: Any,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Set one explicit entity variable to a value."""
+        persisted_value = copy.deepcopy(value)
+        variables = _require_exact_entity_variables(context, entity_id)
+        variables[name] = persisted_value
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=persisted_value,
+            )
+        return ImmediateHandle()
+
+    @registry.register("increment_world_var")
+    def increment_world_var(
+        context: CommandContext,
+        *,
+        name: str,
+        amount: int | float = 1,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Add an amount to one explicit world variable."""
+        current_value = context.world.variables.get(name, 0) + amount
+        context.world.variables[name] = current_value
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=current_value)
+        return ImmediateHandle()
+
+    @registry.register("increment_entity_var")
+    def increment_entity_var(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        amount: int | float = 1,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Add an amount to one explicit entity variable."""
+        variables = _require_exact_entity_variables(context, entity_id)
+        current_value = variables.get(name, 0) + amount
+        variables[name] = current_value
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=current_value,
+            )
+        return ImmediateHandle()
+
+    @registry.register("set_world_var_length")
+    def set_world_var_length(
+        context: CommandContext,
+        *,
+        name: str,
+        value: Any = None,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Store the length of a value into one explicit world variable."""
+        if value is None:
+            length_value = 0
+        else:
+            try:
+                length_value = len(value)
+            except TypeError as exc:
+                raise TypeError("set_world_var_length requires a sized value or null.") from exc
+        context.world.variables[name] = length_value
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=length_value)
+        return ImmediateHandle()
+
+    @registry.register("set_entity_var_length")
+    def set_entity_var_length(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        value: Any = None,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Store the length of a value into one explicit entity variable."""
+        if value is None:
+            length_value = 0
+        else:
+            try:
+                length_value = len(value)
+            except TypeError as exc:
+                raise TypeError("set_entity_var_length requires a sized value or null.") from exc
+        variables = _require_exact_entity_variables(context, entity_id)
+        variables[name] = length_value
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=length_value,
+            )
+        return ImmediateHandle()
+
+    @registry.register("append_world_var")
+    def append_world_var(
+        context: CommandContext,
+        *,
+        name: str,
+        value: Any,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Append one item to one explicit world list variable."""
+        current_value = context.world.variables.get(name)
+        if current_value is None:
+            current_items: list[Any] = []
+        elif isinstance(current_value, list):
+            current_items = [copy.deepcopy(item) for item in current_value]
+        else:
+            raise TypeError("append_world_var requires the target variable to be a list or null.")
+        current_items.append(copy.deepcopy(value))
+        context.world.variables[name] = current_items
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=current_items)
+        return ImmediateHandle()
+
+    @registry.register("append_entity_var")
+    def append_entity_var(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        value: Any,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Append one item to one explicit entity list variable."""
+        variables = _require_exact_entity_variables(context, entity_id)
+        current_value = variables.get(name)
+        if current_value is None:
+            current_items: list[Any] = []
+        elif isinstance(current_value, list):
+            current_items = [copy.deepcopy(item) for item in current_value]
+        else:
+            raise TypeError("append_entity_var requires the target variable to be a list or null.")
+        current_items.append(copy.deepcopy(value))
+        variables[name] = current_items
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=current_items,
+            )
+        return ImmediateHandle()
+
+    @registry.register("pop_world_var")
+    def pop_world_var(
+        context: CommandContext,
+        *,
+        name: str,
+        store_var: str | None = None,
+        default: Any = None,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Pop the last item from one explicit world list variable."""
+        current_value = context.world.variables.get(name)
+        if current_value is None:
+            current_items: list[Any] = []
+        elif isinstance(current_value, list):
+            current_items = [copy.deepcopy(item) for item in current_value]
+        else:
+            raise TypeError("pop_world_var requires the target variable to be a list or null.")
+
+        popped_value = copy.deepcopy(default)
+        if current_items:
+            popped_value = current_items.pop()
+        context.world.variables[name] = current_items
+        if store_var:
+            context.world.variables[store_var] = copy.deepcopy(popped_value)
+
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=current_items)
+            if store_var:
+                _persist_world_variable_value(context, name=store_var, value=popped_value)
+        return ImmediateHandle()
+
+    @registry.register("pop_entity_var")
+    def pop_entity_var(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        store_var: str | None = None,
+        default: Any = None,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Pop the last item from one explicit entity list variable."""
+        variables = _require_exact_entity_variables(context, entity_id)
+        current_value = variables.get(name)
+        if current_value is None:
+            current_items: list[Any] = []
+        elif isinstance(current_value, list):
+            current_items = [copy.deepcopy(item) for item in current_value]
+        else:
+            raise TypeError("pop_entity_var requires the target variable to be a list or null.")
+
+        popped_value = copy.deepcopy(default)
+        if current_items:
+            popped_value = current_items.pop()
+        variables[name] = current_items
+        if store_var:
+            variables[store_var] = copy.deepcopy(popped_value)
+
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=current_items,
+            )
+            if store_var:
+                _persist_exact_entity_variable_value(
+                    context,
+                    entity_id=entity_id,
+                    name=store_var,
+                    value=popped_value,
+                )
+        return ImmediateHandle()
+
+    @registry.register("set_world_var_from_collection_item")
+    def set_world_var_from_collection_item(
+        context: CommandContext,
+        *,
+        name: str,
+        value: Any = None,
+        index: int | None = None,
+        key: str | None = None,
+        default: Any = None,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Store one item from a collection into an explicit world variable."""
+        extracted_value = _extract_collection_item(
+            value,
+            index=index,
+            key=key,
+            default=default,
+        )
+        context.world.variables[name] = extracted_value
+        if persistent:
+            _persist_world_variable_value(context, name=name, value=extracted_value)
+        return ImmediateHandle()
+
+    @registry.register("set_entity_var_from_collection_item")
+    def set_entity_var_from_collection_item(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        value: Any = None,
+        index: int | None = None,
+        key: str | None = None,
+        default: Any = None,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Store one item from a collection into an explicit entity variable."""
+        extracted_value = _extract_collection_item(
+            value,
+            index=index,
+            key=key,
+            default=default,
+        )
+        variables = _require_exact_entity_variables(context, entity_id)
+        variables[name] = extracted_value
+        if persistent:
+            _persist_exact_entity_variable_value(
+                context,
+                entity_id=entity_id,
+                name=name,
+                value=extracted_value,
+            )
+        return ImmediateHandle()
+
+    @registry.register("check_world_var")
+    def check_world_var(
+        context: CommandContext,
+        *,
+        name: str,
+        op: str = "eq",
+        value: Any = None,
+        then: list[dict[str, Any]] | None = None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Branch based on one explicit world-variable condition."""
+        comparator = _COMPARE_OPS.get(op)
+        if comparator is None:
+            raise ValueError(f"Unknown comparison operator '{op}'.")
+        current_value = context.world.variables.get(name)
+        return _branch_with_runtime_context(
+            registry,
+            context,
+            condition_met=comparator(current_value, value),
+            then=then,
+            else_branch=runtime_params.get("else"),
+            runtime_params=runtime_params,
+            excluded_param_names={"name", "op", "value", "then", "else"},
+        )
+
+    @registry.register("check_entity_var")
+    def check_entity_var(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        name: str,
+        op: str = "eq",
+        value: Any = None,
+        then: list[dict[str, Any]] | None = None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Branch based on one explicit entity-variable condition."""
+        comparator = _COMPARE_OPS.get(op)
+        if comparator is None:
+            raise ValueError(f"Unknown comparison operator '{op}'.")
+        variables = _require_exact_entity_variables(context, entity_id)
+        current_value = variables.get(name)
+        return _branch_with_runtime_context(
+            registry,
+            context,
+            condition_met=comparator(current_value, value),
+            then=then,
+            else_branch=runtime_params.get("else"),
+            runtime_params=runtime_params,
+            excluded_param_names={"entity_id", "name", "op", "value", "then", "else"},
+        )
 
     @registry.register("set_var")
     def set_var(

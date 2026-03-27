@@ -2,71 +2,64 @@
   "params": [],
   "commands": [
     {
-      "type": "set_var",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_finish_revision_snapshot",
       "value": "$self.dialogue_revision"
     },
     {
       "type": "run_commands",
-      "commands": "$self.dialogue_current_segment_on_end_commands"
+      "commands": "$self.dialogue_current_segment_on_end_commands",
+      "actor_entity_id": "$self.dialogue_actor_id",
+      "caller_entity_id": "$self.dialogue_caller_id"
     },
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_open",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "eq",
       "value": true,
       "then": [
         {
-          "type": "check_var",
+          "type": "check_entity_var",
           "name": "dialogue_revision",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "op": "eq",
           "value": "$self.dialogue_finish_revision_snapshot",
           "then": [
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_next_segment_index",
               "value": "$self.dialogue_segment_index"
             },
             {
-              "type": "increment_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "increment_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_next_segment_index",
               "amount": 1
             },
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_segment_index",
               "value": "$self.dialogue_next_segment_index"
             },
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_source_page_index",
               "value": 0
             },
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_text_line_offset",
               "value": 0
             },
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_choice_index",
               "value": 0
             },

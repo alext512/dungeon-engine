@@ -2,25 +2,22 @@
   "params": [],
   "commands": [
     {
-      "type": "set_var_length",
+      "type": "set_entity_var_length",
       "name": "dialogue_current_source_page_count",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "value": "$self.dialogue_current_segment_pages"
     },
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_current_source_page_count",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "gt",
       "value": 0,
       "then": [
         {
-          "type": "set_var_from_collection_item",
+          "type": "set_entity_var_from_collection_item",
           "name": "dialogue_current_source_text",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "value": "$self.dialogue_current_segment_pages",
           "index": "$self.dialogue_source_page_index",
           "default": ""
@@ -28,9 +25,8 @@
       ],
       "else": [
         {
-          "type": "set_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_current_source_text",
           "value": "$self.dialogue_current_segment_text"
         }

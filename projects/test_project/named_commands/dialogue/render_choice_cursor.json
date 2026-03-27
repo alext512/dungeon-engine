@@ -2,18 +2,16 @@
   "params": [],
   "commands": [
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_current_option_count",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "gt",
       "value": 0,
       "then": [
         {
-          "type": "set_var_from_collection_item",
+          "type": "set_entity_var_from_collection_item",
           "name": "dialogue_current_choice_cursor_y",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "value": "$self.option_rows_y",
           "index": "$self.dialogue_choice_index",
           "default": 154

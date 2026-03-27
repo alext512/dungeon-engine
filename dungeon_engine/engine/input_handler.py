@@ -27,6 +27,9 @@ ACTION_KEYS = {
     pygame.K_KP_ENTER,
 }
 
+HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS = 0.18
+HELD_DIRECTION_REPEAT_INTERVAL_SECONDS = 0.12
+
 
 @dataclass(slots=True)
 class InputFrameResult:
@@ -73,6 +76,12 @@ class InputHandler:
             "down": 0,
             "left": 0,
             "right": 0,
+        }
+        self.direction_repeat_cooldowns: dict[str, float] = {
+            "up": HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS,
+            "down": HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS,
+            "left": HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS,
+            "right": HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS,
         }
 
     def handle_events(self, events: list[pygame.event.Event]) -> InputFrameResult:
@@ -121,34 +130,76 @@ class InputHandler:
 
                 direction = KEY_TO_DIRECTION.get(event.key)
                 if direction is not None:
+                    was_held = self.held_directions[direction]
                     self.held_directions[direction] = True
+                    if was_held:
+                        continue
                     self.direction_press_counts[direction] += 1
-                    action_name = f"move_{direction}"
-                    if self._can_route_input_while_busy():
-                        self._enqueue_action_if_mapped(action_name)
-                    elif not self.command_runner.has_pending_work():
-                        self._enqueue_action_if_mapped(action_name)
+                    self._enqueue_direction_press(direction)
                 continue
 
             if event.type == pygame.KEYUP:
                 direction = KEY_TO_DIRECTION.get(event.key)
                 if direction is not None:
                     self.held_directions[direction] = False
+                    self._reset_direction_repeat(direction)
 
         return result
 
     def enqueue_held_movement_if_idle(self) -> None:
-        """Start the next movement command as soon as the runner becomes idle."""
-        if self.command_runner.has_pending_work():
+        """Legacy compatibility wrapper for the unified held-repeat path."""
+        return
+
+    def update_held_direction_repeat(self, dt: float) -> None:
+        """Repeat held directional input with an initial pause and steady interval."""
+        if dt <= 0:
             return
 
         for direction in self.direction_priority:
             if not self.held_directions[direction]:
+                self._reset_direction_repeat(direction)
+                continue
+
+            self.direction_repeat_cooldowns[direction] -= float(dt)
+
+        for direction in self.direction_priority:
+            if not self.held_directions[direction]:
+                continue
+            if self.direction_repeat_cooldowns[direction] > 0:
                 continue
 
             action_name = f"move_{direction}"
-            if self._enqueue_action_if_mapped(action_name):
-                return
+            if not self._enqueue_held_direction_if_possible(action_name):
+                continue
+
+            self.direction_repeat_cooldowns[direction] = (
+                HELD_DIRECTION_REPEAT_INTERVAL_SECONDS
+            )
+            return
+
+    def _enqueue_direction_press(self, direction: str) -> None:
+        """Dispatch the first key press immediately when the runner can accept it."""
+        self._reset_direction_repeat(direction)
+        action_name = f"move_{direction}"
+        if self._can_route_input_while_busy():
+            self._enqueue_action_if_mapped(action_name)
+            return
+        if not self.command_runner.has_pending_work():
+            self._enqueue_action_if_mapped(action_name)
+
+    def _enqueue_held_direction_if_possible(self, action_name: str) -> bool:
+        """Dispatch one held directional action when the current lane can accept it."""
+        if self._can_route_input_while_busy():
+            return self._enqueue_action_if_mapped(action_name)
+        if self.command_runner.has_pending_work():
+            return False
+        return self._enqueue_action_if_mapped(action_name)
+
+    def _reset_direction_repeat(self, direction: str) -> None:
+        """Reset one logical direction's held-repeat timer."""
+        self.direction_repeat_cooldowns[direction] = (
+            HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS
+        )
 
     def set_action_event_name(self, action: str, event_name: str) -> None:
         """Change the fallback entity event for a named logical input action."""

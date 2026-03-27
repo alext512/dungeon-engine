@@ -2,17 +2,15 @@
   "params": [],
   "commands": [
     {
-      "type": "check_var",
+      "type": "check_entity_var",
       "name": "dialogue_current_has_more_text",
-      "scope": "entity",
-      "entity_id": "self",
+      "entity_id": "$self_id",
       "op": "eq",
       "value": true,
       "then": [
         {
-          "type": "increment_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "increment_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_text_line_offset",
           "amount": "$self.dialogue_max_lines"
         },
@@ -23,38 +21,33 @@
       ],
       "else": [
         {
-          "type": "set_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_next_source_page_index",
           "value": "$self.dialogue_source_page_index"
         },
         {
-          "type": "increment_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "increment_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_next_source_page_index",
           "amount": 1
         },
         {
-          "type": "check_var",
+          "type": "check_entity_var",
           "name": "dialogue_next_source_page_index",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "op": "lt",
           "value": "$self.dialogue_current_source_page_count",
           "then": [
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_source_page_index",
               "value": "$self.dialogue_next_source_page_index"
             },
             {
-              "type": "set_var",
-              "scope": "entity",
-              "entity_id": "self",
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
               "name": "dialogue_text_line_offset",
               "value": 0
             },

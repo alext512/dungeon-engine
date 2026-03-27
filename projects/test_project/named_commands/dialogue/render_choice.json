@@ -10,19 +10,17 @@
       "value": "$self.dialogue_current_segment_options",
       "commands": [
         {
-          "type": "set_var_from_collection_item",
+          "type": "set_entity_var_from_collection_item",
           "name": "dialogue_render_option_element_id",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "value": "$self.option_element_ids",
           "index": "$index",
           "default": ""
         },
         {
-          "type": "set_var_from_collection_item",
+          "type": "set_entity_var_from_collection_item",
           "name": "dialogue_render_option_row_y",
-          "scope": "entity",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "value": "$self.option_rows_y",
           "index": "$index",
           "default": 154

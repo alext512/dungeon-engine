@@ -314,11 +314,11 @@ Important command families already in the engine:
 
 - event dispatch: `run_event`, `run_named_command`
 - movement: `move_entity`, `move_entity_one_tile`, `teleport_entity`
-- variables: `set_var`, `increment_var`, `check_var`
+- variables: `set_world_var`, `set_entity_var`, `increment_world_var`, `increment_entity_var`, `check_world_var`, `check_entity_var`
 - entity mutation: `set_entity_field`, `set_event_enabled`
 - persistence/flow: `change_area`, `new_game`, `save_game`, `load_game`, `quit_game`
 - input routing: `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, `pop_input_routes`
-- generic text/data helpers: `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_to_var`, `pop_var`
+- generic text/data helpers: `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_world_var`, `append_entity_var`, `pop_world_var`, `pop_entity_var`
 - camera: `set_camera_follow_entity`, `set_camera_follow_input_target`, `clear_camera_follow`, `set_camera_bounds_rect`, `clear_camera_bounds`, `set_camera_deadzone`, `clear_camera_deadzone`, `set_var_from_camera`, `move_camera`, `teleport_camera`
 
 ### Special entity references
@@ -330,6 +330,11 @@ Many commands that accept `entity_id` also accept:
 - `caller`: the caller explicitly forwarded into a deeper command chain
 
 These are resolved by the command system before execution.
+
+Important nuance:
+
+- strict primitive variable commands such as `set_entity_var` and `check_entity_var` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
+- higher-level orchestration commands such as `run_event` and `run_named_command` still carry richer runtime context internally
 
 ### Runtime tokens
 

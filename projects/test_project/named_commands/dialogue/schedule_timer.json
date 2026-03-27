@@ -1,5 +1,7 @@
 {
-  "params": [],
+  "params": [
+    "expected_revision"
+  ],
   "commands": [
     {
       "type": "run_detached_commands",
@@ -9,17 +11,17 @@
           "seconds": "$self.dialogue_current_advance_seconds"
         },
         {
-          "type": "check_var",
-          "scope": "entity",
-          "entity_id": "self",
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_revision",
           "op": "eq",
-          "value": "$self.dialogue_revision",
+          "value": "$expected_revision",
           "then": [
             {
-              "type": "run_event",
-              "entity_id": "self",
-              "event_id": "interact"
+              "type": "run_named_command",
+              "command_id": "dialogue/advance_text",
+              "actor_entity_id": "$self.dialogue_actor_id",
+              "caller_entity_id": "$self.dialogue_caller_id"
             }
           ]
         }
