@@ -271,6 +271,8 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
             "read_text_session",
             "advance_text_session",
             "reset_text_session",
+            "wait_for_action_press",
+            "wait_for_direction_release",
             "set_var_from_json_file",
             "set_var_from_wrapped_lines",
             "set_var_from_text_window",

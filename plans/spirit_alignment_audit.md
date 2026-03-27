@@ -130,31 +130,7 @@ Likely future direction:
 - decide whether `Escape` quit fallback should remain a low-level shell/app behavior or be pushed higher
 - keep only true low-level input plumbing in the engine
 
-### 4. `wait_for_action_press` and `wait_for_direction_release` still poll raw engine input state
-
-Files:
-
-- `dungeon_engine/commands/builtin.py`
-- `dungeon_engine/engine/input_handler.py`
-
-What is happening:
-
-- `wait_for_action_press` watches `InputHandler` press counts
-- `wait_for_direction_release` watches `InputHandler` held-direction state
-- both commands depend on raw engine-side counters/held flags rather than routed entity events
-
-Why this conflicts with the spirit:
-
-- these commands bypass the explicit input-routing model
-- they make authored logic depend on hidden engine-owned input state instead of routed entity behavior
-- they also do not fit the desired future direction of separate press/hold/release input ownership
-
-Likely future direction:
-
-- replace them with explicit routed input phase handling
-- or with authored controller/entity state rather than engine-side raw wait handles
-
-### 5. The runner still has hidden command lifecycle wrappers and dialogue-specific deferred plumbing
+### 4. The runner still has hidden command lifecycle wrappers and dialogue-specific deferred plumbing
 
 Files:
 
@@ -186,7 +162,7 @@ Likely future direction:
 - decide whether `on_start` / `on_end` should remain as a generic composition feature or be replaced by more explicit command-chain structure
 - remove dialogue-branded deferred parameter knowledge from the generic runner
 
-### 6. There is still a large transitional layer of removed builtins kept alive as rejection shims
+### 5. There is still a large transitional layer of removed builtins kept alive as rejection shims
 
 Files:
 
@@ -228,7 +204,7 @@ Likely future direction:
 
 ## Likely Mismatches / Needs Design Review
 
-### 7. Facing/interaction helpers are still broad and gameplay-opinionated
+### 6. Facing/interaction helpers are still broad and gameplay-opinionated
 
 Files:
 
@@ -260,7 +236,7 @@ Open question:
 - should these stay as acceptable high-level orchestration helpers
 - or be broken into smaller explicit primitives over time
 
-### 8. Background command execution and input-while-busy are still hidden scheduling semantics
+### 7. Background command execution and input-while-busy are still hidden scheduling semantics
 
 Files:
 
@@ -291,7 +267,7 @@ Open question:
 - keep as internal substrate
 - or make the scheduling model more explicit/authored if it starts affecting gameplay reasoning too much
 
-### 9. The sample and docs still normalize transitional helper commands as part of the active authoring surface
+### 8. The sample and docs still normalize transitional helper commands as part of the active authoring surface
 
 Files:
 
@@ -329,16 +305,13 @@ They still deserve re-checking later if they start swallowing gameplay meaning, 
 
 ## Suggested Tackling Order
 
-1. Revisit raw input wait commands:
-   - `wait_for_action_press`
-   - `wait_for_direction_release`
-2. Clean runner-level hidden composition/deferred plumbing:
+1. Clean runner-level hidden composition/deferred plumbing:
    - `on_start`
    - `on_end`
    - dialogue-branded deferred parameter handling
-3. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
-4. Once replacement paths are stable, remove the legacy rejection-shim layer
-5. Later, revisit the broader `CommandContext` dependency shape after the command surface is cleaner
+2. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
+3. Once replacement paths are stable, remove the legacy rejection-shim layer
+4. Later, revisit the broader `CommandContext` dependency shape after the command surface is cleaner
 
 ## Working Rule
 

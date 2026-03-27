@@ -97,48 +97,6 @@ class ScreenAnimationCommandHandle(CommandHandle):
         self.complete = screen_manager is None or not screen_manager.is_animating(self.element_id)
 
 
-class ActionPressCommandHandle(CommandHandle):
-    """Wait for the next action-button press after the handle starts."""
-
-    def __init__(self, context: CommandContext) -> None:
-        super().__init__()
-        self.context = context
-        input_handler = context.input_handler
-        self.start_press_count = (
-            input_handler.get_action_press_count() if input_handler is not None else 0
-        )
-        self.update(0.0)
-
-    def update(self, dt: float) -> None:
-        """Complete only after a later action-button press occurs."""
-        input_handler = self.context.input_handler
-        if input_handler is None:
-            self.complete = True
-            return
-        self.complete = input_handler.get_action_press_count() > self.start_press_count
-
-
-class DirectionReleaseCommandHandle(CommandHandle):
-    """Wait until one or more logical directions are no longer held."""
-
-    def __init__(self, context: CommandContext, directions: list[str]) -> None:
-        super().__init__()
-        self.context = context
-        self.directions = [str(direction) for direction in directions]
-        self.update(0.0)
-
-    def update(self, dt: float) -> None:
-        """Complete when every watched direction has been released."""
-        input_handler = self.context.input_handler
-        if input_handler is None:
-            self.complete = True
-            return
-        self.complete = not any(
-            input_handler.is_direction_held(direction)
-            for direction in self.directions
-        )
-
-
 class WaitSecondsHandle(CommandHandle):
     """Complete after a fixed amount of real dt has elapsed."""
 
@@ -295,24 +253,6 @@ def _resolve_entity_id(
             raise ValueError("Command used 'caller' without a caller entity context.")
         return caller_entity_id
     return entity_id
-
-
-def _get_action_press_count(context: CommandContext) -> int:
-    """Return the current action-button press counter, if available."""
-    input_handler = context.input_handler
-    return input_handler.get_action_press_count() if input_handler is not None else 0
-
-
-def _get_menu_press_count(context: CommandContext) -> int:
-    """Return the current menu-button press counter, if available."""
-    input_handler = context.input_handler
-    return input_handler.get_menu_press_count() if input_handler is not None else 0
-
-
-def _get_direction_press_count(context: CommandContext, direction: str) -> int:
-    """Return the keydown press counter for one logical direction."""
-    input_handler = context.input_handler
-    return input_handler.get_direction_press_count(direction) if input_handler is not None else 0
 
 
 def _normalize_color_tuple(
@@ -1547,35 +1487,25 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("wait_for_action_press")
     def wait_for_action_press(
-        context: CommandContext,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Pause until the next Space/Enter-style action press occurs."""
-        return ActionPressCommandHandle(context)
+        """Reject the removed raw-input polling helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "wait_for_action_press was removed; route press input to a controller/entity event and let authored state decide what happens."
+        )
 
     @registry.register("wait_for_direction_release")
     def wait_for_direction_release(
-        context: CommandContext,
-        *,
-        direction: str | None = None,
-        directions: list[str] | None = None,
-        **_: Any,
+        *args: Any,
+        **kwargs: Any,
     ) -> CommandHandle:
-        """Pause until the watched logical direction keys are released."""
-        watched_directions: list[str]
-        if directions is not None:
-            watched_directions = [str(item) for item in directions]
-        elif direction is not None:
-            watched_directions = [str(direction)]
-        else:
-            raise ValueError("wait_for_direction_release requires direction or directions.")
-        if not watched_directions:
-            return ImmediateHandle()
-        valid_directions = {"up", "down", "left", "right"}
-        for watched_direction in watched_directions:
-            if watched_direction not in valid_directions:
-                raise ValueError(f"Unknown direction '{watched_direction}'.")
-        return DirectionReleaseCommandHandle(context, watched_directions)
+        """Reject the removed raw-input release polling helper."""
+        _ = args, kwargs
+        raise ValueError(
+            "wait_for_direction_release was removed; route release behavior through entity-owned input state instead of raw engine polling."
+        )
 
     @registry.register("run_dialogue")
     def run_dialogue(
