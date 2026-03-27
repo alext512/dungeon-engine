@@ -154,18 +154,24 @@ my_project/
 
 ## Documentation
 
-If you want the deeper docs, start here:
+Use this smaller active doc set first:
 
 - [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md)
 - [STATUS.md](./STATUS.md)
-- [MANUAL.md](./MANUAL.md)
 - [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
-- [CONTENT_TYPES.md](./CONTENT_TYPES.md)
 - [architecture.md](./architecture.md)
+- [MANUAL.md](./MANUAL.md)
+- [CHANGELOG.md](./CHANGELOG.md)
+
+Secondary/reference docs:
+
+- [CONTENT_TYPES.md](./CONTENT_TYPES.md)
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [roadmap.md](./roadmap.md)
+- [plans/](./plans/)
 
 ## Current Limits
 
-- inventory and usable-item systems are still planned
 - save/load UX is functional but still basic
 - editor parameter editing is still minimal
 - external PNG import flow is not finished

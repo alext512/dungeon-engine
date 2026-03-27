@@ -32,15 +32,17 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 |---|---|
 | `PROJECT_SPIRIT.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
 | `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
-| `MANUAL.md` | Practical guide for running the engine and authoring project content |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
-| `CONTENT_TYPES.md` | Cross-cutting explanation of project search paths, path-derived IDs, and how areas/entity templates/named commands/assets plus ordinary JSON data relate |
-| `functionality.md` | Plain-language feature list by priority tier |
-| `architecture.md` | Design philosophy, tech stack, command system, entity/component model |
+| `architecture.md` | Design principles and medium-term architectural direction |
+| `MANUAL.md` | Practical runtime behavior and sample wiring details |
 | `CONTRIBUTING.md` | Working rules and project direction |
-| `roadmap.md` | Planned features and phases |
 | `CHANGELOG.md` | Reverse-chronological history of functionality changes |
-| `plans/` folder | Detailed implementation plans for specific tasks |
+
+Optional reference/planning docs:
+
+- `CONTENT_TYPES.md`
+- `roadmap.md`
+- `plans/`
 
 ## Project Structure
 
