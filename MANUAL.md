@@ -333,7 +333,7 @@ These are resolved by the command system before execution.
 
 Important nuance:
 
-- strict primitive variable commands such as `set_entity_var` and `check_entity_var` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
+- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, and `route_inputs_to_entity` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
 - higher-level orchestration commands such as `run_event` and `run_named_command` still carry richer runtime context internally
 
 ### Runtime tokens

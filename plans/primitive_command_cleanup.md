@@ -8,6 +8,16 @@ This file should be deleted once:
 - the implementation is finished
 - the permanent docs have been updated to reflect the final result
 
+## Completed Slices So Far
+
+- variable primitives were tightened first:
+  - broad `set_var` / `increment_var` / `check_var` style commands were replaced by explicit world/entity forms
+- entity-target mutation and input-routing primitives were tightened next:
+  - strict primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, and `route_inputs_to_entity` now require explicit ids or resolved `$..._id` tokens
+  - raw symbolic `self` / `actor` / `caller` ids are now rejected at startup validation and runtime for those primitives
+
+The remaining work is about the other primitive families, not these completed slices.
+
 ## Why This Exists
 
 The current command system works, but many builtin/primary commands have become too broad.

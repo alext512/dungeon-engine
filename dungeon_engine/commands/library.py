@@ -15,6 +15,26 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+_STRICT_ENTITY_TARGET_COMMANDS = {
+    "set_entity_var",
+    "increment_entity_var",
+    "set_entity_var_length",
+    "append_entity_var",
+    "pop_entity_var",
+    "set_entity_var_from_collection_item",
+    "check_entity_var",
+    "set_event_enabled",
+    "set_events_enabled",
+    "set_input_target",
+    "set_entity_field",
+    "route_inputs_to_entity",
+    "set_visible",
+    "set_solid",
+    "set_present",
+    "set_color",
+    "destroy_entity",
+}
+_RESERVED_ENTITY_IDS = {"self", "actor", "caller"}
 
 
 @dataclass(slots=True)
@@ -318,6 +338,13 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'check_var'; "
                 "use 'check_world_var' or 'check_entity_var' instead."
+            )
+        if command_type in _STRICT_ENTITY_TARGET_COMMANDS and value.get("entity_id") in _RESERVED_ENTITY_IDS:
+            symbolic_id = value["entity_id"]
+            raise ValueError(
+                f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
+                f"with strict primitive '{command_type}'; use '${symbolic_id}_id' or resolve the id "
+                "before invoking the primitive."
             )
         for key, item in value.items():
             _validate_command_tree(

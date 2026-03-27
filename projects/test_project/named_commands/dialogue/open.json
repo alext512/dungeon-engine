@@ -40,7 +40,7 @@
         },
         {
           "type": "route_inputs_to_entity",
-          "entity_id": "self"
+          "entity_id": "$self_id"
         }
       ]
     },
