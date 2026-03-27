@@ -15,7 +15,7 @@
           "type": "run_event",
           "entity_id": "dialogue_controller",
           "event_id": "open_dialogue",
-          "dialogue_id": "system/pause_menu",
+          "dialogue_path": "dialogues/system/pause_menu.json",
           "dialogue_on_start": [
             {
               "type": "set_var",
@@ -63,11 +63,7 @@
           "segment_hooks": [
             {
               "option_commands_by_id": {
-                "continue": [
-                  {
-                    "type": "close_dialogue"
-                  }
-                ],
+                "continue": [],
                 "load": [
                   {
                     "type": "set_var",
@@ -75,9 +71,6 @@
                     "entity_id": "self",
                     "name": "pending_pause_menu_action",
                     "value": "load"
-                  },
-                  {
-                    "type": "close_dialogue"
                   }
                 ],
                 "exit": [
@@ -87,9 +80,6 @@
                     "entity_id": "self",
                     "name": "pending_pause_menu_action",
                     "value": "exit"
-                  },
-                  {
-                    "type": "close_dialogue"
                   }
                 ]
               }

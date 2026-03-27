@@ -283,7 +283,7 @@ Expected content groups:
 - `areas/`
 - `entity_templates/`
 - `items/`
-- `dialogues/` if dialogue is split out
+- optional ordinary project JSON data such as `dialogues/`
 
 The editor should read and write these files.
 
@@ -379,8 +379,8 @@ Dialogue needs:
 
 Current practical split:
 
-- the engine owns text measurement, wrapping, pagination, marquee windowing, and text-session storage
-- projects own panel images, portraits, choice layout, dialogue-specific input flow, and when sessions advance or reset
+- the engine owns generic input routing, the input-route stack, text measurement/wrapping/rendering helpers, and generic variable/list commands
+- projects own panel images, portraits, choice layout, current page, selected option, nested dialogue state, dialogue-specific input flow, and when sessions advance or reset
 
 So the intended dialogue pattern is:
 
@@ -388,10 +388,12 @@ So the intended dialogue pattern is:
 2. reroute those actions to a UI entity
 3. show panel image through screen-space commands
 4. optionally show portrait image
-5. prepare and read a text session for the current page or choice row
-6. render the returned text through normal screen-text commands
-7. let the UI entity decide whether input advances text, changes selection, opens another dialogue, or closes the dialogue
-8. pop the borrowed routes to restore the exact previous input ownership
+5. load ordinary JSON dialogue/menu data into UI-entity variables
+6. derive wrapped lines and the currently visible text through generic helper commands
+7. render the returned text through normal screen-text commands
+8. let the UI entity decide whether input advances text, changes selection, opens another dialogue, or closes the dialogue
+9. if nested dialogue is needed, store the previous state in an entity-owned stack before replacing it
+10. pop the borrowed routes to restore the exact previous input ownership
 
 This keeps dialogue aligned with the general command architecture instead of
 turning it into a separate hardcoded menu system.

@@ -1,0 +1,29 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "run_detached_commands",
+      "commands": [
+        {
+          "type": "wait_seconds",
+          "seconds": "$self.dialogue_current_advance_seconds"
+        },
+        {
+          "type": "check_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_revision",
+          "op": "eq",
+          "value": "$self.dialogue_revision",
+          "then": [
+            {
+              "type": "run_event",
+              "entity_id": "self",
+              "event_id": "interact"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

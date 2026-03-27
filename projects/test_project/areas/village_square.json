@@ -121,7 +121,7 @@
       "y": 8,
       "template": "sign",
       "parameters": {
-        "dialogue_id": "showcase/village_square_note"
+        "dialogue_path": "dialogues/showcase/village_square_note.json"
       }
     },
     {

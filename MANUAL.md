@@ -24,8 +24,8 @@ If you are new to the codebase, this is the shortest accurate summary:
 - entities use `visuals`, `space`, `scope`, `input_map`, events, and variables
 - input routes each logical action to its current target entity first
 - the sample project has global `dialogue_controller` and `pause_controller` entities declared in `project.json`
-- dialogue assets live in `dialogues/` and are played through `start_dialogue_session`
-- callers customize dialogue behavior through `on_start`, `on_end`, and `segment_hooks`
+- the sample project's dialogue/menu content lives in ordinary JSON files under `dialogues/`
+- controller entities own dialogue/menu state and nested restore state in normal variables
 - save data records diffs on top of authored area data instead of overwriting project JSON
 
 If you only need the most important files first, read these:
@@ -70,7 +70,6 @@ Current important fields:
 - `asset_paths`
 - `area_paths`
 - `named_command_paths`
-- `dialogue_paths`
 - `shared_variables_path`
 - `global_entities`
 - `startup_area`
@@ -86,7 +85,6 @@ Example:
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "named_command_paths": ["named_commands/"],
-  "dialogue_paths": ["dialogues/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
@@ -210,13 +208,13 @@ They are:
 - addressed by path-derived id
 - executed through `run_named_command`
 
-The sample project uses named commands mainly for movement logic. Dialogue is now driven more directly by controller events plus dialogue assets.
+The sample project uses named commands for both movement logic and controller-owned dialogue/menu behavior.
 
-### Dialogue Assets
+### Ordinary JSON Dialogue Data
 
-Dialogue text lives under `dialogues/`.
+The sample project keeps reusable dialogue/menu data under `dialogues/`, but that folder is only a convention. These files are not a special manifest category anymore. Controllers load them through normal commands such as `set_var_from_json_file`.
 
-A dialogue asset is a reusable definition containing:
+Typical dialogue/menu JSON contains:
 
 - optional `participants`
 - a required `segments` list
@@ -234,7 +232,7 @@ Each segment can also define:
 - `advance_mode`
 - `advance_seconds`
 
-Dialogue assets do not directly own gameplay commands. Callers supply behavior through controller-level hooks when they start the dialogue session.
+These JSON files do not directly own gameplay commands. Controller entities load them, store them in variables, and decide how input advances, branches, or closes.
 
 ## Runtime Entity Model
 
@@ -320,7 +318,7 @@ Important command families already in the engine:
 - entity mutation: `set_entity_field`, `set_event_enabled`
 - persistence/flow: `change_area`, `new_game`, `save_game`, `load_game`, `quit_game`
 - input routing: `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, `pop_input_routes`
-- dialogue: `start_dialogue_session`, `dialogue_advance`, `dialogue_move_selection`, `dialogue_confirm_choice`, `dialogue_cancel`
+- generic text/data helpers: `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_to_var`, `pop_var`
 - camera: `set_camera_follow_entity`, `set_camera_follow_input_target`, `clear_camera_follow`, `set_camera_bounds_rect`, `clear_camera_bounds`, `set_camera_deadzone`, `clear_camera_deadzone`, `set_var_from_camera`, `move_camera`, `teleport_camera`
 
 ### Special entity references
@@ -350,14 +348,14 @@ These are especially useful when forwarding context into another entity's event.
 
 ## Dialogue Model
 
-### The old `run_dialogue` path
+### Removed Dialogue Session Commands
 
-The old authored `run_dialogue` path is intentionally gone. Startup validation now rejects authored uses of it, and the runtime command name remains only as a fail-safe.
+The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are intentionally gone. Startup validation rejects authored uses of them, and the runtime names remain only as fail-fast errors.
 
 Current rule:
 
-- start dialogues by sending an event to a controller entity
-- let that event call `start_dialogue_session`
+- start dialogue or menu flow by sending an event to a controller entity
+- let controller-owned commands load JSON data, mutate controller vars, and redraw UI
 
 ## Session Flow
 
@@ -367,7 +365,7 @@ Current rule:
 - `save_game` writes the current runtime session to a save slot.
 - `quit_game` requests runtime shutdown.
 
-### Controller-driven dialogue
+### Controller-owned Dialogue And Menus
 
 The sample project's `dialogue_panel` template is the canonical example.
 
@@ -375,11 +373,11 @@ It does three jobs:
 
 - owns the screen-space visuals used for the panel and portrait
 - owns the input map for confirm, cancel, and selection movement
-- exposes an `open_dialogue` event that calls `start_dialogue_session`
+- exposes an `open_dialogue` event that calls controller-owned named commands
 
-That event forwards:
+That event forwards values such as:
 
-- `dialogue_id`
+- `dialogue_path`
 - `dialogue_on_start`
 - `dialogue_on_end`
 - `segment_hooks`
@@ -390,15 +388,16 @@ That event forwards:
 When a dialogue starts:
 
 1. the controller's `on_start` commands reroute the needed logical inputs to the dialogue controller
-2. the controller becomes visible
-3. the dialogue handle renders wrapped text and options through the screen manager
-4. controller input routes to `dialogue_advance`, `dialogue_move_selection`, `dialogue_confirm_choice`, and `dialogue_cancel`
-5. when the session ends, the controller restores the borrowed routes through `pop_input_routes`
-6. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
+2. the controller loads ordinary JSON dialogue data into entity variables
+3. controller-owned commands derive visible text/options and render them through the screen manager
+4. controller input routes to normal entity events like `interact`, `move_up`, `move_down`, and `menu`
+5. nested dialogue/menu state is saved into the controller's `dialogue_state_stack`
+6. when the controller finally closes its outermost dialogue, it restores the borrowed routes through `pop_input_routes`
+7. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
 
 ### Caller-supplied hooks
 
-`start_dialogue_session` supports three important extension points:
+The sample controller pattern supports three important extension points:
 
 - `on_start`: runs once before the first segment
 - `on_end`: runs once after the dialogue fully closes
@@ -411,7 +410,7 @@ Each segment hook can contain:
 - `option_commands_by_id`
 - `option_commands`
 
-This is how the sample lever, save point, pause menu, and title screen attach gameplay consequences to plain dialogue assets.
+This is how the sample lever, save point, pause menu, and title screen attach gameplay consequences to plain JSON dialogue/menu data.
 
 When a choice needs to trigger something after the dialogue has fully closed, the reliable pattern is:
 

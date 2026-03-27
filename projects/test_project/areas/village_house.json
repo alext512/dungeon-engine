@@ -141,7 +141,7 @@
       "y": 8,
       "template": "sign",
       "parameters": {
-        "dialogue_id": "showcase/house_block_note"
+        "dialogue_path": "dialogues/showcase/house_block_note.json"
       }
     },
     {
@@ -150,7 +150,7 @@
       "y": 5,
       "template": "sign",
       "parameters": {
-        "dialogue_id": "showcase/house_gate_note"
+        "dialogue_path": "dialogues/showcase/house_gate_note.json"
       }
     }
   ]

@@ -4,6 +4,15 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Entity-Owned Dialogue State
+
+- Removed manifest-level `dialogue_paths` and the old dialogue-definition lookup layer; reusable dialogue/menu content is now just ordinary project-relative JSON loaded by commands
+- Removed the engine-owned dialogue session handle and text-session manager from the active runtime model
+- Made legacy dialogue/session commands such as `start_dialogue_session`, `dialogue_advance`, `dialogue_confirm_choice`, `prepare_text_session`, and `close_dialogue` fail fast during validation and at runtime
+- Added generic controller-friendly helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_to_var`, `pop_var`, `run_commands_for_collection`, and `wait_seconds`
+- Migrated the sample `dialogue_controller` to own its dialogue/menu state, nested `dialogue_state_stack`, and UI redraw flow through named commands instead of engine-owned session state
+- Updated the sample project, tests, and active docs to describe controller-owned dialogue/menu flow plus ordinary JSON dialogue data
+
 ## Transfer-Aware Area Flow + Explicit Camera State
 
 - Added authored area `entry_points` and transfer-aware `change_area` / `new_game` payloads so projects can move one or more live entities into named destinations instead of relying on player-specific area assumptions
@@ -19,7 +28,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 ## Input Route Stack + Modal Controller Cleanup
 
 - Added engine-managed `push_input_routes` and `pop_input_routes` so modal controllers can borrow and restore exact per-action input routing without a single active-entity concept
-- Changed project-level `input_targets` handling to stay partial, so omitted actions fall back to the loaded area's `player_id` instead of hardcoding `"player"`
+- Changed project-level `input_targets` handling to stay partial, so omitted actions stay unrouted unless project defaults, area overrides, or runtime commands assign them
 - Added a project-level `pause_controller` sample entity and moved `Escape` handling off the player template
 - Reworked the sample title menu, pause menu, and save prompt so post-close actions run from `dialogue_on_end` after input routes are restored
 - Kept current logical input targets in save/load, while intentionally leaving the transient route stack out of save data

@@ -1,0 +1,46 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "check_var",
+      "name": "dialogue_open",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "check_var",
+          "name": "dialogue_phase",
+          "scope": "entity",
+          "entity_id": "self",
+          "op": "eq",
+          "value": "choice",
+          "then": [
+            {
+              "type": "run_named_command",
+              "command_id": "dialogue/confirm_choice"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_var",
+              "name": "dialogue_current_advance_mode",
+              "scope": "entity",
+              "entity_id": "self",
+              "op": "eq",
+              "value": "timer",
+              "then": [],
+              "else": [
+                {
+                  "type": "run_named_command",
+                  "command_id": "dialogue/advance_text"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

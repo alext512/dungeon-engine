@@ -1,0 +1,76 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "check_var",
+      "name": "dialogue_current_has_more_text",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "increment_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_text_line_offset",
+          "amount": "$self.dialogue_max_lines"
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/load_and_render_segment"
+        }
+      ],
+      "else": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_next_source_page_index",
+          "value": "$self.dialogue_source_page_index"
+        },
+        {
+          "type": "increment_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_next_source_page_index",
+          "amount": 1
+        },
+        {
+          "type": "check_var",
+          "name": "dialogue_next_source_page_index",
+          "scope": "entity",
+          "entity_id": "self",
+          "op": "lt",
+          "value": "$self.dialogue_current_source_page_count",
+          "then": [
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "dialogue_source_page_index",
+              "value": "$self.dialogue_next_source_page_index"
+            },
+            {
+              "type": "set_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "dialogue_text_line_offset",
+              "value": 0
+            },
+            {
+              "type": "run_named_command",
+              "command_id": "dialogue/load_and_render_segment"
+            }
+          ],
+          "else": [
+            {
+              "type": "run_named_command",
+              "command_id": "dialogue/finish_segment"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

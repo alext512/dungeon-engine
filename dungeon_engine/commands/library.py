@@ -216,8 +216,33 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
         if command_type == "run_dialogue":
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'run_dialogue'; "
-                "start dialogues by sending an event to the dialogue controller entity "
-                "and using 'start_dialogue_session'."
+                "load dialogue JSON into controller variables and drive it with controller entity events instead."
+            )
+        if command_type == "start_dialogue_session":
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command 'start_dialogue_session'; "
+                "keep dialogue state on the controller entity and drive it with normal commands instead."
+            )
+        if command_type in {
+            "dialogue_advance",
+            "dialogue_move_selection",
+            "dialogue_confirm_choice",
+            "dialogue_cancel",
+            "close_dialogue",
+        }:
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command '{command_type}'; "
+                "the controller entity should update and clear its own dialogue state through normal commands."
+            )
+        if command_type in {
+            "prepare_text_session",
+            "read_text_session",
+            "advance_text_session",
+            "reset_text_session",
+        }:
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command '{command_type}'; "
+                "store wrapped lines and visible text directly in entity variables instead."
             )
         if command_type == "set_sprite_frame":
             raise ValueError(

@@ -1,0 +1,346 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "increment_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_revision",
+      "amount": 1
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_current_segment_type",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": "choice",
+      "then": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_phase",
+          "value": "choice"
+        }
+      ],
+      "else": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_phase",
+          "value": "text"
+        }
+      ]
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_current_participants",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_definition",
+      "key": "participants",
+      "default": {}
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_current_speaker_id",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": null,
+      "then": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "dialogue_current_participant",
+          "value": {}
+        }
+      ],
+      "else": [
+        {
+          "type": "set_var_from_collection_item",
+          "name": "dialogue_current_participant",
+          "scope": "entity",
+          "entity_id": "self",
+          "value": "$self.dialogue_current_participants",
+          "key": "$self.dialogue_current_speaker_id",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_current_portrait_path",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_current_participant",
+      "key": "portrait_path",
+      "default": ""
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_current_portrait_frame_width",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_current_participant",
+      "key": "portrait_frame_width",
+      "default": "$self.default_portrait_frame_width"
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_current_portrait_frame_height",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_current_participant",
+      "key": "portrait_frame_height",
+      "default": "$self.default_portrait_frame_height"
+    },
+    {
+      "type": "set_var_from_collection_item",
+      "name": "dialogue_current_portrait_frame",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_current_participant",
+      "key": "portrait_frame",
+      "default": 0
+    },
+    {
+      "type": "set_var",
+      "scope": "entity",
+      "entity_id": "self",
+      "name": "dialogue_show_portrait",
+      "value": false
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_current_speaker_id",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "neq",
+      "value": null,
+      "then": [
+        {
+          "type": "check_var",
+          "name": "dialogue_current_portrait_path",
+          "scope": "entity",
+          "entity_id": "self",
+          "op": "neq",
+          "value": "",
+          "then": [
+            {
+              "type": "check_var",
+              "name": "dialogue_current_segment_show_portrait",
+              "scope": "entity",
+              "entity_id": "self",
+              "op": "eq",
+              "value": false,
+              "then": [],
+              "else": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "dialogue_show_portrait",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_show_portrait",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "text_box_x",
+          "value": "$self.portrait_text_box_x"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "text_box_y",
+          "value": "$self.portrait_text_box_y"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "text_box_width",
+          "value": "$self.portrait_text_box_width"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_text_x",
+          "value": "$self.portrait_choice_text_x"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_width",
+          "value": "$self.portrait_choice_width"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_cursor_x",
+          "value": "$self.portrait_choice_cursor_x"
+        }
+      ],
+      "else": [
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "text_box_x",
+          "value": "$self.plain_text_box_x"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "text_box_y",
+          "value": "$self.plain_text_box_y"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "text_box_width",
+          "value": "$self.plain_text_box_width"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_text_x",
+          "value": "$self.plain_choice_text_x"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_width",
+          "value": "$self.plain_choice_width"
+        },
+        {
+          "type": "set_var",
+          "scope": "entity",
+          "entity_id": "self",
+          "name": "choice_cursor_x",
+          "value": "$self.plain_choice_cursor_x"
+        }
+      ]
+    },
+    {
+      "type": "show_screen_image",
+      "element_id": "$self.panel_element_id",
+      "path": "$self.panel_path",
+      "x": "$self.panel_x",
+      "y": "$self.panel_y",
+      "frame_width": "$self.panel_frame_width",
+      "frame_height": "$self.panel_frame_height",
+      "frame": 0,
+      "layer": "$self.ui_layer",
+      "anchor": "topleft"
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_show_portrait",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "show_screen_image",
+          "element_id": "$self.portrait_element_id",
+          "path": "$self.dialogue_current_portrait_path",
+          "x": "$self.portrait_x",
+          "y": "$self.portrait_y",
+          "frame_width": "$self.dialogue_current_portrait_frame_width",
+          "frame_height": "$self.dialogue_current_portrait_frame_height",
+          "frame": "$self.dialogue_current_portrait_frame",
+          "layer": "$self.text_layer",
+          "anchor": "topleft"
+        }
+      ],
+      "else": [
+        {
+          "type": "remove_screen_element",
+          "element_id": "$self.portrait_element_id"
+        }
+      ]
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_phase",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": "choice",
+      "then": [
+        {
+          "type": "remove_screen_element",
+          "element_id": "$self.text_element_id"
+        },
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/render_choice"
+        }
+      ],
+      "else": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/render_text"
+        },
+        {
+          "type": "check_var",
+          "name": "dialogue_current_advance_mode",
+          "scope": "entity",
+          "entity_id": "self",
+          "op": "eq",
+          "value": "timer",
+          "then": [
+            {
+              "type": "run_named_command",
+              "command_id": "dialogue/schedule_timer"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_var",
+              "name": "dialogue_current_advance_mode",
+              "scope": "entity",
+              "entity_id": "self",
+              "op": "eq",
+              "value": "interact_or_timer",
+              "then": [
+                {
+                  "type": "run_named_command",
+                  "command_id": "dialogue/schedule_timer"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

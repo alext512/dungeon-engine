@@ -29,7 +29,7 @@
               "type": "run_event",
               "entity_id": "dialogue_controller",
               "event_id": "open_dialogue",
-              "dialogue_id": "showcase/lever_open",
+              "dialogue_path": "dialogues/showcase/lever_open.json",
               "dialogue_on_start": [
                 {
                   "type": "play_audio",
@@ -95,7 +95,7 @@
               "type": "run_event",
               "entity_id": "dialogue_controller",
               "event_id": "open_dialogue",
-              "dialogue_id": "showcase/lever_close",
+              "dialogue_path": "dialogues/showcase/lever_close.json",
               "dialogue_on_start": [
                 {
                   "type": "play_audio",

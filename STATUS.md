@@ -11,7 +11,7 @@ Run it with:
 - or `.venv/Scripts/python run_game.py`
 - or `.venv/Scripts/python run_editor.py`
 
-The project uses standalone game/editor applications plus `project.json` manifests for asset, area, entity, dialogue, and shared-variable lookup. The repo includes a versioned sample project at `projects/test_project/`, but the engine remains independent from any specific project folder.
+The project uses standalone game/editor applications plus `project.json` manifests for asset, area, entity-template, named-command, and shared-variable lookup. Reusable dialogue/menu data is now just ordinary project-relative JSON loaded by commands. The repo includes a versioned sample project at `projects/test_project/`, but the engine remains independent from any specific project folder.
 
 ## Fast Catch-Up
 
@@ -20,7 +20,7 @@ If you only need the current reality quickly:
 - engine code is under `dungeon_engine/`
 - sample content is under `projects/test_project/`
 - gameplay behavior is authored in JSON commands and entity events
-- area, entity-template, named-command, and dialogue ids are path-derived from project search roots
+- area, entity-template, and named-command ids are path-derived from project search roots
 - entities now use a `visuals` array instead of a single `sprite` block
 - entities also declare `space` (`world` or `screen`) and `scope` (`area` or `global`)
 - project-level global entities are authored in `project.json` under `global_entities`
@@ -28,7 +28,7 @@ If you only need the current reality quickly:
 - area changes can target authored `entry_points` and optionally transfer one or more live entities
 - the runtime persists transferred travelers and the current camera state across save/load
 - the sample project's shared dialogue UI is a global `dialogue_controller` entity from `entity_templates/dialogue_panel.json`
-- dialogue assets live in `projects/test_project/dialogues/`
+- the sample project's reusable dialogue/menu JSON lives in `projects/test_project/dialogues/`
 - reusable named command libraries live in `projects/test_project/named_commands/`
 - shared project values live in `projects/test_project/shared_variables.json`
 - the startup area id is `title_screen`
@@ -41,7 +41,7 @@ If you only need the current reality quickly:
 - project scaffold with `pyproject.toml`
 - runnable `pygame-ce` game and editor launchers
 - project manifest support via external `project.json` files
-- project-relative search paths for areas, entity templates, named commands, dialogues, assets, and shared variables
+- project-relative search paths for areas, entity templates, named commands, assets, and shared variables
 - project-authored `global_entities`
 - JSON area loading
 - layered tilemaps with separate walkability cell flags
@@ -56,14 +56,15 @@ If you only need the current reality quickly:
 - fixed-timestep simulation for movement and command playback
 - simple visual animation playback and movement-timed walk animation
 - reusable project-level named command libraries loaded from `named_command_paths`
-- startup validation for areas, entity templates, dialogue assets, and named command libraries
+- startup validation for areas, entity templates, and named command libraries
 - startup-built in-memory named-command database reused by runtime `run_named_command` lookups
 - variable system with `set_var`, `increment_var`, and `check_var` commands for entity and world scopes
 - runtime entity references through `self`, `actor`, `caller`, plus `$self_id`, `$actor_id`, and `$caller_id`
 - generic `set_entity_field` command for safe runtime entity-field mutation, including nested visual paths such as `visuals.main.tint`
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
-- controller-driven dialogue sessions through `start_dialogue_session`, `dialogue_advance`, `dialogue_move_selection`, `dialogue_confirm_choice`, and `dialogue_cancel`
-- reusable dialogue assets with segmented text/choice flow plus optional participants, portraits, timers, and per-call segment hooks
+- controller-driven dialogue/menu flow with entity-owned state and stack snapshots on the controller entity
+- generic JSON/text helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_to_var`, and `pop_var` for entity-authored dialogue logic
+- reusable dialogue/menu data stored as ordinary JSON under the sample project's `dialogues/` folder
 - transient and persistent room reset commands
 - persistent save-slot state layered over authored room data
 - generic `change_area`, `new_game`, `save_game`, `load_game`, and `quit_game` primitives
@@ -82,7 +83,7 @@ The sample project currently includes:
 - a connected tilemap-based `village_house` interior area with a persistent lever/gate puzzle
 - one pushable block in the house that resets when you leave and re-enter
 - global `dialogue_controller` and `pause_controller` entities authored in `project.json`
-- authored dialogue assets for title actions, save prompts, showcase notes, lever narration, and the in-level `Escape` menu
+- ordinary JSON dialogue/menu data for title actions, save prompts, showcase notes, lever narration, and the in-level `Escape` menu
 
 Expected behavior:
 
@@ -103,9 +104,9 @@ Expected behavior:
 - Entities now define persistent visuals through a `visuals` array. Legacy `sprite` blocks are rejected at load time.
 - `space: "world"` entities use grid coordinates. `space: "screen"` entities use screen pixel coordinates and must not author `x` / `y`.
 - `scope: "global"` entities are authored in `project.json` and installed into each runtime world as global entities.
-- Dialogue is no longer started with authored `run_dialogue` commands. That command name now raises an error on purpose.
-- The supported dialogue flow is: send an event to the controller entity, then let that event call `start_dialogue_session`.
-- Dialogue callers can pass `on_start`, `on_end`, and per-segment hook commands through the controller boundary.
+- Dialogue is no longer a special engine-owned runtime session. Old commands such as `run_dialogue`, `start_dialogue_session`, `dialogue_advance`, and the old text-session commands now fail fast on purpose.
+- The supported dialogue flow is: send an event to the controller entity, let controller-owned commands load ordinary JSON dialogue data, mutate controller variables, and redraw the UI.
+- Nested dialogue/menu restore is split cleanly: the engine-owned input-route stack restores who receives input, and the controller-owned `dialogue_state_stack` restores which dialogue/menu state comes back on screen.
 - Modal controllers should borrow and restore routes through `push_input_routes` / `pop_input_routes` instead of returning input through `actor`.
 - The transient input-route stack is runtime-only and is intentionally not written into save files.
 - Authored areas must not declare `player_id`; initial control and camera behavior now come from explicit `input_targets`, transition payloads, and area `camera` defaults.

@@ -1,0 +1,32 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_var_length",
+      "name": "dialogue_segment_count",
+      "scope": "entity",
+      "entity_id": "self",
+      "value": "$self.dialogue_definition.segments"
+    },
+    {
+      "type": "check_var",
+      "name": "dialogue_segment_index",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "gte",
+      "value": "$self.dialogue_segment_count",
+      "then": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/close_current_dialogue"
+        }
+      ],
+      "else": [
+        {
+          "type": "run_named_command",
+          "command_id": "dialogue/load_and_render_segment"
+        }
+      ]
+    }
+  ]
+}

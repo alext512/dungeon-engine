@@ -1,0 +1,79 @@
+{
+  "params": [
+    "delta"
+  ],
+  "commands": [
+    {
+      "type": "check_var",
+      "name": "dialogue_phase",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "eq",
+      "value": "choice",
+      "then": [
+        {
+          "type": "check_var",
+          "name": "dialogue_current_option_count",
+          "scope": "entity",
+          "entity_id": "self",
+          "op": "gt",
+          "value": 0,
+          "then": [
+            {
+              "type": "increment_var",
+              "scope": "entity",
+              "entity_id": "self",
+              "name": "dialogue_choice_index",
+              "amount": "$delta"
+            },
+            {
+              "type": "check_var",
+              "name": "dialogue_choice_index",
+              "scope": "entity",
+              "entity_id": "self",
+              "op": "lt",
+              "value": 0,
+              "then": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "dialogue_choice_index",
+                  "value": "$self.dialogue_current_option_count"
+                },
+                {
+                  "type": "increment_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "dialogue_choice_index",
+                  "amount": -1
+                }
+              ]
+            },
+            {
+              "type": "check_var",
+              "name": "dialogue_choice_index",
+              "scope": "entity",
+              "entity_id": "self",
+              "op": "gte",
+              "value": "$self.dialogue_current_option_count",
+              "then": [
+                {
+                  "type": "set_var",
+                  "scope": "entity",
+                  "entity_id": "self",
+                  "name": "dialogue_choice_index",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "type": "run_named_command",
+              "command_id": "dialogue/render_choice_cursor"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

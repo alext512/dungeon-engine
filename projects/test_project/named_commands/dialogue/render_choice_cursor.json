@@ -1,0 +1,41 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "check_var",
+      "name": "dialogue_current_option_count",
+      "scope": "entity",
+      "entity_id": "self",
+      "op": "gt",
+      "value": 0,
+      "then": [
+        {
+          "type": "set_var_from_collection_item",
+          "name": "dialogue_current_choice_cursor_y",
+          "scope": "entity",
+          "entity_id": "self",
+          "value": "$self.option_rows_y",
+          "index": "$self.dialogue_choice_index",
+          "default": 154
+        },
+        {
+          "type": "show_screen_text",
+          "element_id": "$self.cursor_element_id",
+          "text": ">",
+          "x": "$self.choice_cursor_x",
+          "y": "$self.dialogue_current_choice_cursor_y",
+          "layer": "$self.text_layer",
+          "anchor": "topleft",
+          "color": "$self.choice_cursor_color",
+          "font_id": "$self.dialogue_font_id"
+        }
+      ],
+      "else": [
+        {
+          "type": "remove_screen_element",
+          "element_id": "$self.cursor_element_id"
+        }
+      ]
+    }
+  ]
+}
