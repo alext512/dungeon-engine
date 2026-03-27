@@ -4,7 +4,7 @@
   ],
   "commands": [
     {
-      "type": "run_detached_commands",
+      "type": "spawn_flow",
       "commands": [
         {
           "type": "wait_seconds",
@@ -29,3 +29,4 @@
     }
   ]
 }
+

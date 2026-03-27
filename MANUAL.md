@@ -1,4 +1,4 @@
-# Engine Manual
+﻿# Engine Manual
 
 ## Purpose
 
@@ -436,8 +436,22 @@ Generic per-command lifecycle wrapper fields are no longer part of the active co
 
 - removed: command-level `on_start`
 - removed: command-level `on_end`
-- replacement for ordered work: `run_commands`
-- replacement for overlapping work: `run_detached_commands`
+- replacement for ordered work: `run_sequence`
+- replacement for grouped parallel work: `run_parallel`
+- replacement for fire-and-forget overlap: `spawn_flow`
+
+Current runner model:
+
+- top-level command flows run independently by default
+- `run_sequence` blocks only its own later children
+- `run_parallel` starts its child group together and completes by its explicit completion rule
+- `spawn_flow` starts a sibling flow and returns immediately
+
+Current `run_parallel` completion forms:
+
+- omitted completion: wait for all children
+- `mode: "any"`: continue when any child finishes and let the rest keep running
+- `mode: "child"` with `child_id`: continue when that named child finishes and let the rest keep running
 
 When a choice needs to trigger something after the dialogue has fully closed, the reliable pattern is:
 
@@ -552,3 +566,4 @@ Useful commands during refactor work:
 .venv/Scripts/python run_game.py --project projects/test_project village_square --headless --max-frames 2
 .venv/Scripts/python run_game.py --project projects/test_project village_house --headless --max-frames 2
 ```
+

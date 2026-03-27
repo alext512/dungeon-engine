@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -16,6 +16,7 @@ from dungeon_engine.commands.library import (
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     AreaTransitionRequest,
+    CommandRunner,
     CommandExecutionError,
     CommandContext,
     SequenceCommandHandle,
@@ -405,7 +406,6 @@ class _FacingStateCollisionSystem:
 class _RecordingInputDispatchRunner:
     def __init__(self) -> None:
         self.dispatched: list[tuple[str, str, str | None]] = []
-        self.active_handle = None
 
     def has_pending_work(self) -> bool:
         return False
@@ -1585,8 +1585,9 @@ class StrictContentIdTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
 
-        self.assertEqual(registry.get_deferred_params("run_commands"), {"commands"})
-        self.assertEqual(registry.get_deferred_params("run_detached_commands"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("run_sequence"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("spawn_flow"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("run_parallel"), {"commands"})
         self.assertEqual(registry.get_deferred_params("run_commands_for_collection"), {"commands"})
         self.assertEqual(
             registry.get_deferred_params("run_event"),
@@ -2408,7 +2409,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.world.get_input_target_id("menu"), "pause_controller")
 
         game.command_runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=[
                 {
                     "type": "run_event",
@@ -2848,7 +2849,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
-    def test_run_commands_propagates_caller_entity_id(self) -> None:
+    def test_run_sequence_propagates_caller_entity_id(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
@@ -2858,7 +2859,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "commands": [
                     {
@@ -2875,7 +2876,105 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
-    def test_set_entity_field_supports_caller_token_via_run_commands(self) -> None:
+    def test_root_flows_run_independently_by_default(self) -> None:
+        world = World()
+        registry, context = self._make_command_context(world=world)
+        runner = CommandRunner(registry, context)
+
+        runner.enqueue(
+            "run_sequence",
+            commands=[
+                {"type": "wait_frames", "frames": 1},
+                {"type": "set_world_var", "name": "first_done", "value": True},
+            ],
+        )
+        runner.enqueue(
+            "run_sequence",
+            commands=[
+                {"type": "wait_frames", "frames": 1},
+                {"type": "set_world_var", "name": "second_done", "value": True},
+            ],
+        )
+
+        runner.update(1 / 60)
+
+        self.assertTrue(world.variables["first_done"])
+        self.assertTrue(world.variables["second_done"])
+        self.assertFalse(runner.has_pending_work())
+
+    def test_spawn_flow_returns_immediately_inside_run_sequence(self) -> None:
+        world = World()
+        registry, context = self._make_command_context(world=world)
+        runner = CommandRunner(registry, context)
+
+        runner.enqueue(
+            "run_sequence",
+            commands=[
+                {
+                    "type": "spawn_flow",
+                    "commands": [
+                        {"type": "wait_frames", "frames": 1},
+                        {"type": "set_world_var", "name": "later", "value": True},
+                    ],
+                },
+                {"type": "set_world_var", "name": "now", "value": True},
+            ],
+        )
+
+        runner.update(0.0)
+        self.assertTrue(world.variables["now"])
+        self.assertNotIn("later", world.variables)
+        self.assertTrue(runner.has_pending_work())
+
+        runner.update(1 / 60)
+        self.assertTrue(world.variables["later"])
+        self.assertFalse(runner.has_pending_work())
+
+    def test_run_parallel_can_wait_for_one_child_and_let_others_continue(self) -> None:
+        world = World()
+        registry, context = self._make_command_context(world=world)
+        runner = CommandRunner(registry, context)
+
+        runner.enqueue(
+            "run_sequence",
+            commands=[
+                {
+                    "type": "run_parallel",
+                    "completion": {
+                        "mode": "child",
+                        "child_id": "fast",
+                        "remaining": "keep_running",
+                    },
+                    "commands": [
+                        {
+                            "id": "fast",
+                            "type": "wait_frames",
+                            "frames": 1,
+                        },
+                        {
+                            "id": "slow",
+                            "type": "run_sequence",
+                            "commands": [
+                                {"type": "wait_frames", "frames": 2},
+                                {"type": "set_world_var", "name": "slow_done", "value": True},
+                            ],
+                        },
+                    ],
+                },
+                {"type": "set_world_var", "name": "after_fast", "value": True},
+            ],
+        )
+
+        runner.update(1 / 60)
+        self.assertTrue(world.variables["after_fast"])
+        self.assertNotIn("slow_done", world.variables)
+        self.assertTrue(runner.has_pending_work())
+
+        runner.update(1 / 60)
+        self.assertTrue(world.variables["slow_done"])
+        self.assertFalse(runner.has_pending_work())
+
+    def test_set_entity_field_supports_caller_token_via_run_sequence(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -2885,7 +2984,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "caller_entity_id": "lever",
                 "commands": [
@@ -2903,7 +3002,7 @@ class StrictContentIdTests(unittest.TestCase):
         caller_visual = world.get_entity("lever").require_visual("main")  # type: ignore[union-attr]
         self.assertEqual(caller_visual.tint, (5, 6, 7))
 
-    def test_route_inputs_to_entity_command_supports_actor_token_via_run_commands(self) -> None:
+    def test_route_inputs_to_entity_command_supports_actor_token_via_run_sequence(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -2920,7 +3019,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "actor_entity_id": "player",
                 "commands": [
@@ -3096,7 +3195,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {},
             )
 
-    def test_animation_commands_accept_visual_id_and_caller_token_via_run_commands(self) -> None:
+    def test_animation_commands_accept_visual_id_and_caller_token_via_run_sequence(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -3108,7 +3207,7 @@ class StrictContentIdTests(unittest.TestCase):
         play_handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "caller_entity_id": "lever",
                 "commands": [
@@ -3129,7 +3228,7 @@ class StrictContentIdTests(unittest.TestCase):
         wait_handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "caller_entity_id": "lever",
                 "commands": [
@@ -3149,7 +3248,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
 
-    def test_move_entity_one_tile_supports_caller_token_via_run_commands(self) -> None:
+    def test_move_entity_one_tile_supports_caller_token_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -3160,7 +3259,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "caller_entity_id": "lever",
                 "commands": [
@@ -3182,7 +3281,7 @@ class StrictContentIdTests(unittest.TestCase):
             [("lever", "right", None, 8, None, "immediate", False)],
         )
 
-    def test_set_camera_follow_entity_supports_caller_token_via_run_commands(self) -> None:
+    def test_set_camera_follow_entity_supports_caller_token_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -3193,7 +3292,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "caller_entity_id": "lever",
                 "commands": [
@@ -3767,3 +3866,4 @@ class StrictContentIdTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

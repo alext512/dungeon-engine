@@ -1,4 +1,4 @@
-# Temporary Plan - Spirit Alignment Audit
+﻿# Temporary Plan - Spirit Alignment Audit
 
 This is a temporary audit note.
 
@@ -105,8 +105,9 @@ Status:
 - resolved in the active runtime surface
 - generic command-level `on_start` / `on_end` wrapper syntax is gone
 - `LifecycleChainHandle` is gone
-- explicit sequencing now goes through `run_commands`
-- overlapping/background work now goes through `run_detached_commands`
+- explicit sequencing now goes through `run_sequence`
+- grouped parallel work now goes through `run_parallel`
+- fire-and-forget overlap now goes through `spawn_flow`
 
 Remaining follow-through:
 
@@ -165,38 +166,7 @@ Residual note:
 
 - `"$facing_state"` still keeps some facing-derived movement state in one helper value source, so this area is improved but not fully finished
 
-### 7. Background command execution and input-while-busy are still hidden scheduling semantics
-
-Files:
-
-- `dungeon_engine/commands/runner.py`
-- `dungeon_engine/commands/builtin.py`
-- `dungeon_engine/engine/input_handler.py`
-
-Current examples:
-
-- `CommandRunner.background_handles`
-- `run_detached_commands`
-- `allow_entity_input`
-- `captures_menu_input`
-
-What is happening:
-
-- the runner has a main active lane plus a background-handle lane
-- some handles can still allow routed input while the main lane is busy
-
-Why this might conflict with the spirit:
-
-- it is generic runtime infrastructure, so it may be acceptable
-- but it is also a hidden scheduling model that authors can only see indirectly
-- if it grows more complex, it may become another "secret engine state machine"
-
-Open question:
-
-- keep as internal substrate
-- or make the scheduling model more explicit/authored if it starts affecting gameplay reasoning too much
-
-### 8. The sample and docs still normalize transitional helper commands as part of the active authoring surface
+### 7. The sample and docs still normalize transitional helper commands as part of the active authoring surface
 
 Files:
 
@@ -236,7 +206,6 @@ They still deserve re-checking later if they start swallowing gameplay meaning, 
 1. Finish the remaining `CommandContext` shrink work for the strict primitive families that still take full runner context
 2. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
 3. Review whether the remaining physical key mapping in the input layer should stay fixed or become authored/configured later
-4. Once replacement paths are stable, remove the legacy rejection-shim layer
 
 ## Working Rule
 
@@ -244,3 +213,4 @@ This note is a punch list, not a verdict.
 
 If later implementation or design discussion shows that one of these items is actually acceptable infrastructure, this file should be updated deliberately.
 If an item is resolved, the permanent docs should be updated and this file should eventually be deleted.
+

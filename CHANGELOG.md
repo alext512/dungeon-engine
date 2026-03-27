@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 Reverse-chronological log of functionality changes. Each entry describes what was added or changed, not how.
 
@@ -6,8 +6,10 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ## Primitive Command Cleanup
 
+- Reworked command scheduling so top-level flows now run independently by default instead of through one privileged main lane plus detached/background exceptions
+- Added explicit composition commands `run_parallel` and `spawn_flow`, while `run_sequence` now names the ordered composition path directly
 - Removed most historical removed-command / removed-field startup blacklists so validation now focuses on current structural invariants instead of memorializing obsolete authoring forms
-- Removed generic command-level `on_start` / `on_end` wrapper syntax from the active runtime model in favor of explicit `run_commands` sequencing and `run_detached_commands` overlap
+- Removed generic command-level `on_start` / `on_end` wrapper syntax from the active runtime model in favor of explicit `run_sequence`, `run_parallel`, and `spawn_flow` composition
 - Reworked the sample `walk_one_tile` command to use explicit sequencing instead of hidden lifecycle wrappers
 - Tightened validation/runtime so old wrapper syntax now fails fast while dialogue hook payload data such as `segment_hooks[].on_end` continues to work as ordinary controller-owned data
 - Changed primitive command execution so strict primitive families now receive only the engine services named in their Python signatures instead of the full runtime service bag
@@ -172,3 +174,4 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Reusable entity templates with per-instance `$variable` parameter substitution
 - Configurable bitmap font system (`pixelbet`) with per-glyph width measurement
 - Persistent rotating error log in `logs/error.log`
+

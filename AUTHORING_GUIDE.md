@@ -1,4 +1,4 @@
-# Authoring Guide
+﻿# Authoring Guide
 
 ## Purpose
 
@@ -608,8 +608,24 @@ Generic per-command lifecycle wrapper fields are removed from the active command
 
 - removed: command-level `on_start`
 - removed: command-level `on_end`
-- use `run_commands` when later commands should wait for an earlier long-running command to finish
-- use `run_detached_commands` when work should overlap in the background
+- use `run_sequence` when later commands should wait for an earlier long-running command to finish
+- use `run_parallel` when a grouped set of child commands should start together and the group should complete by an explicit rule
+- use `spawn_flow` when work should start and the current sequence should continue immediately
+
+Scheduling model:
+
+- top-level command flows run independently by default
+- `run_sequence` is the explicit ordered composition command
+- `run_parallel` is the explicit grouped parallel composition command
+- `spawn_flow` is the explicit fire-and-forget flow spawner
+
+`run_parallel` completion modes:
+
+- default / omitted: wait for all children
+- `{"mode": "any", "remaining": "keep_running"}`: continue when any child finishes and let the others keep running
+- `{"mode": "child", "child_id": "move", "remaining": "keep_running"}`: continue when the named child finishes and let the others keep running
+
+`run_parallel` child commands may include an optional top-level `id` field when you want `completion.mode = "child"` to target one specific child.
 
 Generic tile-query value sources are also available for explicit spatial lookup:
 
@@ -696,3 +712,4 @@ If you want a concrete example project, inspect these files next:
 6. `projects/test_project/entity_templates/lever_toggle.json`
 7. `projects/test_project/dialogues/system/title_menu.json`
 8. `projects/test_project/dialogues/system/save_prompt.json`
+

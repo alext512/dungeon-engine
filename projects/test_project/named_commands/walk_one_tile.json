@@ -46,7 +46,7 @@
       ]
     },
     {
-      "type": "run_commands",
+      "type": "run_sequence",
       "commands": [
         {
           "type": "move_entity_one_tile",
@@ -69,3 +69,4 @@
     }
   ]
 }
+

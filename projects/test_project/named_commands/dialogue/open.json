@@ -141,7 +141,7 @@
       "value": null
     },
     {
-      "type": "run_commands",
+      "type": "run_sequence",
       "commands": "$dialogue_on_start"
     },
     {
@@ -150,3 +150,4 @@
     }
   ]
 }
+

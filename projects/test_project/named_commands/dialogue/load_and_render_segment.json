@@ -246,7 +246,7 @@
       "value": "$self.dialogue_revision"
     },
     {
-      "type": "run_commands",
+      "type": "run_sequence",
       "commands": "$self.dialogue_current_segment_on_start_commands",
       "actor_entity_id": "$self.dialogue_actor_id",
       "caller_entity_id": "$self.dialogue_caller_id"
@@ -266,3 +266,4 @@
     }
   ]
 }
+
