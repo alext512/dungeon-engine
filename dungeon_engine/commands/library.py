@@ -21,7 +21,6 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_var_length",
     "append_entity_var",
     "pop_entity_var",
-    "set_entity_var_from_collection_item",
     "check_entity_var",
     "set_event_enabled",
     "set_events_enabled",
@@ -365,7 +364,14 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
         if command_type == "set_var_from_collection_item":
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command 'set_var_from_collection_item'; "
-                "use 'set_world_var_from_collection_item' or 'set_entity_var_from_collection_item' instead."
+                "use 'set_world_var' or 'set_entity_var' with value sources like "
+                "'{'$collection_item': {...}}' instead."
+            )
+        if command_type in {"set_world_var_from_collection_item", "set_entity_var_from_collection_item"}:
+            raise ValueError(
+                f"{source_name} command '{location}' uses removed command '{command_type}'; "
+                "use explicit variable commands with value sources like "
+                "'{'$collection_item': {...}}' instead."
             )
         if command_type == "check_var":
             raise ValueError(

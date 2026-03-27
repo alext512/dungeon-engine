@@ -446,36 +446,6 @@ def _branch_with_runtime_context(
     return SequenceCommandHandle(registry, context, branch, base_params=inherited_params)
 
 
-def _extract_collection_item(
-    value: Any = None,
-    *,
-    index: int | None = None,
-    key: str | None = None,
-    default: Any = None,
-) -> Any:
-    """Return one list/tuple or dict item with a consistent defaulting contract."""
-    extracted_value = copy.deepcopy(default)
-    if key is not None:
-        if value is None:
-            return extracted_value
-        if not isinstance(value, dict):
-            raise TypeError("Collection item lookup with key requires a dict value.")
-        if key in value:
-            return copy.deepcopy(value[key])
-        return extracted_value
-
-    if index is None:
-        raise ValueError("Collection item lookup requires either key or index.")
-    if value is None:
-        return extracted_value
-    if not isinstance(value, (list, tuple)):
-        raise TypeError("Collection item lookup with index requires a list or tuple value.")
-    resolved_index = int(index)
-    if 0 <= resolved_index < len(value):
-        return copy.deepcopy(value[resolved_index])
-    return extracted_value
-
-
 def _resolve_facing_direction(entity, direction: str | None) -> str:
     """Return an explicit direction, defaulting to the entity's current facing."""
     resolved_direction = str(direction or entity.facing)
@@ -965,18 +935,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             value=direction,
         )
 
-    @registry.register("query_facing_state")
-    def query_facing_state(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed facing-state-to-var helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "query_facing_state was removed; use explicit variable commands with "
-            "value sources like {'$facing_state': {...}} instead."
-        )
-
     @registry.register("run_facing_event")
     def run_facing_event(
         context: CommandContext,
@@ -1334,42 +1292,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.screen_manager.clear(layer=layer)
         return ImmediateHandle()
 
-    @registry.register("set_var_from_json_file")
-    def set_var_from_json_file(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed JSON-file-to-var helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_var_from_json_file was removed; use explicit variable commands with "
-            "value sources like {'$json_file': 'dialogues/menu.json'} instead."
-        )
-
-    @registry.register("set_var_from_wrapped_lines")
-    def set_var_from_wrapped_lines(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed wrapped-lines-to-var helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_var_from_wrapped_lines was removed; use explicit variable commands with "
-            "value sources like {'$wrapped_lines': {...}} instead."
-        )
-
-    @registry.register("set_var_from_text_window")
-    def set_var_from_text_window(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed text-window-to-var helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_var_from_text_window was removed; use explicit variable commands with "
-            "value sources like {'$text_window': {...}} instead."
-        )
-
     @registry.register("play_screen_animation")
     def play_screen_animation(
         context: CommandContext,
@@ -1427,137 +1349,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Pause the current command lane for a fixed amount of elapsed time."""
         return WaitSecondsHandle(float(seconds))
-
-    @registry.register("wait_for_action_press")
-    def wait_for_action_press(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed raw-input polling helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "wait_for_action_press was removed; route press input to a controller/entity event and let authored state decide what happens."
-        )
-
-    @registry.register("wait_for_direction_release")
-    def wait_for_direction_release(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed raw-input release polling helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "wait_for_direction_release was removed; route release behavior through entity-owned input state instead of raw engine polling."
-        )
-
-    @registry.register("run_dialogue")
-    def run_dialogue(
-        *_: Any,
-        **__: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue command path."""
-        raise ValueError(
-            "run_dialogue was removed. Load dialogue JSON into controller variables and let controller entity events drive the flow."
-        )
-
-    @registry.register("start_dialogue_session")
-    def start_dialogue_session(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue-session command."""
-        _ = args, kwargs
-        raise ValueError(
-            "start_dialogue_session was removed. Keep dialogue state on the controller entity and drive it with normal commands and input events."
-        )
-
-    @registry.register("dialogue_advance")
-    def dialogue_advance(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue input helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "dialogue_advance was removed. The controller entity should advance its own dialogue variables through normal commands."
-        )
-
-    @registry.register("dialogue_move_selection")
-    def dialogue_move_selection(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue input helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "dialogue_move_selection was removed. The controller entity should update its own selection state through normal commands."
-        )
-
-    @registry.register("dialogue_confirm_choice")
-    def dialogue_confirm_choice(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue input helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "dialogue_confirm_choice was removed. The controller entity should confirm its own selected option through normal commands."
-        )
-
-    @registry.register("dialogue_cancel")
-    def dialogue_cancel(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue input helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "dialogue_cancel was removed. The controller entity should decide how cancel input affects its own dialogue state."
-        )
-
-    @registry.register("prepare_text_session")
-    def prepare_text_session(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed stateful text-session helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "prepare_text_session was removed. Store wrapped lines and visible text directly in entity variables instead."
-        )
-
-    @registry.register("read_text_session")
-    def read_text_session(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed stateful text-session helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "read_text_session was removed. Read visible text from entity variables directly instead."
-        )
-
-    @registry.register("advance_text_session")
-    def advance_text_session(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed stateful text-session helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "advance_text_session was removed. Advance your entity-owned text state directly through normal commands."
-        )
-
-    @registry.register("reset_text_session")
-    def reset_text_session(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed stateful text-session helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "reset_text_session was removed. Reset your entity-owned text state directly through normal commands."
-        )
 
     @registry.register("run_detached_commands", deferred_params={"commands"})
     def run_detached_commands(
@@ -1892,29 +1683,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.world.pop_input_routes()
         return ImmediateHandle()
 
-    @registry.register("close_dialogue")
-    def close_dialogue(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed engine-owned dialogue close helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "close_dialogue was removed. The controller entity should clear and restore its own dialogue state through normal commands."
-        )
-
-    @registry.register("set_input_event_name")
-    def set_input_event_name(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed project-level input fallback remapping helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_input_event_name was removed; routed entities should define explicit "
-            "'input_map' entries instead of relying on engine fallback event names."
-        )
-
     @registry.register("change_area")
     def change_area(
         context: CommandContext,
@@ -2116,20 +1884,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.camera.update(context.world, advance_tick=False)
         return ImmediateHandle()
 
-    @registry.register("set_camera_follow_player")
-    def set_camera_follow_player(
-        context: CommandContext,
-        *,
-        offset_x: int | float = 0,
-        offset_y: int | float = 0,
-        **_: Any,
-    ) -> CommandHandle:
-        """Fail fast for the removed player-specific camera follow command."""
-        raise ValueError(
-            "set_camera_follow_player is removed; use 'set_camera_follow_entity' "
-            "or 'set_camera_follow_input_target' instead."
-        )
-
     @registry.register("set_camera_follow_input_target")
     def set_camera_follow_input_target(
         context: CommandContext,
@@ -2236,43 +1990,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context.camera.clear_deadzone()
         context.camera.update(context.world, advance_tick=False)
         return ImmediateHandle()
-
-    @registry.register("set_var_from_camera")
-    def set_var_from_camera(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the removed broad camera-to-variable helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_var_from_camera was removed; read camera values through "
-            "runtime tokens like '$camera.x' and store them with explicit "
-            "variable commands."
-        )
-
-    @registry.register("set_world_var_from_camera")
-    def set_world_var_from_camera(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the transitional explicit camera-to-world-variable helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_world_var_from_camera was removed; use 'set_world_var' with "
-            "a runtime token like '$camera.x' instead."
-        )
-
-    @registry.register("set_entity_var_from_camera")
-    def set_entity_var_from_camera(
-        *args: Any,
-        **kwargs: Any,
-    ) -> CommandHandle:
-        """Reject the transitional explicit camera-to-entity-variable helper."""
-        _ = args, kwargs
-        raise ValueError(
-            "set_entity_var_from_camera was removed; use 'set_entity_var' with "
-            "a runtime token like '$camera.follow_entity_id' instead."
-        )
 
     @registry.register("move_camera")
     def move_camera(
@@ -2732,59 +2449,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 )
         return ImmediateHandle()
 
-    @registry.register("set_world_var_from_collection_item")
-    def set_world_var_from_collection_item(
-        context: CommandContext,
-        *,
-        name: str,
-        value: Any = None,
-        index: int | None = None,
-        key: str | None = None,
-        default: Any = None,
-        persistent: bool = False,
-    ) -> CommandHandle:
-        """Store one item from a collection into an explicit world variable."""
-        extracted_value = _extract_collection_item(
-            value,
-            index=index,
-            key=key,
-            default=default,
-        )
-        context.world.variables[name] = extracted_value
-        if persistent:
-            _persist_world_variable_value(context, name=name, value=extracted_value)
-        return ImmediateHandle()
-
-    @registry.register("set_entity_var_from_collection_item")
-    def set_entity_var_from_collection_item(
-        context: CommandContext,
-        *,
-        entity_id: str,
-        name: str,
-        value: Any = None,
-        index: int | None = None,
-        key: str | None = None,
-        default: Any = None,
-        persistent: bool = False,
-    ) -> CommandHandle:
-        """Store one item from a collection into an explicit entity variable."""
-        extracted_value = _extract_collection_item(
-            value,
-            index=index,
-            key=key,
-            default=default,
-        )
-        variables = _require_exact_entity_variables(context, entity_id)
-        variables[name] = extracted_value
-        if persistent:
-            _persist_exact_entity_variable_value(
-                context,
-                entity_id=entity_id,
-                name=name,
-                value=extracted_value,
-            )
-        return ImmediateHandle()
-
     @registry.register("check_world_var", deferred_params={"then", "else"})
     def check_world_var(
         context: CommandContext,
@@ -3095,77 +2759,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     source_entity_id=source_entity_id,
                     actor_entity_id=actor_entity_id,
                     caller_entity_id=caller_entity_id,
-                )
-        return ImmediateHandle()
-
-    @registry.register("set_var_from_collection_item")
-    def set_var_from_collection_item(
-        context: CommandContext,
-        *,
-        name: str,
-        value: Any = None,
-        index: int | None = None,
-        key: str | None = None,
-        default: Any = None,
-        scope: str = "entity",
-        persistent: bool = False,
-        entity_id: str | None = None,
-        source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Store one item from a list/tuple or dict into a variable."""
-        extracted_value = copy.deepcopy(default)
-        if key is not None:
-            if value is None:
-                extracted_value = copy.deepcopy(default)
-            elif not isinstance(value, dict):
-                raise TypeError("set_var_from_collection_item with key requires a dict value.")
-            elif key in value:
-                extracted_value = copy.deepcopy(value[key])
-        else:
-            if index is None:
-                raise ValueError("set_var_from_collection_item requires either key or index.")
-            if value is None:
-                extracted_value = copy.deepcopy(default)
-            elif not isinstance(value, (list, tuple)):
-                raise TypeError("set_var_from_collection_item with index requires a list or tuple value.")
-            else:
-                resolved_index = int(index)
-                if 0 <= resolved_index < len(value):
-                    extracted_value = copy.deepcopy(value[resolved_index])
-
-        variables = _resolve_variables(
-            context,
-            scope=scope,
-            entity_id=entity_id,
-            source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
-        )
-        variables[name] = extracted_value
-        if persistent and context.persistence_runtime is not None:
-            if scope == "world":
-                context.persistence_runtime.set_world_variable(name, extracted_value)
-            else:
-                if entity_id is None:
-                    raise ValueError("Persistent entity variable set requires entity_id.")
-                resolved_id = _resolve_entity_id(
-                    entity_id,
-                    source_entity_id=source_entity_id,
-                    actor_entity_id=actor_entity_id,
-                    caller_entity_id=caller_entity_id,
-                )
-                entity = context.world.get_entity(resolved_id)
-                if entity is None:
-                    raise KeyError(f"Cannot persist variable on missing entity '{resolved_id}'.")
-                context.persistence_runtime.set_entity_variable(
-                    resolved_id,
-                    name,
-                    extracted_value,
-                    entity=entity,
-                    tile_size=context.area.tile_size,
                 )
         return ImmediateHandle()
 

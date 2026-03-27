@@ -316,6 +316,36 @@ def _build_text_window(
     }
 
 
+def _extract_collection_item(
+    value: Any,
+    *,
+    index: int | None = None,
+    key: str | None = None,
+    default: Any = None,
+) -> Any:
+    """Return one list/tuple or dict item with a consistent defaulting contract."""
+    extracted_value = copy.deepcopy(default)
+    if key is not None:
+        if value is None:
+            return extracted_value
+        if not isinstance(value, dict):
+            raise TypeError("Collection item lookup with key requires a dict value.")
+        if key in value:
+            return copy.deepcopy(value[key])
+        return extracted_value
+
+    if index is None:
+        raise ValueError("Collection item lookup requires either key or index.")
+    if value is None:
+        return extracted_value
+    if not isinstance(value, (list, tuple)):
+        raise TypeError("Collection item lookup with index requires a list or tuple value.")
+    resolved_index = int(index)
+    if 0 <= resolved_index < len(value):
+        return copy.deepcopy(value[resolved_index])
+    return extracted_value
+
+
 def _resolve_facing_state_value(context: CommandContext, resolved_source: Any) -> dict[str, Any]:
     """Return the state of the tile directly in front of one entity."""
     if context.collision_system is None:
@@ -410,6 +440,16 @@ def _resolve_runtime_value_source(
 
     if source_name == "$facing_state":
         return _resolve_facing_state_value(context, resolved_source)
+
+    if source_name == "$collection_item":
+        if not isinstance(resolved_source, dict):
+            raise TypeError("$collection_item value source requires a JSON object.")
+        return _extract_collection_item(
+            resolved_source.get("value"),
+            index=resolved_source.get("index"),
+            key=resolved_source.get("key"),
+            default=resolved_source.get("default"),
+        )
 
     raise KeyError(f"Unknown value source '{source_name}'.")
 
@@ -538,6 +578,7 @@ def _resolve_runtime_values(
                 "$wrapped_lines",
                 "$text_window",
                 "$facing_state",
+                "$collection_item",
             }:
                 return _resolve_runtime_value_source(
                     source_name,

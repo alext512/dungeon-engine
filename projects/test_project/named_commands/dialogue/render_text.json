@@ -15,12 +15,16 @@
       "value": 0,
       "then": [
         {
-          "type": "set_entity_var_from_collection_item",
+          "type": "set_entity_var",
           "name": "dialogue_current_source_text",
           "entity_id": "$self_id",
-          "value": "$self.dialogue_current_segment_pages",
-          "index": "$self.dialogue_source_page_index",
-          "default": ""
+          "value": {
+            "$collection_item": {
+              "value": "$self.dialogue_current_segment_pages",
+              "index": "$self.dialogue_source_page_index",
+              "default": ""
+            }
+          }
         }
       ],
       "else": [

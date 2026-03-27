@@ -2,20 +2,28 @@
   "params": [],
   "commands": [
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_selected_option",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_current_segment_options",
-      "index": "$self.dialogue_choice_index",
-      "default": {}
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment_options",
+          "index": "$self.dialogue_choice_index",
+          "default": {}
+        }
+      }
     },
     {
-      "type": "set_entity_var_from_collection_item",
+      "type": "set_entity_var",
       "name": "dialogue_current_selected_option_id",
       "entity_id": "$self_id",
-      "value": "$self.dialogue_current_selected_option",
-      "key": "option_id",
-      "default": ""
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_selected_option",
+          "key": "option_id",
+          "default": ""
+        }
+      }
     },
     {
       "type": "set_entity_var_length",
@@ -38,34 +46,46 @@
           "value": 0,
           "then": [
             {
-              "type": "set_entity_var_from_collection_item",
+              "type": "set_entity_var",
               "name": "dialogue_current_selected_option_commands",
               "entity_id": "$self_id",
-              "value": "$self.dialogue_current_option_commands_by_id",
-              "key": "$self.dialogue_current_selected_option_id",
-              "default": []
+              "value": {
+                "$collection_item": {
+                  "value": "$self.dialogue_current_option_commands_by_id",
+                  "key": "$self.dialogue_current_selected_option_id",
+                  "default": []
+                }
+              }
             }
           ],
           "else": [
             {
-              "type": "set_entity_var_from_collection_item",
+              "type": "set_entity_var",
               "name": "dialogue_current_selected_option_commands",
               "entity_id": "$self_id",
-              "value": "$self.dialogue_current_option_commands",
-              "index": "$self.dialogue_choice_index",
-              "default": []
+              "value": {
+                "$collection_item": {
+                  "value": "$self.dialogue_current_option_commands",
+                  "index": "$self.dialogue_choice_index",
+                  "default": []
+                }
+              }
             }
           ]
         }
       ],
       "else": [
         {
-          "type": "set_entity_var_from_collection_item",
+          "type": "set_entity_var",
           "name": "dialogue_current_selected_option_commands",
           "entity_id": "$self_id",
-          "value": "$self.dialogue_current_option_commands",
-          "index": "$self.dialogue_choice_index",
-          "default": []
+          "value": {
+            "$collection_item": {
+              "value": "$self.dialogue_current_option_commands",
+              "index": "$self.dialogue_choice_index",
+              "default": []
+            }
+          }
         }
       ]
     },

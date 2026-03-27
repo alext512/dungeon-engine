@@ -29,6 +29,7 @@ These areas look broadly aligned with the intended direction and are not the mai
 - input routing is per logical action through explicit `input_targets`
 - input-route restore is handled through the engine-owned route stack rather than a privileged actor
 - camera state is explicit runtime state instead of being derived from a special player concept
+- helper "read and store" commands for camera, JSON/text processing, facing state, and collection items have been replaced by runtime tokens or structured value sources in the active authored model
 
 ## Definite Mismatches
 
@@ -70,40 +71,7 @@ What to do later:
 - move toward command-specific dependency injection for true primitives
 - keep a full runtime root internally if needed, but stop letting primitive command contracts effectively depend on the whole bag
 
-### 2. Some helper commands still combine "read/compute" plus "store into a variable"
-
-Files:
-
-- `dungeon_engine/commands/builtin.py`
-- `MANUAL.md`
-- `AUTHORING_GUIDE.md`
-
-Current examples:
-
-- `set_world_var_from_collection_item`
-- `set_entity_var_from_collection_item`
-
-What is happening:
-
-- some commands are still doing two things at once:
-  - read/compute something from engine services or input data
-  - store the result into a variable
-- the obvious camera, JSON/text, and facing-state helper cases have already been replaced with runtime tokens and structured value sources, but a smaller helper layer still remains
-
-Why this conflicts with the spirit:
-
-- these are no longer clean primitives
-- they act like mini convenience scripting helpers
-- the user direction is moving toward patterns like:
-  - read a value from a runtime source
-  - then use an ordinary explicit variable command
-
-Likely future direction:
-
-- keep replacing them with clearer value-source mechanisms plus ordinary explicit variable commands
-- avoid introducing new "compute and store" helper commands as replacements
-
-### 3. Input still has hidden engine fallbacks and engine-owned meaning
+### 2. Input still has hidden engine fallbacks and engine-owned meaning
 
 Files:
 
@@ -129,7 +97,7 @@ Likely future direction:
 - decide whether `Escape` quit fallback should remain a low-level shell/app behavior or be pushed higher
 - keep only true low-level input plumbing in the engine
 
-### 4. The runner still has hidden command lifecycle wrappers
+### 3. The runner still has hidden command lifecycle wrappers
 
 Files:
 
@@ -154,11 +122,10 @@ Likely future direction:
 
 - decide whether `on_start` / `on_end` should remain as a generic composition feature or be replaced by more explicit command-chain structure
 
-### 5. There is still a large transitional layer of removed builtins kept alive as rejection shims
+### 4. There is still a transitional layer of removed command-name knowledge in validation
 
 Files:
 
-- `dungeon_engine/commands/builtin.py`
 - `dungeon_engine/world/loader.py`
 - `dungeon_engine/commands/library.py`
 
@@ -180,23 +147,23 @@ Examples:
 
 What is happening:
 
-- many old command names are still registered only to fail fast
-- loader/library also hardcode validation rejection for many of these old names/forms
+- many old command names are no longer in the active builtin registry
+- loader/library still hardcode validation rejection for many of these old names/forms so outdated content fails fast before launch
 
 Why this conflicts with the spirit:
 
 - this is acceptable as a migration step
 - it is not a good final shape
-- the active engine API is still partly carrying historical baggage in its registry and validation logic
+- the active engine surface is cleaner now, but the validation layer still carries a large amount of historical baggage
 
 Likely future direction:
 
-- once the replacement model is stable, remove the historical shims and reduce the rejection surface
+- once the replacement model is stable, reduce the validation rejection surface too
 - keep only the docs/tests needed to explain the final active model
 
 ## Likely Mismatches / Needs Design Review
 
-### 6. Facing/interaction helpers are still broad and gameplay-opinionated
+### 5. Facing/interaction helpers are still broad and gameplay-opinionated
 
 Files:
 
