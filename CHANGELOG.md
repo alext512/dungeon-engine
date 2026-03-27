@@ -9,6 +9,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Removed the broad variable primitives (`set_var`, `increment_var`, `set_var_length`, `append_to_var`, `pop_var`, `set_var_from_collection_item`, `check_var`) in favor of explicit world/entity forms
 - Tightened strict entity-target mutation and input-routing primitives so they now require explicit ids or resolved `$..._id` tokens instead of raw symbolic `self` / `actor` / `caller` ids
 - Tightened `set_camera_follow_entity` the same way, so camera follow targeting now matches the strict primitive model
+- Tightened strict visual/animation primitives such as `set_facing`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` so they now follow the same explicit-id rule
 - Removed the broad `set_var_from_camera` helper in favor of explicit `set_world_var_from_camera` and `set_entity_var_from_camera`
 - Added startup validation and runtime fail-fast errors for the removed broad forms and for raw symbolic ids on strict primitives
 - Updated the sample content, tests, and active docs to describe the stricter primitive-command model

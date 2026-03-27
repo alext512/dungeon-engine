@@ -89,7 +89,7 @@
                 },
                 {
                   "type": "set_visual_frame",
-                  "entity_id": "self",
+                  "entity_id": "$self_id",
                   "frame": "$idle_frame"
                 }
               ]
@@ -108,7 +108,7 @@
             },
             {
               "type": "set_visual_frame",
-              "entity_id": "self",
+              "entity_id": "$self_id",
               "frame": "$idle_frame"
             }
           ]

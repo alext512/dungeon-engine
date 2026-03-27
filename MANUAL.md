@@ -333,7 +333,7 @@ These are resolved by the command system before execution.
 
 Important nuance:
 
-- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, and `set_entity_var_from_camera` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
+- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_var_from_camera`, `set_facing`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
 - higher-level orchestration commands such as `run_event` and `run_named_command` still carry richer runtime context internally
 
 ### Runtime tokens

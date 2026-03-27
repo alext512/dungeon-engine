@@ -17,7 +17,7 @@
       "then": [
         {
           "type": "play_animation",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "frame_sequence": "$phase_b_frames",
           "frames_per_sprite_change": "$frames_per_sprite_change",
           "wait": false
@@ -32,7 +32,7 @@
       "else": [
         {
           "type": "play_animation",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "frame_sequence": "$phase_a_frames",
           "frames_per_sprite_change": "$frames_per_sprite_change",
           "wait": false
@@ -54,12 +54,12 @@
       "on_end": [
         {
           "type": "stop_animation",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "reset_to_default": false
         },
         {
           "type": "set_visual_frame",
-          "entity_id": "self",
+          "entity_id": "$self_id",
           "frame": "$idle_frame"
         }
       ]
