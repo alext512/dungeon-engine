@@ -603,10 +603,13 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
             "read_text_session",
             "advance_text_session",
             "reset_text_session",
+            "set_var_from_json_file",
+            "set_var_from_wrapped_lines",
+            "set_var_from_text_window",
         }:
             raise ValueError(
                 f"{source_name} command '{location}' uses removed command '{command_type}'; "
-                "store wrapped lines and visible text directly in entity variables instead."
+                "use explicit variable commands with structured value sources instead."
             )
         if command_type == "set_sprite_frame":
             raise ValueError(

@@ -729,6 +729,45 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
+    def test_entity_template_validation_rejects_removed_data_helper_commands(self) -> None:
+        for command_name, extra_params in (
+            ("set_var_from_json_file", {"scope": "entity", "name": "data", "path": "dialogues/menus/test.json"}),
+            (
+                "set_var_from_wrapped_lines",
+                {"scope": "entity", "name": "lines", "text": "hello", "max_width": 64},
+            ),
+            (
+                "set_var_from_text_window",
+                {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
+            ),
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    entity_templates={
+                        "legacy_helper.json": {
+                            "kind": "system",
+                            "events": {
+                                "interact": [
+                                    {
+                                        "type": command_name,
+                                        **extra_params,
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                )
+
+                with self.assertRaises(EntityTemplateValidationError) as raised:
+                    validate_project_entity_templates(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
+
     def test_entity_template_validation_rejects_removed_set_camera_follow_player_command(self) -> None:
         _, project = self._make_project(
             entity_templates={
@@ -880,6 +919,43 @@ class StrictContentIdTests(unittest.TestCase):
                 )
             )
 
+    def test_named_command_validation_rejects_removed_data_helper_commands(self) -> None:
+        for command_name, extra_params in (
+            ("set_var_from_json_file", {"scope": "entity", "name": "data", "path": "dialogues/menus/test.json"}),
+            (
+                "set_var_from_wrapped_lines",
+                {"scope": "entity", "name": "lines", "text": "hello", "max_width": 64},
+            ),
+            (
+                "set_var_from_text_window",
+                {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
+            ),
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    commands={
+                        "legacy_helper.json": {
+                            "params": [],
+                            "commands": [
+                                {
+                                    "type": command_name,
+                                    **extra_params,
+                                }
+                            ],
+                        }
+                    }
+                )
+
+                with self.assertRaises(NamedCommandValidationError) as raised:
+                    validate_project_named_commands(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
+
     def test_named_command_validation_rejects_removed_set_input_event_name_command(self) -> None:
         _, project = self._make_project(
             commands={
@@ -1018,7 +1094,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
-    def test_set_var_from_json_file_loads_project_relative_dialogue_data(self) -> None:
+    def test_json_file_value_source_loads_project_relative_dialogue_data(self) -> None:
         _, project = self._make_project(
             dialogues={
                 "menus/test.json": {
@@ -1042,15 +1118,14 @@ class StrictContentIdTests(unittest.TestCase):
         )
         registry, context = self._make_command_context(project=project, world=world)
 
-        handle = execute_registered_command(
+        handle = execute_command_spec(
             registry,
             context,
-            "set_var_from_json_file",
             {
-                "scope": "entity",
                 "entity_id": "dialogue_controller",
                 "name": "dialogue_definition",
-                "path": "dialogues/menus/test.json",
+                "type": "set_entity_var",
+                "value": {"$json_file": "dialogues/menus/test.json"},
             },
         )
         handle.update(0.0)
@@ -1094,6 +1169,9 @@ class StrictContentIdTests(unittest.TestCase):
             "read_text_session",
             "advance_text_session",
             "reset_text_session",
+            "set_var_from_json_file",
+            "set_var_from_wrapped_lines",
+            "set_var_from_text_window",
         ):
             with self.assertRaises(CommandExecutionError) as raised:
                 execute_registered_command(registry, context, command_name, {})
@@ -1115,49 +1193,57 @@ class StrictContentIdTests(unittest.TestCase):
             self.assertIsNotNone(raised.exception.__cause__)
             self.assertIn("was removed", str(raised.exception.__cause__))
 
-    def test_set_var_from_wrapped_lines_and_text_window_store_visible_text(self) -> None:
+    def test_wrapped_lines_and_text_window_value_sources_store_visible_text(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
         registry, context = self._make_command_context(world=world)
         context.text_renderer = _StubTextRenderer()
 
-        wrapped_handle = execute_registered_command(
+        wrapped_handle = execute_command_spec(
             registry,
             context,
-            "set_var_from_wrapped_lines",
             {
-                "scope": "entity",
                 "entity_id": "dialogue_controller",
                 "name": "wrapped_lines",
-                "text": "one two three four",
-                "max_width": 64,
+                "type": "set_entity_var",
+                "value": {
+                    "$wrapped_lines": {
+                        "text": "one two three four",
+                        "max_width": 64,
+                    }
+                },
             },
         )
         wrapped_handle.update(0.0)
         controller = world.get_entity("dialogue_controller")
         assert controller is not None
 
-        window_handle = execute_registered_command(
+        window_handle = execute_command_spec(
             registry,
             context,
-            "set_var_from_text_window",
             {
-                "scope": "entity",
                 "entity_id": "dialogue_controller",
-                "name": "visible_text",
-                "lines": controller.variables["wrapped_lines"],
-                "start": 1,
-                "max_lines": 2,
-                "store_has_more_var": "has_more",
-                "store_total_var": "total_lines",
+                "name": "text_window",
+                "type": "set_entity_var",
+                "value": {
+                    "$text_window": {
+                        "lines": controller.variables["wrapped_lines"],
+                        "start": 1,
+                        "max_lines": 2,
+                    }
+                },
             },
         )
         window_handle.update(0.0)
 
         self.assertEqual(controller.variables["wrapped_lines"], ["one", "two", "three", "four"])
-        self.assertEqual(controller.variables["visible_text"], "two\nthree")
-        self.assertTrue(controller.variables["has_more"])
-        self.assertEqual(controller.variables["total_lines"], 4)
+        self.assertEqual(controller.variables["text_window"]["visible_text"], "two\nthree")
+        self.assertEqual(
+            controller.variables["text_window"]["visible_lines"],
+            ["two", "three"],
+        )
+        self.assertTrue(controller.variables["text_window"]["has_more"])
+        self.assertEqual(controller.variables["text_window"]["total_lines"], 4)
 
     def test_explicit_entity_var_primitives_manage_values_and_branching(self) -> None:
         world = World()
@@ -1601,6 +1687,43 @@ class StrictContentIdTests(unittest.TestCase):
                     for issue in raised.exception.issues
                 )
             )
+
+    def test_area_validation_rejects_removed_data_helper_commands(self) -> None:
+        for command_name, extra_params in (
+            ("set_var_from_json_file", {"scope": "entity", "name": "data", "path": "dialogues/menus/test.json"}),
+            (
+                "set_var_from_wrapped_lines",
+                {"scope": "entity", "name": "lines", "text": "hello", "max_width": 64},
+            ),
+            (
+                "set_var_from_text_window",
+                {"scope": "entity", "name": "text", "lines": ["hello"], "max_lines": 1},
+            ),
+        ):
+            with self.subTest(command_name=command_name):
+                _, project = self._make_project(
+                    areas={
+                        "test_room.json": {
+                            **_minimal_area(),
+                            "enter_commands": [
+                                {
+                                    "type": command_name,
+                                    **extra_params,
+                                }
+                            ],
+                        }
+                    }
+                )
+
+                with self.assertRaises(AreaValidationError) as raised:
+                    validate_project_areas(project)
+
+                self.assertTrue(
+                    any(
+                        f"uses removed command '{command_name}'" in issue
+                        for issue in raised.exception.issues
+                    )
+                )
 
     def test_area_validation_rejects_removed_set_input_event_name_command(self) -> None:
         _, project = self._make_project(

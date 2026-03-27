@@ -428,7 +428,7 @@ For the strict primitive entity-target commands, use explicit ids or resolved to
 
 ## Ordinary JSON Dialogue Data
 
-The sample project keeps dialogue/menu definitions under `dialogues/`, but that folder is only a convention. These files are ordinary JSON data loaded by controller commands.
+The sample project keeps dialogue/menu definitions under `dialogues/`, but that folder is only a convention. These files are ordinary JSON data loaded by controller commands through explicit variable writes with value sources such as `{"$json_file": "dialogues/system/pause_menu.json"}`.
 
 Example:
 

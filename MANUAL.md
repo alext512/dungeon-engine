@@ -202,7 +202,7 @@ The sample project uses named commands for both movement logic and controller-ow
 
 ### Ordinary JSON Dialogue Data
 
-The sample project keeps reusable dialogue/menu data under `dialogues/`, but that folder is only a convention. These files are not a special manifest category anymore. Controllers load them through normal commands such as `set_var_from_json_file`.
+The sample project keeps reusable dialogue/menu data under `dialogues/`, but that folder is only a convention. These files are not a special manifest category anymore. Controllers load them through explicit variable commands with value sources such as `{"$json_file": "dialogues/system/pause_menu.json"}`.
 
 Typical dialogue/menu JSON contains:
 
@@ -308,7 +308,7 @@ Important command families already in the engine:
 - entity mutation: `set_entity_field`, `set_event_enabled`
 - persistence/flow: `change_area`, `new_game`, `save_game`, `load_game`, `quit_game`
 - input routing: `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, `pop_input_routes`
-- generic text/data helpers: `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_world_var`, `append_entity_var`, `pop_world_var`, `pop_entity_var`
+- generic collection helpers: `append_world_var`, `append_entity_var`, `pop_world_var`, `pop_entity_var`
 - camera: `set_camera_follow_entity`, `set_camera_follow_input_target`, `clear_camera_follow`, `set_camera_bounds_rect`, `clear_camera_bounds`, `set_camera_deadzone`, `clear_camera_deadzone`, `move_camera`, `teleport_camera`
 
 ### Special entity references
@@ -340,6 +340,23 @@ The runner also supports tokens such as:
 - `$world.some_value`
 
 These are especially useful when forwarding context into another entity's event.
+
+### Structured value sources
+
+For explicit variable commands, the runner also resolves a few structured value sources before the primitive runs.
+
+Examples:
+
+- `{"$json_file": "dialogues/system/pause_menu.json"}`
+- `{"$wrapped_lines": {"text": "$self.dialogue_text", "max_width": "$self.text_box_width", "font_id": "$self.dialogue_font_id"}}`
+- `{"$text_window": {"lines": "$self.dialogue_wrapped_lines", "start": "$self.dialogue_text_line_offset", "max_lines": "$self.dialogue_max_lines"}}`
+
+`$text_window` returns an object with:
+
+- `visible_lines`
+- `visible_text`
+- `has_more`
+- `total_lines`
 
 ## Dialogue Model
 

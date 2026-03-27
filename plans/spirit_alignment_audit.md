@@ -70,7 +70,7 @@ What to do later:
 - move toward command-specific dependency injection for true primitives
 - keep a full runtime root internally if needed, but stop letting primitive command contracts effectively depend on the whole bag
 
-### 2. A helper-command layer still combines "read/compute" plus "store into a variable"
+### 2. Some helper commands still combine "read/compute" plus "store into a variable"
 
 Files:
 
@@ -80,19 +80,16 @@ Files:
 
 Current examples:
 
-- `set_var_from_json_file`
-- `set_var_from_wrapped_lines`
-- `set_var_from_text_window`
-- `set_world_var_from_camera`
-- `set_entity_var_from_camera`
 - `query_facing_state`
+- `set_world_var_from_collection_item`
+- `set_entity_var_from_collection_item`
 
 What is happening:
 
-- these commands are still doing two things at once:
+- some commands are still doing two things at once:
   - read/compute something from engine services or input data
   - store the result into a variable
-- several of them also still carry `scope`, `entity_id`, and rich symbolic/runtime resolution behavior
+- the obvious camera and JSON/text helper cases have already been replaced with runtime tokens and structured value sources, but a smaller helper layer still remains
 
 Why this conflicts with the spirit:
 
@@ -104,9 +101,8 @@ Why this conflicts with the spirit:
 
 Likely future direction:
 
-- replace these with clearer value-source mechanisms plus ordinary explicit variable commands
-- example direction already discussed:
-  - instead of `set_world_var_from_camera`, prefer something in the spirit of `set_world_var(name, value="$camera.x")`
+- keep replacing them with clearer value-source mechanisms plus ordinary explicit variable commands
+- avoid introducing new "compute and store" helper commands as replacements
 
 ### 3. Input still has hidden engine fallbacks and engine-owned meaning
 
@@ -120,22 +116,18 @@ Files:
 
 Current examples:
 
-- project-level `input_events` fallback mapping
-- `InputHandler._resolve_input_target_event_name()` falls back to project/global event names when an entity has no `input_map` entry
-- `set_input_event_name` mutates that fallback mapping at runtime
 - `Escape` still has engine-owned fallback behavior that can become quit when not consumed
 - debug keys are still handled directly in the engine input layer
 
 Why this conflicts with the spirit:
 
-- input meaning is still not fully owned by routed entities
-- the engine still decides fallback meaning for logical actions
+- most logical input meaning is now owned by routed entities, but a few engine-owned escape/debug paths still bypass that rule
 - this is exactly the kind of hidden convenience that can become a design trap later
 
 Likely future direction:
 
-- remove or sharply reduce project/global fallback event mappings
-- make routed entities or explicit controller logic own meaning for inputs
+- keep routed entities or explicit controller logic owning meaning for gameplay inputs
+- decide whether `Escape` quit fallback should remain a low-level shell/app behavior or be pushed higher
 - keep only true low-level input plumbing in the engine
 
 ### 4. `wait_for_action_press` and `wait_for_direction_release` still poll raw engine input state
@@ -337,25 +329,16 @@ They still deserve re-checking later if they start swallowing gameplay meaning, 
 
 ## Suggested Tackling Order
 
-1. Replace helper commands that both compute and store:
-   - `set_var_from_json_file`
-   - `set_var_from_wrapped_lines`
-   - `set_var_from_text_window`
-   - camera query-to-var helpers
-2. Revisit input fallbacks:
-   - `input_events`
-   - `set_input_event_name`
-   - engine-owned fallback action meaning
-3. Revisit raw input wait commands:
+1. Revisit raw input wait commands:
    - `wait_for_action_press`
    - `wait_for_direction_release`
-4. Clean runner-level hidden composition/deferred plumbing:
+2. Clean runner-level hidden composition/deferred plumbing:
    - `on_start`
    - `on_end`
    - dialogue-branded deferred parameter handling
-5. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
-6. Once replacement paths are stable, remove the legacy rejection-shim layer
-7. Later, revisit the broader `CommandContext` dependency shape after the command surface is cleaner
+3. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
+4. Once replacement paths are stable, remove the legacy rejection-shim layer
+5. Later, revisit the broader `CommandContext` dependency shape after the command surface is cleaner
 
 ## Working Rule
 

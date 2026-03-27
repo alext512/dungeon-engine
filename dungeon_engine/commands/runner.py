@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections import deque
 import copy
 from dataclasses import dataclass, field
+import json
+from pathlib import Path
 from typing import Any, Callable
 
+from dungeon_engine import config
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
 from dungeon_engine.systems.animation import AnimationSystem
@@ -17,6 +20,7 @@ from dungeon_engine.logging_utils import get_logger
 
 
 logger = get_logger(__name__)
+_JSON_FILE_CACHE: dict[Path, Any] = {}
 
 
 @dataclass(slots=True)
@@ -262,6 +266,94 @@ def _lookup_nested_value(value: Any, path_parts: list[str]) -> Any:
     return current
 
 
+def _resolve_json_file_path(context: CommandContext, path: str) -> Path:
+    """Resolve one JSON file path relative to the active project when needed."""
+    resolved_path = Path(str(path).strip())
+    if not resolved_path.is_absolute():
+        if context.project is not None:
+            resolved_path = context.project.project_root / resolved_path
+        else:
+            resolved_path = Path.cwd() / resolved_path
+    return resolved_path.resolve()
+
+
+def _load_json_file(path: Path) -> Any:
+    """Load one JSON file through a small in-memory cache."""
+    cached = _JSON_FILE_CACHE.get(path)
+    if cached is None:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        _JSON_FILE_CACHE[path] = cached
+    return copy.deepcopy(cached)
+
+
+def _build_text_window(
+    lines: Any,
+    *,
+    start: int = 0,
+    max_lines: int = 1,
+    separator: str = "\n",
+) -> dict[str, Any]:
+    """Return one visible text window plus simple metadata."""
+    if lines is None:
+        normalized_lines: list[str] = []
+    elif isinstance(lines, str):
+        normalized_lines = [str(lines)]
+    elif isinstance(lines, (list, tuple)):
+        normalized_lines = [str(item) for item in lines]
+    else:
+        raise TypeError(
+            "Text-window value source requires lines to be a list, tuple, string, or null."
+        )
+
+    resolved_start = max(0, int(start))
+    resolved_max_lines = max(0, int(max_lines))
+    visible_lines = normalized_lines[resolved_start : resolved_start + resolved_max_lines]
+    return {
+        "visible_lines": visible_lines,
+        "visible_text": str(separator).join(visible_lines),
+        "has_more": resolved_start + resolved_max_lines < len(normalized_lines),
+        "total_lines": len(normalized_lines),
+    }
+
+
+def _resolve_runtime_value_source(
+    source_name: str,
+    source_value: Any,
+    context: CommandContext,
+    runtime_params: dict[str, Any],
+) -> Any:
+    """Resolve one structured value source before primitive execution."""
+    resolved_source = _resolve_runtime_values(source_value, context, runtime_params)
+
+    if source_name == "$json_file":
+        if resolved_source in (None, ""):
+            raise ValueError("JSON file value source requires a non-empty path.")
+        return _load_json_file(_resolve_json_file_path(context, str(resolved_source)))
+
+    if source_name == "$wrapped_lines":
+        if context.text_renderer is None:
+            raise ValueError("Cannot wrap text without an active text renderer.")
+        if not isinstance(resolved_source, dict):
+            raise TypeError("$wrapped_lines value source requires a JSON object.")
+        return context.text_renderer.wrap_lines(
+            "" if resolved_source.get("text") is None else str(resolved_source.get("text")),
+            int(resolved_source.get("max_width", 0)),
+            font_id=str(resolved_source.get("font_id", config.DEFAULT_UI_FONT_ID)),
+        )
+
+    if source_name == "$text_window":
+        if not isinstance(resolved_source, dict):
+            raise TypeError("$text_window value source requires a JSON object.")
+        return _build_text_window(
+            resolved_source.get("lines"),
+            start=int(resolved_source.get("start", 0)),
+            max_lines=int(resolved_source.get("max_lines", 1)),
+            separator=str(resolved_source.get("separator", "\n")),
+        )
+
+    raise KeyError(f"Unknown value source '{source_name}'.")
+
+
 def _resolve_runtime_token(
     token: str,
     context: CommandContext,
@@ -379,6 +471,19 @@ def _resolve_runtime_values(
 ) -> Any:
     """Resolve $tokens recursively inside a command spec before execution."""
     if isinstance(value, dict):
+        if len(value) == 1:
+            source_name, source_value = next(iter(value.items()))
+            if isinstance(source_name, str) and source_name in {
+                "$json_file",
+                "$wrapped_lines",
+                "$text_window",
+            }:
+                return _resolve_runtime_value_source(
+                    source_name,
+                    source_value,
+                    context,
+                    runtime_params,
+                )
         return {
             key: _resolve_runtime_values(item, context, runtime_params)
             for key, item in value.items()

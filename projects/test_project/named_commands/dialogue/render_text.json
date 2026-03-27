@@ -33,24 +33,46 @@
       ]
     },
     {
-      "type": "set_var_from_wrapped_lines",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_current_wrapped_lines",
-      "scope": "entity",
-      "entity_id": "self",
-      "text": "$self.dialogue_current_source_text",
-      "max_width": "$self.text_box_width",
-      "font_id": "$self.dialogue_font_id"
+      "value": {
+        "$wrapped_lines": {
+          "text": "$self.dialogue_current_source_text",
+          "max_width": "$self.text_box_width",
+          "font_id": "$self.dialogue_font_id"
+        }
+      }
     },
     {
-      "type": "set_var_from_text_window",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_text_window",
+      "value": {
+        "$text_window": {
+          "lines": "$self.dialogue_current_wrapped_lines",
+          "start": "$self.dialogue_text_line_offset",
+          "max_lines": "$self.dialogue_max_lines"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_current_visible_text",
-      "scope": "entity",
-      "entity_id": "self",
-      "lines": "$self.dialogue_current_wrapped_lines",
-      "start": "$self.dialogue_text_line_offset",
-      "max_lines": "$self.dialogue_max_lines",
-      "store_has_more_var": "dialogue_current_has_more_text",
-      "store_total_var": "dialogue_current_wrapped_line_count"
+      "value": "$self.dialogue_current_text_window.visible_text"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_has_more_text",
+      "value": "$self.dialogue_current_text_window.has_more"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_wrapped_line_count",
+      "value": "$self.dialogue_current_text_window.total_lines"
     },
     {
       "type": "show_screen_text",

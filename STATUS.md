@@ -64,7 +64,8 @@ If you only need the current reality quickly:
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
 - strict primitive entity-target commands across variables, input routing, camera follow/query, movement, and visual/animation control now require explicit ids or resolved `$..._id` tokens; raw symbolic `self` / `actor` / `caller` ids are rejected at startup validation and runtime
 - controller-driven dialogue/menu flow with entity-owned state and stack snapshots on the controller entity
-- generic JSON/text helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_world_var`, `append_entity_var`, `pop_world_var`, and `pop_entity_var` for entity-authored dialogue logic
+- explicit variable commands plus structured value sources such as `{"$json_file": ...}`, `{"$wrapped_lines": {...}}`, and `{"$text_window": {...}}` for entity-authored dialogue logic
+- generic collection helpers such as `append_world_var`, `append_entity_var`, `pop_world_var`, and `pop_entity_var`
 - reusable dialogue/menu data stored as ordinary JSON under the sample project's `dialogues/` folder
 - transient and persistent room reset commands
 - persistent save-slot state layered over authored room data

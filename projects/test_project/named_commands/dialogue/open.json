@@ -45,11 +45,12 @@
       ]
     },
     {
-      "type": "set_var_from_json_file",
-      "scope": "entity",
-      "entity_id": "self",
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
       "name": "dialogue_definition",
-      "path": "$dialogue_path"
+      "value": {
+        "$json_file": "$dialogue_path"
+      }
     },
     {
       "type": "set_entity_var",
