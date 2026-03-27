@@ -130,7 +130,7 @@ Likely future direction:
 - decide whether `Escape` quit fallback should remain a low-level shell/app behavior or be pushed higher
 - keep only true low-level input plumbing in the engine
 
-### 4. The runner still has hidden command lifecycle wrappers and dialogue-specific deferred plumbing
+### 4. The runner still has hidden command lifecycle wrappers
 
 Files:
 
@@ -142,25 +142,18 @@ Current examples:
 
 - generic per-command `on_start` / `on_end` wrapper syntax
 - `LifecycleChainHandle`
-- runner-level special deferred params for `run_event`:
-  - `dialogue_on_start`
-  - `dialogue_on_end`
-  - `segment_hooks`
 
 What is happening:
 
 - any command can quietly gain extra wrapper command chains through special keys
-- the generic runner still knows about dialogue-branded deferred parameter names even after dialogue state moved into entities
 
 Why this conflicts with the spirit:
 
 - this is hidden engine authorship/composition syntax rather than explicit command chaining
-- the dialogue-specific deferred parameter handling is still a special-case residue inside the generic runner
 
 Likely future direction:
 
 - decide whether `on_start` / `on_end` should remain as a generic composition feature or be replaced by more explicit command-chain structure
-- remove dialogue-branded deferred parameter knowledge from the generic runner
 
 ### 5. There is still a large transitional layer of removed builtins kept alive as rejection shims
 
