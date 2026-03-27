@@ -47,6 +47,11 @@ class CommandContext:
     request_load_game: Callable[[str | None], None] | None = None
     save_game: Callable[[str | None], bool] | None = None
     request_quit: Callable[[], None] | None = None
+    debug_inspection_enabled: bool = False
+    set_simulation_paused: Callable[[bool], None] | None = None
+    get_simulation_paused: Callable[[], bool] | None = None
+    request_step_simulation_tick: Callable[[], None] | None = None
+    adjust_output_scale: Callable[[int], None] | None = None
     named_command_stack: list[str] = field(default_factory=list)
     command_trace: list[str] = field(default_factory=list)
 

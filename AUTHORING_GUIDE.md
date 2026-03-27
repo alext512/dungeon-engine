@@ -69,17 +69,25 @@ Example:
       "id": "dialogue_controller",
       "template": "dialogue_panel"
     },
-    {
-      "id": "pause_controller",
-      "template": "pause_controller"
-    }
-  ],
-  "startup_area": "title_screen",
+      {
+        "id": "pause_controller",
+        "template": "pause_controller"
+      },
+      {
+        "id": "debug_controller",
+        "template": "debug_controller"
+      }
+    ],
+    "startup_area": "title_screen",
   "input_targets": {
-    "menu": "pause_controller"
-  },
+    "menu": "pause_controller",
+    "debug_toggle_pause": "debug_controller",
+    "debug_step_tick": "debug_controller",
+    "debug_zoom_in": "debug_controller",
+    "debug_zoom_out": "debug_controller"
+    },
   "debug_inspection_enabled": true
-}
+  }
 ```
 
 ### Important fields
@@ -482,7 +490,7 @@ Example:
 
 ## Starting Dialogue
 
-The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are removed. Startup validation rejects them before launch.
+The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are removed. They are not part of the active command surface anymore.
 
 Current pattern:
 

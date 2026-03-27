@@ -84,21 +84,19 @@ Files:
 - `AUTHORING_GUIDE.md`
 - `STATUS.md`
 
-Current examples:
+Status:
 
-- `Escape` still has engine-owned fallback behavior that can become quit when not consumed
-- debug keys are still handled directly in the engine input layer
+- mostly addressed
 
-Why this conflicts with the spirit:
+What changed:
 
-- most logical input meaning is now owned by routed entities, but a few engine-owned escape/debug paths still bypass that rule
-- this is exactly the kind of hidden convenience that can become a design trap later
+- `Escape` now only means the routed logical `menu` action in play mode; it no longer falls back to quit when nothing consumes it
+- raw debug keys now route to a normal global `debug_controller` entity in the sample project
+- debug effects such as simulation pause, stepping, and zoom are now explicit runtime commands gated by `debug_inspection_enabled`
 
-Likely future direction:
+Residual note:
 
-- keep routed entities or explicit controller logic owning meaning for gameplay inputs
-- decide whether `Escape` quit fallback should remain a low-level shell/app behavior or be pushed higher
-- keep only true low-level input plumbing in the engine
+- physical key-to-logical-action mapping still lives in the engine input layer, which is acceptable so long as action meaning continues to be controller-owned
 
 ### 3. Generic per-command lifecycle wrappers are now removed from the active model
 
@@ -114,49 +112,27 @@ Remaining follow-through:
 
 - keep the docs/examples aligned so old wrapper syntax does not reappear
 
-### 4. There is still a transitional layer of removed command-name knowledge in validation
+### 4. Validation historical baggage has mostly been removed
 
 Files:
 
 - `dungeon_engine/world/loader.py`
 - `dungeon_engine/commands/library.py`
 
-Examples:
-
-- `run_dialogue`
-- `start_dialogue_session`
-- `dialogue_advance`
-- `dialogue_move_selection`
-- `dialogue_confirm_choice`
-- `dialogue_cancel`
-- `close_dialogue`
-- `prepare_text_session`
-- `read_text_session`
-- `advance_text_session`
-- `reset_text_session`
-- `set_var_from_camera`
-- `set_var`
-- `increment_var`
-- `set_var_length`
-- `append_to_var`
-- `pop_var`
-- `check_var`
-
 What is happening:
 
-- many old command names are no longer in the active builtin registry
-- loader/library still hardcode validation rejection for many of these old names/forms so outdated content fails fast before launch
+- loader/library now focus on current-architecture invariants such as reserved ids and strict primitive entity targeting
+- removed command names are no longer specially memorialized in the startup validators
 
-Why this conflicts with the spirit:
+Why this is better:
 
-- this is acceptable as a migration step
-- it is not a good final shape
-- the active engine surface is cleaner now, but the validation layer still carries a large amount of historical baggage
+- the active engine surface and the validation layer now describe the same current language more closely
+- the engine no longer carries a large startup blacklist of obsolete command names just to explain old history
 
-Likely future direction:
+Remaining follow-through:
 
-- once the replacement model is stable, reduce the validation rejection surface too
-- keep only the docs/tests needed to explain the final active model
+- keep only current-model guards such as reserved ids and path-derived structural identity
+- avoid reintroducing historical blacklist checks unless they protect a live invariant
 
 ## Likely Mismatches / Needs Design Review
 
@@ -231,18 +207,17 @@ Files:
 
 Current examples:
 
-- docs list `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `set_world_var_from_camera`, and `set_entity_var_from_camera` as standard active commands
-- docs also still teach project-level `input_events` fallback as part of the normal model
-- the sample project still uses the helper-command layer heavily
+- the docs/sample still rely on a few convenience value sources such as `"$facing_state"` and helper-heavy dialogue redraw chains
+- the sample still demonstrates some transitional composition patterns that may not be the final cleanest authoring style
 
 Why this matters:
 
-- the docs are accurate about the current code
-- but they also risk solidifying transitional shapes that already look suspect under the spirit of the project
+- the docs are much closer to the current spirit than before
+- but the sample can still normalize convenience patterns that deserve another pass before they harden into the long-term style
 
 Likely future direction:
 
-- keep the docs honest about current behavior until implementation changes
+- keep the docs honest about current behavior while continuing to simplify the helper-heavy sample flows
 - but treat these commands/features as transitional, not as the final intended model
 
 ## Possible Non-Issues To Leave Alone Unless They Start Causing Problems
@@ -260,7 +235,7 @@ They still deserve re-checking later if they start swallowing gameplay meaning, 
 
 1. Finish the remaining `CommandContext` shrink work for the strict primitive families that still take full runner context
 2. Review whether facing/interaction helpers should remain high-level orchestration helpers or be decomposed
-3. Decide the final shape of engine-owned fallback input behavior such as `Escape`
+3. Review whether the remaining physical key mapping in the input layer should stay fixed or become authored/configured later
 4. Once replacement paths are stable, remove the legacy rejection-shim layer
 
 ## Working Rule

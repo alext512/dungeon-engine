@@ -28,7 +28,6 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_field",
     "route_inputs_to_entity",
     "set_camera_follow_entity",
-    "set_entity_var_from_camera",
     "set_facing",
     "move_entity_one_tile",
     "move_entity",
@@ -236,156 +235,9 @@ def _load_named_command_definition_from_path(
 
 
 def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
-    """Reject removed command-shape fields anywhere inside named-command content."""
+    """Enforce current command-tree invariants for named-command content."""
     if isinstance(value, dict):
         command_type = value.get("type")
-        if command_type is not None and "on_complete" in value:
-            raise ValueError(
-                f"{source_name} command '{location}' must not use 'on_complete'; "
-                "use explicit sequencing with 'run_commands' instead."
-            )
-        if command_type is not None and ("on_start" in value or "on_end" in value):
-            raise ValueError(
-                f"{source_name} command '{location}' must not use lifecycle wrapper fields "
-                "'on_start' or 'on_end'; use explicit sequencing with 'run_commands' or "
-                "overlapping work with 'run_detached_commands' instead."
-            )
-        if command_type == "run_dialogue":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'run_dialogue'; "
-                "load dialogue JSON into controller variables and drive it with controller entity events instead."
-            )
-        if command_type == "start_dialogue_session":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'start_dialogue_session'; "
-                "keep dialogue state on the controller entity and drive it with normal commands instead."
-            )
-        if command_type in {
-            "dialogue_advance",
-            "dialogue_move_selection",
-            "dialogue_confirm_choice",
-            "dialogue_cancel",
-            "close_dialogue",
-        }:
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command '{command_type}'; "
-                "the controller entity should update and clear its own dialogue state through normal commands."
-            )
-        if command_type in {
-            "prepare_text_session",
-            "read_text_session",
-            "advance_text_session",
-            "reset_text_session",
-            "wait_for_action_press",
-            "wait_for_direction_release",
-            "set_var_from_json_file",
-            "set_var_from_wrapped_lines",
-            "set_var_from_text_window",
-            "query_facing_state",
-            "run_facing_event",
-            "interact_facing",
-        }:
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command '{command_type}'; "
-                "use explicit variable commands with structured value sources instead."
-            )
-        if command_type == "set_sprite_frame":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_sprite_frame'; "
-                "use 'set_visual_frame' instead."
-            )
-        if command_type == "set_sprite_flip_x":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_sprite_flip_x'; "
-                "use 'set_visual_flip_x' instead."
-            )
-        if command_type == "set_active_entity":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_active_entity'; "
-                "route inputs explicitly with 'set_input_target' or 'route_inputs_to_entity'."
-            )
-        if command_type == "push_active_entity":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'push_active_entity'; "
-                "route inputs explicitly with 'set_input_target' or 'route_inputs_to_entity'."
-            )
-        if command_type == "pop_active_entity":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'pop_active_entity'; "
-                "route inputs explicitly with 'set_input_target' or 'route_inputs_to_entity'."
-            )
-        if command_type == "set_camera_follow_active_entity":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_camera_follow_active_entity'; "
-                "use 'set_camera_follow_input_target' or 'set_camera_follow_entity'."
-            )
-        if command_type == "set_camera_follow_player":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_camera_follow_player'; "
-                "use 'set_camera_follow_input_target' or 'set_camera_follow_entity'."
-            )
-        if command_type == "set_var_from_camera":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_var_from_camera'; "
-                "use explicit variable commands with runtime tokens like '$camera.x' instead."
-            )
-        if command_type == "set_input_event_name":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_input_event_name'; "
-                "routed entities should define explicit 'input_map' entries instead."
-            )
-        if command_type in {"set_world_var_from_camera", "set_entity_var_from_camera"}:
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command '{command_type}'; "
-                "use explicit variable commands with runtime tokens like '$camera.x' instead."
-            )
-        if command_type == "if_var":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'if_var'; "
-                "use 'check_world_var' or 'check_entity_var' instead."
-            )
-        if command_type == "set_var":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_var'; "
-                "use 'set_world_var' or 'set_entity_var' instead."
-            )
-        if command_type == "increment_var":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'increment_var'; "
-                "use 'increment_world_var' or 'increment_entity_var' instead."
-            )
-        if command_type == "set_var_length":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_var_length'; "
-                "use 'set_world_var_length' or 'set_entity_var_length' instead."
-            )
-        if command_type == "append_to_var":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'append_to_var'; "
-                "use 'append_world_var' or 'append_entity_var' instead."
-            )
-        if command_type == "pop_var":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'pop_var'; "
-                "use 'pop_world_var' or 'pop_entity_var' instead."
-            )
-        if command_type == "set_var_from_collection_item":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'set_var_from_collection_item'; "
-                "use 'set_world_var' or 'set_entity_var' with value sources like "
-                "'{'$collection_item': {...}}' instead."
-            )
-        if command_type in {"set_world_var_from_collection_item", "set_entity_var_from_collection_item"}:
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command '{command_type}'; "
-                "use explicit variable commands with value sources like "
-                "'{'$collection_item': {...}}' instead."
-            )
-        if command_type == "check_var":
-            raise ValueError(
-                f"{source_name} command '{location}' uses removed command 'check_var'; "
-                "use 'check_world_var' or 'check_entity_var' instead."
-            )
         if command_type in _STRICT_ENTITY_TARGET_COMMANDS and value.get("entity_id") in _RESERVED_ENTITY_IDS:
             symbolic_id = value["entity_id"]
             raise ValueError(
