@@ -860,13 +860,17 @@ Scheduling model:
 Generic tile-query value sources are also available for explicit spatial lookup:
 
 - `{"$entity_ref": {"entity_id": "$self_id", "select": {...}, "default": null}}`
-- `{"$entities_at": {"x": ..., "y": ..., "select": {...}}}`
-- `{"$entity_at": {"x": ..., "y": ..., "index": 0, "select": {...}, "default": null}}`
+- `{"$entities_at": {"x": ..., "y": ..., "where": {...}, "select": {...}}}`
+- `{"$entity_at": {"x": ..., "y": ..., "index": 0, "where": {...}, "select": {...}, "default": null}}`
+- `{"$entities_query": {"where": {...}, "select": {...}}}`
+- `{"$entity_query": {"where": {...}, "index": 0, "select": {...}, "default": null}}`
 - `{"$sum": [base_x, delta_x]}`
 
 `$entity_ref` returns one selected plain runtime snapshot for an explicit entity id.
 `$entities_at` returns a stable list of selected plain entity refs for that tile.
 `$entity_at` returns one selected ref from the same stable ordering, including negative indexes such as `-1` for the last item.
+`$entities_query` returns a stable list of selected plain entity refs from one filtered world scan.
+`$entity_query` returns one selected ref from the same stable query ordering.
 `$sum` is a small numeric helper for explicit authored coordinate math.
 
 Current entity-query helpers all require a `select` block. Example:
@@ -895,6 +899,65 @@ That returns plain selected data such as:
   "variables": {
     "pushable": true,
     "blocks_movement": true
+  }
+}
+```
+
+Entity queries now also support an optional `where` block for broad lookups by stable engine fields:
+
+- `kind` or `kinds`
+- `tags_any` or `tags_all`
+- `space`
+- `scope`
+- `present`
+- `visible`
+- `events_enabled`
+
+Different `where` keys combine with implicit `AND`. Multi-result query helpers return matches in stable runtime order:
+
+1. `layer`
+2. `stack_order`
+3. `entity_id`
+
+Example broad query:
+
+```json
+{
+  "type": "set_entity_var",
+  "entity_id": "$self_id",
+  "name": "all_levers",
+  "value": {
+    "$entities_query": {
+      "where": {
+        "kind": "lever_toggle",
+        "scope": "area",
+        "present": true
+      },
+      "select": {
+        "fields": ["entity_id", "grid_x", "grid_y"],
+        "variables": ["toggled"]
+      }
+    }
+  }
+}
+```
+
+Use `where` on `$entity_at` or `$entities_at` when you want one tile query to target only certain occupants:
+
+```json
+{
+  "$entity_at": {
+    "x": "$self.target_x",
+    "y": "$self.target_y",
+    "index": 0,
+    "where": {
+      "kind": "door"
+    },
+    "select": {
+      "fields": ["entity_id"],
+      "variables": ["locked"]
+    },
+    "default": null
   }
 }
 ```
@@ -963,7 +1026,7 @@ Use this when the command needs a stable snapshot of current position data durin
 
 ### Query Tile Occupants Without Copying Whole Entities
 
-Use `"$entities_at"` or `"$entity_at"` with a narrow `select`:
+Use `"$entities_at"` / `"$entity_at"` for one tile, and `"$entities_query"` / `"$entity_query"` for broader world scans. Keep the `select` narrow:
 
 ```json
 {

@@ -57,6 +57,11 @@ _PLAIN_ENTITY_VISUAL_FIELDS = (
     "offset_y",
     "draw_order",
 )
+_ENTITY_QUERY_WHERE_BOOLEAN_FIELDS = ("present", "visible", "events_enabled")
+_ENTITY_QUERY_WHERE_STRING_FIELDS = ("kind", "space", "scope")
+_ENTITY_QUERY_WHERE_LIST_FIELDS = ("kinds", "tags_any", "tags_all")
+_ENTITY_QUERY_ALLOWED_SPACES = ("world", "screen")
+_ENTITY_QUERY_ALLOWED_SCOPES = ("area", "global")
 
 
 @dataclass(slots=True)
@@ -432,6 +437,142 @@ def _resolve_entity_select_spec(raw_select: Any, *, source_name: str) -> dict[st
     return select
 
 
+def _normalize_string_filter_list(
+    raw_values: Any,
+    *,
+    source_name: str,
+    field_name: str,
+) -> list[str]:
+    """Validate one non-empty list of distinct string values for query filters."""
+    if not isinstance(raw_values, (list, tuple)) or not raw_values:
+        raise ValueError(f"{source_name} where.{field_name} requires a non-empty list.")
+    resolved_values: list[str] = []
+    for raw_value in raw_values:
+        if not isinstance(raw_value, str) or not raw_value.strip():
+            raise ValueError(
+                f"{source_name} where.{field_name} only supports non-empty string values."
+            )
+        value = raw_value.strip()
+        if value not in resolved_values:
+            resolved_values.append(value)
+    return resolved_values
+
+
+def _resolve_entity_where_spec(raw_where: Any, *, source_name: str) -> dict[str, Any]:
+    """Validate one shared entity-query filter spec."""
+    if raw_where in (None, {}):
+        return {}
+    if not isinstance(raw_where, dict):
+        raise TypeError(f"{source_name} where requires a JSON object.")
+
+    supported_keys = {
+        *_ENTITY_QUERY_WHERE_BOOLEAN_FIELDS,
+        *_ENTITY_QUERY_WHERE_STRING_FIELDS,
+        *_ENTITY_QUERY_WHERE_LIST_FIELDS,
+    }
+    unsupported_keys = sorted(set(raw_where) - supported_keys)
+    if unsupported_keys:
+        formatted = ", ".join(repr(key) for key in unsupported_keys)
+        raise ValueError(
+            f"{source_name} where does not support key(s) {formatted}. "
+            "Allowed keys: 'kind', 'kinds', 'tags_any', 'tags_all', 'space', "
+            "'scope', 'present', 'visible', 'events_enabled'."
+        )
+    if "kind" in raw_where and "kinds" in raw_where:
+        raise ValueError(f"{source_name} where does not allow both 'kind' and 'kinds'.")
+
+    where: dict[str, Any] = {}
+
+    for field_name in _ENTITY_QUERY_WHERE_BOOLEAN_FIELDS:
+        if field_name not in raw_where:
+            continue
+        raw_value = raw_where.get(field_name)
+        if not isinstance(raw_value, bool):
+            raise TypeError(f"{source_name} where.{field_name} requires a boolean.")
+        where[field_name] = raw_value
+
+    if "kind" in raw_where:
+        raw_kind = raw_where.get("kind")
+        if not isinstance(raw_kind, str) or not raw_kind.strip():
+            raise ValueError(f"{source_name} where.kind requires a non-empty string.")
+        where["kind"] = raw_kind.strip()
+
+    if "kinds" in raw_where:
+        where["kinds"] = _normalize_string_filter_list(
+            raw_where.get("kinds"),
+            source_name=source_name,
+            field_name="kinds",
+        )
+
+    if "tags_any" in raw_where:
+        where["tags_any"] = _normalize_string_filter_list(
+            raw_where.get("tags_any"),
+            source_name=source_name,
+            field_name="tags_any",
+        )
+
+    if "tags_all" in raw_where:
+        where["tags_all"] = _normalize_string_filter_list(
+            raw_where.get("tags_all"),
+            source_name=source_name,
+            field_name="tags_all",
+        )
+
+    if "space" in raw_where:
+        raw_space = raw_where.get("space")
+        if not isinstance(raw_space, str) or not raw_space.strip():
+            raise ValueError(f"{source_name} where.space requires a non-empty string.")
+        resolved_space = raw_space.strip()
+        if resolved_space not in _ENTITY_QUERY_ALLOWED_SPACES:
+            allowed = ", ".join(repr(value) for value in _ENTITY_QUERY_ALLOWED_SPACES)
+            raise ValueError(
+                f"{source_name} where.space does not support {resolved_space!r}. "
+                f"Allowed values: {allowed}."
+            )
+        where["space"] = resolved_space
+
+    if "scope" in raw_where:
+        raw_scope = raw_where.get("scope")
+        if not isinstance(raw_scope, str) or not raw_scope.strip():
+            raise ValueError(f"{source_name} where.scope requires a non-empty string.")
+        resolved_scope = raw_scope.strip()
+        if resolved_scope not in _ENTITY_QUERY_ALLOWED_SCOPES:
+            allowed = ", ".join(repr(value) for value in _ENTITY_QUERY_ALLOWED_SCOPES)
+            raise ValueError(
+                f"{source_name} where.scope does not support {resolved_scope!r}. "
+                f"Allowed values: {allowed}."
+            )
+        where["scope"] = resolved_scope
+
+    return where
+
+
+def _entity_matches_where(entity: Any, where: dict[str, Any]) -> bool:
+    """Return whether one runtime entity matches the shared query filter spec."""
+    if not where:
+        return True
+    if "kind" in where and entity.kind != where["kind"]:
+        return False
+    if "kinds" in where and entity.kind not in where["kinds"]:
+        return False
+    if "space" in where and entity.space != where["space"]:
+        return False
+    if "scope" in where and entity.scope != where["scope"]:
+        return False
+    if "present" in where and entity.present is not where["present"]:
+        return False
+    if "visible" in where and entity.visible is not where["visible"]:
+        return False
+    if "events_enabled" in where and entity.events_enabled is not where["events_enabled"]:
+        return False
+    entity_tags = set(entity.tags)
+    if "tags_any" in where and not entity_tags.intersection(where["tags_any"]):
+        return False
+    if "tags_all" in where and not set(where["tags_all"]).issubset(entity_tags):
+        return False
+    return True
+
+
 def _serialize_selected_entity(entity: Any, *, select: dict[str, Any]) -> dict[str, Any]:
     """Return one plain-data entity object shaped by the shared selection grammar."""
     data: dict[str, Any] = {}
@@ -497,8 +638,16 @@ def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) ->
     if raw_x is None or raw_y is None:
         raise ValueError("$entities_at value source requires both x and y.")
     exclude_entity_id = resolved_source.get("exclude_entity_id")
-    include_hidden = bool(resolved_source.get("include_hidden", False))
-    include_absent = bool(resolved_source.get("include_absent", False))
+    where = _resolve_entity_where_spec(
+        resolved_source.get("where"),
+        source_name="$entities_at",
+    )
+    include_hidden = bool(resolved_source.get("include_hidden", False)) or (
+        where.get("visible") is False
+    )
+    include_absent = bool(resolved_source.get("include_absent", False)) or (
+        where.get("present") is False
+    )
     if "select" not in resolved_source:
         raise ValueError("$entities_at value source requires a select object.")
     select = _resolve_entity_select_spec(
@@ -512,6 +661,7 @@ def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) ->
         include_hidden=include_hidden,
         include_absent=include_absent,
     )
+    entities = [entity for entity in entities if _entity_matches_where(entity, where)]
     return [_serialize_selected_entity(entity, select=select) for entity in entities]
 
 
@@ -520,6 +670,50 @@ def _resolve_entity_at_value(context: CommandContext, resolved_source: Any) -> A
     if not isinstance(resolved_source, dict):
         raise TypeError("$entity_at value source requires a JSON object.")
     entities = _resolve_entities_at_value(context, resolved_source)
+    return _extract_collection_item(
+        entities,
+        index=resolved_source.get("index", 0),
+        default=resolved_source.get("default"),
+    )
+
+
+def _resolve_entities_query_value(context: CommandContext, resolved_source: Any) -> list[dict[str, Any]]:
+    """Return selected plain-data refs for one filtered world/entity scan."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$entities_query value source requires a JSON object.")
+    where = _resolve_entity_where_spec(
+        resolved_source.get("where"),
+        source_name="$entities_query",
+    )
+    include_hidden = bool(resolved_source.get("include_hidden", False)) or (
+        where.get("visible") is False
+    )
+    include_absent = bool(resolved_source.get("include_absent", False)) or (
+        where.get("present") is False
+    )
+    if "select" not in resolved_source:
+        raise ValueError("$entities_query value source requires a select object.")
+    select = _resolve_entity_select_spec(
+        resolved_source.get("select"),
+        source_name="$entities_query",
+    )
+    entities = sorted(
+        [
+            entity
+            for entity in context.world.iter_entities(include_absent=include_absent)
+            if include_hidden or entity.visible
+            if _entity_matches_where(entity, where)
+        ],
+        key=context.world.entity_sort_key,
+    )
+    return [_serialize_selected_entity(entity, select=select) for entity in entities]
+
+
+def _resolve_entity_query_value(context: CommandContext, resolved_source: Any) -> Any:
+    """Return one selected plain-data ref chosen from a filtered world/entity scan."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$entity_query value source requires a JSON object.")
+    entities = _resolve_entities_query_value(context, resolved_source)
     return _extract_collection_item(
         entities,
         index=resolved_source.get("index", 0),
@@ -816,6 +1010,12 @@ def _resolve_runtime_value_source(
     if source_name == "$entity_at":
         return _resolve_entity_at_value(context, resolved_source)
 
+    if source_name == "$entities_query":
+        return _resolve_entities_query_value(context, resolved_source)
+
+    if source_name == "$entity_query":
+        return _resolve_entity_query_value(context, resolved_source)
+
     if source_name == "$cell_flags_at":
         return _resolve_cell_flags_at_value(context, resolved_source)
 
@@ -982,6 +1182,8 @@ def _resolve_runtime_values(
                 "$cell_flags_at",
                 "$entities_at",
                 "$entity_at",
+                "$entities_query",
+                "$entity_query",
                 "$collection_item",
                 "$sum",
                 "$product",
