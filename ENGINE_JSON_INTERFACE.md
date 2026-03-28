@@ -405,6 +405,44 @@ Use:
 - `run_parallel`
 - `spawn_flow`
 
+### Reading Command JSON
+
+There are three important authored JSON shapes:
+
+- command objects
+  These have a `"type"` field and are executed by the engine.
+- runtime token strings
+  These look like `$self_id` or `$project.dialogue.max_lines` and resolve to a value at runtime.
+- structured value sources
+  These are single-key objects like `{"$sum": [...]}` or `{"$entity_ref": {...}}` that compute or query a value before a primitive command runs.
+
+Example:
+
+```json
+{
+  "type": "set_entity_var",
+  "entity_id": "$self_id",
+  "name": "next_x",
+  "value": {
+    "$sum": [
+      "$self.current_x",
+      1
+    ]
+  }
+}
+```
+
+How to read it:
+
+- `"type": "set_entity_var"`
+  This is the primary engine-handled command being executed.
+- `"entity_id": "$self_id"`
+  `$self_id` resolves from the current runtime context.
+- `"value": { "$sum": [...] }`
+  `"$sum"` is a helper that computes the value before `set_entity_var` runs.
+
+When one command chain needs to call another JSON command file, use `run_named_command` and pass the named-command params as ordinary extra fields on that command object.
+
 ## Runtime Tokens
 
 Runtime tokens resolve inside command data at execution time.
@@ -629,7 +667,7 @@ Negative indexes are supported through the shared collection lookup helper:
 
 ### Shared Entity-Query `select` Shape
 
-`$entity_ref`, `$entities_at`, and `$entity_at` all support the same optional `select` object.
+`$entity_ref`, `$entities_at`, and `$entity_at` all use the same `select` object, and all three currently require it.
 
 Current shape:
 
@@ -690,6 +728,26 @@ Allowed `select.visuals.fields` values:
 - `draw_order`
 
 Selected visuals are returned under a `visuals` object keyed by the requested visual id.
+
+Example selected result:
+
+```json
+{
+  "entity_id": "box_1",
+  "grid_x": 6,
+  "grid_y": 4,
+  "variables": {
+    "pushable": true,
+    "blocks_movement": true
+  },
+  "visuals": {
+    "main": {
+      "visible": true,
+      "flip_x": false
+    }
+  }
+}
+```
 
 ### `$collection_item`
 
