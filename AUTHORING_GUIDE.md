@@ -414,13 +414,62 @@ Notes:
 - do not author a top-level `id`
 - use `run_named_command` to call them
 
+### How To Read Command JSON
+
+There are three important JSON shapes in authored command files:
+
+- command objects
+  These have a `"type"` field and tell the engine to do something.
+- runtime token strings
+  These look like `$self_id` or `$project.movement.ticks_per_tile` and read a value at runtime.
+- structured value sources
+  These are single-key objects like `{"$sum": [...]}` or `{"$entity_ref": {...}}` that compute or query a value before a primitive command runs.
+
+Example:
+
+```json
+{
+  "type": "set_entity_var",
+  "entity_id": "$self_id",
+  "name": "next_x",
+  "value": {
+    "$sum": [
+      "$self.current_x",
+      1
+    ]
+  }
+}
+```
+
+How to read it:
+
+- `"type": "set_entity_var"`
+  This is the engine-handled primitive command being executed.
+- `"entity_id": "$self_id"`
+  `$self_id` resolves to the current source entity id at runtime.
+- `"value": { "$sum": [...] }`
+  `"$sum"` is a helper that computes the value before `set_entity_var` runs.
+
+When one JSON command chain needs to call another JSON command file, use `run_named_command`:
+
+```json
+{
+  "type": "run_named_command",
+  "command_id": "walk_one_tile",
+  "offset_x": 1,
+  "offset_y": 0
+}
+```
+
+In the called named command file, `$offset_x` and `$offset_y` resolve from those passed params.
+
 ## Runtime References and Tokens
 
 Commands often need to refer to the current entity or interaction initiator.
 
-### Special `entity_id` values
+### Context Roles vs Strict Primitive IDs
 
-Use these in higher-level orchestration commands such as `run_event` and `run_named_command`, and in any primitive that explicitly allows symbolic refs:
+These are the three runtime context roles:
 
 - `self`
 - `actor`
@@ -431,6 +480,14 @@ Meaning:
 - `self`: the entity that owns the current event
 - `actor`: the entity that initiated the current input or interaction flow
 - `caller`: a caller explicitly forwarded by another command chain
+
+Use the raw symbolic ids `self`, `actor`, and `caller` only in higher-level orchestration commands that explicitly support them.
+
+For strict primitive commands, use resolved id tokens instead:
+
+- `$self_id`
+- `$actor_id`
+- `$caller_id`
 
 ### Tokens
 
@@ -654,15 +711,152 @@ Scheduling model:
 
 Generic tile-query value sources are also available for explicit spatial lookup:
 
-- `{"$entity_ref": {"entity_id": "$self_id"}}`
-- `{"$entities_at": {"x": ..., "y": ...}}`
-- `{"$entity_at": {"x": ..., "y": ..., "index": 0, "default": null}}`
+- `{"$entity_ref": {"entity_id": "$self_id", "select": {...}, "default": null}}`
+- `{"$entities_at": {"x": ..., "y": ..., "select": {...}}}`
+- `{"$entity_at": {"x": ..., "y": ..., "index": 0, "select": {...}, "default": null}}`
 - `{"$sum": [base_x, delta_x]}`
 
-`$entity_ref` returns one plain runtime snapshot for an explicit entity id.
-`$entities_at` returns a stable list of plain entity refs for that tile.
+`$entity_ref` returns one selected plain runtime snapshot for an explicit entity id.
+`$entities_at` returns a stable list of selected plain entity refs for that tile.
 `$entity_at` returns one selected ref from the same stable ordering, including negative indexes such as `-1` for the last item.
 `$sum` is a small numeric helper for explicit authored coordinate math.
+
+Current entity-query helpers all require a `select` block. Example:
+
+```json
+{
+  "$entity_at": {
+    "x": "$self.target_x",
+    "y": "$self.target_y",
+    "index": 0,
+    "select": {
+      "fields": ["entity_id", "kind"],
+      "variables": ["pushable", "blocks_movement"]
+    },
+    "default": null
+  }
+}
+```
+
+That returns plain selected data such as:
+
+```json
+{
+  "entity_id": "box_1",
+  "kind": "block",
+  "variables": {
+    "pushable": true,
+    "blocks_movement": true
+  }
+}
+```
+
+## Common Authored Patterns
+
+These patterns are worth copying when building new JSON behavior.
+
+### Query Current Position Explicitly
+
+Use `"$entity_ref"` with `select.fields` when a command needs current runtime position fields:
+
+```json
+{
+  "type": "set_entity_var",
+  "entity_id": "$self_id",
+  "name": "move_self_position",
+  "value": {
+    "$entity_ref": {
+      "entity_id": "$self_id",
+      "select": {
+        "fields": ["grid_x", "grid_y", "pixel_x", "pixel_y"]
+      },
+      "default": null
+    }
+  }
+}
+```
+
+Use this when the command needs a stable snapshot of current position data during one authored decision flow.
+
+### Query Tile Occupants Without Copying Whole Entities
+
+Use `"$entities_at"` or `"$entity_at"` with a narrow `select`:
+
+```json
+{
+  "type": "set_entity_var",
+  "entity_id": "$self_id",
+  "name": "move_target_entities",
+  "value": {
+    "$entities_at": {
+      "x": "$self.move_target_x",
+      "y": "$self.move_target_y",
+      "exclude_entity_id": "$self_id",
+      "select": {
+        "fields": ["entity_id"],
+        "variables": ["blocks_movement", "pushable"]
+      }
+    }
+  }
+}
+```
+
+That keeps authored queries explicit while avoiding broad full-entity snapshots.
+
+### Keep Primitive Movement Small
+
+For simple movement execution, prefer relative primitives over manually computing absolute end coordinates:
+
+```json
+{
+  "type": "set_entity_grid_position",
+  "entity_id": "$self_id",
+  "x": "$offset_x",
+  "y": "$offset_y",
+  "mode": "relative"
+}
+```
+
+```json
+{
+  "type": "move_entity_world_position",
+  "entity_id": "$self_id",
+  "x": {
+    "$product": [
+      "$offset_x",
+      "$area.tile_size"
+    ]
+  },
+  "y": {
+    "$product": [
+      "$offset_y",
+      "$area.tile_size"
+    ]
+  },
+  "mode": "relative",
+  "frames_needed": "$frames_needed",
+  "wait": false
+}
+```
+
+The high-level decision logic can stay in JSON without forcing every movement command to manually reconstruct the entity's absolute target position.
+
+### Treat Dialogue As Controller-Owned State
+
+The current dialogue model is:
+
+1. another entity sends an event to the dialogue controller
+2. the controller loads dialogue JSON data
+3. the controller stores session state on itself
+4. controller-owned named commands redraw the screen-space UI and handle later input
+
+That means dialogue/menu logic should usually be built by composing:
+
+- one controller entity
+- ordinary JSON dialogue data
+- controller-owned named commands
+- explicit `push_input_routes` / `pop_input_routes`
+- explicit `dialogue_on_start` / `dialogue_on_end` hooks when callers need setup or cleanup
 
 ## Area Transfers
 
