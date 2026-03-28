@@ -1218,9 +1218,41 @@ Useful commands:
 - `clear_camera_deadzone`
 Follow commands support `offset_x` and `offset_y`. Bounds and deadzone commands accept `space: "pixel"` or `space: "grid"`. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow_entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
 
+Example:
+
+```json
+{
+  "commands": [
+    {
+      "type": "set_camera_follow_entity",
+      "entity_id": "$self_id",
+      "offset_x": 0,
+      "offset_y": -8
+    },
+    {
+      "type": "set_camera_deadzone",
+      "x": 4,
+      "y": 3,
+      "width": 8,
+      "height": 6,
+      "space": "grid"
+    }
+  ]
+}
+```
+
+That pattern is useful when you want the camera to follow an entity normally, but still allow a small amount of movement inside a deadzone before the camera starts shifting.
+
 ## Persistence Notes
 
 If you want a gameplay change to survive save/load, use `persistent: true` on the relevant command when supported.
+
+Terms:
+
+- `persistent`
+  - the command writes a change into the saved runtime state, so the change survives save/load and room reloads
+- `transient`
+  - the change only affects the current live session and disappears when the runtime state is rebuilt or the game is reloaded
 
 Common examples:
 

@@ -1250,6 +1250,12 @@ Both commands forward any additional fields on the command object into the calle
 - `push_input_routes(actions?)`
 - `pop_input_routes()`
 
+Notes:
+- `set_event_enabled` targets one named event on one entity
+- `set_events_enabled` gates the entity's event system as a whole
+- `push_input_routes` stores the current routed target ids for the selected actions on a runtime stack
+- `pop_input_routes` restores the most recently pushed routing snapshot for those actions
+
 ### Area / Save / Game Flow
 
 - `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow_entity_id?, camera_follow_input_action?, camera_offset_x?, camera_offset_y?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
@@ -1320,10 +1326,47 @@ Notes:
 - in normal play, this is the authored surface for current area/runtime state that can also be persisted
 - `toggle_world_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
 
+Example:
+
+```json
+{
+  "type": "check_world_var",
+  "name": "gate_open",
+  "op": "eq",
+  "value": true,
+  "then": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "gate",
+      "field_name": "present",
+      "value": false,
+      "persistent": true
+    }
+  ],
+  "else": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "gate",
+      "field_name": "present",
+      "value": true,
+      "persistent": true
+    }
+  ]
+}
+```
+
 ### Reset / Persistence Helpers
 
 - `reset_transient_state(include_tags?, exclude_tags?, apply?)`
 - `reset_persistent_state(include_tags?, exclude_tags?, apply?)`
+
+Terms:
+- `transient` - live session state that is not stored in persistence and disappears when runtime state is rebuilt
+- `persistent` - saved runtime state that survives save/load and area rebuilds
+
+`apply` controls when the reset takes effect:
+- `apply: "immediate"` - clear matching state now and rebuild/apply the result immediately
+- `apply: "on_reentry"` - clear matching state now, but do not rebuild the affected area until it is next loaded
 
 ## Deferred Nested Command Fields
 
