@@ -14,7 +14,7 @@ It focuses on:
 - dialogue JSON
 - the current controller-owned dialogue/menu pattern
 
-Use this guide for authoring patterns. Use `CONTENT_TYPES.md` for the structural map of project content, and `ENGINE_JSON_INTERFACE.md` when you need the exact current command/value-source surface.
+Use this guide for authoring patterns. Use `ENGINE_JSON_INTERFACE.md` when you need the exact current command/value-source surface.
 
 ## Mental Model
 
@@ -35,6 +35,35 @@ Important clarification:
 - the exact folder names are just conventions
 - the manifest paths decide what gets indexed automatically
 - ordinary JSON data can still live anywhere inside the project and be loaded by relative path
+
+How the categories connect:
+
+```text
+project.json
+|-- points to areas/
+|-- points to entity_templates/
+|-- points to named_commands/
+|-- points to assets/
+|-- points to shared_variables.json
+`-- instantiates global_entities
+
+areas
+|-- place entity instances
+|-- define entry_points and camera defaults
+|-- call commands from enter hooks
+`-- override input-target defaults
+
+entity templates
+|-- define visuals, events, input maps, variables
+|-- call named commands
+`-- call controller events to start dialogues
+
+ordinary JSON data
+`-- provide reusable dialogue/menu content or any other project-specific payloads
+
+named commands
+`-- provide reusable behavior chains
+```
 
 ## A Minimal Project
 
@@ -110,6 +139,8 @@ Example:
   Default area id to open when only the project is selected.
 - `input_targets`
   Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
+- `save_dir`
+  Directory for save files. Defaults to `saves`.
 
 ## `shared_variables.json`
 
@@ -229,6 +260,32 @@ Example tileset entry:
   "tile_height": 16
 }
 ```
+
+Each tile layer has a `grid` field: a 2D array of integer GIDs arranged as `[row][col]`, where `[0][0]` is the top-left corner. Example for a 4x3 area:
+
+```json
+{
+  "name": "ground",
+  "draw_above_entities": false,
+  "grid": [
+    [1, 1, 1, 1],
+    [1, 2, 2, 1],
+    [1, 1, 1, 1]
+  ]
+}
+```
+
+`cell_flags` uses the same `[row][col]` layout. `true` means walkable, `false` means blocked:
+
+```json
+"cell_flags": [
+  [false, false, false, false],
+  [false, true,  true,  false],
+  [false, false, false, false]
+]
+```
+
+Area dimensions (`$area.width`, `$area.height`) are auto-computed from the first tile layer's grid. Do not author width or height fields.
 
 ### Placed entities
 
@@ -368,6 +425,28 @@ Example:
 }
 ```
 
+### How Input Routing Works
+
+Each logical action is routed independently through three layers:
+
+1. the input handler resolves a logical action such as `move_up`, `interact`, or `menu`
+2. the world chooses the routed entity for that action from the current `input_targets`, using project defaults plus any area overrides
+3. that routed entity's `input_map` decides which event to run for that action
+4. if there is no mapping for that action, nothing is dispatched
+5. the runner enqueues `run_event` on the routed entity
+
+This is what allows dialogue controllers, menus, and other service entities to temporarily own only the inputs they need without a single active-entity focus model.
+
+If an action is absent from both the project and the area routing maps, it is simply unrouted until a runtime command assigns it.
+
+For modal flows, the intended pattern is:
+
+1. `push_input_routes` to save the current routing
+2. reroute the borrowed actions to the modal controller
+3. later `pop_input_routes` to restore the exact previous routes
+
+The route stack is runtime-only control state. It is not saved.
+
 ## Named Commands
 
 Named commands are reusable command chains stored in separate files.
@@ -463,6 +542,8 @@ When one JSON command chain needs to call another JSON command file, use `run_na
 
 In the called named command file, `$offset_x` and `$offset_y` resolve from those passed params.
 
+This is a general rule: both `run_named_command` and `run_event` forward any extra fields on the command object into the called flow as runtime parameters. The called commands can then read those values with `$param_name` tokens. This is how the dialogue examples pass `dialogue_path`, `dialogue_on_start`, `segment_hooks`, and other caller-supplied data into the controller's event.
+
 ## Runtime References and Tokens
 
 Commands often need to refer to the current entity or interaction initiator.
@@ -499,8 +580,19 @@ The command runner also resolves tokens such as:
 - `$self.some_value`
 - `$actor.some_value`
 - `$caller.some_value`
+- `$entity.<entity_id>.some_value`
 - `$project.some.path`
+- `$area.tile_size`
+- `$camera.x`
 - `$world.some_value`
+
+`$self...`, `$actor...`, `$caller...`, and `$entity.<id>...` read entity `variables`, not built-in entity fields. Use `$entity_ref` with a `select` block when you need built-in fields like `grid_x` or `pixel_y`.
+
+`$world...` reads the live world/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_world_var`, `add_world_var`, `toggle_world_var`, and `check_world_var` operate on.
+
+`$area...` exposes the current area's `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `name`.
+
+`$camera...` exposes `x`, `y`, `follow_entity_id`, `follow_mode`, `follow_offset_x`, `follow_offset_y`, `bounds`, `has_bounds`, `deadzone`, and `has_deadzone`.
 
 Example:
 
@@ -514,11 +606,11 @@ Example:
 }
 ```
 
-For strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
+For strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_entity_fields`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
 
 ## Ordinary JSON Dialogue Data
 
-The sample project keeps dialogue/menu definitions under `dialogues/`, but that folder is only a convention. These files are ordinary JSON data loaded by controller commands through explicit variable writes with value sources such as `{"$json_file": "dialogues/system/pause_menu.json"}`.
+Dialogue/menu definitions are typically kept under `dialogues/`, but that folder is only a convention. These files are ordinary JSON data loaded by controller commands through explicit variable writes with value sources such as `{"$json_file": "dialogues/system/pause_menu.json"}`.
 
 Example:
 
@@ -549,15 +641,46 @@ Example:
 ### Common fields
 
 - `participants`
-  Optional portrait/name map.
+  Optional map of participant id to character metadata.
 - `segments`
   Required list of `text` and `choice` segments.
 - `font_id`
-  Optional font override.
+  Optional font override. Font ids are the JSON filename (without extension) of a bitmap font definition under the project's `assets/.../fonts/` folder. See `ENGINE_JSON_INTERFACE.md` for the font definition format.
 - `max_lines`
   Optional per-dialogue page height override.
 - `text_color`
   Optional RGB color override.
+
+### Participant fields
+
+Each entry in `participants` supports:
+
+- `name`
+  Display name shown in the dialogue UI.
+- `portrait_path`
+  Asset path to the portrait sprite sheet.
+- `portrait_frame_width`
+  Width in pixels of each portrait frame.
+- `portrait_frame_height`
+  Height in pixels of each portrait frame.
+- `portrait_frame`
+  Frame index to display from the portrait sprite sheet.
+
+Example:
+
+```json
+{
+  "participants": {
+    "guide": {
+      "name": "Guide",
+      "portrait_path": "assets/project/sprites/portraits.png",
+      "portrait_frame_width": 38,
+      "portrait_frame_height": 38,
+      "portrait_frame": 0
+    }
+  }
+}
+```
 
 ### Segment fields
 
@@ -567,8 +690,22 @@ Example:
 - `options`
 - `speaker_id`
 - `show_portrait`
-- `advance_mode`
-- `advance_seconds`
+- `advance`
+
+`text` is for single-page segments. `pages` is a string array for multi-page segments. Use one or the other.
+
+`advance` is an optional object controlling how the segment progresses:
+
+```json
+{
+  "advance": {
+    "mode": "timer",
+    "seconds": 1.2
+  }
+}
+```
+
+When omitted, the segment advances on player interaction (the default). When `mode` is `"timer"`, the segment auto-advances after the specified `seconds`.
 
 ## Starting Dialogue
 
@@ -579,6 +716,17 @@ Current pattern:
 1. call `run_event` on the dialogue controller entity
 2. let that event load JSON dialogue data and store the session state on the controller entity
 3. let controller-owned named commands redraw the UI and react to later input
+
+Detailed lifecycle when a dialogue starts:
+
+1. when opening an outermost session, the controller borrows the needed logical inputs through `push_input_routes` and `route_inputs_to_entity`
+2. the controller loads ordinary JSON dialogue data into entity variables and resets its current segment/page/choice state
+3. caller-supplied `dialogue_on_start` commands run with those borrowed routes already in place
+4. controller-owned commands derive visible text/options and render them through the screen manager
+5. controller input routes to normal entity events like `interact`, `move_up`, `move_down`, and `menu`
+6. nested dialogue/menu state is saved into the controller's `dialogue_state_stack` when another dialogue opens on top of the current one
+7. when the controller finally closes its outermost dialogue, it restores the borrowed routes through `pop_input_routes`
+8. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
 
 Practical rule:
 
@@ -755,6 +903,41 @@ That returns plain selected data such as:
 
 These patterns are worth copying when building new JSON behavior.
 
+### Movement And Collision Are JSON-Authored
+
+The engine does **not** automatically block movement against entities. It only provides tile walkability through `cell_flags`. Everything else — checking whether another entity blocks the target tile, pushing blocks, playing bump sounds — is authored in your project's named commands.
+
+A typical movement flow:
+
+1. The player entity's `input_map` maps `move_up` to a `move_up` event.
+2. That event calls a named command like `attempt_move_one_tile` with the direction offset.
+3. The named command:
+   - computes the target tile using `$sum` with the current position and the offset
+   - checks `$cell_flags_at` for walkability
+   - checks `$entities_at` for entities with `blocks_movement: true`
+   - if the tile is clear, calls `set_entity_grid_position` (instant grid update) and `move_entity_world_position` (smooth pixel animation)
+   - if blocked, optionally plays a bump animation or pushes a pushable entity
+
+Minimal player `move_up` event:
+
+```json
+"move_up": {
+  "commands": [
+    {
+      "type": "run_named_command",
+      "command_id": "attempt_move_one_tile",
+      "direction": "up",
+      "offset_x": 0,
+      "offset_y": -1
+    }
+  ]
+}
+```
+
+Gate-style blocking works the same way: a gate entity has `variables.blocks_movement: true`. The movement named command queries `$entities_at` at the target tile and finds the gate. When the lever toggles the gate, it sets `blocks_movement: false` and hides the gate visual, both with `persistent: true`.
+
+This approach keeps all movement logic visible in your project's JSON instead of hidden inside the engine.
+
 ### Query Current Position Explicitly
 
 Use `"$entity_ref"` with `select.fields` when a command needs current runtime position fields:
@@ -841,6 +1024,67 @@ For simple movement execution, prefer relative primitives over manually computin
 
 The high-level decision logic can stay in JSON without forcing every movement command to manually reconstruct the entity's absolute target position.
 
+When you do use interpolated movement commands directly, timing precedence is:
+
+1. `frames_needed`
+2. `duration`
+3. `speed_px_per_second`
+4. engine default fallback
+
+So if you need exact authored tile cadence, prefer `frames_needed`.
+
+### Use Small Boolean And Random Helpers
+
+The value-source layer now includes small helpers for readable authored logic:
+
+- `$and`
+- `$or`
+- `$not`
+- `$random_int`
+- `$random_choice`
+
+Examples:
+
+```json
+{
+  "type": "set_world_var",
+  "name": "both_switches_active",
+  "value": {
+    "$and": [
+      "$entity.switch_a.active",
+      "$entity.switch_b.active"
+    ]
+  }
+}
+```
+
+```json
+{
+  "type": "set_entity_var",
+  "entity_id": "$self_id",
+  "name": "wander_direction",
+  "value": {
+    "$random_choice": {
+      "value": ["up", "down", "left", "right"],
+      "default": "down"
+    }
+  }
+}
+```
+
+```json
+{
+  "type": "set_world_var",
+  "name": "loot_roll",
+  "value": {
+    "$random_int": {
+      "min": 1,
+      "max": 100
+    }
+  }
+}
+```
+
 ### Treat Dialogue As Controller-Owned State
 
 The current dialogue model is:
@@ -890,7 +1134,11 @@ Rules:
 - use `entry_id` to land on an authored area entry point
 - use `transfer_entity_ids` when the live entity itself should travel to the new area
 - use one camera follow field or the other, not both
-- transferred entities persist as travelers and do not duplicate on re-entry
+- transferred entities are tracked as session travelers:
+  - a transferred entity keeps one live identity across areas
+  - its authored origin placeholder is suppressed while it is away
+  - re-entering the origin area does not duplicate it
+  - save/load restores the traveler in its current area
 
 ## Camera Control
 
@@ -916,19 +1164,69 @@ Common examples:
 - `set_world_var` with `persistent: true`
 - `set_entity_var` with `persistent: true`
 - `set_entity_field` with `persistent: true`
+- `set_entity_fields` with `persistent: true`
 
-The sample lever/gate puzzle uses both.
+`set_world_var` is the current authored surface for live area/runtime state. Use it for room/session flags such as opened chests, current puzzle state, or temporary controller state that belongs to the current play session rather than one specific entity.
 
-## Recommended Reading Order
+A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var` with `persistent: true` to remember whether the lever is toggled, and `set_entity_field` or `set_entity_fields` with `persistent: true` to update the gate's runtime presentation/state.
 
-If you want a concrete example project, inspect these files next:
+`set_entity_fields` is the structured bulk-mutation form. It lets one command update top-level entity fields, ordinary entity variables, and one or more visuals together:
 
-1. `projects/test_project/project.json`
-2. `projects/test_project/areas/title_screen.json`
-3. `projects/test_project/entity_templates/dialogue_panel.json`
-4. `projects/test_project/entity_templates/player.json`
-5. `projects/test_project/entity_templates/sign.json`
-6. `projects/test_project/entity_templates/lever_toggle.json`
-7. `projects/test_project/dialogues/system/title_menu.json`
-8. `projects/test_project/dialogues/system/save_prompt.json`
+```json
+{
+  "type": "set_entity_fields",
+  "entity_id": "$caller_id",
+  "set": {
+    "fields": {
+      "visible": true
+    },
+    "variables": {
+      "toggled": false
+    },
+    "visuals": {
+      "main": {
+        "offset_y": -1,
+        "animation_fps": 8
+      }
+    }
+  },
+  "persistent": true
+}
+```
 
+The command validates the full `set` payload before applying any changes, so invalid visual or field names do not partially mutate the entity.
+
+If you only need one runtime field, `set_entity_field` still works for focused updates. Its visual form now supports `visuals.<visual_id>.flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`.
+
+## Audio Notes
+
+Treat one-shot sounds and background music as separate tools:
+
+- use `play_audio` for one-shot sound effects
+- use `play_music` for the current background track
+- use `set_sound_volume` for future sound effects
+- use `set_music_volume` for the dedicated music channel
+
+Practical rule:
+
+- area `enter_commands` can safely call `play_music` for that area's track
+- by default, `play_music` does not restart the same already-playing track
+- use `restart_if_same: true` only when you intentionally want a restart
+
+Example area hook:
+
+```json
+{
+  "type": "play_music",
+  "path": "assets/project/music/village_square.ogg"
+}
+```
+
+Example pause/menu behavior:
+
+```json
+[
+  { "type": "pause_music" },
+  { "type": "resume_music" }
+]
+```

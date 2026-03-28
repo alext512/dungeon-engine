@@ -462,6 +462,7 @@ Exact current token families:
 - `$actor_id`
 - `$caller_id`
 - `$project...`
+- `$area...`
 - `$camera...`
 - `$world...`
 - `$entity.<entity_id>...`
@@ -480,10 +481,12 @@ Meaning:
   - caller entity id for the current flow
 - `$project.foo.bar`
   - lookup in `shared_variables.json`
+- `$area.tile_size`
+  - lookup in current area state
 - `$camera.x`
   - lookup in current camera state
 - `$world.some_var`
-  - lookup in world variables
+  - lookup in the current live world/runtime variable store
 - `$entity.some_entity.some_var`
   - lookup in another entity's `variables`
 - `$self.some_var`
@@ -497,6 +500,16 @@ Meaning:
 
 Important limitation:
 - `$entity.<id>...`, `$self...`, `$actor...`, and `$caller...` read entity `variables`, not built-in entity fields
+
+Current area token state exposes:
+- `area_id`
+- `name`
+- `tile_size`
+- `width`
+- `height`
+- `pixel_width`
+- `pixel_height`
+- `camera`
 
 Current camera token state exposes:
 - `follow_mode`
@@ -531,6 +544,11 @@ Current value sources:
 - `$join_text`
 - `$slice_collection`
 - `$wrap_index`
+- `$and`
+- `$or`
+- `$not`
+- `$random_int`
+- `$random_choice`
 - `$find_in_collection`
 - `$any_in_collection`
 
@@ -850,6 +868,66 @@ Notes:
 - when `count <= 0`, the helper returns `default`
 - otherwise the result is the wrapped modulo index
 
+### `$and`, `$or`, `$not`
+
+Small authored boolean helpers.
+
+Shapes:
+
+```json
+{ "$and": [true, "$self.flag_a", "$self.flag_b"] }
+```
+
+```json
+{ "$or": ["$self.choice_a", "$self.choice_b"] }
+```
+
+```json
+{ "$not": "$self.dialogue_open" }
+```
+
+Notes:
+- `$and` and `$or` resolve every authored child value first, then apply normal truthiness
+- `$not` negates one resolved value's truthiness
+
+### `$random_int`
+
+Returns one inclusive random integer.
+
+Shape:
+
+```json
+{
+  "$random_int": {
+    "min": 1,
+    "max": 6
+  }
+}
+```
+
+Notes:
+- `min` and `max` are required
+- the range is inclusive
+
+### `$random_choice`
+
+Returns one random item from a list/tuple.
+
+Shape:
+
+```json
+{
+  "$random_choice": {
+    "value": ["left", "right", "up", "down"],
+    "default": "idle"
+  }
+}
+```
+
+Notes:
+- `default` is returned when `value` is empty or `null`
+- the selected item is copied before being returned
+
 ### `$cell_flags_at`
 
 Returns plain cell-flag data for one explicit tile coordinate.
@@ -946,7 +1024,13 @@ Current builtin commands, grouped by role.
 - `set_entity_screen_position(entity_id, x, y, mode?)`
 - `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
 - `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
-- `wait_for_move(entity_id, visual_id?)`
+- `wait_for_move(entity_id)`
+
+Movement timing precedence for interpolated move commands is:
+- `frames_needed`
+- `duration`
+- `speed_px_per_second`
+- engine default fallback
 
 ### Animation, Audio, And Entity Visuals
 
@@ -955,12 +1039,24 @@ Current builtin commands, grouped by role.
 - `stop_animation(entity_id, visual_id?, reset_to_default?)`
 - `set_visual_frame(entity_id, visual_id?, frame)`
 - `set_visual_flip_x(entity_id, visual_id?, flip_x)`
-- `play_audio(path)`
+- `play_audio(path, volume?)`
+- `set_sound_volume(volume)`
+- `play_music(path, loop?, volume?, restart_if_same?)`
+- `stop_music(fade_seconds?)`
+- `pause_music()`
+- `resume_music()`
+- `set_music_volume(volume)`
+
+Notes:
+- `play_audio` is one-shot sound-effect playback
+- `set_sound_volume` affects future `play_audio` calls
+- `play_music` uses the dedicated music channel and defaults to `loop = true`
+- `play_music` does not restart the same already-playing track unless `restart_if_same` is `true`
 
 ### Screen-Space UI Elements
 
-- `show_screen_image(element_id, path, x, y, frame_width?, frame_height?, frame?, layer?, anchor?, flip_x?, tint?, visible?)`
-- `show_screen_text(element_id, text, x, y, layer?, anchor?, color?, font_id?, max_width?, visible?)`
+- `show_screen_image(element_id, path, x, y, frame_width?, frame_height?, frame?, layer?, anchor?, flip_x?, tint?, visible?)` — `anchor` defaults to `"topleft"`; valid values: `topleft`, `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright`
+- `show_screen_text(element_id, text, x, y, layer?, anchor?, color?, font_id?, max_width?, visible?)` — `anchor` values same as `show_screen_image`
 - `set_screen_text(element_id, text)`
 - `remove_screen_element(element_id)`
 - `clear_screen_elements(layer?)`
@@ -974,7 +1070,7 @@ Current builtin commands, grouped by role.
 - `spawn_flow(commands?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
 - `run_sequence(commands?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
 - `run_parallel(commands?, completion?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, actor_entity_id?, caller_entity_id?)` — iterates a list/tuple and runs `commands` once per item, injecting the current item and index as runtime params
 
 Current `run_parallel` completion shape:
 
@@ -1008,10 +1104,33 @@ Current remaining policy:
 
 Each `run_parallel.commands[]` child may also declare an optional `id` field, used by `completion.mode = "child"`.
 
+`run_commands_for_collection` example:
+
+```json
+{
+  "type": "run_commands_for_collection",
+  "value": "$self.targets_here",
+  "item_param": "item",
+  "index_param": "index",
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$item.entity_id",
+      "name": "activated",
+      "value": true
+    }
+  ]
+}
+```
+
+Inside `commands`, `$item` resolves to the current list element and `$index` resolves to its zero-based position. The param names default to `item` and `index` but can be overridden with `item_param` and `index_param`.
+
 ### Event And Named-Command Dispatch
 
-- `run_event(entity_id, event_id, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `run_named_command(command_id, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `run_event(entity_id, event_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
+- `run_named_command(command_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
+
+Both commands forward any additional fields on the command object into the called flow as runtime parameters. The called commands can read those values with `$param_name` tokens. For example, passing `"dialogue_path": "dialogues/system/pause_menu.json"` on a `run_event` makes `$dialogue_path` available inside the target event's command chain.
 
 ### Event/Input Routing
 
@@ -1053,19 +1172,23 @@ These commands are gated by project `debug_inspection_enabled`.
 
 ### Entity State
 
-- `set_entity_field(entity_id, field_name, value, persistent?)`
+- `set_entity_field(entity_id, field_name, value, persistent?)` — supported field names: `present`, `visible`, `events_enabled`, `layer`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>` where visual field is one of `flip_x`, `visible`, `current_frame`, `tint`
 - `set_visible(entity_id, visible, persistent?)`
+- `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
+- `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes
 - `set_present(entity_id, present, persistent?)`
 - `set_color(entity_id, color, persistent?)`
 - `destroy_entity(entity_id, persistent?)`
-- `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)`
+- `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)` — two forms: pass a full `entity` dict, or pass individual fields (`entity_id`, `x`, `y`, and optionally `template`, `kind`, `parameters`)
 
 ### World And Entity Variables
 
 - `set_world_var(name, value, persistent?)`
 - `set_entity_var(entity_id, name, value, persistent?)`
-- `increment_world_var(name, amount?, persistent?)`
-- `increment_entity_var(entity_id, name, amount?, persistent?)`
+- `add_world_var(name, amount?, persistent?)`
+- `add_entity_var(entity_id, name, amount?, persistent?)`
+- `toggle_world_var(name, persistent?)`
+- `toggle_entity_var(entity_id, name, persistent?)`
 - `set_world_var_length(name, value?, persistent?)`
 - `set_entity_var_length(entity_id, name, value?, persistent?)`
 - `append_world_var(name, value, persistent?)`
@@ -1082,6 +1205,11 @@ Current comparison operators:
 - `gte`
 - `lt`
 - `lte`
+
+Notes:
+- `set_world_var` and related world-variable commands currently operate on the live world/runtime variable store for the active play session
+- in normal play, this is the authored surface for current area/runtime state that can also be persisted
+- `toggle_world_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
 
 ### Reset / Persistence Helpers
 
@@ -1167,6 +1295,44 @@ The current command runner model is:
 - `spawn_flow` starts a separate flow and returns immediately
 
 Routed input events are ordinary root-flow dispatches, not a special busy-state exception.
+
+## Bitmap Font Definition
+
+Font JSON files live under the project's asset paths and define bitmap fonts for text rendering.
+
+Current fields:
+
+- `kind`: must be `"bitmap"`
+- `atlas`: asset-relative path to the font atlas PNG
+- `cell_width`: pixel width of each glyph cell in the atlas
+- `cell_height`: pixel height of each glyph cell in the atlas
+- `columns`: number of glyph columns in the atlas
+- `line_height`: pixel height per rendered line
+- `letter_spacing`: pixel gap between characters
+- `space_width`: pixel width of the space character
+- `minimum_advance`: minimum pixel advance per character
+- `fallback_character`: character to render for unknown glyphs
+- `glyph_order`: string listing each glyph in atlas order (left to right, top to bottom)
+
+Example:
+
+```json
+{
+  "kind": "bitmap",
+  "atlas": "project/fonts/pixelbet.png",
+  "cell_width": 6,
+  "cell_height": 16,
+  "columns": 83,
+  "line_height": 10,
+  "letter_spacing": 1,
+  "space_width": 4,
+  "minimum_advance": 1,
+  "fallback_character": "?",
+  "glyph_order": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.!?\":1234567890,'-/+()=;_[]%#><"
+}
+```
+
+Font ids are the JSON filename without extension. The engine looks for `{font_id}.json` under `fonts/` in the project's asset paths. For example, `assets/project/fonts/pixelbet.json` has font id `pixelbet`. Commands reference fonts through `font_id` parameters.
 
 ## Suggested Use
 

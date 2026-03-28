@@ -32,7 +32,8 @@ _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
 _RESERVED_ENTITY_IDS = {"self", "actor", "caller"}
 _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_var",
-    "increment_entity_var",
+    "add_entity_var",
+    "toggle_entity_var",
     "set_entity_var_length",
     "append_entity_var",
     "pop_entity_var",
@@ -41,6 +42,7 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_events_enabled",
     "set_input_target",
     "set_entity_field",
+    "set_entity_fields",
     "route_inputs_to_entity",
     "set_camera_follow_entity",
     "set_entity_grid_position",

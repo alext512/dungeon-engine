@@ -123,8 +123,8 @@ Primitive commands should be split into narrow, explicit forms.
 Examples of the intended direction:
 - `set_world_var(name, value, persistent=false)`
 - `set_entity_var(entity_id, name, value, persistent=false)`
-- `increment_world_var(name, amount, persistent=false)`
-- `increment_entity_var(entity_id, name, amount, persistent=false)`
+- `add_world_var(name, amount, persistent=false)`
+- `add_entity_var(entity_id, name, amount, persistent=false)`
 - `check_world_var(name, op, value, then, else)`
 - `check_entity_var(entity_id, name, op, value, then, else)`
 - `set_entity_field(entity_id, field_name, value, persistent=false)`
