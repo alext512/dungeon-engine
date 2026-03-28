@@ -1,7 +1,9 @@
 {
   "kind": "block",
-  "solid": true,
-  "pushable": true,
+  "variables": {
+    "blocks_movement": true,
+    "pushable": true
+  },
   "visuals": [
     {
       "id": "main",

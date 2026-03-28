@@ -3,8 +3,8 @@
     "guide": {
       "name": "Guide",
       "portrait_path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
-      "portrait_frame_width": 16,
-      "portrait_frame_height": 16,
+      "portrait_frame_width": 38,
+      "portrait_frame_height": 38,
       "portrait_frame": 1
     }
   },

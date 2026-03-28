@@ -192,11 +192,8 @@ def _serialize_template_entity_overrides(
 def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str, Any]:
     """Return only the safe authored override fields for template instances."""
     data = {
-        "facing": entity.facing,
         "space": entity.space,
         "scope": entity.scope,
-        "solid": entity.solid,
-        "pushable": entity.pushable,
         "present": entity.present,
         "visible": entity.visible,
         "events_enabled": entity.events_enabled,
@@ -218,11 +215,8 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
     """Return the stable authored/runtime fields that should round-trip through JSON."""
     data = {
         "kind": entity.kind,
-        "facing": entity.facing,
         "space": entity.space,
         "scope": entity.scope,
-        "solid": entity.solid,
-        "pushable": entity.pushable,
         "present": entity.present,
         "visible": entity.visible,
         "events_enabled": entity.events_enabled,

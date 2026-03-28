@@ -18,7 +18,10 @@ class InteractionSystem:
         if actor is None:
             raise KeyError(f"Cannot resolve interaction target for '{actor_entity_id}'.")
 
-        delta_x, delta_y = DIRECTION_VECTORS[actor.facing]
+        direction = str(actor.variables.get("direction", "")).strip()
+        if direction not in DIRECTION_VECTORS:
+            return None
+        delta_x, delta_y = DIRECTION_VECTORS[direction]  # type: ignore[index]
         target_x = actor.grid_x + delta_x
         target_y = actor.grid_y + delta_y
         for entity in reversed(

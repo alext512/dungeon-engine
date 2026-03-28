@@ -557,7 +557,16 @@ Shape:
 {
   "$entity_ref": {
     "entity_id": "crate_1",
-    "include_variables": true,
+    "select": {
+      "fields": ["entity_id", "grid_x", "grid_y"],
+      "variables": ["pushable"],
+      "visuals": [
+        {
+          "id": "main",
+          "fields": ["visible", "flip_x"]
+        }
+      ]
+    },
     "default": null
   }
 }
@@ -565,8 +574,8 @@ Shape:
 
 Notes:
 
-- `include_variables` defaults to `true`.
-- Set `include_variables: false` when you only need identity/position data and want to avoid copying the entity's variable bag into the returned ref.
+- `select` is required.
+- with `select`, missing entities return `default`.
 
 ### `$entities_at`
 
@@ -581,13 +590,18 @@ Shape:
     "y": 7,
     "exclude_entity_id": "player",
     "include_hidden": false,
-    "include_absent": false
+    "include_absent": false,
+    "select": {
+      "fields": ["entity_id"],
+      "variables": ["blocks_movement", "pushable"]
+    }
   }
 }
 ```
 
 Ordering is the current runtime tile-query order:
 - sorted by `(layer, stack_order, entity_id)`
+- `select` is required.
 
 ### `$entity_at`
 
@@ -601,6 +615,10 @@ Shape:
     "x": 5,
     "y": 7,
     "index": 0,
+    "select": {
+      "fields": ["entity_id"],
+      "variables": ["pushable"]
+    },
     "default": null
   }
 }
@@ -608,6 +626,70 @@ Shape:
 
 Negative indexes are supported through the shared collection lookup helper:
 - `index: -1` means last item
+
+### Shared Entity-Query `select` Shape
+
+`$entity_ref`, `$entities_at`, and `$entity_at` all support the same optional `select` object.
+
+Current shape:
+
+```json
+{
+  "select": {
+    "fields": ["entity_id", "grid_x", "grid_y"],
+    "variables": ["pushable", "blocks_movement"],
+    "visuals": [
+      {
+        "id": "main",
+        "fields": ["visible", "flip_x", "current_frame"],
+        "default": null
+      }
+    ]
+  }
+}
+```
+
+Allowed `select.fields` values:
+- `entity_id`
+- `kind`
+- `space`
+- `scope`
+- `grid_x`
+- `grid_y`
+- `pixel_x`
+- `pixel_y`
+- `present`
+- `visible`
+- `events_enabled`
+- `layer`
+- `stack_order`
+- `tags`
+
+`select.variables` is a list of variable keys to copy into a `variables` object on the returned result. Keys that do not exist are omitted.
+
+`select.visuals` is a list of visual selectors. Each entry currently supports:
+- `id`
+- `fields`
+- `default`
+
+Allowed `select.visuals.fields` values:
+- `id`
+- `path`
+- `frame_width`
+- `frame_height`
+- `frames`
+- `animation_fps`
+- `animate_when_moving`
+- `current_frame`
+- `animation_elapsed`
+- `flip_x`
+- `visible`
+- `tint`
+- `offset_x`
+- `offset_y`
+- `draw_order`
+
+Selected visuals are returned under a `visuals` object keyed by the requested visual id.
 
 ### `$collection_item`
 
@@ -761,27 +843,9 @@ Shape:
 }
 ```
 
-### Plain-Data Entity Ref Shape
+### Selected Entity Result Shape
 
-`$entities_at` and `$entity_at` return entity refs with:
-
-- `entity_id`
-- `kind`
-- `space`
-- `scope`
-- `grid_x`
-- `grid_y`
-- `pixel_x`
-- `pixel_y`
-- `present`
-- `visible`
-- `events_enabled`
-- `layer`
-- `stack_order`
-- `tags`
-- `variables`
-
-`$entity_ref` returns the same shape by default. When authored with `include_variables: false`, the returned ref omits the `variables` field.
+`$entity_ref`, `$entities_at`, and `$entity_at` now always return the exact selected subset described by `select`.
 
 ## Logical Input Surface
 

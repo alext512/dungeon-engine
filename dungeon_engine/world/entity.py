@@ -119,11 +119,8 @@ class Entity:
     grid_y: int
     pixel_x: float = 0.0
     pixel_y: float = 0.0
-    facing: Direction = "down"
     space: EntitySpace = "world"
     scope: EntityScope = "area"
-    solid: bool = True
-    pushable: bool = False
     present: bool = True
     visible: bool = True
     events_enabled: bool = True

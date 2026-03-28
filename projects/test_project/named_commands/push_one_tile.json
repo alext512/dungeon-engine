@@ -7,40 +7,49 @@
     {
       "type": "set_entity_var",
       "entity_id": "$self_id",
-      "name": "push_attempt_info",
+      "name": "push_offset",
       "value": {
-        "$facing_state": {
-          "entity_id": "$self_id",
-          "direction": "$direction"
+        "$collection_item": {
+          "value": {
+            "up": { "x": 0, "y": -1 },
+            "down": { "x": 0, "y": 1 },
+            "left": { "x": -1, "y": 0 },
+            "right": { "x": 1, "y": 0 }
+          },
+          "key": "$direction",
+          "default": { "x": 0, "y": 0 }
         }
       }
     },
     {
-      "type": "set_entity_var",
+      "type": "set_entity_grid_position",
       "entity_id": "$self_id",
-      "name": "push_attempt_state",
-      "value": "$self.push_attempt_info.state"
+      "x": "$self.push_offset.x",
+      "y": "$self.push_offset.y",
+      "mode": "relative"
     },
     {
-      "type": "check_entity_var",
+      "type": "play_audio",
+      "path": "assets/project/sfx/push.wav"
+    },
+    {
+      "type": "move_entity_world_position",
       "entity_id": "$self_id",
-      "name": "push_attempt_state",
-      "op": "eq",
-      "value": "free",
-      "then": [
-        {
-          "type": "play_audio",
-          "path": "assets/project/sfx/push.wav"
-        },
-        {
-          "type": "move_entity_one_tile",
-          "entity_id": "$self_id",
-          "direction": "$direction",
-          "frames_needed": "$frames_needed",
-          "allow_push": false,
-          "wait": false
-        }
-      ]
+      "x": {
+        "$product": [
+          "$self.push_offset.x",
+          "$area.tile_size"
+        ]
+      },
+      "y": {
+        "$product": [
+          "$self.push_offset.y",
+          "$area.tile_size"
+        ]
+      },
+      "mode": "relative",
+      "frames_needed": "$frames_needed",
+      "wait": false
     }
   ]
 }

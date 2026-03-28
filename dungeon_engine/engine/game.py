@@ -175,9 +175,9 @@ class Game:
         if self.animation_system is None:
             raise RuntimeError("Game runtime is missing an animation system.")
 
-        self.input_handler.update_held_direction_repeat(dt)
         self.command_runner.update(0.0)
         self.movement_system.update_tick()
+        self.input_handler.update_held_direction_repeat(dt)
         self.animation_system.update_tick(dt)
         self.screen_manager.update_tick()
         self.camera.update(self.world, advance_tick=True)
@@ -796,7 +796,7 @@ class Game:
         entity.grid_x = int(entry_point.grid_x)
         entity.grid_y = int(entry_point.grid_y)
         if entry_point.facing is not None:
-            entity.facing = str(entry_point.facing)
+            entity.variables["direction"] = str(entry_point.facing)
         entity.pixel_x = (
             float(entry_point.pixel_x)
             if entry_point.pixel_x is not None

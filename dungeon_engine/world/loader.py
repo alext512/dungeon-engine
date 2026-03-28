@@ -43,10 +43,11 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_field",
     "route_inputs_to_entity",
     "set_camera_follow_entity",
-    "set_facing",
-    "move_entity_one_tile",
-    "move_entity",
-    "teleport_entity",
+    "set_entity_grid_position",
+    "set_entity_world_position",
+    "set_entity_screen_position",
+    "move_entity_world_position",
+    "move_entity_screen_position",
     "wait_for_move",
     "play_animation",
     "wait_for_animation",
@@ -54,7 +55,6 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_visual_frame",
     "set_visual_flip_x",
     "set_visible",
-    "set_solid",
     "set_present",
     "set_color",
     "destroy_entity",
@@ -198,6 +198,12 @@ def instantiate_entity(
             f"'{entity_id}' ({reserved_names})."
         )
     kind = _require_non_empty_string(entity_data, "kind", source_name=source_name)
+    for removed_field in ("facing", "solid", "pushable"):
+        if removed_field in entity_data:
+            raise ValueError(
+                f"{source_name} must not declare '{removed_field}'; store that data under "
+                "'variables' instead."
+            )
     space = _parse_entity_space(entity_data, source_name=source_name)
     scope = _parse_entity_scope(entity_data, source_name=source_name)
     if space == "world":
@@ -223,11 +229,8 @@ def instantiate_entity(
         grid_y=grid_y,
         pixel_x=float(entity_data.get("pixel_x", default_pixel_x)),
         pixel_y=float(entity_data.get("pixel_y", default_pixel_y)),
-        facing=entity_data.get("facing", "down"),
         space=space,
         scope=scope,
-        solid=bool(entity_data.get("solid", True)),
-        pushable=bool(entity_data.get("pushable", False)),
         present=bool(entity_data.get("present", True)),
         visible=bool(entity_data.get("visible", True)),
         events_enabled=bool(entity_data.get("events_enabled", True)),

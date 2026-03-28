@@ -35,13 +35,31 @@ class MovementCommandHandle(CommandHandle):
         super().__init__()
         self.movement_system = movement_system
         self.entity_ids = entity_ids
+        self._move_signatures = {
+            entity_id: self._movement_signature(entity_id)
+            for entity_id in self.entity_ids
+        }
         self.update(0.0)
 
     def update(self, dt: float) -> None:
         """Mark the command complete when every moved entity has stopped moving."""
         self.complete = not any(
-            self.movement_system.is_entity_moving(entity_id)
+            self._movement_signature(entity_id) == self._move_signatures.get(entity_id)
             for entity_id in self.entity_ids
+        )
+
+    def _movement_signature(self, entity_id: str) -> tuple[float, float, float, float, int] | None:
+        """Return one stable snapshot for the entity's currently active move."""
+        entity = self.movement_system.world.get_entity(entity_id)
+        if entity is None or not entity.movement.active:
+            return None
+        movement = entity.movement
+        return (
+            float(movement.start_pixel_x),
+            float(movement.start_pixel_y),
+            float(movement.target_pixel_x),
+            float(movement.target_pixel_y),
+            int(movement.total_ticks),
         )
 
 
@@ -514,22 +532,6 @@ def _branch_with_runtime_context(
     }
     return SequenceCommandHandle(registry, context, branch, base_params=inherited_params)
 
-
-def _resolve_facing_direction(entity, direction: str | None) -> str:
-    """Return an explicit direction, defaulting to the entity's current facing."""
-    resolved_direction = str(direction or entity.facing)
-    if resolved_direction not in DIRECTION_VECTORS:
-        raise ValueError(f"Unknown direction '{resolved_direction}'.")
-    return resolved_direction
-
-
-def _get_facing_tile(entity, direction: str | None = None) -> tuple[int, int, str]:
-    """Return the tile in front of an entity for a resolved direction."""
-    resolved_direction = _resolve_facing_direction(entity, direction)
-    delta_x, delta_y = DIRECTION_VECTORS[resolved_direction]  # type: ignore[index]
-    return entity.grid_x + delta_x, entity.grid_y + delta_y, resolved_direction
-
-
 def _normalize_input_map(value: Any) -> dict[str, str]:
     """Convert JSON-like input-map data into a stable string-to-string mapping."""
     if not isinstance(value, dict):
@@ -576,24 +578,6 @@ def _apply_entity_field_value(
         raise ValueError("set_entity_field requires a non-empty field name.")
 
     root = path[0]
-    if root == "facing":
-        if len(path) != 1:
-            raise ValueError("facing does not support nested field paths.")
-        entity.facing = _resolve_facing_direction(entity, str(value))  # type: ignore[assignment]
-        return "facing", entity.facing
-
-    if root == "solid":
-        if len(path) != 1:
-            raise ValueError("solid does not support nested field paths.")
-        entity.solid = bool(value)
-        return "solid", entity.solid
-
-    if root == "pushable":
-        if len(path) != 1:
-            raise ValueError("pushable does not support nested field paths.")
-        entity.pushable = bool(value)
-        return "pushable", entity.pushable
-
     if root == "present":
         if len(path) != 1:
             raise ValueError("present does not support nested field paths.")
@@ -925,116 +909,244 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             return ImmediateHandle()
         return AnimationCommandHandle(animation_system, [resolved_id], visual_id=visual_id)
 
-    @registry.register("set_facing")
-    def set_facing(
+    def _require_entity_space(
         world: Any,
-        area: Any,
-        persistence_runtime: Any | None,
-        *,
         entity_id: str,
-        direction: str,
-    ) -> CommandHandle:
-        """Set an entity's facing direction without moving it."""
-        return _set_exact_entity_field_handle(
-            world=world,
-            area=area,
-            persistence_runtime=persistence_runtime,
-            entity_id=entity_id,
-            field_name="facing",
-            value=direction,
-        )
+        *,
+        expected_space: str,
+        command_name: str,
+    ) -> Any:
+        entity = _require_exact_entity(world, entity_id)
+        if entity.space != expected_space:
+            raise ValueError(
+                f"{command_name} requires entity '{entity.entity_id}' to use space "
+                f"'{expected_space}', but it uses '{entity.space}'."
+            )
+        return entity
 
-    @registry.register("move_entity_one_tile")
-    def move_entity_one_tile(
+    def _set_entity_grid_position(
+        *,
+        world: Any,
+        movement_system: Any,
+        entity_id: str,
+        x: int,
+        y: int,
+        mode: str = "absolute",
+        **_: Any,
+    ) -> CommandHandle:
+        entity = _require_entity_space(
+            world,
+            entity_id,
+            expected_space="world",
+            command_name="set_entity_grid_position",
+        )
+        if mode not in {"absolute", "relative"}:
+            raise ValueError(f"Unknown grid-position mode '{mode}'.")
+        target_x = int(x) if mode == "absolute" else entity.grid_x + int(x)
+        target_y = int(y) if mode == "absolute" else entity.grid_y + int(y)
+        movement_system.set_grid_position(entity.entity_id, target_x, target_y)
+        return ImmediateHandle()
+
+    def _set_entity_pixel_position(
+        *,
+        world: Any,
+        movement_system: Any,
+        entity_id: str,
+        x: int | float,
+        y: int | float,
+        mode: str = "absolute",
+        expected_space: str,
+        command_name: str,
+        **_: Any,
+    ) -> CommandHandle:
+        entity = _require_entity_space(
+            world,
+            entity_id,
+            expected_space=expected_space,
+            command_name=command_name,
+        )
+        if mode not in {"absolute", "relative"}:
+            raise ValueError(f"Unknown {expected_space}-position mode '{mode}'.")
+        target_x = float(x) if mode == "absolute" else entity.pixel_x + float(x)
+        target_y = float(y) if mode == "absolute" else entity.pixel_y + float(y)
+        movement_system.set_pixel_position(entity.entity_id, target_x, target_y)
+        return ImmediateHandle()
+
+    def _move_entity_pixel_position(
+        *,
+        world: Any,
+        movement_system: Any,
+        entity_id: str,
+        x: int | float,
+        y: int | float,
+        mode: str = "absolute",
+        expected_space: str,
+        command_name: str,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        wait: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        entity = _require_entity_space(
+            world,
+            entity_id,
+            expected_space=expected_space,
+            command_name=command_name,
+        )
+        if mode not in {"absolute", "relative"}:
+            raise ValueError(f"Unknown {expected_space}-position mode '{mode}'.")
+        if mode == "absolute":
+            moved_entity_ids = movement_system.request_move_to_position(
+                entity.entity_id,
+                float(x),
+                float(y),
+                duration=duration,
+                frames_needed=frames_needed,
+                speed_px_per_second=speed_px_per_second,
+                grid_sync="none",
+            )
+        else:
+            moved_entity_ids = movement_system.request_move_by_offset(
+                entity.entity_id,
+                float(x),
+                float(y),
+                duration=duration,
+                frames_needed=frames_needed,
+                speed_px_per_second=speed_px_per_second,
+                grid_sync="none",
+            )
+        if not moved_entity_ids or not wait:
+            return ImmediateHandle()
+        return MovementCommandHandle(movement_system, moved_entity_ids)
+
+    @registry.register("set_entity_grid_position")
+    def set_entity_grid_position(
         world: Any,
         movement_system: Any,
         *,
         entity_id: str,
-        direction: str,
-        duration: float | None = None,
-        frames_needed: int | None = None,
-        speed_px_per_second: float | None = None,
-        grid_sync: str = "immediate",
-        allow_push: bool = True,
-        wait: bool = True,
+        x: int,
+        y: int,
+        mode: str = "absolute",
         **_: Any,
     ) -> CommandHandle:
-        """Move an entity by one grid tile while keeping motion configurable."""
-        return _step_entity(
+        """Instantly update a world-space entity's logical grid position."""
+        return _set_entity_grid_position(
             world=world,
             movement_system=movement_system,
             entity_id=entity_id,
-            direction=direction,
-            duration=duration,
-            frames_needed=frames_needed,
-            speed_px_per_second=speed_px_per_second,
-            grid_sync=grid_sync,
-            allow_push=allow_push,
-            wait=wait,
+            x=x,
+            y=y,
+            mode=mode,
         )
 
-    @registry.register("move_entity")
-    def move_entity(
+    @registry.register("set_entity_world_position")
+    def set_entity_world_position(
         world: Any,
         movement_system: Any,
         *,
         entity_id: str,
         x: int | float,
         y: int | float,
-        space: str = "pixel",
         mode: str = "absolute",
-        duration: float | None = None,
-        frames_needed: int | None = None,
-        speed_px_per_second: float | None = None,
-        grid_sync: str | None = None,
-        target_grid_x: int | None = None,
-        target_grid_y: int | None = None,
-        wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
-        """Move an entity using pixel/grid and absolute/relative addressing."""
-        return _move_entity(
+        """Instantly update a world-space entity's pixel position."""
+        return _set_entity_pixel_position(
             world=world,
             movement_system=movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
-            space=space,
             mode=mode,
-            duration=duration,
-            frames_needed=frames_needed,
-            speed_px_per_second=speed_px_per_second,
-            grid_sync=grid_sync,
-            target_grid_x=target_grid_x,
-            target_grid_y=target_grid_y,
-            wait=wait,
+            expected_space="world",
+            command_name="set_entity_world_position",
         )
 
-    @registry.register("teleport_entity")
-    def teleport_entity(
+    @registry.register("set_entity_screen_position")
+    def set_entity_screen_position(
         world: Any,
         movement_system: Any,
         *,
         entity_id: str,
         x: int | float,
         y: int | float,
-        space: str = "pixel",
         mode: str = "absolute",
-        target_grid_x: int | None = None,
-        target_grid_y: int | None = None,
         **_: Any,
     ) -> CommandHandle:
-        """Instantly reposition an entity using pixel/grid and absolute/relative addressing."""
-        return _teleport_entity(
+        """Instantly update a screen-space entity's pixel position."""
+        return _set_entity_pixel_position(
             world=world,
             movement_system=movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
-            space=space,
             mode=mode,
-            target_grid_x=target_grid_x,
-            target_grid_y=target_grid_y,
+            expected_space="screen",
+            command_name="set_entity_screen_position",
+        )
+
+    @registry.register("move_entity_world_position")
+    def move_entity_world_position(
+        world: Any,
+        movement_system: Any,
+        *,
+        entity_id: str,
+        x: int | float,
+        y: int | float,
+        mode: str = "absolute",
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        wait: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        """Interpolate a world-space entity's pixel position."""
+        return _move_entity_pixel_position(
+            world=world,
+            movement_system=movement_system,
+            entity_id=entity_id,
+            x=x,
+            y=y,
+            mode=mode,
+            expected_space="world",
+            command_name="move_entity_world_position",
+            duration=duration,
+            frames_needed=frames_needed,
+            speed_px_per_second=speed_px_per_second,
+            wait=wait,
+        )
+
+    @registry.register("move_entity_screen_position")
+    def move_entity_screen_position(
+        world: Any,
+        movement_system: Any,
+        *,
+        entity_id: str,
+        x: int | float,
+        y: int | float,
+        mode: str = "absolute",
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        wait: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        """Interpolate a screen-space entity's pixel position."""
+        return _move_entity_pixel_position(
+            world=world,
+            movement_system=movement_system,
+            entity_id=entity_id,
+            x=x,
+            y=y,
+            mode=mode,
+            expected_space="screen",
+            command_name="move_entity_screen_position",
+            duration=duration,
+            frames_needed=frames_needed,
+            speed_px_per_second=speed_px_per_second,
+            wait=wait,
         )
 
     @registry.register("wait_for_move")
@@ -2120,27 +2232,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             entity_id=entity_id,
             field_name="visible",
             value=visible,
-            persistent=persistent,
-        )
-
-    @registry.register("set_solid")
-    def set_solid(
-        world: Any,
-        area: Any,
-        persistence_runtime: Any | None,
-        *,
-        entity_id: str,
-        solid: bool,
-        persistent: bool = False,
-    ) -> CommandHandle:
-        """Change whether an entity blocks movement."""
-        return _set_exact_entity_field_handle(
-            world=world,
-            area=area,
-            persistence_runtime=persistence_runtime,
-            entity_id=entity_id,
-            field_name="solid",
-            value=solid,
             persistent=persistent,
         )
 

@@ -1,7 +1,6 @@
 {
   "kind": "system",
   "space": "screen",
-  "solid": false,
   "visible": true,
   "visuals": [
     {
