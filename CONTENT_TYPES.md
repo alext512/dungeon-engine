@@ -6,6 +6,8 @@ This document explains how the engine connects to project JSON files, which
 content categories exist, and how they relate to one another in the current
 runtime.
 
+This is a structural map, not a field-by-field tutorial. Use `AUTHORING_GUIDE.md` for authoring patterns and `ENGINE_JSON_INTERFACE.md` for the exact current command/value-source surface.
+
 ## Project Entry Point
 
 Every project starts with a `project.json` manifest. It declares the search
@@ -28,6 +30,10 @@ Example:
     {
       "id": "pause_controller",
       "template": "pause_controller"
+    },
+    {
+      "id": "debug_controller",
+      "template": "debug_controller"
     }
   ]
 }
@@ -176,9 +182,9 @@ Example:
 {
   "kind": "system",
   "space": "screen",
-  "solid": false,
   "visible": false,
   "layer": 100,
+  "variables": {},
   "input_map": {
     "interact": "interact",
     "menu": "menu",
@@ -220,6 +226,7 @@ Key entity rules:
 - `space: "screen"` uses screen pixel coordinates
 - `scope: "global"` is intended for project-level services such as controller entities
 - global entities are usually instantiated from `project.json`, not area JSON
+- gameplay flags such as `blocks_movement`, `pushable`, and puzzle state should live under `variables`, not top-level `solid` / `pushable` / `facing` fields
 
 ## Named Commands
 
@@ -235,12 +242,33 @@ Example:
 
 ```json
 {
-  "params": ["direction"],
+  "params": ["offset_x", "offset_y", "frames_needed"],
   "commands": [
     {
-      "type": "move_entity_one_tile",
-      "entity_id": "self",
-      "direction": "$direction"
+      "type": "set_entity_grid_position",
+      "entity_id": "$self_id",
+      "x": "$offset_x",
+      "y": "$offset_y",
+      "mode": "relative"
+    },
+    {
+      "type": "move_entity_world_position",
+      "entity_id": "$self_id",
+      "x": {
+        "$product": [
+          "$offset_x",
+          "$area.tile_size"
+        ]
+      },
+      "y": {
+        "$product": [
+          "$offset_y",
+          "$area.tile_size"
+        ]
+      },
+      "mode": "relative",
+      "frames_needed": "$frames_needed",
+      "wait": false
     }
   ]
 }
@@ -280,12 +308,12 @@ Segment fields:
 
 The supported controller pattern is:
 
-1. send an event to a controller entity
-2. controller-owned commands load the JSON data and store the active state in entity variables
-3. the caller passes optional `dialogue_on_start`, `dialogue_on_end`, and `segment_hooks`
-4. the controller borrows its needed inputs through `push_input_routes`
-5. the controller restores those routes through `pop_input_routes`
-6. nested state restore comes from the controller's own `dialogue_state_stack`
+1. the caller sends an event to a controller entity and may pass `dialogue_on_start`, `dialogue_on_end`, and `segment_hooks`
+2. when opening an outermost session, the controller borrows its needed inputs through `push_input_routes`
+3. the controller reroutes those borrowed actions to itself
+4. controller-owned commands load the JSON data and store the active state in entity variables
+5. nested state restore comes from the controller's own `dialogue_state_stack`
+6. when the outermost session closes, the controller restores those routes through `pop_input_routes`
 7. post-close behavior such as `save_game`, `load_game`, or `new_game` runs from `dialogue_on_end`
 
 The old authored `run_dialogue`, `start_dialogue_session`, `dialogue_*`, and text-session commands are intentionally removed.
@@ -336,6 +364,8 @@ Commands can also pass runtime context using:
 - `$self_id`
 - `$actor_id`
 - `$caller_id`
+
+For strict primitive entity-target commands, prefer the explicit `$..._id` tokens. The symbolic `self` / `actor` / `caller` refs are mainly for higher-level orchestration commands.
 
 ## Runtime Session Layers
 

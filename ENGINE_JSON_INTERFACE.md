@@ -1,0 +1,1058 @@
+# Engine JSON Interface
+
+This file is the canonical inventory of the current interface between the Python engine and authored JSON content.
+
+It is intentionally about current implementation, not future plans.
+
+Use it when you need to answer questions like:
+- what JSON files does the engine load?
+- which fields in those files are engine-known?
+- which runtime tokens and value sources can commands use?
+- which builtin commands exist right now?
+
+For the philosophy behind this interface, see [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md). For authoring walkthroughs, see [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md). This file is the lower-level reference.
+
+## Core Rules
+
+- Projects are loaded through a `project.json` manifest.
+- Area ids, entity-template ids, and named-command ids are path-derived. They are not authored `id` fields inside those files.
+- Gameplay is driven by JSON command specs. A command spec is a JSON object with a `"type"` field.
+- Runtime token strings start with `$...` or `${...}`.
+- Structured value sources are single-key objects like `{ "$entity_at": { ... } }`.
+- Entity-owned `events` and `input_map` are part of the live engine/JSON contract.
+
+## Content Roots And Path-Derived IDs
+
+`project.json` declares search roots for:
+- entity templates
+- assets
+- areas
+- named commands
+
+The engine derives these ids from the relative path under each configured root:
+- area id
+- entity template id
+- named command id
+
+Examples:
+- `areas/village_square.json` -> area id `village_square`
+- `entity_templates/npcs/guard.json` -> template id `npcs/guard`
+- `named_commands/dialogue/open.json` -> command id `dialogue/open`
+
+These files must not author their own path-derived ids internally:
+- area files must not contain `area_id`
+- named command files must not contain `id`
+
+## Project Manifest: `project.json`
+
+Current manifest fields the engine reads:
+
+- `entity_template_paths: string[]`
+- `asset_paths: string[]`
+- `area_paths: string[]`
+- `named_command_paths: string[]`
+- `shared_variables_path: string`
+- `save_dir: string`
+- `global_entities: object[]`
+- `startup_area: string`
+- `input_targets: object`
+- `debug_inspection_enabled: boolean`
+
+Notes:
+- If the path arrays are omitted or empty, the engine falls back to conventional folders inside the project root:
+  - `entity_templates/`
+  - `assets/`
+  - `areas/`
+  - `named_commands/`
+- `shared_variables_path` falls back to `shared_variables.json` if that file exists.
+- `save_dir` defaults to `saves`.
+- `global_entities` uses the same instance shape as area `entities`.
+- `input_targets` is a project-level logical-action routing table.
+
+Minimal example:
+
+```json
+{
+  "entity_template_paths": ["entity_templates/"],
+  "asset_paths": ["assets/"],
+  "area_paths": ["areas/"],
+  "named_command_paths": ["named_commands/"],
+  "shared_variables_path": "shared_variables.json",
+  "global_entities": [
+    { "id": "dialogue_controller", "template": "dialogue_panel" }
+  ],
+  "startup_area": "title_screen",
+  "input_targets": {
+    "menu": "pause_controller"
+  },
+  "debug_inspection_enabled": true
+}
+```
+
+## Shared Variables: `shared_variables.json`
+
+This is an ordinary JSON object loaded once at project startup.
+
+The engine exposes it through runtime tokens:
+- `$project.foo`
+- `$project.display.internal_width`
+- `$project.some_list.0`
+
+Special current use:
+- `display.internal_width`
+- `display.internal_height`
+
+These influence the runtime internal display size if present.
+
+## Area Files
+
+Current area file fields:
+
+- `name: string`
+- `tile_size: number`
+- `variables: object`
+- `tilesets: object[]`
+- `tile_layers: object[]`
+- `cell_flags: (boolean | object | null)[][]`
+- `enter_commands: command[]`
+- `entry_points: object`
+- `camera: object`
+- `input_targets: object`
+- `entities: object[]`
+
+Current engine behavior:
+- `tile_layers` is required.
+- `cell_flags` falls back to all-walkable cells if omitted.
+- `input_targets` is merged on top of project-level `input_targets`.
+- `enter_commands` runs when the area is entered.
+- `camera` is stored as area camera defaults.
+
+### `tilesets`
+
+Each tileset object currently uses:
+
+- `firstgid`
+- `path`
+- `tile_width`
+- `tile_height`
+
+`path` is an authored asset path like `assets/tiles/basic_tiles.png`.
+
+### `tile_layers`
+
+Each tile layer object currently uses:
+
+- `name`
+- `grid`
+- `draw_above_entities`
+
+`grid` is a 2D array of integer GIDs.
+
+### `cell_flags`
+
+Each cell can currently be:
+- `true` / `false`
+- an object like `{ "walkable": false, "terrain": "water" }`
+- `null`
+
+The engine currently gives built-in meaning to:
+- `walkable`
+
+Other keys are stored as ordinary cell metadata.
+
+### `entry_points`
+
+Each entry point object currently uses:
+
+- `x`
+- `y`
+- `facing`
+- `pixel_x`
+- `pixel_y`
+
+Notes:
+- `facing` on an area entry point remains supported.
+- On arrival, the runtime maps that value into the traveler's `variables.direction`.
+
+### `camera`
+
+The engine stores this object as-is as `camera_defaults`. Current authored examples use it for follow mode, offsets, bounds, and deadzones.
+
+### `input_targets`
+
+This is an action -> entity id mapping, for example:
+
+```json
+{
+  "menu": "pause_controller",
+  "interact": "dialogue_controller"
+}
+```
+
+### `entities`
+
+Each entry is either:
+- a full entity definition
+- or an instance that references a reusable template with `template` and `parameters`
+
+## Entity Templates And Entity Instances
+
+The engine resolves area entities and `project.json` `global_entities` through the same instance-expansion path.
+
+An instance can contain:
+- `template`
+- `parameters`
+- any overriding entity fields
+
+The engine:
+1. loads the template JSON by path-derived id
+2. deep-merges the instance over the template
+3. applies `$name` / `${name}` template-parameter substitution
+4. validates the resulting entity object
+
+### Template Parameter Substitution
+
+This is distinct from runtime tokens.
+
+Template parameter substitution happens when a template is instantiated, before the runtime command system exists.
+
+Inside template JSON:
+- `$foo`
+- `${foo}`
+
+will be replaced by `parameters.foo` if present.
+
+### Current Entity Fields
+
+Current engine-known entity fields:
+
+- `id`
+- `kind`
+- `x`
+- `y`
+- `pixel_x`
+- `pixel_y`
+- `space`
+- `scope`
+- `present`
+- `visible`
+- `events_enabled`
+- `layer`
+- `stack_order`
+- `color`
+- `tags`
+- `visuals`
+- `events`
+- `variables`
+- `input_map`
+
+Template-only / instance metadata that the engine also tracks:
+- `template`
+- `parameters`
+
+Runtime-only fields not authored directly:
+- movement state
+- animation playback state
+- session/origin ids
+
+### World-Space vs Screen-Space
+
+- `space: "world"`
+  - entity uses `x` / `y`
+- `space: "screen"`
+  - entity must not declare `x` / `y`
+  - use `pixel_x` / `pixel_y` or visual offsets instead
+
+### Scope
+
+- `scope: "area"`
+- `scope: "global"`
+
+### Visuals
+
+Each `visuals[]` entry currently uses:
+
+- `id`
+- `path`
+- `frame_width`
+- `frame_height`
+- `frames`
+- `animation_fps`
+- `animate_when_moving`
+- `flip_x`
+- `visible`
+- `tint`
+- `offset_x`
+- `offset_y`
+- `draw_order`
+
+### Events
+
+Current `events` forms:
+
+Simple list form:
+
+```json
+"events": {
+  "interact": [
+    { "type": "run_named_command", "command_id": "dialogue/open" }
+  ]
+}
+```
+
+Object form:
+
+```json
+"events": {
+  "interact": {
+    "enabled": true,
+    "commands": [
+      { "type": "run_named_command", "command_id": "dialogue/open" }
+    ]
+  }
+}
+```
+
+### Input Map
+
+`input_map` is an entity-owned mapping from logical input actions to event names:
+
+```json
+"input_map": {
+  "move_up": "move_up",
+  "move_down": "move_down",
+  "interact": "interact",
+  "menu": "menu"
+}
+```
+
+The engine routes a logical action to an entity through `input_targets`, then uses that entity's `input_map` to find the event name to run.
+
+## Named Command Files
+
+Named command files are JSON objects with:
+
+- `params: string[]`
+- `commands: command[]`
+
+Example:
+
+```json
+{
+  "params": ["target_id"],
+  "commands": [
+    {
+      "type": "run_event",
+      "entity_id": "$target_id",
+      "event_id": "interact"
+    }
+  ]
+}
+```
+
+Current rules:
+- command id is path-derived from the file path
+- file must not declare `id`
+- `params` is optional and defaults to `[]`
+- `commands` is required
+
+## Ordinary Project JSON Data
+
+The engine does not need every project data file to be declared in `project.json`.
+
+Any ordinary JSON file under the project root can be loaded through the `$json_file` value source, for example dialogue data under `dialogues/`.
+
+## Command Specs
+
+A command spec is a JSON object with a `"type"` field.
+
+Examples:
+
+```json
+{ "type": "set_world_var", "name": "opened", "value": true }
+```
+
+```json
+{
+  "type": "run_sequence",
+  "commands": [
+    { "type": "play_audio", "path": "assets/project/sfx/open.wav" },
+    { "type": "set_world_var", "name": "opened", "value": true }
+  ]
+}
+```
+
+Command arrays currently appear in:
+- entity event command lists
+- area `enter_commands`
+- named command `commands`
+- `run_sequence.commands`
+- `run_parallel.commands`
+- `spawn_flow.commands`
+- `run_commands_for_collection.commands`
+- `check_world_var.then`
+- `check_world_var.else`
+- `check_entity_var.then`
+- `check_entity_var.else`
+
+Lifecycle wrapper fields are no longer valid:
+- `on_start`
+- `on_end`
+- `on_complete`
+
+Use:
+- `run_sequence`
+- `run_parallel`
+- `spawn_flow`
+
+## Runtime Tokens
+
+Runtime tokens resolve inside command data at execution time.
+
+String forms:
+- `$token`
+- `${token}`
+
+Special numeric helper:
+- `$half:token`
+
+### Current Token Heads
+
+Exact current token families:
+
+- `$self_id`
+- `$actor_id`
+- `$caller_id`
+- `$project...`
+- `$camera...`
+- `$world...`
+- `$entity.<entity_id>...`
+- `$self...`
+- `$actor...`
+- `$caller...`
+- `$<runtime_param>`
+
+Meaning:
+
+- `$self_id`
+  - source entity id for the current flow
+- `$actor_id`
+  - actor entity id for the current flow
+- `$caller_id`
+  - caller entity id for the current flow
+- `$project.foo.bar`
+  - lookup in `shared_variables.json`
+- `$camera.x`
+  - lookup in current camera state
+- `$world.some_var`
+  - lookup in world variables
+- `$entity.some_entity.some_var`
+  - lookup in another entity's `variables`
+- `$self.some_var`
+  - lookup in source entity `variables`
+- `$actor.some_var`
+  - lookup in actor entity `variables`
+- `$caller.some_var`
+  - lookup in caller entity `variables`
+- `$some_named_param`
+  - lookup in runtime params passed by named commands, collection loops, or composition commands
+
+Important limitation:
+- `$entity.<id>...`, `$self...`, `$actor...`, and `$caller...` read entity `variables`, not built-in entity fields
+
+Current camera token state exposes:
+- `follow_mode`
+- `follow_entity_id`
+- `follow_input_action`
+- `x`
+- `y`
+- `follow_offset_x`
+- `follow_offset_y`
+- `bounds`
+- `deadzone`
+- `has_bounds`
+- `has_deadzone`
+- `mode`
+
+## Structured Value Sources
+
+Structured value sources are single-key objects that the runner resolves before primitive execution.
+
+Current value sources:
+
+- `$json_file`
+- `$wrapped_lines`
+- `$text_window`
+- `$entity_ref`
+- `$cell_flags_at`
+- `$entities_at`
+- `$entity_at`
+- `$collection_item`
+- `$sum`
+- `$product`
+- `$join_text`
+- `$slice_collection`
+- `$wrap_index`
+- `$find_in_collection`
+- `$any_in_collection`
+
+### `$json_file`
+
+Loads any JSON file. Relative paths resolve from the active project root.
+
+Example:
+
+```json
+{
+  "$json_file": "dialogues/system/title_menu.json"
+}
+```
+
+### `$wrapped_lines`
+
+Wraps text through the active bitmap text renderer.
+
+Shape:
+
+```json
+{
+  "$wrapped_lines": {
+    "text": "Hello world",
+    "max_width": 120,
+    "font_id": "default"
+  }
+}
+```
+
+### `$text_window`
+
+Builds a visible slice from a list of lines.
+
+Shape:
+
+```json
+{
+  "$text_window": {
+    "lines": "$self.lines",
+    "start": 0,
+    "max_lines": 3,
+    "separator": "\n"
+  }
+}
+```
+
+Return shape:
+- `visible_lines`
+- `visible_text`
+- `has_more`
+- `total_lines`
+
+### `$entity_ref`
+
+Returns one plain-data entity reference by explicit id.
+
+Shape:
+
+```json
+{
+  "$entity_ref": {
+    "entity_id": "crate_1",
+    "include_variables": true,
+    "default": null
+  }
+}
+```
+
+Notes:
+
+- `include_variables` defaults to `true`.
+- Set `include_variables: false` when you only need identity/position data and want to avoid copying the entity's variable bag into the returned ref.
+
+### `$entities_at`
+
+Returns all world-space entities at one tile.
+
+Shape:
+
+```json
+{
+  "$entities_at": {
+    "x": 5,
+    "y": 7,
+    "exclude_entity_id": "player",
+    "include_hidden": false,
+    "include_absent": false
+  }
+}
+```
+
+Ordering is the current runtime tile-query order:
+- sorted by `(layer, stack_order, entity_id)`
+
+### `$entity_at`
+
+Returns one entity ref selected from `$entities_at`.
+
+Shape:
+
+```json
+{
+  "$entity_at": {
+    "x": 5,
+    "y": 7,
+    "index": 0,
+    "default": null
+  }
+}
+```
+
+Negative indexes are supported through the shared collection lookup helper:
+- `index: -1` means last item
+
+### `$collection_item`
+
+Returns one item from a list/tuple by `index`, or one value from a dict by `key`.
+
+Shape:
+
+```json
+{
+  "$collection_item": {
+    "value": "$self.targets_here",
+    "index": 0,
+    "default": null
+  }
+}
+```
+
+or:
+
+```json
+{
+  "$collection_item": {
+    "value": "$self.window",
+    "key": "visible_text",
+    "default": ""
+  }
+}
+```
+
+### `$sum`
+
+Returns the numeric sum of a small value list.
+
+Example:
+
+```json
+{ "$sum": ["$self.grid_x", 1] }
+```
+
+### `$product`
+
+Returns the numeric product of a small value list.
+
+Example:
+
+```json
+{ "$product": ["$offset_x", "$area.tile_size"] }
+```
+
+### `$join_text`
+
+Joins a small authored value list into one text string.
+
+Example:
+
+```json
+{ "$join_text": [">", "$item.text"] }
+```
+
+### `$slice_collection`
+
+Returns one bounded list slice from a list/tuple value.
+
+Shape:
+
+```json
+{
+  "$slice_collection": {
+    "value": "$self.dialogue_current_segment_options",
+    "start": "$self.dialogue_choice_scroll_offset",
+    "count": "$self.visible_choice_rows"
+  }
+}
+```
+
+Notes:
+- `start` defaults to `0`
+- `count` is optional; when omitted the slice runs to the end
+- negative `start` values are supported and clamp against the collection length
+
+### `$wrap_index`
+
+Wraps one integer index around a positive collection size.
+
+Shape:
+
+```json
+{
+  "$wrap_index": {
+    "value": {
+      "$sum": ["$self.dialogue_choice_index", "$delta"]
+    },
+    "count": "$self.dialogue_current_option_count",
+    "default": 0
+  }
+}
+```
+
+Notes:
+- when `count <= 0`, the helper returns `default`
+- otherwise the result is the wrapped modulo index
+
+### `$cell_flags_at`
+
+Returns plain cell-flag data for one explicit tile coordinate.
+
+Shape:
+
+```json
+{
+  "$cell_flags_at": {
+    "x": 5,
+    "y": 7,
+    "default": { "walkable": false }
+  }
+}
+```
+
+### `$find_in_collection`
+
+Returns the first matching item from a list/tuple, or the supplied `default`.
+
+Shape:
+
+```json
+{
+  "$find_in_collection": {
+    "value": "$self.targets_here",
+    "field": "variables.blocks_movement",
+    "op": "eq",
+    "match": true,
+    "default": null
+  }
+}
+```
+
+### `$any_in_collection`
+
+Returns `true` when any item in a list/tuple matches the supplied predicate.
+
+Shape:
+
+```json
+{
+  "$any_in_collection": {
+    "value": "$self.targets_here",
+    "field": "variables.pushable",
+    "op": "eq",
+    "match": true
+  }
+}
+```
+
+### Plain-Data Entity Ref Shape
+
+`$entities_at` and `$entity_at` return entity refs with:
+
+- `entity_id`
+- `kind`
+- `space`
+- `scope`
+- `grid_x`
+- `grid_y`
+- `pixel_x`
+- `pixel_y`
+- `present`
+- `visible`
+- `events_enabled`
+- `layer`
+- `stack_order`
+- `tags`
+- `variables`
+
+`$entity_ref` returns the same shape by default. When authored with `include_variables: false`, the returned ref omits the `variables` field.
+
+## Logical Input Surface
+
+Current keyboard-to-action mapping in the engine:
+
+- `WASD` / arrow keys -> `move_up`, `move_down`, `move_left`, `move_right`
+- `Space`, `Enter`, keypad Enter -> `interact`
+- `Escape` -> `menu`
+
+Debug-only raw key mappings:
+
+- `F6` -> `debug_toggle_pause`
+- `F7` -> `debug_step_tick`
+- `[` -> `debug_zoom_out`
+- `]` -> `debug_zoom_in`
+
+These debug actions only matter if:
+- the project maps them through `input_targets`
+- the target entity maps them through `input_map`
+- debug inspection is enabled for the project
+
+The world currently knows these default logical actions:
+- `move_up`
+- `move_down`
+- `move_left`
+- `move_right`
+- `interact`
+- `menu`
+
+But entity `input_map` and project/area `input_targets` can also use additional arbitrary action strings.
+
+## Builtin Command Inventory
+
+Current builtin commands, grouped by role.
+
+### Movement And Position
+
+- `set_entity_grid_position(entity_id, x, y, mode?)`
+- `set_entity_world_position(entity_id, x, y, mode?)`
+- `set_entity_screen_position(entity_id, x, y, mode?)`
+- `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
+- `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
+- `wait_for_move(entity_id, visual_id?)`
+
+### Animation, Audio, And Entity Visuals
+
+- `play_animation(entity_id, visual_id?, frame_sequence, frames_per_sprite_change?, hold_last_frame?, wait?)`
+- `wait_for_animation(entity_id, visual_id?)`
+- `stop_animation(entity_id, visual_id?, reset_to_default?)`
+- `set_visual_frame(entity_id, visual_id?, frame)`
+- `set_visual_flip_x(entity_id, visual_id?, flip_x)`
+- `play_audio(path)`
+
+### Screen-Space UI Elements
+
+- `show_screen_image(element_id, path, x, y, frame_width?, frame_height?, frame?, layer?, anchor?, flip_x?, tint?, visible?)`
+- `show_screen_text(element_id, text, x, y, layer?, anchor?, color?, font_id?, max_width?, visible?)`
+- `set_screen_text(element_id, text)`
+- `remove_screen_element(element_id)`
+- `clear_screen_elements(layer?)`
+- `play_screen_animation(element_id, frame_sequence, ticks_per_frame?, hold_last_frame?, wait?)`
+- `wait_for_screen_animation(element_id)`
+
+### Time And Flow Composition
+
+- `wait_frames(frames)`
+- `wait_seconds(seconds)`
+- `spawn_flow(commands?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `run_sequence(commands?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `run_parallel(commands?, completion?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+
+Current `run_parallel` completion shape:
+
+```json
+{
+  "completion": {
+    "mode": "all"
+  }
+}
+```
+
+Supported current completion modes:
+- `all`
+- `any`
+- `child`
+
+For `child`, current shape is:
+
+```json
+{
+  "completion": {
+    "mode": "child",
+    "child_id": "move",
+    "remaining": "keep_running"
+  }
+}
+```
+
+Current remaining policy:
+- `keep_running`
+
+Each `run_parallel.commands[]` child may also declare an optional `id` field, used by `completion.mode = "child"`.
+
+### Event And Named-Command Dispatch
+
+- `run_event(entity_id, event_id, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `run_named_command(command_id, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+
+### Event/Input Routing
+
+- `set_event_enabled(entity_id, event_id, enabled, persistent?)`
+- `set_events_enabled(entity_id, enabled, persistent?)`
+- `set_input_target(action, entity_id?)`
+- `route_inputs_to_entity(entity_id?, actions?)`
+- `push_input_routes(actions?)`
+- `pop_input_routes()`
+
+### Area / Save / Game Flow
+
+- `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow_entity_id?, camera_follow_input_action?, camera_offset_x?, camera_offset_y?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `new_game(area_id?, entry_id?, camera_follow_entity_id?, camera_follow_input_action?, camera_offset_x?, camera_offset_y?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `load_game(save_path?)`
+- `save_game(save_path?)`
+- `quit_game()`
+
+### Debug Runtime
+
+- `set_simulation_paused(paused)`
+- `toggle_simulation_paused()`
+- `step_simulation_tick()`
+- `adjust_output_scale(delta)`
+
+These commands are gated by project `debug_inspection_enabled`.
+
+### Camera
+
+- `set_camera_follow_entity(entity_id, offset_x?, offset_y?)`
+- `set_camera_follow_input_target(action, offset_x?, offset_y?)`
+- `clear_camera_follow()`
+- `set_camera_bounds_rect(x, y, width, height, space?)`
+- `clear_camera_bounds()`
+- `set_camera_deadzone(x, y, width, height, space?)`
+- `clear_camera_deadzone()`
+- `move_camera(x, y, space?, mode?, duration?, frames_needed?, speed_px_per_second?)`
+- `teleport_camera(x, y, space?, mode?)`
+
+### Entity State
+
+- `set_entity_field(entity_id, field_name, value, persistent?)`
+- `set_visible(entity_id, visible, persistent?)`
+- `set_present(entity_id, present, persistent?)`
+- `set_color(entity_id, color, persistent?)`
+- `destroy_entity(entity_id, persistent?)`
+- `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)`
+
+### World And Entity Variables
+
+- `set_world_var(name, value, persistent?)`
+- `set_entity_var(entity_id, name, value, persistent?)`
+- `increment_world_var(name, amount?, persistent?)`
+- `increment_entity_var(entity_id, name, amount?, persistent?)`
+- `set_world_var_length(name, value?, persistent?)`
+- `set_entity_var_length(entity_id, name, value?, persistent?)`
+- `append_world_var(name, value, persistent?)`
+- `append_entity_var(entity_id, name, value, persistent?)`
+- `pop_world_var(name, store_var?, default?, persistent?)`
+- `pop_entity_var(entity_id, name, store_var?, default?, persistent?)`
+- `check_world_var(name, op?, value?, then?, else?)`
+- `check_entity_var(entity_id, name, op?, value?, then?, else?)`
+
+Current comparison operators:
+- `eq`
+- `neq`
+- `gt`
+- `gte`
+- `lt`
+- `lte`
+
+### Reset / Persistence Helpers
+
+- `reset_transient_state(include_tags?, exclude_tags?, apply?)`
+- `reset_persistent_state(include_tags?, exclude_tags?, apply?)`
+
+## Deferred Nested Command Fields
+
+Some command params intentionally defer nested command specs instead of resolving all nested `$...` values immediately.
+
+Current deferred command params:
+
+- `spawn_flow.commands`
+- `run_sequence.commands`
+- `run_parallel.commands`
+- `run_commands_for_collection.commands`
+- `check_world_var.then`
+- `check_world_var.else`
+- `check_entity_var.then`
+- `check_entity_var.else`
+
+Current special deferred params on `run_event`:
+- `dialogue_on_start`
+- `dialogue_on_end`
+- `segment_hooks`
+
+Those are part of the current dialogue/controller surface.
+
+## Current Engine-Known Special Fields
+
+These fields are currently engine-known and actively interpreted, not just stored as opaque data.
+
+### Broadly Acceptable Infrastructure
+
+- area `tile_layers`
+- area `cell_flags`
+- area `entry_points`
+- entity `space`
+- entity `scope`
+- entity `present`
+- entity `visible`
+- entity `events_enabled`
+- entity `layer`
+- entity `stack_order`
+- entity `color`
+- entity `input_map`
+- entity `visuals`
+
+### Grid Notes
+
+Current grid blocking comes from:
+- `cell_flags.walkable`
+
+Tile art itself does not define collision.
+
+## Reserved Runtime Entity IDs
+
+These names are reserved runtime references and should not be used as authored entity ids:
+
+- `self`
+- `actor`
+- `caller`
+
+Strict primitive commands must not use raw symbolic ids like:
+
+```json
+{ "type": "set_entity_var", "entity_id": "self", "name": "x", "value": 1 }
+```
+
+Use:
+
+```json
+{ "type": "set_entity_var", "entity_id": "$self_id", "name": "x", "value": 1 }
+```
+
+## Current Root-Flow Scheduling Model
+
+The current command runner model is:
+
+- top-level dispatches become independent root flows
+- `run_sequence` executes child commands in order
+- `run_parallel` executes child commands together with an explicit completion policy
+- `spawn_flow` starts a separate flow and returns immediately
+
+Routed input events are ordinary root-flow dispatches, not a special busy-state exception.
+
+## Suggested Use
+
+Use the docs together like this:
+
+1. [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md)
+   Read for philosophy and design intent.
+2. [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
+   Read for normal authoring workflow.
+3. This file
+   Read when you need exact current engine/JSON contract details.

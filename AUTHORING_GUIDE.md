@@ -14,6 +14,8 @@ It focuses on:
 - dialogue JSON
 - the current controller-owned dialogue/menu pattern
 
+Use this guide for authoring patterns. Use `CONTENT_TYPES.md` for the structural map of project content, and `ENGINE_JSON_INTERFACE.md` when you need the exact current command/value-source surface.
+
 ## Mental Model
 
 The engine is built from a few content layers:
@@ -253,7 +255,9 @@ Example:
 ```json
 {
   "kind": "sign",
-  "solid": true,
+  "variables": {
+    "dialogue_path": "dialogues/showcase/village_square_note.json"
+  },
   "visuals": [
     {
       "id": "main",
@@ -291,15 +295,16 @@ Example:
 - `visuals`
 - `space`
 - `scope`
-- `solid`
-- `pushable`
 - `present`
 - `visible`
 - `layer`
 - `stack_order`
+- `tags`
 - `variables`
 - `input_map`
 - `events`
+
+Gameplay flags such as `blocks_movement`, `pushable`, `toggled`, and project-specific state like `dialogue_path` should live under `variables`. Top-level `facing`, `solid`, and `pushable` fields are removed.
 
 ### `visuals`
 
@@ -371,13 +376,33 @@ Example:
 
 ```json
 {
-  "params": ["direction", "frames_needed"],
+  "params": ["offset_x", "offset_y", "frames_needed"],
   "commands": [
     {
-      "type": "move_entity_one_tile",
-      "entity_id": "self",
-      "direction": "$direction",
-      "frames_needed": "$frames_needed"
+      "type": "set_entity_grid_position",
+      "entity_id": "$self_id",
+      "x": "$offset_x",
+      "y": "$offset_y",
+      "mode": "relative"
+    },
+    {
+      "type": "move_entity_world_position",
+      "entity_id": "$self_id",
+      "x": {
+        "$product": [
+          "$offset_x",
+          "$area.tile_size"
+        ]
+      },
+      "y": {
+        "$product": [
+          "$offset_y",
+          "$area.tile_size"
+        ]
+      },
+      "mode": "relative",
+      "frames_needed": "$frames_needed",
+      "wait": false
     }
   ]
 }
@@ -395,7 +420,7 @@ Commands often need to refer to the current entity or interaction initiator.
 
 ### Special `entity_id` values
 
-Use these in commands that accept `entity_id`:
+Use these in higher-level orchestration commands such as `run_event` and `run_named_command`, and in any primitive that explicitly allows symbolic refs:
 
 - `self`
 - `actor`
@@ -432,7 +457,7 @@ Example:
 }
 ```
 
-For the strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_facing`, `move_entity_one_tile`, `move_entity`, `teleport_entity`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
+For strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
 
 ## Ordinary JSON Dialogue Data
 

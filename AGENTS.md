@@ -33,6 +33,7 @@ Or double-click `Run_Game.cmd` or `Run_Editor.cmd`.
 | `PROJECT_SPIRIT.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
 | `STATUS.md` | What's implemented, current controls, current sample project, known gaps |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
+| `ENGINE_JSON_INTERFACE.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
 | `architecture.md` | Design principles and medium-term architectural direction |
 | `MANUAL.md` | Practical runtime behavior and sample wiring details |
 | `CONTRIBUTING.md` | Working rules and project direction |

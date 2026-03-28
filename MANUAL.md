@@ -13,6 +13,8 @@ It explains:
 
 This document describes the engine as it exists now.
 
+Use `ENGINE_JSON_INTERFACE.md` when you need the exact current command signatures, value-source shapes, or engine-known JSON fields.
+
 ## Five-Minute Catch-Up
 
 If you are new to the codebase, this is the shortest accurate summary:
@@ -195,6 +197,7 @@ Important authoring rules:
 - `space: "world"` entities use `x` / `y`
 - `space: "screen"` entities use `pixel_x` / `pixel_y` and must not author `x` / `y`
 - `scope: "global"` is intended for project-level controller/service entities
+- gameplay flags such as `blocks_movement`, `pushable`, `toggled`, and other project-specific state belong under `variables`, not top-level `facing` / `solid` / `pushable` fields
 
 ### Named Commands
 
@@ -311,7 +314,7 @@ Broad split:
 Important command families already in the engine:
 
 - event dispatch: `run_event`, `run_named_command`
-- movement: `move_entity`, `move_entity_one_tile`, `teleport_entity`
+- movement: `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`
 - variables: `set_world_var`, `set_entity_var`, `increment_world_var`, `increment_entity_var`, `check_world_var`, `check_entity_var`
 - entity mutation: `set_entity_field`, `set_event_enabled`
 - persistence/flow: `change_area`, `new_game`, `save_game`, `load_game`, `quit_game`
@@ -321,7 +324,7 @@ Important command families already in the engine:
 
 ### Special entity references
 
-Many commands that accept `entity_id` also accept:
+Higher-level orchestration commands can resolve these symbolic refs:
 
 - `self`: the entity that owns the current event/command chain
 - `actor`: the entity that initiated the current interaction/input flow
@@ -331,7 +334,7 @@ These are resolved by the command system before execution.
 
 Important nuance:
 
-- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_facing`, `move_entity_one_tile`, `move_entity`, `teleport_entity`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
+- strict primitive entity-target commands such as `set_entity_var`, `check_entity_var`, `set_entity_field`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` should be authored with explicit ids or resolved tokens like `$self_id`, `$actor_id`, and `$caller_id`
 - higher-level orchestration commands such as `run_event` and `run_named_command` still carry richer runtime context internally
 
 ### Runtime tokens
@@ -407,20 +410,21 @@ That event forwards values such as:
 
 When a dialogue starts:
 
-1. the caller-supplied `dialogue_on_start` commands reroute the needed logical inputs to the dialogue controller
-2. the controller loads ordinary JSON dialogue data into entity variables
-3. controller-owned commands derive visible text/options and render them through the screen manager
-4. controller input routes to normal entity events like `interact`, `move_up`, `move_down`, and `menu`
-5. nested dialogue/menu state is saved into the controller's `dialogue_state_stack`
-6. when the controller finally closes its outermost dialogue, it restores the borrowed routes through `pop_input_routes`
-7. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
+1. when opening an outermost session, the controller borrows the needed logical inputs through `push_input_routes` and `route_inputs_to_entity`
+2. the controller loads ordinary JSON dialogue data into entity variables and resets its current segment/page/choice state
+3. caller-supplied `dialogue_on_start` commands then run with those borrowed routes already in place
+4. controller-owned commands derive visible text/options and render them through the screen manager
+5. controller input routes to normal entity events like `interact`, `move_up`, `move_down`, and `menu`
+6. nested dialogue/menu state is saved into the controller's `dialogue_state_stack` when another dialogue opens on top of the current one
+7. when the controller finally closes its outermost dialogue, it restores the borrowed routes through `pop_input_routes`
+8. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
 
 ### Caller-supplied hooks
 
-The sample controller pattern supports three important extension points:
+The sample controller pattern supports three important caller-supplied extension points:
 
-- `on_start`: runs once before the first segment
-- `on_end`: runs once after the dialogue fully closes
+- `dialogue_on_start`: runs once after the controller borrows its input routes
+- `dialogue_on_end`: runs once after the controller restores those routes and fully closes
 - `segment_hooks`: one optional hook object per segment
 
 Each segment hook can contain:
@@ -429,6 +433,8 @@ Each segment hook can contain:
 - `on_end`
 - `option_commands_by_id`
 - `option_commands`
+
+Those plain `on_start` / `on_end` names belong inside each segment-hook object. The top-level call payload uses `dialogue_on_start` / `dialogue_on_end`.
 
 This is how the sample lever, save point, pause menu, and title screen attach gameplay consequences to plain JSON dialogue/menu data.
 

@@ -208,7 +208,7 @@ Commands need access to live runtime state, but primitive command APIs should st
 Expected early command categories:
 
 - flow: sequence, branch, filter, wait, repeat-if-needed
-- movement: step entity, push entity, move entity along a path, face direction
+- movement: claim grid position, move entity in world or screen space, push entity, move entity along a path
 - interaction: trigger entity, trigger tile, enable, disable
 - visibility/map: show, hide, remove from map, restore to map
 - dialogue: show text, choices, branch on choice
@@ -232,9 +232,9 @@ Example movement chain:
 
 1. receive `run_event(entity_id=input_target_for_move_right, event_id=configured_move_right_event)`
 2. start any project-authored walk animation
-3. call `move_entity_one_tile(direction=right)`
-4. if blocked by pushable object, try push chain
-5. if passable, animate and move
+3. query the target tile and its blockers
+4. if blocked by a pushable object, try the push chain
+5. if passable, claim the target tile and start the pixel tween
 6. run any authored cleanup command such as restoring the idle frame
 7. finish
 
@@ -418,7 +418,9 @@ Example shape:
       "entities": {
         "gate_1": {
           "visible": false,
-          "solid": false
+          "variables": {
+            "blocks_movement": false
+          }
         },
         "lever_1": {
           "variables": {
