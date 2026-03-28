@@ -1,8 +1,8 @@
 {
   "kind": "lever_toggle",
-  "solid": true,
   "variables": {
-    "toggled": false
+    "toggled": false,
+    "blocks_movement": true
   },
   "visuals": [
     {
@@ -69,9 +69,9 @@
                       "persistent": true
                     },
                     {
-                      "type": "set_entity_field",
+                      "type": "set_entity_var",
                       "entity_id": "$target_gate",
-                      "field_name": "solid",
+                      "name": "blocks_movement",
                       "value": false,
                       "persistent": true
                     },
@@ -138,9 +138,9 @@
                       "persistent": true
                     },
                     {
-                      "type": "set_entity_field",
+                      "type": "set_entity_var",
                       "entity_id": "$target_gate",
-                      "field_name": "solid",
+                      "name": "blocks_movement",
                       "value": true,
                       "persistent": true
                     },

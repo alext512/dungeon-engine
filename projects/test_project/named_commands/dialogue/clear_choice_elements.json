@@ -10,10 +10,6 @@
           "element_id": "$item"
         }
       ]
-    },
-    {
-      "type": "remove_screen_element",
-      "element_id": "$self.cursor_element_id"
     }
   ]
 }

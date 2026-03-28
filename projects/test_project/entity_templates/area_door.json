@@ -1,6 +1,8 @@
 {
   "kind": "door",
-  "solid": true,
+  "variables": {
+    "blocks_movement": true
+  },
   "visuals": [
     {
       "id": "main",

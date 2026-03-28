@@ -30,6 +30,7 @@
             "dialogue_source_page_index": "$self.dialogue_source_page_index",
             "dialogue_text_line_offset": "$self.dialogue_text_line_offset",
             "dialogue_choice_index": "$self.dialogue_choice_index",
+            "dialogue_choice_scroll_offset": "$self.dialogue_choice_scroll_offset",
             "dialogue_current_speaker_id": "$self.dialogue_current_speaker_id"
           }
         }
@@ -132,6 +133,12 @@
       "type": "set_entity_var",
       "entity_id": "$self_id",
       "name": "dialogue_choice_index",
+      "value": 0
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_choice_scroll_offset",
       "value": 0
     },
     {

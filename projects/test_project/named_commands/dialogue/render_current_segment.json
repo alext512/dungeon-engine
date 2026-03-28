@@ -91,7 +91,7 @@
         "$collection_item": {
           "value": "$self.dialogue_current_participant",
           "key": "portrait_frame_width",
-          "default": "$self.default_portrait_frame_width"
+          "default": "$self.layout.portrait.default_frame_width"
         }
       }
     },
@@ -103,7 +103,7 @@
         "$collection_item": {
           "value": "$self.dialogue_current_participant",
           "key": "portrait_frame_height",
-          "default": "$self.default_portrait_frame_height"
+          "default": "$self.layout.portrait.default_frame_height"
         }
       }
     },
@@ -170,37 +170,31 @@
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "text_box_x",
-          "value": "$self.portrait_text_box_x"
+          "value": "$self.layout.text.with_portrait.x"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "text_box_y",
-          "value": "$self.portrait_text_box_y"
+          "value": "$self.layout.text.with_portrait.y"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "text_box_width",
-          "value": "$self.portrait_text_box_width"
-        },
-        {
-          "type": "set_entity_var",
-          "entity_id": "$self_id",
-          "name": "choice_text_x",
-          "value": "$self.portrait_choice_text_x"
+          "value": "$self.layout.text.with_portrait.width"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "choice_width",
-          "value": "$self.portrait_choice_width"
+          "value": "$self.layout.choice.with_portrait.width"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "choice_cursor_x",
-          "value": "$self.portrait_choice_cursor_x"
+          "value": "$self.layout.choice.with_portrait.x"
         }
       ],
       "else": [
@@ -208,48 +202,42 @@
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "text_box_x",
-          "value": "$self.plain_text_box_x"
+          "value": "$self.layout.text.plain.x"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "text_box_y",
-          "value": "$self.plain_text_box_y"
+          "value": "$self.layout.text.plain.y"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "text_box_width",
-          "value": "$self.plain_text_box_width"
-        },
-        {
-          "type": "set_entity_var",
-          "entity_id": "$self_id",
-          "name": "choice_text_x",
-          "value": "$self.plain_choice_text_x"
+          "value": "$self.layout.text.plain.width"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "choice_width",
-          "value": "$self.plain_choice_width"
+          "value": "$self.layout.choice.plain.width"
         },
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
           "name": "choice_cursor_x",
-          "value": "$self.plain_choice_cursor_x"
+          "value": "$self.layout.choice.plain.x"
         }
       ]
     },
     {
       "type": "show_screen_image",
       "element_id": "$self.panel_element_id",
-      "path": "$self.panel_path",
-      "x": "$self.panel_x",
-      "y": "$self.panel_y",
-      "frame_width": "$self.panel_frame_width",
-      "frame_height": "$self.panel_frame_height",
+      "path": "$self.layout.panel.path",
+      "x": "$self.layout.panel.x",
+      "y": "$self.layout.panel.y",
+      "frame_width": "$self.layout.panel.width",
+      "frame_height": "$self.layout.panel.height",
       "frame": 0,
       "layer": "$self.ui_layer",
       "anchor": "topleft"
@@ -265,8 +253,8 @@
           "type": "show_screen_image",
           "element_id": "$self.portrait_element_id",
           "path": "$self.dialogue_current_portrait_path",
-          "x": "$self.portrait_x",
-          "y": "$self.portrait_y",
+          "x": "$self.layout.portrait.x",
+          "y": "$self.layout.portrait.y",
           "frame_width": "$self.dialogue_current_portrait_frame_width",
           "frame_height": "$self.dialogue_current_portrait_frame_height",
           "frame": "$self.dialogue_current_portrait_frame",

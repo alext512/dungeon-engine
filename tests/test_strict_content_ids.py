@@ -31,6 +31,7 @@ from dungeon_engine.project import load_project
 from dungeon_engine.world.loader import (
     AreaValidationError,
     EntityTemplateValidationError,
+    instantiate_entity,
     load_area_from_data,
     validate_project_areas,
     validate_project_entity_templates,
@@ -49,6 +50,7 @@ from dungeon_engine.world.persistence import (
 )
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.input_handler import InputHandler
+from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.engine.text import TextRenderer
 
 
@@ -805,9 +807,11 @@ class StrictContentIdTests(unittest.TestCase):
                     "params": [],
                     "commands": [
                         {
-                            "type": "move_entity_one_tile",
+                            "type": "move_entity_world_position",
                             "entity_id": "actor",
-                            "direction": "down",
+                            "x": 16,
+                            "y": 0,
+                            "mode": "relative",
                         }
                     ],
                 }
@@ -819,7 +823,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'actor' with strict primitive 'move_entity_one_tile'"
+                "must not use symbolic entity id 'actor' with strict primitive 'move_entity_world_position'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -966,19 +970,92 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(controller.variables["text_window"]["has_more"])
         self.assertEqual(controller.variables["text_window"]["total_lines"], 4)
 
-    def test_facing_state_value_source_reports_state_and_blocking_entity(self) -> None:
+    def test_slice_collection_wrap_index_and_join_text_value_sources_store_windowed_values(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        slice_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "visible_options",
+                "type": "set_entity_var",
+                "value": {
+                    "$slice_collection": {
+                        "value": ["zero", "one", "two", "three", "four"],
+                        "start": 1,
+                        "count": 3,
+                    }
+                },
+            },
+        )
+        slice_handle.update(0.0)
+
+        wrap_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "wrapped_index",
+                "type": "set_entity_var",
+                "value": {
+                    "$wrap_index": {
+                        "value": -1,
+                        "count": 5,
+                        "default": 0,
+                    }
+                },
+            },
+        )
+        wrap_handle.update(0.0)
+
+        join_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "joined_text",
+                "type": "set_entity_var",
+                "value": {
+                    "$join_text": [">", "one"]
+                },
+            },
+        )
+        join_handle.update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(controller.variables["visible_options"], ["one", "two", "three"])
+        self.assertEqual(controller.variables["wrapped_index"], 4)
+        self.assertEqual(controller.variables["joined_text"], ">one")
+
+    def test_explicit_movement_query_value_sources_resolve_cell_flags_and_blockers(self) -> None:
+        area = Area(
+            area_id="test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[],
+            cell_flags=[
+                [{"walkable": True}, {"walkable": True}, {"walkable": True}],
+                [{"walkable": True}, {"walkable": True}, {"walkable": False}],
+                [{"walkable": True}, {"walkable": True}, {"walkable": True}],
+            ],
+        )
         world = World()
         actor = _make_runtime_entity("player", kind="player")
-        actor.facing = "right"
+        actor.grid_x = 1
+        actor.grid_y = 1
         blocking_entity = _make_runtime_entity("crate", kind="crate")
-        blocking_entity.pushable = True
+        blocking_entity.grid_x = 2
+        blocking_entity.grid_y = 1
+        blocking_entity.variables["blocks_movement"] = True
+        blocking_entity.variables["pushable"] = True
         world.add_entity(actor)
         world.add_entity(blocking_entity)
-        registry, context = self._make_command_context(world=world)
-        context.collision_system = _FacingStateCollisionSystem(
-            blocking_entity=blocking_entity,
-            can_move=False,
-        )
+        registry, context = self._make_command_context(area=area, world=world)
 
         handle = execute_command_spec(
             registry,
@@ -986,10 +1063,71 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "type": "set_entity_var",
                 "entity_id": "player",
-                "name": "facing_info",
+                "name": "target_cell",
                 "value": {
-                    "$facing_state": {
-                        "entity_id": "player",
+                    "$cell_flags_at": {
+                        "x": 2,
+                        "y": 1,
+                    }
+                },
+            },
+        )
+        handle.update(0.0)
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "player",
+                "name": "target_entities",
+                "value": {
+                    "$entities_at": {
+                        "x": 2,
+                        "y": 1,
+                        "select": {
+                            "fields": ["entity_id"],
+                            "variables": ["blocks_movement", "pushable"],
+                        },
+                    }
+                },
+            },
+        )
+        handle.update(0.0)
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "player",
+                "name": "blocking_entity",
+                "value": {
+                    "$find_in_collection": {
+                        "value": "$entity.player.target_entities",
+                        "field": "variables.blocks_movement",
+                        "op": "eq",
+                        "match": True,
+                        "default": None,
+                    }
+                },
+            },
+        )
+        handle.update(0.0)
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "player",
+                "name": "has_pushable_blocker",
+                "value": {
+                    "$any_in_collection": {
+                        "value": "$entity.player.target_entities",
+                        "field": "variables.pushable",
+                        "op": "eq",
+                        "match": True,
                     }
                 },
             },
@@ -998,9 +1136,9 @@ class StrictContentIdTests(unittest.TestCase):
 
         player = world.get_entity("player")
         assert player is not None
-        self.assertEqual(player.variables["facing_info"]["state"], "movable")
-        self.assertEqual(player.variables["facing_info"]["entity_id"], "crate")
-        self.assertEqual(player.variables["facing_info"]["direction"], "right")
+        self.assertEqual(player.variables["target_cell"]["walkable"], False)
+        self.assertEqual(player.variables["blocking_entity"]["entity_id"], "crate")
+        self.assertTrue(player.variables["has_pushable_blocker"])
 
     def test_entities_at_and_entity_at_value_sources_return_stable_plain_refs(self) -> None:
         world = World()
@@ -1014,6 +1152,16 @@ class StrictContentIdTests(unittest.TestCase):
         high.grid_y = 3
         high.layer = 2
         high.stack_order = 5
+        high.variables["blocks_movement"] = True
+        high.variables["pushable"] = True
+        high.visuals.append(
+            EntityVisual(
+                visual_id="main",
+                visible=False,
+                flip_x=True,
+                current_frame=3,
+            )
+        )
         world.add_entity(low)
         world.add_entity(high)
         world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
@@ -1030,6 +1178,9 @@ class StrictContentIdTests(unittest.TestCase):
                     "$entities_at": {
                         "x": 2,
                         "y": 3,
+                        "select": {
+                            "fields": ["entity_id", "kind"],
+                        },
                     }
                 },
             },
@@ -1055,6 +1206,9 @@ class StrictContentIdTests(unittest.TestCase):
                         "x": 2,
                         "y": 3,
                         "index": 0,
+                        "select": {
+                            "fields": ["entity_id"],
+                        },
                         "default": None,
                     }
                 },
@@ -1075,6 +1229,9 @@ class StrictContentIdTests(unittest.TestCase):
                         "x": 2,
                         "y": 3,
                         "index": -1,
+                        "select": {
+                            "fields": ["entity_id"],
+                        },
                         "default": None,
                     }
                 },
@@ -1093,6 +1250,10 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": {
                     "$entity_ref": {
                         "entity_id": "high",
+                        "select": {
+                            "fields": ["entity_id", "grid_x"],
+                            "variables": ["blocks_movement", "pushable"],
+                        },
                     }
                 },
             },
@@ -1100,6 +1261,150 @@ class StrictContentIdTests(unittest.TestCase):
         ref_handle.update(0.0)
         self.assertEqual(controller.variables["self_ref"]["entity_id"], "high")
         self.assertEqual(controller.variables["self_ref"]["grid_x"], 2)
+        self.assertEqual(
+            controller.variables["self_ref"]["variables"],
+            {"blocks_movement": True, "pushable": True},
+        )
+
+        selected_ref_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "selected_ref",
+                "value": {
+                    "$entity_ref": {
+                        "entity_id": "high",
+                        "select": {
+                            "fields": ["grid_x", "pixel_y", "present"],
+                            "variables": ["pushable"],
+                            "visuals": [
+                                {
+                                    "id": "main",
+                                    "fields": ["visible", "flip_x", "current_frame"],
+                                }
+                            ],
+                        },
+                    }
+                },
+            },
+        )
+        selected_ref_handle.update(0.0)
+        self.assertEqual(
+            controller.variables["selected_ref"],
+            {
+                "grid_x": 2,
+                "pixel_y": 0.0,
+                "present": True,
+                "variables": {"pushable": True},
+                "visuals": {
+                    "main": {
+                        "visible": False,
+                        "flip_x": True,
+                        "current_frame": 3,
+                    }
+                },
+            },
+        )
+
+        selected_target_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "selected_target",
+                "value": {
+                    "$entity_at": {
+                        "x": 2,
+                        "y": 3,
+                        "index": -1,
+                        "select": {
+                            "fields": ["entity_id"],
+                            "variables": ["pushable"],
+                        },
+                        "default": None,
+                    }
+                },
+            },
+        )
+        selected_target_handle.update(0.0)
+        self.assertEqual(
+            controller.variables["selected_target"],
+            {"entity_id": "high", "variables": {"pushable": True}},
+        )
+
+        selected_targets_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "selected_targets",
+                "value": {
+                    "$entities_at": {
+                        "x": 2,
+                        "y": 3,
+                        "select": {
+                            "fields": ["entity_id"],
+                            "variables": ["blocks_movement", "pushable"],
+                        },
+                    }
+                },
+            },
+        )
+        selected_targets_handle.update(0.0)
+        self.assertEqual(
+            controller.variables["selected_targets"],
+            [
+                {"entity_id": "low", "variables": {}},
+                {
+                    "entity_id": "high",
+                    "variables": {"blocks_movement": True, "pushable": True},
+                },
+            ],
+        )
+
+        missing_selected_ref_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "missing_selected_ref",
+                "value": {
+                    "$entity_ref": {
+                        "entity_id": "missing",
+                        "select": {
+                            "fields": ["grid_x", "grid_y"],
+                        },
+                        "default": None,
+                    }
+                },
+            },
+        )
+        missing_selected_ref_handle.update(0.0)
+        self.assertIsNone(controller.variables["missing_selected_ref"])
+
+        with self.assertRaisesRegex(ValueError, r"\$entity_ref select\.fields does not support"):
+            execute_command_spec(
+                registry,
+                context,
+                {
+                    "type": "set_entity_var",
+                    "entity_id": "dialogue_controller",
+                    "name": "invalid_select",
+                    "value": {
+                        "$entity_ref": {
+                            "entity_id": "high",
+                            "select": {
+                                "fields": ["grid_x", "variables"],
+                            },
+                        }
+                    },
+                },
+            )
 
         sum_handle = execute_command_spec(
             registry,
@@ -1171,10 +1476,13 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "type": "set_entity_var",
                             "entity_id": "$self_id",
-                            "name": "interact_self_ref",
+                            "name": "interact_self_position",
                             "value": {
                                 "$entity_ref": {
                                     "entity_id": "$self_id",
+                                    "select": {
+                                        "fields": ["grid_x", "grid_y"],
+                                    },
                                 }
                             },
                         },
@@ -1190,7 +1498,7 @@ class StrictContentIdTests(unittest.TestCase):
                                         "left": {"x": -1, "y": 0},
                                         "right": {"x": 1, "y": 0},
                                     },
-                                    "key": "$self.interact_self_ref.facing",
+                                    "key": "$self.direction",
                                     "default": {"x": 0, "y": 0},
                                 }
                             },
@@ -1201,7 +1509,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "name": "interact_target_x",
                             "value": {
                                 "$sum": [
-                                    "$self.interact_self_ref.grid_x",
+                                    "$self.interact_self_position.grid_x",
                                     "$self.interact_offset.x",
                                 ]
                             },
@@ -1212,7 +1520,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "name": "interact_target_y",
                             "value": {
                                 "$sum": [
-                                    "$self.interact_self_ref.grid_y",
+                                    "$self.interact_self_position.grid_y",
                                     "$self.interact_offset.y",
                                 ]
                             },
@@ -1226,6 +1534,9 @@ class StrictContentIdTests(unittest.TestCase):
                                     "x": "$self.interact_target_x",
                                     "y": "$self.interact_target_y",
                                     "index": 0,
+                                    "select": {
+                                        "fields": ["entity_id"],
+                                    },
                                     "default": None,
                                 }
                             },
@@ -1253,7 +1564,7 @@ class StrictContentIdTests(unittest.TestCase):
         player = _make_runtime_entity("player", kind="player")
         player.grid_x = 4
         player.grid_y = 6
-        player.facing = "right"
+        player.variables["direction"] = "right"
         lever = _make_runtime_entity(
             "lever",
             kind="lever",
@@ -2287,6 +2598,299 @@ class StrictContentIdTests(unittest.TestCase):
             game._advance_simulation_tick(1 / 60)
         self.assertEqual(controller.variables["dialogue_choice_index"], 2)
 
+    def test_sample_player_held_direction_chains_movement_without_extra_pause(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        player = game.world.get_entity("player")
+        assert player is not None
+        start_grid_x = player.grid_x
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT)])
+        max_root_handles = 0
+        for _ in range(32):
+            game._advance_simulation_tick(1 / 60)
+            max_root_handles = max(max_root_handles, len(game.command_runner.root_handles))
+
+        self.assertGreaterEqual(player.grid_x, start_grid_x + 3)
+        self.assertLessEqual(max_root_handles, 1)
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_sample_player_held_direction_keeps_walk_animation_active_across_steps(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        player = game.world.get_entity("player")
+        assert player is not None
+        visual = player.require_visual("body")
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT)])
+        for _ in range(20):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertTrue(player.movement.active)
+        self.assertTrue(visual.animation_playback.active)
+        self.assertIn(visual.current_frame, {1, 4, 7})
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_sample_player_position_snapshots_stay_lightweight(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        player = game.world.get_entity("player")
+        assert player is not None
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT)])
+        game._advance_simulation_tick(1 / 60)
+
+        move_self_position = player.variables["move_self_position"]
+        self.assertEqual(
+            set(move_self_position.keys()),
+            {"grid_x", "grid_y", "pixel_x", "pixel_y"},
+        )
+
+        while player.movement.active:
+            game._advance_simulation_tick(1 / 60)
+
+        walk_cleanup_position = player.variables["walk_cleanup_position"]
+        self.assertEqual(
+            set(walk_cleanup_position.keys()),
+            {"grid_x", "grid_y", "pixel_x", "pixel_y"},
+        )
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_sample_player_repeated_direction_input_during_walk_does_not_raise_cycle_error(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        player = game.world.get_entity("player")
+        assert player is not None
+
+        selected_event_id: str | None = None
+        for event_id, delta_x, delta_y in (
+            ("move_right", 1, 0),
+            ("move_left", -1, 0),
+            ("move_down", 0, 1),
+            ("move_up", 0, -1),
+        ):
+            target_x = player.grid_x + delta_x
+            target_y = player.grid_y + delta_y
+            if not game.area.in_bounds(target_x, target_y):
+                continue
+            cell_flags = game.area.cell_flags_at(target_x, target_y)
+            walkable = (
+                bool(cell_flags.get("walkable"))
+                if isinstance(cell_flags, dict)
+                else bool(cell_flags)
+            )
+            if not walkable:
+                continue
+            blocking_entities = [
+                entity
+                for entity in game.world.get_entities_at(
+                    target_x,
+                    target_y,
+                    exclude_entity_id="player",
+                    include_hidden=True,
+                )
+                if bool(entity.variables.get("blocks_movement"))
+            ]
+            if blocking_entities:
+                continue
+            selected_event_id = event_id
+            break
+
+        self.assertIsNotNone(selected_event_id)
+
+        game.command_runner.enqueue(
+            "run_event",
+            entity_id="player",
+            event_id=selected_event_id,
+        )
+        game._advance_simulation_tick(1 / 60)
+        self.assertTrue(player.movement.active)
+
+        for _ in range(4):
+            game.command_runner.enqueue(
+                "run_event",
+                entity_id="player",
+                event_id=selected_event_id,
+            )
+            game._advance_simulation_tick(1 / 60)
+
+        for _ in range(24):
+            game._advance_simulation_tick(1 / 60)
+
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_sample_player_opposite_direction_during_walk_does_not_flip_mid_step(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("village_square")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        player = game.world.get_entity("player")
+        assert player is not None
+
+        game.command_runner.enqueue(
+            "run_event",
+            entity_id="player",
+            event_id="move_right",
+        )
+        game._advance_simulation_tick(1 / 60)
+
+        visual = player.require_visual("body")
+        self.assertTrue(player.movement.active)
+        self.assertTrue(visual.flip_x)
+
+        game.command_runner.enqueue(
+            "run_event",
+            entity_id="player",
+            event_id="move_left",
+        )
+        game._advance_simulation_tick(1 / 60)
+
+        self.assertTrue(player.movement.active)
+        self.assertTrue(visual.flip_x)
+        self.assertEqual(player.variables["direction"], "right")
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_dialogue_choice_window_scrolls_after_three_visible_rows(self) -> None:
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        controller = instantiate_entity(
+            {
+                "id": "dialogue_controller",
+                "template": "dialogue_panel",
+                "space": "screen",
+                "scope": "global",
+            },
+            16,
+            project=project,
+            source_name="test dialogue controller",
+        )
+        controller.variables["dialogue_phase"] = "choice"
+        controller.variables["dialogue_font_id"] = "pixelbet"
+        controller.variables["choice_width"] = controller.variables["layout"]["choice"]["plain"]["width"]
+        controller.variables["choice_cursor_x"] = controller.variables["layout"]["choice"]["plain"]["x"]
+        controller.variables["dialogue_current_segment_options"] = [
+            {"text": "One"},
+            {"text": "Two"},
+            {"text": "Three"},
+            {"text": "Four"},
+            {"text": "Five"},
+        ]
+        controller.variables["dialogue_current_option_count"] = 5
+        controller.variables["dialogue_choice_index"] = 0
+        controller.variables["dialogue_choice_scroll_offset"] = 0
+
+        world = World()
+        world.add_entity(controller)
+        registry, context = self._make_command_context(project=project, world=world)
+        context.screen_manager = ScreenElementManager()
+
+        def _run_named(command_id: str, **params: object) -> None:
+            handle = execute_registered_command(
+                registry,
+                context,
+                "run_named_command",
+                {
+                    "command_id": command_id,
+                    "source_entity_id": "dialogue_controller",
+                    **params,
+                },
+            )
+            while not handle.complete:
+                handle.update(0.0)
+
+        _run_named("dialogue/render_choice")
+
+        option_0 = context.screen_manager.get_element("dialogue_option_0")
+        option_1 = context.screen_manager.get_element("dialogue_option_1")
+        option_2 = context.screen_manager.get_element("dialogue_option_2")
+        assert option_0 is not None
+        assert option_1 is not None
+        assert option_2 is not None
+        self.assertEqual(option_0.text, ">One")
+        self.assertEqual(option_1.text, " Two")
+        self.assertEqual(option_2.text, " Three")
+
+        _run_named("dialogue/move_selection", delta=1)
+        _run_named("dialogue/move_selection", delta=1)
+        _run_named("dialogue/move_selection", delta=1)
+
+        self.assertEqual(controller.variables["dialogue_choice_index"], 3)
+        self.assertEqual(controller.variables["dialogue_choice_scroll_offset"], 1)
+
+        option_0 = context.screen_manager.get_element("dialogue_option_0")
+        option_1 = context.screen_manager.get_element("dialogue_option_1")
+        option_2 = context.screen_manager.get_element("dialogue_option_2")
+        assert option_0 is not None
+        assert option_1 is not None
+        assert option_2 is not None
+        self.assertEqual(option_0.text, " Two")
+        self.assertEqual(option_1.text, " Three")
+        self.assertEqual(option_2.text, ">Four")
+        self.assertIsNone(context.screen_manager.get_element("dialogue_cursor"))
+
     def test_sample_timer_dialogue_segment_advances_without_input(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
@@ -2381,7 +2985,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertFalse(controller.variables["dialogue_open"])
         self.assertTrue(lever.variables["toggled"])
         self.assertFalse(gate.visible)
-        self.assertFalse(gate.solid)
+        self.assertFalse(gate.variables["blocks_movement"])
         self.assertEqual(lever.require_visual("main").tint, (150, 150, 150))
         self.assertIsNone(game.command_runner.last_error_notice)
 
@@ -2723,7 +3327,7 @@ class StrictContentIdTests(unittest.TestCase):
         assert current_player is not None
         current_visual = current_player.get_primary_visual()
         assert current_visual is not None
-        current_player.facing = "right"
+        current_player.variables["direction"] = "right"
         current_visual.current_frame = 2
 
         current_area_state = capture_current_area_state(
@@ -2745,7 +3349,7 @@ class StrictContentIdTests(unittest.TestCase):
         assert restored_player is not None
         restored_visual = restored_player.get_primary_visual()
         assert restored_visual is not None
-        self.assertEqual(restored_player.facing, "right")
+        self.assertEqual(restored_player.variables["direction"], "right")
         self.assertEqual(restored_visual.current_frame, 2)
 
     def test_runtime_token_lookup_rejects_removed_source_alias(self) -> None:
@@ -3108,10 +3712,12 @@ class StrictContentIdTests(unittest.TestCase):
                 },
             ),
             (
-                "move_entity_one_tile",
+                "move_entity_world_position",
                 {
                     "entity_id": "caller",
-                    "direction": "down",
+                    "x": 16,
+                    "y": 0,
+                    "mode": "relative",
                 },
             ),
         ):
@@ -3248,7 +3854,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
 
-    def test_move_entity_one_tile_supports_caller_token_via_run_sequence(self) -> None:
+    def test_move_entity_world_position_supports_caller_token_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -3264,11 +3870,12 @@ class StrictContentIdTests(unittest.TestCase):
                 "caller_entity_id": "lever",
                 "commands": [
                     {
-                        "type": "move_entity_one_tile",
+                        "type": "move_entity_world_position",
                         "entity_id": "$caller_id",
-                        "direction": "right",
+                        "x": 16,
+                        "y": 0,
+                        "mode": "relative",
                         "frames_needed": 8,
-                        "allow_push": False,
                         "wait": False,
                     }
                 ],
@@ -3277,8 +3884,8 @@ class StrictContentIdTests(unittest.TestCase):
         handle.update(0.0)
 
         self.assertEqual(
-            movement_system.grid_steps,
-            [("lever", "right", None, 8, None, "immediate", False)],
+            movement_system.move_by_offsets,
+            [("lever", 16.0, 0.0, None, 8, None, "none", None, None)],
         )
 
     def test_set_camera_follow_entity_supports_caller_token_via_run_sequence(self) -> None:

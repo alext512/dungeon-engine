@@ -8,7 +8,7 @@ from dungeon_engine.world.world import World
 
 
 class CollisionSystem:
-    """Provide collision queries without embedding them into commands directly."""
+    """Provide low-level area walkability queries without entity-blocking rules."""
 
     def __init__(self, area: Area, world: World) -> None:
         self.area = area
@@ -21,14 +21,8 @@ class CollisionSystem:
         *,
         ignore_entity_id: str | None = None,
     ) -> Entity | None:
-        """Return the first solid entity on the requested tile."""
-        for entity in self.world.get_entities_at(
-            grid_x,
-            grid_y,
-            exclude_entity_id=ignore_entity_id,
-        ):
-            if entity.solid:
-                return entity
+        """Return no blocker because blocking is now authored explicitly in JSON flows."""
+        _ = grid_x, grid_y, ignore_entity_id
         return None
 
     def can_move_to(
@@ -38,13 +32,8 @@ class CollisionSystem:
         *,
         ignore_entity_id: str | None = None,
     ) -> bool:
-        """Return True when a tile is walkable and not blocked by another entity."""
-        if not self.area.is_walkable(grid_x, grid_y):
-            return False
-        return self.get_blocking_entity(
-            grid_x,
-            grid_y,
-            ignore_entity_id=ignore_entity_id,
-        ) is None
+        """Return True when the area marks the tile as walkable."""
+        _ = ignore_entity_id
+        return self.area.is_walkable(grid_x, grid_y)
 
 

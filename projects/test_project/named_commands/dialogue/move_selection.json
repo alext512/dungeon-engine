@@ -18,50 +18,73 @@
           "value": 0,
           "then": [
             {
-              "type": "increment_entity_var",
+              "type": "set_entity_var",
               "entity_id": "$self_id",
               "name": "dialogue_choice_index",
-              "amount": "$delta"
+              "value": {
+                "$wrap_index": {
+                  "value": {
+                    "$sum": [
+                      "$self.dialogue_choice_index",
+                      "$delta"
+                    ]
+                  },
+                  "count": "$self.dialogue_current_option_count",
+                  "default": 0
+                }
+              }
             },
             {
               "type": "check_entity_var",
               "name": "dialogue_choice_index",
               "entity_id": "$self_id",
               "op": "lt",
-              "value": 0,
+              "value": "$self.dialogue_choice_scroll_offset",
               "then": [
                 {
                   "type": "set_entity_var",
                   "entity_id": "$self_id",
-                  "name": "dialogue_choice_index",
-                  "value": "$self.dialogue_current_option_count"
-                },
-                {
-                  "type": "increment_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "dialogue_choice_index",
-                  "amount": -1
+                  "name": "dialogue_choice_scroll_offset",
+                  "value": "$self.dialogue_choice_index"
                 }
-              ]
-            },
-            {
-              "type": "check_entity_var",
-              "name": "dialogue_choice_index",
-              "entity_id": "$self_id",
-              "op": "gte",
-              "value": "$self.dialogue_current_option_count",
-              "then": [
+              ],
+              "else": [
                 {
-                  "type": "set_entity_var",
-                  "entity_id": "$self_id",
+                  "type": "check_entity_var",
                   "name": "dialogue_choice_index",
-                  "value": 0
+                  "entity_id": "$self_id",
+                  "op": "gte",
+                  "value": {
+                    "$sum": [
+                      "$self.dialogue_choice_scroll_offset",
+                      "$self.layout.choice.visible_rows"
+                    ]
+                  },
+                  "then": [
+                    {
+                      "type": "set_entity_var",
+                      "entity_id": "$self_id",
+                      "name": "dialogue_choice_scroll_offset",
+                      "value": {
+                        "$sum": [
+                          "$self.dialogue_choice_index",
+                          {
+                            "$product": [
+                              -1,
+                              "$self.layout.choice.visible_rows"
+                            ]
+                          },
+                          1
+                        ]
+                      }
+                    }
+                  ]
                 }
               ]
             },
             {
               "type": "run_named_command",
-              "command_id": "dialogue/render_choice_cursor"
+              "command_id": "dialogue/render_choice"
             }
           ]
         }

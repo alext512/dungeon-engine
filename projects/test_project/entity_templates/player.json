@@ -1,6 +1,5 @@
 {
   "kind": "player",
-  "solid": true,
   "input_map": {
     "move_up": "move_up",
     "move_down": "move_down",
@@ -9,7 +8,9 @@
     "interact": "interact"
   },
   "variables": {
-    "walk_phase": 0
+    "walk_phase": 0,
+    "direction": "down",
+    "blocks_movement": true
   },
   "visuals": [
     {
@@ -125,14 +126,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_visual_flip_x",
-          "entity_id": "$self_id",
-          "flip_x": "$flip_x"
-        },
-        {
           "type": "run_named_command",
           "command_id": "attempt_move_one_tile",
           "direction": "$direction",
+          "flip_x": "$flip_x",
           "push_event_id": "$push_event_id",
           "phase_a_frames": "$phase_a_frames",
           "phase_b_frames": "$phase_b_frames",

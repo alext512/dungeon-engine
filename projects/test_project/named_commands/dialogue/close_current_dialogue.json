@@ -154,6 +154,12 @@
         {
           "type": "set_entity_var",
           "entity_id": "$self_id",
+          "name": "dialogue_choice_scroll_offset",
+          "value": 0
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
           "name": "dialogue_current_speaker_id",
           "value": null
         },

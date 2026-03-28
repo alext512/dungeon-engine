@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 
 from dungeon_engine import config
-from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import DIRECTION_VECTORS, Direction, Entity, GridSyncPolicy
 from dungeon_engine.world.world import World
@@ -14,7 +13,7 @@ from dungeon_engine.world.world import World
 class MovementSystem:
     """Execute transform movement while keeping grid occupancy explicit."""
 
-    def __init__(self, area: Area, world: World, collision_system: CollisionSystem) -> None:
+    def __init__(self, area: Area, world: World, collision_system: object | None) -> None:
         self.area = area
         self.world = world
         self.collision_system = collision_system
@@ -48,7 +47,8 @@ class MovementSystem:
         grid_sync: GridSyncPolicy = "immediate",
         allow_push: bool = True,
     ) -> list[str]:
-        """Try to move an entity one tile while keeping grid occupancy in sync."""
+        """Move an entity one tile using explicit direction data and grid sync."""
+        _ = allow_push
         entity = self.world.get_entity(entity_id)
         if entity is None:
             raise KeyError(f"Cannot step missing entity '{entity_id}'.")
@@ -58,7 +58,6 @@ class MovementSystem:
         if entity.movement.active:
             return []
 
-        entity.facing = direction
         delta_x, delta_y = DIRECTION_VECTORS[direction]
         target_x = entity.grid_x + delta_x
         target_y = entity.grid_y + delta_y
@@ -70,59 +69,16 @@ class MovementSystem:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
         )
-
-        blocking_entity = self.collision_system.get_blocking_entity(
-            target_x,
-            target_y,
-            ignore_entity_id=entity.entity_id,
+        self._start_move(
+            entity,
+            target_pixel_x=target_pixel_x,
+            target_pixel_y=target_pixel_y,
+            total_ticks=total_ticks,
+            grid_sync=grid_sync,
+            target_grid_x=target_x,
+            target_grid_y=target_y,
         )
-        if blocking_entity is None:
-            if self.collision_system.can_move_to(
-                target_x,
-                target_y,
-                ignore_entity_id=entity.entity_id,
-            ):
-                self._start_move(
-                    entity,
-                    target_pixel_x=target_pixel_x,
-                    target_pixel_y=target_pixel_y,
-                    total_ticks=total_ticks,
-                    grid_sync=grid_sync,
-                    target_grid_x=target_x,
-                    target_grid_y=target_y,
-                )
-                return [entity.entity_id]
-            return []
-
-        if allow_push and blocking_entity.pushable and not blocking_entity.movement.active:
-            push_target_x = blocking_entity.grid_x + delta_x
-            push_target_y = blocking_entity.grid_y + delta_y
-            if self.collision_system.can_move_to(
-                push_target_x,
-                push_target_y,
-                ignore_entity_id=blocking_entity.entity_id,
-            ):
-                self._start_move(
-                    blocking_entity,
-                    target_pixel_x=push_target_x * self.area.tile_size,
-                    target_pixel_y=push_target_y * self.area.tile_size,
-                    total_ticks=total_ticks,
-                    grid_sync=grid_sync,
-                    target_grid_x=push_target_x,
-                    target_grid_y=push_target_y,
-                )
-                self._start_move(
-                    entity,
-                    target_pixel_x=target_pixel_x,
-                    target_pixel_y=target_pixel_y,
-                    total_ticks=total_ticks,
-                    grid_sync=grid_sync,
-                    target_grid_x=target_x,
-                    target_grid_y=target_y,
-                )
-                return [blocking_entity.entity_id, entity.entity_id]
-
-        return []
+        return [entity.entity_id]
 
     def request_move_to_position(
         self,
@@ -277,6 +233,34 @@ class MovementSystem:
             speed_px_per_second=speed_px_per_second,
             grid_sync=grid_sync,
         )
+
+    def set_grid_position(
+        self,
+        entity_id: str,
+        target_grid_x: int,
+        target_grid_y: int,
+    ) -> None:
+        """Instantly update an entity's logical grid placement without touching pixels."""
+        entity = self.world.get_entity(entity_id)
+        if entity is None:
+            raise KeyError(f"Cannot set grid position for missing entity '{entity_id}'.")
+        entity.movement.active = False
+        entity.grid_x = int(target_grid_x)
+        entity.grid_y = int(target_grid_y)
+
+    def set_pixel_position(
+        self,
+        entity_id: str,
+        target_pixel_x: float,
+        target_pixel_y: float,
+    ) -> None:
+        """Instantly update an entity's pixel position without touching grid placement."""
+        entity = self.world.get_entity(entity_id)
+        if entity is None:
+            raise KeyError(f"Cannot set world position for missing entity '{entity_id}'.")
+        entity.movement.active = False
+        entity.pixel_x = float(target_pixel_x)
+        entity.pixel_y = float(target_pixel_y)
 
     def teleport_to_position(
         self,

@@ -141,6 +141,18 @@
     },
     {
       "type": "set_entity_var",
+      "name": "dialogue_choice_scroll_offset",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_choice_scroll_offset",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
       "name": "dialogue_current_speaker_id",
       "entity_id": "$self_id",
       "value": {

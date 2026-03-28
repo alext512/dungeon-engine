@@ -1,6 +1,7 @@
 {
   "params": [
     "direction",
+    "flip_x",
     "push_event_id",
     "phase_a_frames",
     "phase_b_frames",
@@ -10,96 +11,190 @@
   ],
   "commands": [
     {
-      "type": "set_entity_field",
-      "entity_id": "$self_id",
-      "field_name": "facing",
-      "value": "$direction"
-    },
-    {
       "type": "set_entity_var",
       "entity_id": "$self_id",
-      "name": "move_attempt_info",
+      "name": "move_self_position",
       "value": {
-        "$facing_state": {
+        "$entity_ref": {
           "entity_id": "$self_id",
-          "movable_event_id": "$push_event_id"
+          "select": {
+            "fields": [
+              "grid_x",
+              "grid_y",
+              "pixel_x",
+              "pixel_y"
+            ]
+          }
         }
       }
     },
     {
       "type": "set_entity_var",
       "entity_id": "$self_id",
-      "name": "move_attempt_state",
-      "value": "$self.move_attempt_info.state"
+      "name": "move_current_pixel_x",
+      "value": "$self.move_self_position.pixel_x"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_current_pixel_y",
+      "value": "$self.move_self_position.pixel_y"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_expected_pixel_x",
+      "value": {
+        "$product": [
+          "$self.move_self_position.grid_x",
+          "$area.tile_size"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_expected_pixel_y",
+      "value": {
+        "$product": [
+          "$self.move_self_position.grid_y",
+          "$area.tile_size"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_offset",
+      "value": {
+        "$collection_item": {
+          "value": {
+            "up": { "x": 0, "y": -1 },
+            "down": { "x": 0, "y": 1 },
+            "left": { "x": -1, "y": 0 },
+            "right": { "x": 1, "y": 0 }
+          },
+          "key": "$direction",
+          "default": { "x": 0, "y": 0 }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_target_x",
+      "value": {
+        "$sum": [
+          "$self.move_self_position.grid_x",
+          "$self.move_offset.x"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_target_y",
+      "value": {
+        "$sum": [
+          "$self.move_self_position.grid_y",
+          "$self.move_offset.y"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_target_cell_flags",
+      "value": {
+        "$cell_flags_at": {
+          "x": "$self.move_target_x",
+          "y": "$self.move_target_y",
+          "default": {
+            "walkable": false
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_target_walkable",
+      "value": {
+        "$collection_item": {
+          "value": "$self.move_target_cell_flags",
+          "key": "walkable",
+          "default": false
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_target_entities",
+      "value": {
+        "$entities_at": {
+          "x": "$self.move_target_x",
+          "y": "$self.move_target_y",
+          "exclude_entity_id": "$self_id",
+          "include_hidden": true,
+          "select": {
+            "fields": [
+              "entity_id"
+            ],
+            "variables": [
+              "blocks_movement",
+              "pushable"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "move_blocking_entity",
+      "value": {
+        "$find_in_collection": {
+          "value": "$self.move_target_entities",
+          "field": "variables.blocks_movement",
+          "op": "eq",
+          "match": true,
+          "default": null
+        }
+      }
     },
     {
       "type": "check_entity_var",
       "entity_id": "$self_id",
-      "name": "move_attempt_state",
+      "name": "move_current_pixel_x",
       "op": "eq",
-      "value": "free",
+      "value": "$self.move_expected_pixel_x",
       "then": [
-        {
-          "type": "run_named_command",
-          "command_id": "walk_one_tile",
-          "direction": "$direction",
-          "phase_a_frames": "$phase_a_frames",
-          "phase_b_frames": "$phase_b_frames",
-          "idle_frame": "$idle_frame",
-          "frames_per_sprite_change": "$frames_per_sprite_change",
-          "frames_needed": "$frames_needed"
-        }
-      ],
-      "else": [
         {
           "type": "check_entity_var",
           "entity_id": "$self_id",
-          "name": "move_attempt_state",
+          "name": "move_current_pixel_y",
           "op": "eq",
-          "value": "movable",
+          "value": "$self.move_expected_pixel_y",
           "then": [
             {
-              "type": "run_event",
-              "entity_id": "$self.move_attempt_info.entity_id",
-              "event_id": "$push_event_id",
-              "actor_entity_id": "$self_id"
+              "type": "set_visual_flip_x",
+              "entity_id": "$self_id",
+              "flip_x": "$flip_x"
             },
             {
-              "type": "set_entity_var",
               "entity_id": "$self_id",
-              "name": "move_attempt_info",
-              "value": {
-                "$facing_state": {
-                  "entity_id": "$self_id",
-                  "movable_event_id": "$push_event_id"
-                }
-              }
-            },
-            {
+              "name": "direction",
               "type": "set_entity_var",
-              "entity_id": "$self_id",
-              "name": "move_attempt_state",
-              "value": "$self.move_attempt_info.state"
+              "value": "$direction"
             },
             {
               "type": "check_entity_var",
               "entity_id": "$self_id",
-              "name": "move_attempt_state",
+              "name": "move_target_walkable",
               "op": "eq",
-              "value": "free",
+              "value": false,
               "then": [
-                {
-                  "type": "run_named_command",
-                  "command_id": "walk_one_tile",
-                  "direction": "$direction",
-                  "phase_a_frames": "$phase_a_frames",
-                  "phase_b_frames": "$phase_b_frames",
-                  "idle_frame": "$idle_frame",
-                  "frames_per_sprite_change": "$frames_per_sprite_change",
-                  "frames_needed": "$frames_needed"
-                }
-              ],
-              "else": [
                 {
                   "type": "spawn_flow",
                   "commands": [
@@ -115,24 +210,148 @@
                   "entity_id": "$self_id",
                   "frame": "$idle_frame"
                 }
-              ]
-            }
-          ],
-          "else": [
-            {
-              "type": "spawn_flow",
-              "commands": [
+              ],
+              "else": [
                 {
-                  "type": "run_event",
-                  "entity_id": "self",
-                  "event_id": "play_bump_sound"
+                  "type": "check_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "move_blocking_entity",
+                  "op": "eq",
+                  "value": null,
+                  "then": [
+                    {
+                      "type": "run_named_command",
+                      "command_id": "walk_one_tile",
+                      "offset_x": "$self.move_offset.x",
+                      "offset_y": "$self.move_offset.y",
+                      "phase_a_frames": "$phase_a_frames",
+                      "phase_b_frames": "$phase_b_frames",
+                      "idle_frame": "$idle_frame",
+                      "frames_per_sprite_change": "$frames_per_sprite_change",
+                      "frames_needed": "$frames_needed"
+                    }
+                  ],
+                  "else": [
+                    {
+                      "type": "set_entity_var",
+                      "entity_id": "$self_id",
+                      "name": "move_blocking_entity_pushable",
+                      "value": {
+                        "$collection_item": {
+                          "value": "$self.move_blocking_entity.variables",
+                          "key": "pushable",
+                          "default": false
+                        }
+                      }
+                    },
+                    {
+                      "type": "check_entity_var",
+                      "entity_id": "$self_id",
+                      "name": "move_blocking_entity_pushable",
+                      "op": "eq",
+                      "value": true,
+                      "then": [
+                        {
+                          "type": "run_event",
+                          "entity_id": "$self.move_blocking_entity.entity_id",
+                          "event_id": "$push_event_id",
+                          "actor_entity_id": "$self_id"
+                        },
+                        {
+                          "type": "set_entity_var",
+                          "entity_id": "$self_id",
+                          "name": "move_target_entities",
+                          "value": {
+                            "$entities_at": {
+                              "x": "$self.move_target_x",
+                              "y": "$self.move_target_y",
+                              "exclude_entity_id": "$self_id",
+                              "include_hidden": true,
+                              "select": {
+                                "fields": [
+                                  "entity_id"
+                                ],
+                                "variables": [
+                                  "blocks_movement",
+                                  "pushable"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "set_entity_var",
+                          "entity_id": "$self_id",
+                          "name": "move_blocking_entity",
+                          "value": {
+                            "$find_in_collection": {
+                              "value": "$self.move_target_entities",
+                              "field": "variables.blocks_movement",
+                              "op": "eq",
+                              "match": true,
+                              "default": null
+                            }
+                          }
+                        },
+                        {
+                          "type": "check_entity_var",
+                          "entity_id": "$self_id",
+                          "name": "move_blocking_entity",
+                          "op": "eq",
+                          "value": null,
+                          "then": [
+                            {
+                              "type": "run_named_command",
+                              "command_id": "walk_one_tile",
+                              "offset_x": "$self.move_offset.x",
+                              "offset_y": "$self.move_offset.y",
+                              "phase_a_frames": "$phase_a_frames",
+                              "phase_b_frames": "$phase_b_frames",
+                              "idle_frame": "$idle_frame",
+                              "frames_per_sprite_change": "$frames_per_sprite_change",
+                              "frames_needed": "$frames_needed"
+                            }
+                          ],
+                          "else": [
+                            {
+                              "type": "spawn_flow",
+                              "commands": [
+                                {
+                                  "type": "run_event",
+                                  "entity_id": "self",
+                                  "event_id": "play_bump_sound"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "set_visual_frame",
+                              "entity_id": "$self_id",
+                              "frame": "$idle_frame"
+                            }
+                          ]
+                        }
+                      ],
+                      "else": [
+                        {
+                          "type": "spawn_flow",
+                          "commands": [
+                            {
+                              "type": "run_event",
+                              "entity_id": "self",
+                              "event_id": "play_bump_sound"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "set_visual_frame",
+                          "entity_id": "$self_id",
+                          "frame": "$idle_frame"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
-            },
-            {
-              "type": "set_visual_frame",
-              "entity_id": "$self_id",
-              "frame": "$idle_frame"
             }
           ]
         }
@@ -140,4 +359,3 @@
     }
   ]
 }
-

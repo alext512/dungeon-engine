@@ -22,6 +22,39 @@ from dungeon_engine.logging_utils import get_logger
 
 logger = get_logger(__name__)
 _JSON_FILE_CACHE: dict[Path, Any] = {}
+_PLAIN_ENTITY_REF_FIELDS = (
+    "entity_id",
+    "kind",
+    "space",
+    "scope",
+    "grid_x",
+    "grid_y",
+    "pixel_x",
+    "pixel_y",
+    "present",
+    "visible",
+    "events_enabled",
+    "layer",
+    "stack_order",
+    "tags",
+)
+_PLAIN_ENTITY_VISUAL_FIELDS = (
+    "id",
+    "path",
+    "frame_width",
+    "frame_height",
+    "frames",
+    "animation_fps",
+    "animate_when_moving",
+    "current_frame",
+    "animation_elapsed",
+    "flip_x",
+    "visible",
+    "tint",
+    "offset_x",
+    "offset_y",
+    "draw_order",
+)
 
 
 @dataclass(slots=True)
@@ -261,25 +294,167 @@ def _coerce_numeric_value(value: Any, *, source_name: str) -> int | float:
     return value
 
 
-def _serialize_entity_ref(entity: Any) -> dict[str, Any]:
-    """Return one small plain-data entity reference for authored queries."""
-    return {
-        "entity_id": entity.entity_id,
-        "kind": entity.kind,
-        "space": entity.space,
-        "scope": entity.scope,
-        "grid_x": entity.grid_x,
-        "grid_y": entity.grid_y,
-        "facing": entity.facing,
-        "solid": entity.solid,
-        "pushable": entity.pushable,
-        "present": entity.present,
-        "visible": entity.visible,
-        "events_enabled": entity.events_enabled,
-        "layer": entity.layer,
-        "stack_order": entity.stack_order,
-        "tags": list(entity.tags),
-    }
+def _serialize_entity_fields(entity: Any, *, fields: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    """Return a small plain-data object containing only the requested entity fields."""
+    data: dict[str, Any] = {}
+    for field_name in fields:
+        if field_name == "tags":
+            data[field_name] = list(entity.tags)
+            continue
+        data[field_name] = copy.deepcopy(getattr(entity, field_name))
+    return data
+
+
+def _serialize_visual_fields(visual: Any, *, fields: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    """Return one plain-data object containing only the requested visual fields."""
+    data: dict[str, Any] = {}
+    for field_name in fields:
+        if field_name == "id":
+            data[field_name] = visual.visual_id
+            continue
+        data[field_name] = copy.deepcopy(getattr(visual, field_name))
+    return data
+
+
+def _normalize_requested_field_names(
+    raw_fields: Any,
+    *,
+    source_name: str,
+    section_name: str,
+    allowed_fields: tuple[str, ...],
+) -> list[str]:
+    """Validate one requested field-name list against a fixed public whitelist."""
+    if not isinstance(raw_fields, (list, tuple)) or not raw_fields:
+        raise ValueError(f"{source_name} {section_name} requires a non-empty list.")
+    resolved_fields: list[str] = []
+    invalid_fields: list[str] = []
+    for raw_field in raw_fields:
+        if not isinstance(raw_field, str):
+            invalid_fields.append(str(raw_field))
+            continue
+        field_name = raw_field.strip()
+        if field_name not in allowed_fields:
+            invalid_fields.append(field_name)
+            continue
+        if field_name not in resolved_fields:
+            resolved_fields.append(field_name)
+    if invalid_fields:
+        allowed = ", ".join(allowed_fields)
+        invalid = ", ".join(repr(field_name) for field_name in invalid_fields)
+        raise ValueError(
+            f"{source_name} {section_name} does not support field(s) {invalid}. "
+            f"Allowed fields: {allowed}."
+        )
+    return resolved_fields
+
+
+def _resolve_entity_select_spec(raw_select: Any, *, source_name: str) -> dict[str, Any]:
+    """Validate one shared entity-query selection spec."""
+    if not isinstance(raw_select, dict):
+        raise TypeError(f"{source_name} select requires a JSON object.")
+    supported_keys = {"fields", "variables", "visuals"}
+    unsupported_keys = sorted(set(raw_select) - supported_keys)
+    if unsupported_keys:
+        formatted = ", ".join(repr(key) for key in unsupported_keys)
+        raise ValueError(
+            f"{source_name} select does not support key(s) {formatted}. "
+            "Allowed keys: 'fields', 'variables', 'visuals'."
+        )
+
+    select: dict[str, Any] = {}
+    if "fields" in raw_select:
+        select["fields"] = _normalize_requested_field_names(
+            raw_select.get("fields"),
+            source_name=source_name,
+            section_name="select.fields",
+            allowed_fields=_PLAIN_ENTITY_REF_FIELDS,
+        )
+
+    if "variables" in raw_select:
+        raw_variables = raw_select.get("variables")
+        if not isinstance(raw_variables, (list, tuple)) or not raw_variables:
+            raise ValueError(f"{source_name} select.variables requires a non-empty list.")
+        resolved_variables: list[str] = []
+        for raw_variable in raw_variables:
+            if not isinstance(raw_variable, str) or not raw_variable.strip():
+                raise ValueError(
+                    f"{source_name} select.variables only supports non-empty string keys."
+                )
+            variable_name = raw_variable.strip()
+            if variable_name not in resolved_variables:
+                resolved_variables.append(variable_name)
+        select["variables"] = resolved_variables
+
+    if "visuals" in raw_select:
+        raw_visuals = raw_select.get("visuals")
+        if not isinstance(raw_visuals, (list, tuple)) or not raw_visuals:
+            raise ValueError(f"{source_name} select.visuals requires a non-empty list.")
+        resolved_visuals: list[dict[str, Any]] = []
+        for raw_visual in raw_visuals:
+            if not isinstance(raw_visual, dict):
+                raise TypeError(
+                    f"{source_name} select.visuals entries require JSON objects."
+                )
+            visual_id = str(raw_visual.get("id", raw_visual.get("visual_id", ""))).strip()
+            if not visual_id:
+                raise ValueError(
+                    f"{source_name} select.visuals entries require a non-empty 'id'."
+                )
+            resolved_visuals.append(
+                {
+                    "id": visual_id,
+                    "fields": _normalize_requested_field_names(
+                        raw_visual.get("fields"),
+                        source_name=source_name,
+                        section_name="select.visuals.fields",
+                        allowed_fields=_PLAIN_ENTITY_VISUAL_FIELDS,
+                    ),
+                    "default": copy.deepcopy(raw_visual.get("default")),
+                }
+            )
+        select["visuals"] = resolved_visuals
+
+    if not select:
+        raise ValueError(
+            f"{source_name} select requires at least one of 'fields', 'variables', or 'visuals'."
+        )
+    return select
+
+
+def _serialize_selected_entity(entity: Any, *, select: dict[str, Any]) -> dict[str, Any]:
+    """Return one plain-data entity object shaped by the shared selection grammar."""
+    data: dict[str, Any] = {}
+    selected_fields = select.get("fields")
+    if selected_fields:
+        data.update(_serialize_entity_fields(entity, fields=selected_fields))
+
+    selected_variables = select.get("variables")
+    if selected_variables:
+        selected_variable_values: dict[str, Any] = {}
+        for variable_name in selected_variables:
+            if variable_name in entity.variables:
+                selected_variable_values[variable_name] = copy.deepcopy(
+                    entity.variables[variable_name]
+                )
+        data["variables"] = selected_variable_values
+
+    selected_visuals = select.get("visuals")
+    if selected_visuals:
+        selected_visual_values: dict[str, Any] = {}
+        for visual_spec in selected_visuals:
+            visual = entity.get_visual(str(visual_spec["id"]))
+            if visual is None:
+                selected_visual_values[str(visual_spec["id"])] = copy.deepcopy(
+                    visual_spec.get("default")
+                )
+                continue
+            selected_visual_values[str(visual_spec["id"])] = _serialize_visual_fields(
+                visual,
+                fields=visual_spec["fields"],
+            )
+        data["visuals"] = selected_visual_values
+
+    return data
 
 
 def _resolve_entity_ref_value(context: CommandContext, resolved_source: Any) -> dict[str, Any] | None:
@@ -290,10 +465,16 @@ def _resolve_entity_ref_value(context: CommandContext, resolved_source: Any) -> 
     if not entity_id:
         raise ValueError("$entity_ref value source requires a non-empty entity_id.")
     default = copy.deepcopy(resolved_source.get("default"))
+    if "select" not in resolved_source:
+        raise ValueError("$entity_ref value source requires a select object.")
+    select = _resolve_entity_select_spec(
+        resolved_source.get("select"),
+        source_name="$entity_ref",
+    )
     entity = context.world.get_entity(entity_id)
     if entity is None:
         return default
-    return _serialize_entity_ref(entity)
+    return _serialize_selected_entity(entity, select=select)
 
 
 def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) -> list[dict[str, Any]]:
@@ -307,6 +488,12 @@ def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) ->
     exclude_entity_id = resolved_source.get("exclude_entity_id")
     include_hidden = bool(resolved_source.get("include_hidden", False))
     include_absent = bool(resolved_source.get("include_absent", False))
+    if "select" not in resolved_source:
+        raise ValueError("$entities_at value source requires a select object.")
+    select = _resolve_entity_select_spec(
+        resolved_source.get("select"),
+        source_name="$entities_at",
+    )
     entities = context.world.get_entities_at(
         int(raw_x),
         int(raw_y),
@@ -314,7 +501,7 @@ def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) ->
         include_hidden=include_hidden,
         include_absent=include_absent,
     )
-    return [_serialize_entity_ref(entity) for entity in entities]
+    return [_serialize_selected_entity(entity, select=select) for entity in entities]
 
 
 def _resolve_entity_at_value(context: CommandContext, resolved_source: Any) -> Any:
@@ -339,61 +526,148 @@ def _resolve_sum_value(resolved_source: Any) -> int | float:
     return int(sum(int(value) for value in numeric_values))
 
 
-def _resolve_facing_state_value(context: CommandContext, resolved_source: Any) -> dict[str, Any]:
-    """Return the state of the tile directly in front of one entity."""
-    if context.collision_system is None:
-        raise ValueError("Cannot resolve facing state without an active collision system.")
+def _resolve_product_value(resolved_source: Any) -> int | float:
+    """Return the numeric product of a small authored value list."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$product value source requires a list or tuple.")
+    numeric_values = [_coerce_numeric_value(value, source_name="$product") for value in resolved_source]
+    if not numeric_values:
+        raise ValueError("$product value source requires at least one value.")
+    product: int | float = 1
+    for value in numeric_values:
+        product *= value
+    if any(isinstance(value, float) for value in numeric_values):
+        return float(product)
+    return int(product)
+
+
+def _resolve_join_text_value(resolved_source: Any) -> str:
+    """Join a small authored value list into one text string."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$join_text value source requires a list or tuple.")
+    return "".join("" if value is None else str(value) for value in resolved_source)
+
+
+def _resolve_slice_collection_value(resolved_source: Any) -> list[Any]:
+    """Return a bounded list slice from a list/tuple value."""
     if not isinstance(resolved_source, dict):
-        raise TypeError("$facing_state value source requires a JSON object.")
-
-    entity_id = str(resolved_source.get("entity_id", "")).strip()
-    if not entity_id:
-        raise ValueError("$facing_state value source requires a non-empty entity_id.")
-
-    actor = context.world.get_entity(entity_id)
-    if actor is None:
-        raise KeyError(f"Cannot resolve facing state for missing entity '{entity_id}'.")
-
-    resolved_direction = str(resolved_source.get("direction") or actor.facing)
-    if resolved_direction not in DIRECTION_VECTORS:
-        raise ValueError(f"Unknown direction '{resolved_direction}'.")
-
-    delta_x, delta_y = DIRECTION_VECTORS[resolved_direction]
-    target_x = actor.grid_x + delta_x
-    target_y = actor.grid_y + delta_y
-    blocking_entity = context.collision_system.get_blocking_entity(
-        target_x,
-        target_y,
-        ignore_entity_id=entity_id,
-    )
-    if blocking_entity is None:
-        state = (
-            "free"
-            if context.collision_system.can_move_to(
-                target_x,
-                target_y,
-                ignore_entity_id=entity_id,
-            )
-            else "blocked"
-        )
-        blocking_entity_id = ""
+        raise TypeError("$slice_collection value source requires a JSON object.")
+    collection = resolved_source.get("value")
+    if collection is None:
+        return []
+    if not isinstance(collection, (list, tuple)):
+        raise TypeError("$slice_collection value source requires a list or tuple value.")
+    start = int(resolved_source.get("start", 0))
+    count = resolved_source.get("count")
+    if start < 0:
+        start = max(0, len(collection) + start)
+    if count is None:
+        end = len(collection)
     else:
-        blocking_entity_id = blocking_entity.entity_id
-        movable_event_id = resolved_source.get("movable_event_id")
-        if movable_event_id and blocking_entity.has_enabled_event(str(movable_event_id)):
-            state = "movable"
-        elif blocking_entity.pushable:
-            state = "movable"
-        else:
-            state = "blocked"
+        resolved_count = int(count)
+        if resolved_count <= 0:
+            return []
+        end = start + resolved_count
+    return [copy.deepcopy(item) for item in list(collection)[start:end]]
 
-    return {
-        "state": state,
-        "entity_id": blocking_entity_id,
-        "target_x": target_x,
-        "target_y": target_y,
-        "direction": resolved_direction,
+
+def _resolve_wrap_index_value(resolved_source: Any) -> int:
+    """Wrap one integer index around a positive collection size."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$wrap_index value source requires a JSON object.")
+    count = int(resolved_source.get("count", 0))
+    default = int(resolved_source.get("default", 0))
+    if count <= 0:
+        return default
+    value = int(resolved_source.get("value", default))
+    return value % count
+
+
+def _resolve_cell_flags_at_value(context: CommandContext, resolved_source: Any) -> dict[str, Any] | Any:
+    """Return plain per-cell flag data for one explicit tile coordinate."""
+    if context.area is None:
+        raise ValueError("Cannot resolve cell flags without an active area.")
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$cell_flags_at value source requires a JSON object.")
+    raw_x = resolved_source.get("x")
+    raw_y = resolved_source.get("y")
+    if raw_x is None or raw_y is None:
+        raise ValueError("$cell_flags_at value source requires both x and y.")
+    grid_x = int(raw_x)
+    grid_y = int(raw_y)
+    if context.area.in_bounds(grid_x, grid_y):
+        return copy.deepcopy(context.area.cell_flags_at(grid_x, grid_y))
+    if "default" in resolved_source:
+        return copy.deepcopy(resolved_source.get("default"))
+    raise KeyError(f"Cell flag lookup ({grid_x}, {grid_y}) is out of bounds.")
+
+
+def _resolve_collection_field_value(item: Any, field_path: str | None) -> Any:
+    """Resolve one optional dotted field path against a collection item."""
+    if field_path in (None, ""):
+        return item
+    parts = [part for part in str(field_path).split(".") if part]
+    return _lookup_nested_value(item, parts)
+
+
+def _collection_comparator(op: str) -> Any:
+    """Return a small generic comparator for collection helpers."""
+    comparators = {
+        "eq": lambda left, right: left == right,
+        "neq": lambda left, right: left != right,
+        "gt": lambda left, right: left > right,
+        "gte": lambda left, right: left >= right,
+        "lt": lambda left, right: left < right,
+        "lte": lambda left, right: left <= right,
     }
+    comparator = comparators.get(str(op))
+    if comparator is None:
+        raise ValueError(f"Unknown comparison operator '{op}'.")
+    return comparator
+
+
+def _resolve_find_in_collection_value(resolved_source: Any) -> Any:
+    """Return the first matching collection item or the supplied default."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$find_in_collection value source requires a JSON object.")
+    collection = resolved_source.get("value")
+    if collection is None:
+        return copy.deepcopy(resolved_source.get("default"))
+    if not isinstance(collection, (list, tuple)):
+        raise TypeError("$find_in_collection value source requires a list or tuple value.")
+    comparator = _collection_comparator(str(resolved_source.get("op", "eq")))
+    field_path = resolved_source.get("field")
+    match_value = resolved_source.get("match")
+    for item in collection:
+        try:
+            candidate_value = _resolve_collection_field_value(item, field_path)
+        except KeyError:
+            continue
+        if comparator(candidate_value, match_value):
+            return copy.deepcopy(item)
+    return copy.deepcopy(resolved_source.get("default"))
+
+
+def _resolve_any_in_collection_value(resolved_source: Any) -> bool:
+    """Return True when any collection item matches the supplied predicate."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$any_in_collection value source requires a JSON object.")
+    collection = resolved_source.get("value")
+    if collection is None:
+        return False
+    if not isinstance(collection, (list, tuple)):
+        raise TypeError("$any_in_collection value source requires a list or tuple value.")
+    comparator = _collection_comparator(str(resolved_source.get("op", "eq")))
+    field_path = resolved_source.get("field")
+    match_value = resolved_source.get("match")
+    for item in collection:
+        try:
+            candidate_value = _resolve_collection_field_value(item, field_path)
+        except KeyError:
+            continue
+        if comparator(candidate_value, match_value):
+            return True
+    return False
 
 
 def _resolve_runtime_value_source(
@@ -437,14 +711,26 @@ def _resolve_runtime_value_source(
     if source_name == "$sum":
         return _resolve_sum_value(resolved_source)
 
-    if source_name == "$facing_state":
-        return _resolve_facing_state_value(context, resolved_source)
+    if source_name == "$product":
+        return _resolve_product_value(resolved_source)
+
+    if source_name == "$join_text":
+        return _resolve_join_text_value(resolved_source)
+
+    if source_name == "$slice_collection":
+        return _resolve_slice_collection_value(resolved_source)
+
+    if source_name == "$wrap_index":
+        return _resolve_wrap_index_value(resolved_source)
 
     if source_name == "$entities_at":
         return _resolve_entities_at_value(context, resolved_source)
 
     if source_name == "$entity_at":
         return _resolve_entity_at_value(context, resolved_source)
+
+    if source_name == "$cell_flags_at":
+        return _resolve_cell_flags_at_value(context, resolved_source)
 
     if source_name == "$collection_item":
         if not isinstance(resolved_source, dict):
@@ -455,6 +741,12 @@ def _resolve_runtime_value_source(
             key=resolved_source.get("key"),
             default=resolved_source.get("default"),
         )
+
+    if source_name == "$find_in_collection":
+        return _resolve_find_in_collection_value(resolved_source)
+
+    if source_name == "$any_in_collection":
+        return _resolve_any_in_collection_value(resolved_source)
 
     raise KeyError(f"Unknown value source '{source_name}'.")
 
@@ -527,6 +819,23 @@ def _resolve_runtime_token(
             return copy.deepcopy(camera_state)
         return copy.deepcopy(_lookup_nested_value(camera_state, tail))
 
+    if head == "area":
+        if context.area is None:
+            raise KeyError("No active area context for $area lookup.")
+        area_state = {
+            "area_id": context.area.area_id,
+            "name": context.area.name,
+            "tile_size": context.area.tile_size,
+            "width": context.area.width,
+            "height": context.area.height,
+            "pixel_width": context.area.pixel_width,
+            "pixel_height": context.area.pixel_height,
+            "camera": copy.deepcopy(context.area.camera_defaults),
+        }
+        if not tail:
+            return copy.deepcopy(area_state)
+        return copy.deepcopy(_lookup_nested_value(area_state, tail))
+
     if head == "world":
         return copy.deepcopy(_lookup_nested_value(context.world.variables, tail))
 
@@ -583,11 +892,17 @@ def _resolve_runtime_values(
                 "$wrapped_lines",
                 "$text_window",
                 "$entity_ref",
-                "$facing_state",
+                "$cell_flags_at",
                 "$entities_at",
                 "$entity_at",
                 "$collection_item",
                 "$sum",
+                "$product",
+                "$join_text",
+                "$slice_collection",
+                "$wrap_index",
+                "$find_in_collection",
+                "$any_in_collection",
             }:
                 return _resolve_runtime_value_source(
                     source_name,

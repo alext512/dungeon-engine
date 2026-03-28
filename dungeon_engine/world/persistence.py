@@ -1061,12 +1061,6 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
         elif key == "pixel_y":
             entity.pixel_y = float(value)
             pixel_position_changed = True
-        elif key == "facing":
-            entity.facing = str(value)
-        elif key == "solid":
-            entity.solid = bool(value)
-        elif key == "pushable":
-            entity.pushable = bool(value)
         elif key == "present":
             entity.present = bool(value)
         elif key == "visible":
@@ -1174,12 +1168,6 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["pixel_x"] = current_entity.pixel_x
     if not math.isclose(current_entity.pixel_y, authored_entity.pixel_y, abs_tol=0.001):
         overrides["pixel_y"] = current_entity.pixel_y
-    if current_entity.facing != authored_entity.facing:
-        overrides["facing"] = current_entity.facing
-    if current_entity.solid != authored_entity.solid:
-        overrides["solid"] = current_entity.solid
-    if current_entity.pushable != authored_entity.pushable:
-        overrides["pushable"] = current_entity.pushable
     if current_entity.present != authored_entity.present:
         overrides["present"] = current_entity.present
     if current_entity.visible != authored_entity.visible:

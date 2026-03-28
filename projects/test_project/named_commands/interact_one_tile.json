@@ -4,10 +4,16 @@
     {
       "type": "set_entity_var",
       "entity_id": "$self_id",
-      "name": "interact_self_ref",
+      "name": "interact_self_position",
       "value": {
         "$entity_ref": {
-          "entity_id": "$self_id"
+          "entity_id": "$self_id",
+          "select": {
+            "fields": [
+              "grid_x",
+              "grid_y"
+            ]
+          }
         }
       }
     },
@@ -23,7 +29,7 @@
             "left": { "x": -1, "y": 0 },
             "right": { "x": 1, "y": 0 }
           },
-          "key": "$self.interact_self_ref.facing",
+          "key": "$self.direction",
           "default": { "x": 0, "y": 0 }
         }
       }
@@ -34,7 +40,7 @@
       "name": "interact_target_x",
       "value": {
         "$sum": [
-          "$self.interact_self_ref.grid_x",
+          "$self.interact_self_position.grid_x",
           "$self.interact_offset.x"
         ]
       }
@@ -45,7 +51,7 @@
       "name": "interact_target_y",
       "value": {
         "$sum": [
-          "$self.interact_self_ref.grid_y",
+          "$self.interact_self_position.grid_y",
           "$self.interact_offset.y"
         ]
       }
@@ -58,7 +64,12 @@
         "$entity_at": {
           "x": "$self.interact_target_x",
           "y": "$self.interact_target_y",
-          "index": 0,
+          "index": -1,
+          "select": {
+            "fields": [
+              "entity_id"
+            ]
+          },
           "default": null
         }
       }

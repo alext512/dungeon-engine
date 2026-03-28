@@ -1,7 +1,6 @@
 {
   "kind": "system",
   "space": "screen",
-  "solid": false,
   "visible": false,
   "layer": 100,
   "input_map": {
@@ -14,42 +13,57 @@
     "panel_element_id": "dialogue_panel",
     "portrait_element_id": "dialogue_portrait",
     "text_element_id": "dialogue_text",
-    "cursor_element_id": "dialogue_cursor",
     "option_element_ids": [
       "dialogue_option_0",
       "dialogue_option_1",
-      "dialogue_option_2",
-      "dialogue_option_3"
+      "dialogue_option_2"
     ],
-    "option_rows_y": [154, 164, 174, 184],
-    "panel_path": "assets/project/ui/dialogue_panel.png",
-    "panel_x": 0,
-    "panel_y": 148,
-    "panel_frame_width": 256,
-    "panel_frame_height": 44,
-    "portrait_x": 8,
-    "portrait_y": 154,
-    "plain_text_box_x": 8,
-    "plain_text_box_y": 154,
-    "plain_text_box_width": 240,
-    "plain_choice_text_x": 16,
-    "plain_choice_width": 232,
-    "plain_choice_cursor_x": 8,
-    "portrait_text_box_x": 56,
-    "portrait_text_box_y": 154,
-    "portrait_text_box_width": 192,
-    "portrait_choice_text_x": 64,
-    "portrait_choice_width": 180,
-    "portrait_choice_cursor_x": 56,
+    "layout": {
+      "panel": {
+        "path": "assets/project/ui/dialogue_panel.png",
+        "x": 0,
+        "y": 148,
+        "width": 256,
+        "height": 44
+      },
+      "portrait": {
+        "x": 3,
+        "y": 151,
+        "default_frame_width": 38,
+        "default_frame_height": 38
+      },
+      "text": {
+        "plain": {
+          "x": 8,
+          "y": 154,
+          "width": 240
+        },
+        "with_portrait": {
+          "x": 56,
+          "y": 154,
+          "width": 192
+        }
+      },
+      "choice": {
+        "visible_rows": 3,
+        "base_y": 154,
+        "row_height": 10,
+        "plain": {
+          "x": 8,
+          "width": 240
+        },
+        "with_portrait": {
+          "x": 56,
+          "width": 188
+        }
+      }
+    },
     "ui_layer": 100,
     "text_layer": 101,
     "default_font_id": "pixelbet",
     "default_max_lines": 3,
     "default_text_color": [245, 232, 190],
     "choice_text_color": [238, 242, 248],
-    "choice_cursor_color": [245, 232, 190],
-    "default_portrait_frame_width": 16,
-    "default_portrait_frame_height": 16,
     "dialogue_open": false,
     "dialogue_state_stack": [],
     "dialogue_pending_on_end": [],
@@ -67,6 +81,7 @@
     "dialogue_source_page_index": 0,
     "dialogue_text_line_offset": 0,
     "dialogue_choice_index": 0,
+    "dialogue_choice_scroll_offset": 0,
     "dialogue_current_speaker_id": null,
     "dialogue_revision": 0
   },

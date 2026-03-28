@@ -156,7 +156,19 @@ class InputHandler:
 
     def _enqueue_held_direction_if_possible(self, action_name: str) -> bool:
         """Dispatch one held directional action using the normal routed flow model."""
-        return self._enqueue_action_if_mapped(action_name)
+        target_entity = self.world.get_input_target(action_name)
+        if target_entity is None:
+            return False
+        if action_name.startswith("move_") and target_entity.is_world_space() and target_entity.movement.active:
+            return False
+        event_name = self._resolve_input_target_event_name(action_name, target_entity)
+        if not event_name:
+            return False
+        return self.command_runner.dispatch_input_event(
+            entity_id=target_entity.entity_id,
+            event_id=event_name,
+            actor_entity_id=target_entity.entity_id,
+        )
 
     def _reset_direction_repeat(self, direction: str) -> None:
         """Reset one logical direction's held-repeat timer."""
