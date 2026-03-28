@@ -38,7 +38,7 @@ The included sample project currently demonstrates:
 
 - a `title_screen` area that auto-opens a choice dialogue through an area `enter_commands` hook
 - connected showcase areas: `village_square` and `village_house`
-- project-level global `dialogue_controller` and `pause_controller` entities defined in `project.json`
+- project-level global `dialogue_controller`, `pause_controller`, and `debug_controller` entities defined in `project.json`
 - player movement with authored walk animation timing
 - pushable blocks
 - lever/gate interaction with persistent puzzle state
@@ -156,16 +156,17 @@ my_project/
 
 Use this smaller active doc set first:
 
-- [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md)
-- [STATUS.md](./STATUS.md)
-- [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
-- [architecture.md](./architecture.md)
-- [MANUAL.md](./MANUAL.md)
-- [CHANGELOG.md](./CHANGELOG.md)
+- [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md): project intent and design compass
+- [STATUS.md](./STATUS.md): current shipped reality and sample-project behavior
+- [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md): how to author content in JSON
+- [ENGINE_JSON_INTERFACE.md](./ENGINE_JSON_INTERFACE.md): exact current JSON surface and builtin command/value-source signatures
+- [architecture.md](./architecture.md): medium-term direction and tradeoffs
+- [MANUAL.md](./MANUAL.md): practical runtime behavior and sample wiring
+- [CHANGELOG.md](./CHANGELOG.md): reverse-chronological change history
 
 Secondary/reference docs:
 
-- [CONTENT_TYPES.md](./CONTENT_TYPES.md)
+- [CONTENT_TYPES.md](./CONTENT_TYPES.md): structural map of the content categories and how they connect
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [roadmap.md](./roadmap.md)
 - [plans/](./plans/)
