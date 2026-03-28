@@ -11,11 +11,10 @@ from dungeon_engine import config
 
 @dataclass(slots=True)
 class LauncherState:
-    """Remember the last project and area ids opened by each standalone launcher."""
+    """Remember the last project and game area opened by the launcher."""
 
     last_project: str | None = None
     last_game_area: str | None = None
-    last_editor_area: str | None = None
 
 
 def load_launcher_state(path: Path | None = None) -> LauncherState:
@@ -32,7 +31,6 @@ def load_launcher_state(path: Path | None = None) -> LauncherState:
     return LauncherState(
         last_project=_optional_str(raw.get("last_project")),
         last_game_area=_optional_str(raw.get("last_game_area")),
-        last_editor_area=_optional_str(raw.get("last_editor_area")),
     )
 
 

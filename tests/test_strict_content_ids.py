@@ -7,7 +7,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import run_editor
 import run_game
 from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import (
@@ -2881,18 +2880,16 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(world.get_input_target_id("interact"), "player")
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
 
-    def test_launchers_resolve_startup_area_and_cli_ids(self) -> None:
+    def test_game_launcher_resolves_startup_area_and_cli_ids(self) -> None:
         _, project = self._make_project(
             startup_area="intro/title_screen",
             areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
         )
 
         self.assertEqual(run_game._resolve_project_startup_area(project), "intro/title_screen")
-        self.assertEqual(run_editor._resolve_project_startup_area(project), "intro/title_screen")
         self.assertEqual(run_game._resolve_area_argument(project, "intro/title_screen"), "intro/title_screen")
-        self.assertEqual(run_editor._resolve_area_argument(project, "intro/title_screen"), "intro/title_screen")
 
-    def test_launchers_reject_area_paths_as_cli_arguments(self) -> None:
+    def test_game_launcher_rejects_area_paths_as_cli_arguments(self) -> None:
         _, project = self._make_project(
             startup_area="intro/title_screen",
             areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
@@ -2900,9 +2897,6 @@ class StrictContentIdTests(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             run_game._resolve_area_argument(project, "areas/intro/title_screen.json")
-
-        with self.assertRaises(FileNotFoundError):
-            run_editor._resolve_area_argument(project, "areas/intro/title_screen.json")
 
     def test_new_game_command_queues_requested_transition(self) -> None:
         recorded_requests: list[AreaTransitionRequest] = []
@@ -2976,13 +2970,6 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(request.camera_follow.entity_id, "player")
         self.assertEqual(request.camera_follow.offset_x, 12.0)
         self.assertEqual(request.camera_follow.offset_y, -8.0)
-
-    def test_editor_launcher_headless_without_picker_returns_none(self) -> None:
-        _, project = self._make_project(
-            areas={"test_room.json": _minimal_area()},
-        )
-
-        self.assertIsNone(run_editor._choose_area_id(None, project, None, allow_picker=False))
 
     def test_asset_manager_requires_project_asset_resolution(self) -> None:
         _, project = self._make_project()

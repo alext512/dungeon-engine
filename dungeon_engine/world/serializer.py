@@ -4,7 +4,7 @@ Writes areas back to the GID-based JSON format: tilesets array, integer grids,
 cell flags, and entity instances.
 
 Depends on: area, world
-Used by: editor (save)
+Used by: save/export tooling
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def _serialize_template_entity_overrides(
     """Persist only explicit authored overrides for a template instance.
 
     Generated data like resolved command chains should not leak back into room
-    JSON during normal editor saves. Those belong to the template plus
+    JSON during normal saves. Those belong to the template plus
     parameters, not the authored room instance.
     """
     reference_entity = instantiate_entity(

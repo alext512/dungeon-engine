@@ -6,7 +6,7 @@ Parses area JSON files into runtime Area + World objects. Handles:
 - Cell flags parsing (booleans or rich metadata dicts)
 
 Depends on: config, area, entity, world, asset_manager (for tileset image queries)
-Used by: game, editor
+Used by: game, validation, tooling
 """
 
 from __future__ import annotations
@@ -652,7 +652,7 @@ def extract_template_parameter_names(
     """Return the parameter placeholder names used by a template.
 
     Scans the template JSON for ``$name`` and ``${name}`` tokens and returns
-    a sorted list of unique parameter names.  Useful for seeding the editor
+    a sorted list of unique parameter names. Useful for authoring tools
     property inspector with empty values.
     """
     try:

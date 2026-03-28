@@ -220,7 +220,7 @@ class World:
         ]
 
     def entity_sort_key(self, entity: Entity) -> tuple[int, int, str]:
-        """Return a stable per-cell stacking key for editor and runtime queries."""
+        """Return a stable per-cell stacking key for spatial queries."""
         return (entity.layer, entity.stack_order, entity.entity_id)
 
     def get_entities_at(
@@ -266,7 +266,7 @@ class World:
         return None
 
     def generate_entity_id(self, base_name: str) -> str:
-        """Return a stable unique entity id for editor-created instances."""
+        """Return a stable unique entity id for new authored instances."""
         candidate = base_name
         counter = 1
         while self.get_entity(candidate) is not None:

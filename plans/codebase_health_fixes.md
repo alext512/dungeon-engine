@@ -33,7 +33,7 @@ if x is None:
 **Location:** `world/loader.py` line 83.
 
 **Problem:** `tile_size` is read from JSON with no validation. A value of `0`
-or negative causes `ZeroDivisionError` in the renderer and editor (floor
+or negative causes `ZeroDivisionError` in the renderer and authoring tooling (floor
 division by tile size).
 
 **Fix:** Add after the `tile_size` parse line:
@@ -157,7 +157,7 @@ These were flagged but do not warrant changes:
 
 - **Unbounded module-level caches** — A puzzle game loads at most ~50
   templates. These caches will never matter. A `clear_caches()` function would
-  only help if the editor needs hot reload.
+  only help if external tooling needs hot reload.
 
 - **Path traversal in save slot resolution** — The containment check
   (`resolve().relative_to(save_dir)`) correctly blocks traversal. The absolute

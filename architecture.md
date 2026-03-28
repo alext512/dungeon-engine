@@ -9,7 +9,7 @@ The spirit should still come from the old Godot project:
 - gameplay is driven by reusable commands
 - objects do not hard-code bespoke one-off behavior
 - the same command ideas should be usable by the player, interactable objects, and dialogue choices
-- testing content creation should be possible early through an editor
+- testing content creation should be possible early through a lightweight authoring workflow
 
 This is not meant to be a totally generic engine. It is a focused, data-driven puzzle/RPG framework.
 
@@ -21,7 +21,7 @@ The core engine is centered on:
 - interactable objects
 - dialogue
 - world creation
-- early level editor
+- data-driven authoring support
 
 This document is about architectural direction, not a promise of specific future engine features.
 
@@ -29,10 +29,10 @@ This document is about architectural direction, not a promise of specific future
 
 - Python 3.11+
 - `pygame-ce` as the runtime library for windowing, rendering, input, timing, fonts, and audio
-- JSON for content data such as areas, entities, items, and editor-saved room state
+- JSON for content data such as areas, entities, items, and authored room state
 - Python standard library for most support code, including `dataclasses`, `pathlib`, `json`, and `typing`
 
-`pygame-ce` is a good fit here because we want a Python-first project with direct control over rendering, data loading, UI flow, command execution, and editor behavior without fighting a heavier engine framework.
+`pygame-ce` is a good fit here because we want a Python-first project with direct control over rendering, data loading, UI flow, and command execution without fighting a heavier engine framework.
 
 ## Design Principles
 
@@ -81,19 +81,16 @@ The same top-level action can later be executed by:
 - a free movement executor
 - a turn scheduler that decides when actions are allowed
 
-### 4. The editor is part of the product
+### 4. Authoring tools stay outside the runtime
 
-The level editor is not a late convenience feature. It is part of the intended workflow and should arrive early.
+The project needs a practical authoring workflow, but the runtime should not be coupled to a built-in editor.
 
-The early editor only needs to be strong enough to:
+The intended pattern is:
 
-- create and edit rooms
-- paint tiles
-- set walkability
-- place entities
-- edit a few important properties
-- save and load data
-- save and launch the room in the standalone game quickly
+- the runtime consumes JSON files
+- external authoring tools or focused helpers read and write those same JSON files
+- gameplay/runtime code does not import tool UI code
+- tool-specific state should stay outside runtime data structures
 
 ### 5. Data should describe content, not replace code entirely
 
@@ -102,7 +99,7 @@ The project is command-driven and data-driven, but not every hard problem should
 The intended split is:
 
 - data defines content, command chains, entities, items, dialogue, and room setup
-- code defines the runtime, command execution, rendering, collision, UI, persistence, and editor behavior
+- code defines the runtime, command execution, rendering, collision, UI, and persistence
 
 Project content may live inside this repo for version control, for example under `projects/test_project/`, but that does not make it engine data. The real boundary is:
 
@@ -123,7 +120,7 @@ An area is a playable map with:
 - local variables
 - transitions to other areas
 
-Areas are loaded from JSON and can be created or modified in the editor.
+Areas are loaded from JSON and can be created or modified in authoring tools.
 
 ### Entities
 
@@ -169,7 +166,6 @@ Systems should provide reusable services such as:
 - animation playback
 - dialogue UI
 - save/load
-- editor tools
 
 Systems should not become giant one-off gameplay scripts. If a behavior is content-specific, it should usually be represented as commands.
 
@@ -249,7 +245,7 @@ Expected content groups:
 - `items/`
 - optional ordinary project JSON data such as `dialogues/`
 
-The editor should read and write these files.
+Authoring tools should read and write these files.
 
 The first versions can keep the schemas simple. They do not need to predict every future feature perfectly.
 
@@ -273,8 +269,10 @@ dungeon_engine/
     systems/
     commands/
     ui/
-    editor/
     data/
+
+tools/
+    area_authoring/
 ```
 
 Suggested responsibilities:
@@ -284,20 +282,20 @@ Suggested responsibilities:
 - `systems/`: movement, collision, dialogue, animation
 - `commands/`: command runner, registry, command implementations
 - `ui/`: dialogue boxes, choices, debug overlays
-- `editor/`: editor state, tools, inspector, save/load helpers
+- `tools/`: external authoring tools that operate on the same JSON data
 - `data/`: engine-owned internal support data only, if still needed
 
 Important boundary:
 
-- `dungeon_engine/` is the engine/editor package
+- `dungeon_engine/` is the runtime package
 - `projects/<name>/` is one possible place to keep project content under version control
 - the engine must not assume any specific project exists there
 
-## Editor Architecture
+## Authoring Tooling
 
-The editor should operate on the same data model as play mode, not a separate hidden format.
+Authoring tools should operate on the same file format as play mode, not a separate hidden format.
 
-Early editor scope:
+Early authoring scope:
 
 - create a room
 - resize a room
@@ -307,9 +305,9 @@ Early editor scope:
 - select an entity
 - edit a small set of important properties
 - save and load
-- save and launch the same room in the game quickly
+- launch the same room in the game quickly
 
-The first editor version does not need a full visual command-chain authoring UI. A simple property inspector plus raw JSON editing for advanced fields is acceptable early on.
+The first tool does not need a full visual command-chain authoring UI. A focused convenience tool plus raw JSON editing for advanced fields is acceptable early on.
 
 ## Dialogue
 
@@ -479,7 +477,7 @@ it is useful to distinguish between:
 - variables/state: mutable runtime values used by gameplay and persistence
 - persistent overrides: saved differences layered over authored data
 
-Keeping those names separate will make both the editor UX and the save model easier
+Keeping those names separate will make both the authoring UX and the save model easier
 to understand.
 
 ### Current Caveats To Keep In Mind
@@ -500,7 +498,7 @@ The architecture is on the right track if we can quickly build a small room wher
 - a lever opens a gate
 - a box can be pushed
 - an NPC talks
-- the room can be created and tested from the editor
+- the room can be authored and tested through the chosen workflow
 
 If the architecture makes that awkward, it should be changed.
 

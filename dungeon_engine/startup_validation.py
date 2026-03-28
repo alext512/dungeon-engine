@@ -1,4 +1,4 @@
-"""Helpers for validating a project before launching the game or editor."""
+"""Helpers for validating a project before launch."""
 
 from __future__ import annotations
 

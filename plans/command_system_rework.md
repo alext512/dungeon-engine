@@ -83,7 +83,7 @@ Implemented in the first movement-foundation slice:
 - Command ids are now path-based relative to `named_command_paths`, so nested command
   folders stay unambiguous.
 - Named-command validation now runs at project startup for both the game and
-  editor:
+  related tooling:
   - malformed command files
   - duplicate command ids
   - literal missing `run_named_command` targets in command files, entity
@@ -783,7 +783,7 @@ That would be enough to prove:
 
 ### Phase 3
 
-- Broaden command-library tooling and editor awareness.
+- Broaden command-library tooling and authoring-tool awareness.
 - Keep moving project control flow onto reusable composite commands instead of
   ad-hoc inline event chains where that improves reuse.
 

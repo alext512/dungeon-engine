@@ -8,32 +8,32 @@ If implementation exposes a better approach, change the plan and update the docs
 
 - Python project
 - command-driven gameplay
-- early editor
+- reliable authoring workflow
 - steady playable progress
 
 ## Ground Rules
 
 1. The game should stay runnable after every phase.
 2. The command model is central, not decorative.
-3. The editor arrives early enough to support testing and content creation.
+3. The authoring workflow should support testing and content creation early.
 4. Favor vertical slices over huge architecture dumps.
 5. If a phase reveals a bad assumption, refactor early instead of protecting the document.
 
 ## Runtime Portability Note
 
-The current project should continue as a Python + `pygame-ce` project until the command model, JSON schemas, and editor workflow feel stable.
+The current project should continue as a Python + `pygame-ce` project until the command model, JSON schemas, and authoring workflow feel stable.
 
 If wider platform support becomes important later, the first replatforming candidate should be a code-first runtime such as MonoGame.
 
 Important constraints for that future path:
 
-- do not start a full engine port while the command/data/editor model is still changing quickly
-- if a port happens, port the runtime first and keep the current Python editor as an external authoring tool
-- keep JSON content as the source of truth so the editor and any future runtime can share the same data
+- do not start a full engine port while the command/data/authoring model is still changing quickly
+- if a port happens, port the runtime first and keep authoring tools external to the runtime
+- keep JSON content as the source of truth so authoring tools and any future runtime can share the same data
 - avoid baking `pygame-ce` assumptions into room data, entity data, command data, or save data unless they are truly engine-agnostic concepts
-- prefer engine-independent gameplay concepts over editor- or renderer-specific shortcuts
+- prefer engine-independent gameplay concepts over tooling- or renderer-specific shortcuts
 
-A reasonable point to revisit replatforming is after a fuller vertical slice exists with movement, interaction, dialogue, inventory, save/load, and a more settled editor workflow.
+A reasonable point to revisit replatforming is after a fuller vertical slice exists with movement, interaction, dialogue, inventory, save/load, and a more settled authoring workflow.
 
 ## Phase 1: Core Shell and Grid Room
 
@@ -86,26 +86,26 @@ Make the room interactive through command chains.
 - a pushable block puzzle works
 - one-time interactions can disable themselves
 
-## Phase 3: Early Editor and World Creation
+## Phase 3: Authoring Workflow and World Creation
 
 ### Goal
 
-Create and test rooms through the standalone editor/game workflow instead of relying on manual JSON editing.
+Create and test rooms through a lightweight authoring workflow instead of relying on ad hoc manual JSON editing.
 
 ### Deliverables
 
-- standalone editor application
+- external room-authoring tool or focused authoring helpers
 - tile painting
 - walkability editing
 - entity placement and removal
 - entity selection
 - basic property inspection and editing
 - save/load room data
-- quick handoff from editor-authored data into the standalone game
+- quick handoff from authored room data into the standalone game
 
 ### Exit criteria
 
-- create a new room in the editor
+- create a new room through the chosen authoring workflow
 - place player spawn and puzzle objects
 - save and reload the room
 - launch the same room in the game and test it immediately
@@ -187,7 +187,7 @@ Make content production smoother and improve debuggability.
 
 ### Deliverables
 
-- better editor property editing
+- better authoring ergonomics for common room/entity changes
 - basic validation for room/entity/item data
 - command debugging helpers
 - final pixel-perfect movement/render feel pass on real hardware
@@ -210,7 +210,7 @@ These are planned, but they are not required before the core project is useful.
 - free movement mode
 - NPC AI
 - richer stats/combat
-- stronger editor tooling for command authoring
+- stronger authoring tooling for command authoring
 
 ### Important rule
 
@@ -227,6 +227,6 @@ The first true milestone should be a single room that proves the spirit of the w
 - one key and one locked door
 - one usable item
 - one short cutscene
-- room creation or editing through the early editor
+- room creation or editing through the authoring workflow
 
 If that slice works well, the architecture is healthy.

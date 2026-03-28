@@ -1,11 +1,11 @@
-"""Tile-based area data used by the runtime and editor.
+"""Tile-based area data used by the runtime and authoring JSON.
 
 Areas contain layered tile grids using the GID (Global ID) system — the industry
 standard used by Tiled, Godot, RPG Maker, etc. Each integer in a tile grid maps
 to a specific frame in a specific tileset. GID 0 means empty/no tile.
 
 Depends on: nothing (pure data)
-Used by: loader, serializer, renderer, editor, collision
+Used by: loader, serializer, renderer, collision
 """
 
 from __future__ import annotations
