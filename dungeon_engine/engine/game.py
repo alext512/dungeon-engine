@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import random
 
 import pygame
 
@@ -214,6 +215,7 @@ class Game:
             audio_player=self.audio_player,
             screen_manager=self.screen_manager,
             command_runner=None,
+            random_generator=random.Random(),
             persistence_runtime=self.persistence_runtime,
             request_area_change=self.request_area_change,
             request_new_game=self.request_new_game,

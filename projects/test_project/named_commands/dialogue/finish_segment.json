@@ -34,7 +34,7 @@
               "value": "$self.dialogue_segment_index"
             },
             {
-              "type": "increment_entity_var",
+              "type": "add_entity_var",
               "entity_id": "$self_id",
               "name": "dialogue_next_segment_index",
               "amount": 1

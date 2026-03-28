@@ -33,6 +33,10 @@ class AssetManager:
             f"Asset '{relative_path}' could not be resolved in project '{self._project.project_root}'."
         )
 
+    def resolve_asset_path(self, relative_path: str) -> Path:
+        """Return the absolute filesystem path for one authored asset path."""
+        return self._resolve(relative_path)
+
     def get_frame(
         self,
         relative_path: str,
@@ -50,7 +54,7 @@ class AssetManager:
 
     def get_image(self, relative_path: str) -> pygame.Surface:
         """Return a cached full image surface by path relative to the data folder."""
-        asset_path = self._resolve(relative_path)
+        asset_path = self.resolve_asset_path(relative_path)
         return self._load_image(asset_path)
 
     def get_image_size(self, relative_path: str) -> tuple[int, int]:
@@ -60,7 +64,7 @@ class AssetManager:
 
     def get_sound(self, relative_path: str) -> pygame.mixer.Sound:
         """Return a cached sound object by path relative to the active project."""
-        asset_path = self._resolve(relative_path)
+        asset_path = self.resolve_asset_path(relative_path)
         return self._load_sound(asset_path)
 
     def get_frame_count(

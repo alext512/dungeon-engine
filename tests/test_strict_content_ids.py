@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import run_editor
 import run_game
@@ -49,6 +50,7 @@ from dungeon_engine.world.persistence import (
     save_data_to_dict,
 )
 from dungeon_engine.engine.asset_manager import AssetManager
+from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.engine.text import TextRenderer
@@ -167,7 +169,7 @@ class _RecordingAnimationSystem:
 
 class _RecordingMovementSystem:
     def __init__(self) -> None:
-        self.grid_steps: list[tuple[str, str, float | None, int | None, float | None, str, bool]] = []
+        self.grid_steps: list[tuple[str, str, float | None, int | None, float | None, str]] = []
         self.move_to_positions: list[
             tuple[str, float, float, float | None, int | None, float | None, str, int | None, int | None]
         ] = []
@@ -189,10 +191,9 @@ class _RecordingMovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: str = "immediate",
-        allow_push: bool = True,
     ) -> list[str]:
         self.grid_steps.append(
-            (entity_id, direction, duration, frames_needed, speed_px_per_second, grid_sync, allow_push)
+            (entity_id, direction, duration, frames_needed, speed_px_per_second, grid_sync)
         )
         return [entity_id]
 
@@ -421,6 +422,144 @@ class _RecordingInputDispatchRunner:
     ) -> bool:
         self.dispatched.append((entity_id, event_id, actor_entity_id))
         return True
+
+
+class _FixedRandom:
+    def __init__(self, *, randint_result: int, choice_result: Any) -> None:
+        self.randint_result = randint_result
+        self.choice_result = choice_result
+        self.randint_calls: list[tuple[int, int]] = []
+        self.choice_calls: list[list[Any]] = []
+
+    def randint(self, minimum: int, maximum: int) -> int:
+        self.randint_calls.append((minimum, maximum))
+        return self.randint_result
+
+    def choice(self, values: list[Any]) -> Any:
+        self.choice_calls.append(list(values))
+        return self.choice_result
+
+
+class _RecordingAudioPlayer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+
+    def play_audio(self, path: str, *, volume: float | None = None) -> bool:
+        self.calls.append(("play_audio", (path,), {"volume": volume}))
+        return True
+
+    def set_sound_volume(self, volume: float) -> None:
+        self.calls.append(("set_sound_volume", (float(volume),), {}))
+
+    def play_music(
+        self,
+        path: str,
+        *,
+        loop: bool = True,
+        volume: float | None = None,
+        restart_if_same: bool = False,
+    ) -> bool:
+        self.calls.append(
+            (
+                "play_music",
+                (path,),
+                {
+                    "loop": bool(loop),
+                    "volume": volume,
+                    "restart_if_same": bool(restart_if_same),
+                },
+            )
+        )
+        return True
+
+    def stop_music(self, *, fade_seconds: float = 0.0) -> bool:
+        self.calls.append(("stop_music", (), {"fade_seconds": float(fade_seconds)}))
+        return True
+
+    def pause_music(self) -> bool:
+        self.calls.append(("pause_music", (), {}))
+        return True
+
+    def resume_music(self) -> bool:
+        self.calls.append(("resume_music", (), {}))
+        return True
+
+    def set_music_volume(self, volume: float) -> None:
+        self.calls.append(("set_music_volume", (float(volume),), {}))
+
+
+class _FakeAudioChannel:
+    def __init__(self) -> None:
+        self.volume: float | None = None
+
+    def set_volume(self, volume: float) -> None:
+        self.volume = float(volume)
+
+
+class _FakeSound:
+    def __init__(self, channel: _FakeAudioChannel | None) -> None:
+        self.channel = channel
+        self.play_calls = 0
+
+    def play(self) -> _FakeAudioChannel | None:
+        self.play_calls += 1
+        return self.channel
+
+
+class _FakeMusicController:
+    def __init__(self) -> None:
+        self.loaded_paths: list[str] = []
+        self.play_calls: list[int] = []
+        self.volume_calls: list[float] = []
+        self.pause_calls = 0
+        self.unpause_calls = 0
+        self.stop_calls = 0
+        self.fadeout_calls: list[int] = []
+        self.busy = False
+
+    def load(self, path: str) -> None:
+        self.loaded_paths.append(str(path))
+
+    def play(self, loops: int = 0) -> None:
+        self.play_calls.append(int(loops))
+        self.busy = True
+
+    def set_volume(self, volume: float) -> None:
+        self.volume_calls.append(float(volume))
+
+    def get_busy(self) -> bool:
+        return self.busy
+
+    def pause(self) -> None:
+        self.pause_calls += 1
+
+    def unpause(self) -> None:
+        self.unpause_calls += 1
+        self.busy = True
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+        self.busy = False
+
+    def fadeout(self, milliseconds: int) -> None:
+        self.fadeout_calls.append(int(milliseconds))
+        self.busy = False
+
+
+class _FakeAudioAssetManager:
+    def __init__(self, sound: _FakeSound | None = None, *, music_path: str = "C:/tmp/theme.ogg") -> None:
+        self.sound = sound or _FakeSound(_FakeAudioChannel())
+        self.music_path = Path(music_path)
+        self.requested_sound_paths: list[str] = []
+        self.requested_asset_paths: list[str] = []
+
+    def get_sound(self, relative_path: str) -> _FakeSound:
+        self.requested_sound_paths.append(str(relative_path))
+        return self.sound
+
+    def resolve_asset_path(self, relative_path: str) -> Path:
+        self.requested_asset_paths.append(str(relative_path))
+        return self.music_path
 
 
 class StrictContentIdTests(unittest.TestCase):
@@ -1031,6 +1170,95 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(controller.variables["wrapped_index"], 4)
         self.assertEqual(controller.variables["joined_text"], ">one")
 
+    def test_boolean_and_random_value_sources_store_resolved_values(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+        fixed_random = _FixedRandom(randint_result=4, choice_result="blue")
+        context.random_generator = fixed_random
+
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "all_true",
+                "value": {"$and": [True, 1, "yes"]},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "any_true",
+                "value": {"$or": [0, "", "picked"]},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "negated",
+                "value": {"$not": []},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "random_roll",
+                "value": {"$random_int": {"min": 2, "max": 6}},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "picked_color",
+                "value": {
+                    "$random_choice": {
+                        "value": ["red", "blue", "green"],
+                        "default": "none",
+                    }
+                },
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "empty_pick",
+                "value": {
+                    "$random_choice": {
+                        "value": [],
+                        "default": "fallback",
+                    }
+                },
+            },
+        ).update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertTrue(controller.variables["all_true"])
+        self.assertTrue(controller.variables["any_true"])
+        self.assertTrue(controller.variables["negated"])
+        self.assertEqual(controller.variables["random_roll"], 4)
+        self.assertEqual(controller.variables["picked_color"], "blue")
+        self.assertEqual(controller.variables["empty_pick"], "fallback")
+        self.assertEqual(fixed_random.randint_calls, [(2, 6)])
+        self.assertEqual(fixed_random.choice_calls, [["red", "blue", "green"]])
+
     def test_explicit_movement_query_value_sources_resolve_cell_flags_and_blockers(self) -> None:
         area = Area(
             area_id="test_room",
@@ -1620,7 +1848,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "increment_entity_var",
+            "add_entity_var",
             {
                 "entity_id": "dialogue_controller",
                 "name": "choice_index",
@@ -1738,7 +1966,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "increment_world_var",
+            "add_world_var",
             {
                 "name": "turn_count",
                 "amount": 3,
@@ -1821,6 +2049,146 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(context.world.variables["visited_rooms"], ["village_square"])
         self.assertEqual(context.world.variables["popped_room"], "village_house")
         self.assertTrue(context.world.variables["world_branch_hit"])
+
+    def test_toggle_var_primitives_flip_boolean_values(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("switch", kind="switch"))
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "toggle_entity_var",
+            {
+                "entity_id": "switch",
+                "name": "enabled",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "toggle_entity_var",
+            {
+                "entity_id": "switch",
+                "name": "enabled",
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "toggle_world_var",
+            {
+                "name": "paused",
+            },
+        ).update(0.0)
+
+        switch = world.get_entity("switch")
+        assert switch is not None
+        self.assertFalse(switch.variables["enabled"])
+        self.assertTrue(context.world.variables["paused"])
+
+        switch.variables["enabled"] = "yes"
+        with self.assertRaises(CommandExecutionError):
+            execute_registered_command(
+                registry,
+                context,
+                "toggle_entity_var",
+                {
+                    "entity_id": "switch",
+                    "name": "enabled",
+                },
+            ).update(0.0)
+
+    def test_set_entity_fields_updates_multiple_sections(self) -> None:
+        world = World()
+        lever = _make_runtime_entity("lever", kind="lever", with_visual=True)
+        lever.variables["active"] = False
+        lever.visuals.append(
+            EntityVisual(
+                visual_id="shadow",
+                path="assets/project/sprites/shadow.png",
+                frame_width=16,
+                frame_height=16,
+                frames=[0],
+            )
+        )
+        world.add_entity(lever)
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_fields",
+            {
+                "entity_id": "lever",
+                "set": {
+                    "fields": {
+                        "visible": False,
+                    },
+                    "variables": {
+                        "active": True,
+                    },
+                    "visuals": {
+                        "main": {
+                            "offset_x": 2,
+                            "offset_y": -1,
+                            "animation_fps": 6,
+                            "tint": [1, 2, 3],
+                        },
+                        "shadow": {
+                            "visible": False,
+                        },
+                    },
+                },
+            },
+        ).update(0.0)
+
+        updated = world.get_entity("lever")
+        assert updated is not None
+        self.assertFalse(updated.visible)
+        self.assertTrue(updated.variables["active"])
+        main_visual = updated.require_visual("main")
+        self.assertEqual(main_visual.tint, (1, 2, 3))
+        self.assertEqual(main_visual.offset_x, 2.0)
+        self.assertEqual(main_visual.offset_y, -1.0)
+        self.assertEqual(main_visual.animation_fps, 6.0)
+        self.assertFalse(updated.require_visual("shadow").visible)
+
+    def test_set_entity_fields_is_all_or_nothing(self) -> None:
+        world = World()
+        lever = _make_runtime_entity("lever", kind="lever", with_visual=True)
+        lever.variables["active"] = False
+        world.add_entity(lever)
+        registry, context = self._make_command_context(world=world)
+
+        with self.assertRaises(CommandExecutionError):
+            execute_registered_command(
+                registry,
+                context,
+                "set_entity_fields",
+                {
+                    "entity_id": "lever",
+                    "set": {
+                        "fields": {
+                            "visible": False,
+                        },
+                        "variables": {
+                            "active": True,
+                        },
+                        "visuals": {
+                            "main": {
+                                "path": "assets/project/other.png",
+                            }
+                        },
+                    },
+                },
+            ).update(0.0)
+
+        unchanged = world.get_entity("lever")
+        assert unchanged is not None
+        self.assertTrue(unchanged.visible)
+        self.assertFalse(unchanged.variables["active"])
+        self.assertEqual(unchanged.require_visual("main").path, "assets/project/sprites/test.png")
 
     def test_explicit_var_primitives_persist_when_requested(self) -> None:
         _, project = self._make_project()
@@ -3668,6 +4036,119 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
         self.assertEqual(world.get_input_target_id("interact"), "player")
 
+    def test_audio_commands_forward_parameters_to_audio_player(self) -> None:
+        registry, context = self._make_command_context()
+        audio_player = _RecordingAudioPlayer()
+        context.audio_player = audio_player
+
+        execute_registered_command(
+            registry,
+            context,
+            "play_audio",
+            {"path": "assets/project/sfx/click.wav", "volume": 0.25},
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_sound_volume",
+            {"volume": 0.5},
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "play_music",
+            {
+                "path": "assets/project/music/field.ogg",
+                "loop": False,
+                "volume": 0.8,
+                "restart_if_same": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "pause_music",
+            {},
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "resume_music",
+            {},
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_music_volume",
+            {"volume": 0.6},
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "stop_music",
+            {"fade_seconds": 1.25},
+        ).update(0.0)
+
+        self.assertEqual(
+            audio_player.calls,
+            [
+                ("play_audio", ("assets/project/sfx/click.wav",), {"volume": 0.25}),
+                ("set_sound_volume", (0.5,), {}),
+                (
+                    "play_music",
+                    ("assets/project/music/field.ogg",),
+                    {"loop": False, "volume": 0.8, "restart_if_same": True},
+                ),
+                ("pause_music", (), {}),
+                ("resume_music", (), {}),
+                ("set_music_volume", (0.6,), {}),
+                ("stop_music", (), {"fade_seconds": 1.25}),
+            ],
+        )
+
+    def test_audio_player_supports_sound_volume_and_music_track_control(self) -> None:
+        fake_channel = _FakeAudioChannel()
+        fake_sound = _FakeSound(fake_channel)
+        fake_music = _FakeMusicController()
+        asset_manager = _FakeAudioAssetManager(sound=fake_sound, music_path="C:/tmp/field.ogg")
+        expected_music_path = str(Path("C:/tmp/field.ogg"))
+
+        with patch("pygame.mixer.get_init", return_value=(44100, -16, 2)):
+            with patch("pygame.mixer.music", fake_music):
+                player = AudioPlayer(asset_manager, enabled=True)
+                player.set_sound_volume(0.5)
+
+                self.assertTrue(player.play_audio("assets/project/sfx/click.wav", volume=0.6))
+                self.assertEqual(asset_manager.requested_sound_paths, ["assets/project/sfx/click.wav"])
+                self.assertEqual(fake_sound.play_calls, 1)
+                self.assertAlmostEqual(fake_channel.volume or 0.0, 0.3)
+
+                self.assertTrue(player.play_music("assets/project/music/field.ogg", volume=0.7))
+                self.assertEqual(asset_manager.requested_asset_paths, ["assets/project/music/field.ogg"])
+                self.assertEqual(fake_music.loaded_paths, [expected_music_path])
+                self.assertEqual(fake_music.play_calls, [-1])
+                self.assertAlmostEqual(player.music_volume, 0.7)
+                self.assertEqual(player.current_music_path, expected_music_path)
+
+                self.assertTrue(player.play_music("assets/project/music/field.ogg"))
+                self.assertEqual(fake_music.loaded_paths, [expected_music_path])
+
+                self.assertTrue(player.pause_music())
+                self.assertTrue(player.music_paused)
+                self.assertEqual(fake_music.pause_calls, 1)
+
+                self.assertTrue(player.resume_music())
+                self.assertFalse(player.music_paused)
+                self.assertEqual(fake_music.unpause_calls, 1)
+
+                player.set_music_volume(0.4)
+                self.assertAlmostEqual(player.music_volume, 0.4)
+                self.assertAlmostEqual(fake_music.volume_calls[-1], 0.4)
+
+                self.assertTrue(player.stop_music(fade_seconds=0.5))
+                self.assertEqual(fake_music.fadeout_calls, [500])
+                self.assertIsNone(player.current_music_path)
+
     def test_strict_entity_primitives_reject_raw_symbolic_entity_refs(self) -> None:
         world = World(default_input_targets={"interact": "player"})
         world.add_entity(_make_runtime_entity("player", kind="player", with_visual=True))
@@ -3681,6 +4162,17 @@ class StrictContentIdTests(unittest.TestCase):
                     "entity_id": "self",
                     "field_name": "visible",
                     "value": False,
+                },
+            ),
+            (
+                "set_entity_fields",
+                {
+                    "entity_id": "self",
+                    "set": {
+                        "fields": {
+                            "visible": False,
+                        }
+                    },
                 },
             ),
             (

@@ -2,7 +2,7 @@
   "params": [],
   "commands": [
     {
-      "type": "increment_entity_var",
+      "type": "add_entity_var",
       "entity_id": "$self_id",
       "name": "dialogue_revision",
       "amount": 1

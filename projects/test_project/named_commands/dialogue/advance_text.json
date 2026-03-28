@@ -9,7 +9,7 @@
       "value": true,
       "then": [
         {
-          "type": "increment_entity_var",
+          "type": "add_entity_var",
           "entity_id": "$self_id",
           "name": "dialogue_text_line_offset",
           "amount": "$self.dialogue_max_lines"
@@ -27,7 +27,7 @@
           "value": "$self.dialogue_source_page_index"
         },
         {
-          "type": "increment_entity_var",
+          "type": "add_entity_var",
           "entity_id": "$self_id",
           "name": "dialogue_next_source_page_index",
           "amount": 1

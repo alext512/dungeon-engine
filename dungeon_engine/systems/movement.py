@@ -45,10 +45,8 @@ class MovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: GridSyncPolicy = "immediate",
-        allow_push: bool = True,
     ) -> list[str]:
         """Move an entity one tile using explicit direction data and grid sync."""
-        _ = allow_push
         entity = self.world.get_entity(entity_id)
         if entity is None:
             raise KeyError(f"Cannot step missing entity '{entity_id}'.")

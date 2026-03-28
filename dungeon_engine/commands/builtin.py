@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from dungeon_engine import config
@@ -567,13 +568,28 @@ def _serialize_entity_visuals(entity: Any) -> list[dict[str, Any]]:
     return serialized
 
 
-def _apply_entity_field_value(
+@dataclass(frozen=True, slots=True)
+class _EntityFieldMutation:
+    """One validated runtime entity-field mutation."""
+
+    path: tuple[str, ...]
+    normalized_value: Any
+
+
+def _normalize_rgb_triplet(value: Any, *, label: str) -> tuple[int, int, int]:
+    """Validate a color/tint value and return a normalized RGB triplet."""
+    if not isinstance(value, (list, tuple)) or len(value) < 3:
+        raise ValueError(f"{label} must be a list or tuple with at least 3 channels.")
+    return (int(value[0]), int(value[1]), int(value[2]))
+
+
+def _normalize_entity_field_mutation(
     entity: Any,
     field_name: str,
     value: Any,
-) -> tuple[str, Any]:
-    """Apply one supported runtime entity field mutation and return its persistent form."""
-    path = [segment for segment in str(field_name).split(".") if segment]
+) -> _EntityFieldMutation:
+    """Validate one supported runtime entity-field mutation without applying it yet."""
+    path = tuple(segment for segment in str(field_name).split(".") if segment)
     if not path:
         raise ValueError("set_entity_field requires a non-empty field name.")
 
@@ -581,44 +597,110 @@ def _apply_entity_field_value(
     if root == "present":
         if len(path) != 1:
             raise ValueError("present does not support nested field paths.")
-        entity.set_present(bool(value))
-        return "present", entity.present
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
     if root == "visible":
         if len(path) != 1:
             raise ValueError("visible does not support nested field paths.")
-        entity.visible = bool(value)
-        return "visible", entity.visible
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
     if root == "events_enabled":
         if len(path) != 1:
             raise ValueError("events_enabled does not support nested field paths.")
-        entity.set_events_enabled(bool(value))
-        return "events_enabled", entity.events_enabled
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
     if root == "layer":
         if len(path) != 1:
             raise ValueError("layer does not support nested field paths.")
-        entity.layer = int(value)
-        return "layer", entity.layer
+        return _EntityFieldMutation(path=path, normalized_value=int(value))
 
     if root == "stack_order":
         if len(path) != 1:
             raise ValueError("stack_order does not support nested field paths.")
-        entity.stack_order = int(value)
-        return "stack_order", entity.stack_order
+        return _EntityFieldMutation(path=path, normalized_value=int(value))
 
     if root == "color":
         if len(path) != 1:
             raise ValueError("color does not support nested field paths.")
-        if not isinstance(value, (list, tuple)) or len(value) < 3:
-            raise ValueError("color must be a list or tuple with at least 3 channels.")
-        entity.color = (int(value[0]), int(value[1]), int(value[2]))
-        return "color", list(entity.color)
+        return _EntityFieldMutation(
+            path=path,
+            normalized_value=_normalize_rgb_triplet(value, label="color"),
+        )
 
     if root == "visuals":
         if len(path) < 3:
             raise ValueError("visuals field mutations must use visuals.<visual_id>.<field>.")
+        entity.require_visual(str(path[1]))
+        visual_field = str(path[2])
+        if visual_field == "flip_x":
+            normalized_value = bool(value)
+        elif visual_field == "visible":
+            normalized_value = bool(value)
+        elif visual_field == "current_frame":
+            normalized_value = int(value)
+        elif visual_field == "tint":
+            normalized_value = _normalize_rgb_triplet(value, label="visual tint")
+        elif visual_field == "offset_x":
+            normalized_value = float(value)
+        elif visual_field == "offset_y":
+            normalized_value = float(value)
+        elif visual_field == "animation_fps":
+            normalized_value = float(value)
+            if normalized_value < 0:
+                raise ValueError("visual animation_fps must be non-negative.")
+        else:
+            raise ValueError(f"Unsupported visuals field '{visual_field}'.")
+        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
+
+    if root == "input_map":
+        if len(path) == 1:
+            normalized_value = _normalize_input_map(value)
+        elif len(path) == 2:
+            normalized_value = str(value)
+        else:
+            raise ValueError("input_map only supports one nested key level.")
+        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
+
+    raise ValueError(
+        f"Unsupported entity field '{field_name}'. "
+        "Use set_world_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
+    )
+
+
+def _apply_normalized_entity_field_mutation(
+    entity: Any,
+    mutation: _EntityFieldMutation,
+) -> tuple[str, Any]:
+    """Apply one already-validated entity-field mutation and return its persistent form."""
+    path = mutation.path
+    value = mutation.normalized_value
+    root = path[0]
+
+    if root == "present":
+        entity.set_present(bool(value))
+        return "present", entity.present
+
+    if root == "visible":
+        entity.visible = bool(value)
+        return "visible", entity.visible
+
+    if root == "events_enabled":
+        entity.set_events_enabled(bool(value))
+        return "events_enabled", entity.events_enabled
+
+    if root == "layer":
+        entity.layer = int(value)
+        return "layer", entity.layer
+
+    if root == "stack_order":
+        entity.stack_order = int(value)
+        return "stack_order", entity.stack_order
+
+    if root == "color":
+        entity.color = tuple(value)
+        return "color", list(entity.color)
+
+    if root == "visuals":
         visual = entity.require_visual(str(path[1]))
         visual_field = str(path[2])
         if visual_field == "flip_x":
@@ -628,26 +710,38 @@ def _apply_entity_field_value(
         elif visual_field == "current_frame":
             visual.current_frame = int(value)
         elif visual_field == "tint":
-            if not isinstance(value, (list, tuple)) or len(value) < 3:
-                raise ValueError("visual tint must be a list or tuple with at least 3 channels.")
-            visual.tint = (int(value[0]), int(value[1]), int(value[2]))
+            visual.tint = tuple(value)
+        elif visual_field == "offset_x":
+            visual.offset_x = float(value)
+        elif visual_field == "offset_y":
+            visual.offset_y = float(value)
+        elif visual_field == "animation_fps":
+            visual.animation_fps = float(value)
         else:
             raise ValueError(f"Unsupported visuals field '{visual_field}'.")
         return "visuals", _serialize_entity_visuals(entity)
 
     if root == "input_map":
         if len(path) == 1:
-            entity.input_map = _normalize_input_map(value)
-        elif len(path) == 2:
-            entity.input_map[str(path[1])] = str(value)
+            entity.input_map = copy.deepcopy(value)
         else:
-            raise ValueError("input_map only supports one nested key level.")
+            entity.input_map[str(path[1])] = str(value)
         return "input_map", copy.deepcopy(entity.input_map)
 
     raise ValueError(
-        f"Unsupported entity field '{field_name}'. "
+        f"Unsupported entity field path '{'.'.join(path)}'. "
         "Use set_world_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
     )
+
+
+def _apply_entity_field_value(
+    entity: Any,
+    field_name: str,
+    value: Any,
+) -> tuple[str, Any]:
+    """Apply one supported runtime entity field mutation and return its persistent form."""
+    mutation = _normalize_entity_field_mutation(entity, field_name, value)
+    return _apply_normalized_entity_field_mutation(entity, mutation)
 
 
 _COMPARE_OPS: dict[str, Any] = {
@@ -691,6 +785,106 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
+    def _set_exact_entity_fields_handle(
+        *,
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        entity_id: str,
+        set_payload: dict[str, Any],
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Apply one validated batch of entity field, variable, and visual mutations."""
+        entity = _require_exact_entity(world, entity_id)
+        if not isinstance(set_payload, dict):
+            raise ValueError("set_entity_fields requires 'set' to be a JSON object.")
+
+        prepared_operations: list[tuple[str, Any, Any]] = []
+        for section_name, section_value in set_payload.items():
+            if section_name == "fields":
+                if not isinstance(section_value, dict):
+                    raise ValueError("set_entity_fields.set.fields must be a JSON object.")
+                for field_name, raw_value in section_value.items():
+                    mutation = _normalize_entity_field_mutation(entity, str(field_name), raw_value)
+                    if mutation.path[0] == "visuals":
+                        raise ValueError(
+                            "set_entity_fields.set.fields only supports top-level entity fields; "
+                            "use set.visuals for visual mutations."
+                        )
+                    prepared_operations.append(("field", mutation, None))
+            elif section_name == "variables":
+                if not isinstance(section_value, dict):
+                    raise ValueError("set_entity_fields.set.variables must be a JSON object.")
+                for name, raw_value in section_value.items():
+                    prepared_operations.append(("variable", str(name), copy.deepcopy(raw_value)))
+            elif section_name == "visuals":
+                if not isinstance(section_value, dict):
+                    raise ValueError("set_entity_fields.set.visuals must be a JSON object.")
+                for visual_id, visual_fields in section_value.items():
+                    resolved_visual_id = str(visual_id).strip()
+                    if not resolved_visual_id:
+                        raise ValueError("set_entity_fields.set.visuals keys must be non-empty visual ids.")
+                    if not isinstance(visual_fields, dict):
+                        raise ValueError(
+                            f"set_entity_fields.set.visuals.{resolved_visual_id} must be a JSON object."
+                        )
+                    for visual_field, raw_value in visual_fields.items():
+                        mutation = _normalize_entity_field_mutation(
+                            entity,
+                            f"visuals.{resolved_visual_id}.{visual_field}",
+                            raw_value,
+                        )
+                        prepared_operations.append(("field", mutation, None))
+            else:
+                raise ValueError(
+                    f"Unsupported set_entity_fields section '{section_name}'. "
+                    "Supported sections are: fields, variables, visuals."
+                )
+
+        visuals_changed = False
+        for operation_kind, operation_name, operation_value in prepared_operations:
+            if operation_kind == "field":
+                persisted_field_name, persisted_value = _apply_normalized_entity_field_mutation(
+                    entity,
+                    operation_name,
+                )
+                if persistent:
+                    if persisted_field_name == "visuals":
+                        visuals_changed = True
+                    else:
+                        _persist_entity_field(
+                            area=area,
+                            persistence_runtime=persistence_runtime,
+                            entity_id=entity.entity_id,
+                            field_name=persisted_field_name,
+                            value=persisted_value,
+                            entity=entity,
+                        )
+                continue
+
+            variables = _require_exact_entity_variables(world, entity.entity_id)
+            variables[operation_name] = copy.deepcopy(operation_value)
+            if persistent:
+                _persist_exact_entity_variable_value(
+                    world=world,
+                    area=area,
+                    persistence_runtime=persistence_runtime,
+                    entity_id=entity.entity_id,
+                    name=operation_name,
+                    value=operation_value,
+                )
+
+        if persistent and visuals_changed:
+            _persist_entity_field(
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity_id=entity.entity_id,
+                field_name="visuals",
+                value=_serialize_entity_visuals(entity),
+                entity=entity,
+            )
+        return ImmediateHandle()
+
     def _step_entity(
         *,
         world: Any,
@@ -701,7 +895,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: str = "immediate",
-        allow_push: bool = True,
         wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
@@ -713,7 +906,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             grid_sync=grid_sync,  # type: ignore[arg-type]
-            allow_push=allow_push,
         )
         if not moved_entity_ids:
             return ImmediateHandle()
@@ -1155,7 +1347,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         movement_system: Any,
         *,
         entity_id: str,
-        visual_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Block the command lane until the requested entity stops moving."""
@@ -1262,12 +1453,95 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         audio_player: Any | None,
         *,
         path: str,
+        volume: int | float | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Play a one-shot audio asset from the active project's assets."""
         if audio_player is None:
             return ImmediateHandle()
-        audio_player.play_audio(str(path))
+        audio_player.play_audio(str(path), volume=volume)
+        return ImmediateHandle()
+
+    @registry.register("set_sound_volume")
+    def set_sound_volume(
+        audio_player: Any | None,
+        *,
+        volume: int | float,
+        **_: Any,
+    ) -> CommandHandle:
+        """Set the default sound-effect volume for future one-shot playback."""
+        if audio_player is None:
+            return ImmediateHandle()
+        audio_player.set_sound_volume(float(volume))
+        return ImmediateHandle()
+
+    @registry.register("play_music")
+    def play_music(
+        audio_player: Any | None,
+        *,
+        path: str,
+        loop: bool = True,
+        volume: int | float | None = None,
+        restart_if_same: bool = False,
+        **_: Any,
+    ) -> CommandHandle:
+        """Start or resume one dedicated background music track."""
+        if audio_player is None:
+            return ImmediateHandle()
+        audio_player.play_music(
+            str(path),
+            loop=bool(loop),
+            volume=None if volume is None else float(volume),
+            restart_if_same=bool(restart_if_same),
+        )
+        return ImmediateHandle()
+
+    @registry.register("stop_music")
+    def stop_music(
+        audio_player: Any | None,
+        *,
+        fade_seconds: int | float = 0.0,
+        **_: Any,
+    ) -> CommandHandle:
+        """Stop the current background music track."""
+        if audio_player is None:
+            return ImmediateHandle()
+        audio_player.stop_music(fade_seconds=float(fade_seconds))
+        return ImmediateHandle()
+
+    @registry.register("pause_music")
+    def pause_music(
+        audio_player: Any | None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Pause the current background music track."""
+        if audio_player is None:
+            return ImmediateHandle()
+        audio_player.pause_music()
+        return ImmediateHandle()
+
+    @registry.register("resume_music")
+    def resume_music(
+        audio_player: Any | None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Resume the paused background music track."""
+        if audio_player is None:
+            return ImmediateHandle()
+        audio_player.resume_music()
+        return ImmediateHandle()
+
+    @registry.register("set_music_volume")
+    def set_music_volume(
+        audio_player: Any | None,
+        *,
+        volume: int | float,
+        **_: Any,
+    ) -> CommandHandle:
+        """Set the dedicated music-channel volume."""
+        if audio_player is None:
+            return ImmediateHandle()
+        audio_player.set_music_volume(float(volume))
         return ImmediateHandle()
 
     @registry.register("show_screen_image")
@@ -1724,6 +1998,26 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             entity_id=entity_id,
             field_name=field_name,
             value=value,
+            persistent=persistent,
+        )
+
+    @registry.register("set_entity_fields")
+    def set_entity_fields(
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        *,
+        entity_id: str,
+        set: dict[str, Any],
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Change several supported runtime fields, variables, and visuals on one entity at once."""
+        return _set_exact_entity_fields_handle(
+            world=world,
+            area=area,
+            persistence_runtime=persistence_runtime,
+            entity_id=entity_id,
+            set_payload=set,
             persistent=persistent,
         )
 
@@ -2394,8 +2688,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("increment_world_var")
-    def increment_world_var(
+    @registry.register("add_world_var")
+    def add_world_var(
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -2410,8 +2704,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             _persist_world_variable_value(persistence_runtime, name=name, value=current_value)
         return ImmediateHandle()
 
-    @registry.register("increment_entity_var")
-    def increment_entity_var(
+    @registry.register("add_entity_var")
+    def add_entity_var(
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -2433,6 +2727,60 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 entity_id=entity_id,
                 name=name,
                 value=current_value,
+            )
+        return ImmediateHandle()
+
+    @registry.register("toggle_world_var")
+    def toggle_world_var(
+        world: Any,
+        persistence_runtime: Any | None,
+        *,
+        name: str,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Flip one explicit world variable between True and False."""
+        current_value = world.variables.get(name, False)
+        if current_value is None:
+            current_value = False
+        if not isinstance(current_value, bool):
+            raise TypeError(
+                f"toggle_world_var requires boolean state for '{name}', got {type(current_value).__name__}."
+            )
+        next_value = not current_value
+        world.variables[name] = next_value
+        if persistent:
+            _persist_world_variable_value(persistence_runtime, name=name, value=next_value)
+        return ImmediateHandle()
+
+    @registry.register("toggle_entity_var")
+    def toggle_entity_var(
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        *,
+        entity_id: str,
+        name: str,
+        persistent: bool = False,
+    ) -> CommandHandle:
+        """Flip one explicit entity variable between True and False."""
+        variables = _require_exact_entity_variables(world, entity_id)
+        current_value = variables.get(name, False)
+        if current_value is None:
+            current_value = False
+        if not isinstance(current_value, bool):
+            raise TypeError(
+                f"toggle_entity_var requires boolean state for '{name}', got {type(current_value).__name__}."
+            )
+        next_value = not current_value
+        variables[name] = next_value
+        if persistent:
+            _persist_exact_entity_variable_value(
+                world=world,
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity_id=entity_id,
+                name=name,
+                value=next_value,
             )
         return ImmediateHandle()
 

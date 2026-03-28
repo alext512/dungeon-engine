@@ -7,6 +7,7 @@ import copy
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
+import random
 from typing import Any, Callable
 
 from dungeon_engine import config
@@ -22,6 +23,7 @@ from dungeon_engine.logging_utils import get_logger
 
 logger = get_logger(__name__)
 _JSON_FILE_CACHE: dict[Path, Any] = {}
+_FALLBACK_RANDOM_GENERATOR = random.Random()
 _PLAIN_ENTITY_REF_FIELDS = (
     "entity_id",
     "kind",
@@ -74,6 +76,7 @@ class CommandContext:
     audio_player: Any | None = None
     screen_manager: Any | None = None
     command_runner: Any | None = None
+    random_generator: Any | None = None
     persistence_runtime: Any | None = None
     request_area_change: Callable[["AreaTransitionRequest"], None] | None = None
     request_new_game: Callable[["AreaTransitionRequest"], None] | None = None
@@ -292,6 +295,14 @@ def _coerce_numeric_value(value: Any, *, source_name: str) -> int | float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{source_name} value source expects numeric values.")
     return value
+
+
+def _coerce_integer_value(value: Any, *, source_name: str, field_name: str) -> int:
+    """Return one integer-like value or raise a clear error."""
+    numeric_value = _coerce_numeric_value(value, source_name=source_name)
+    if isinstance(numeric_value, float) and not numeric_value.is_integer():
+        raise TypeError(f"{source_name} {field_name} expects an integer value.")
+    return int(numeric_value)
 
 
 def _serialize_entity_fields(entity: Any, *, fields: list[str] | tuple[str, ...]) -> dict[str, Any]:
@@ -583,6 +594,67 @@ def _resolve_wrap_index_value(resolved_source: Any) -> int:
     return value % count
 
 
+def _resolve_and_value(resolved_source: Any) -> bool:
+    """Return True when every authored value in the list is truthy."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$and value source requires a list or tuple.")
+    return all(bool(value) for value in resolved_source)
+
+
+def _resolve_or_value(resolved_source: Any) -> bool:
+    """Return True when any authored value in the list is truthy."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$or value source requires a list or tuple.")
+    return any(bool(value) for value in resolved_source)
+
+
+def _resolve_not_value(resolved_source: Any) -> bool:
+    """Return the authored truthiness negation of one value."""
+    return not bool(resolved_source)
+
+
+def _runtime_random_generator(context: CommandContext) -> Any:
+    """Return the active RNG for authored runtime helpers."""
+    if context.random_generator is not None:
+        return context.random_generator
+    return _FALLBACK_RANDOM_GENERATOR
+
+
+def _resolve_random_int_value(context: CommandContext, resolved_source: Any) -> int:
+    """Return one inclusive authored random integer."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$random_int value source requires a JSON object.")
+    if "min" not in resolved_source or "max" not in resolved_source:
+        raise ValueError("$random_int value source requires both min and max.")
+    minimum = _coerce_integer_value(
+        resolved_source.get("min"),
+        source_name="$random_int",
+        field_name="min",
+    )
+    maximum = _coerce_integer_value(
+        resolved_source.get("max"),
+        source_name="$random_int",
+        field_name="max",
+    )
+    if minimum > maximum:
+        raise ValueError("$random_int value source requires min <= max.")
+    return int(_runtime_random_generator(context).randint(minimum, maximum))
+
+
+def _resolve_random_choice_value(context: CommandContext, resolved_source: Any) -> Any:
+    """Return one random collection item or the supplied default."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$random_choice value source requires a JSON object.")
+    collection = resolved_source.get("value")
+    if collection is None:
+        return copy.deepcopy(resolved_source.get("default"))
+    if not isinstance(collection, (list, tuple)):
+        raise TypeError("$random_choice value source requires a list or tuple value.")
+    if not collection:
+        return copy.deepcopy(resolved_source.get("default"))
+    return copy.deepcopy(_runtime_random_generator(context).choice(list(collection)))
+
+
 def _resolve_cell_flags_at_value(context: CommandContext, resolved_source: Any) -> dict[str, Any] | Any:
     """Return plain per-cell flag data for one explicit tile coordinate."""
     if context.area is None:
@@ -722,6 +794,21 @@ def _resolve_runtime_value_source(
 
     if source_name == "$wrap_index":
         return _resolve_wrap_index_value(resolved_source)
+
+    if source_name == "$and":
+        return _resolve_and_value(resolved_source)
+
+    if source_name == "$or":
+        return _resolve_or_value(resolved_source)
+
+    if source_name == "$not":
+        return _resolve_not_value(resolved_source)
+
+    if source_name == "$random_int":
+        return _resolve_random_int_value(context, resolved_source)
+
+    if source_name == "$random_choice":
+        return _resolve_random_choice_value(context, resolved_source)
 
     if source_name == "$entities_at":
         return _resolve_entities_at_value(context, resolved_source)
@@ -901,6 +988,11 @@ def _resolve_runtime_values(
                 "$join_text",
                 "$slice_collection",
                 "$wrap_index",
+                "$and",
+                "$or",
+                "$not",
+                "$random_int",
+                "$random_choice",
                 "$find_in_collection",
                 "$any_in_collection",
             }:

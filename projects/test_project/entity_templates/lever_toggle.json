@@ -55,35 +55,35 @@
                 {
                   "on_end": [
                     {
-                      "type": "set_entity_var",
+                      "type": "set_entity_fields",
                       "entity_id": "$caller_id",
-                      "name": "toggled",
-                      "value": true,
+                      "set": {
+                        "variables": {
+                          "toggled": true
+                        },
+                        "visuals": {
+                          "main": {
+                            "tint": [
+                              150,
+                              150,
+                              150
+                            ]
+                          }
+                        }
+                      },
                       "persistent": true
                     },
                     {
-                      "type": "set_entity_field",
+                      "type": "set_entity_fields",
                       "entity_id": "$target_gate",
-                      "field_name": "visible",
-                      "value": false,
-                      "persistent": true
-                    },
-                    {
-                      "type": "set_entity_var",
-                      "entity_id": "$target_gate",
-                      "name": "blocks_movement",
-                      "value": false,
-                      "persistent": true
-                    },
-                    {
-                      "type": "set_entity_field",
-                      "entity_id": "$caller_id",
-                      "field_name": "visuals.main.tint",
-                      "value": [
-                        150,
-                        150,
-                        150
-                      ],
+                      "set": {
+                        "fields": {
+                          "visible": false
+                        },
+                        "variables": {
+                          "blocks_movement": false
+                        }
+                      },
                       "persistent": true
                     }
                   ]
@@ -124,35 +124,35 @@
                 {
                   "on_end": [
                     {
-                      "type": "set_entity_var",
+                      "type": "set_entity_fields",
                       "entity_id": "$caller_id",
-                      "name": "toggled",
-                      "value": false,
+                      "set": {
+                        "variables": {
+                          "toggled": false
+                        },
+                        "visuals": {
+                          "main": {
+                            "tint": [
+                              255,
+                              255,
+                              255
+                            ]
+                          }
+                        }
+                      },
                       "persistent": true
                     },
                     {
-                      "type": "set_entity_field",
+                      "type": "set_entity_fields",
                       "entity_id": "$target_gate",
-                      "field_name": "visible",
-                      "value": true,
-                      "persistent": true
-                    },
-                    {
-                      "type": "set_entity_var",
-                      "entity_id": "$target_gate",
-                      "name": "blocks_movement",
-                      "value": true,
-                      "persistent": true
-                    },
-                    {
-                      "type": "set_entity_field",
-                      "entity_id": "$caller_id",
-                      "field_name": "visuals.main.tint",
-                      "value": [
-                        255,
-                        255,
-                        255
-                      ],
+                      "set": {
+                        "fields": {
+                          "visible": true
+                        },
+                        "variables": {
+                          "blocks_movement": true
+                        }
+                      },
                       "persistent": true
                     }
                   ]
