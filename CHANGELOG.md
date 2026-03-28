@@ -4,6 +4,15 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Current-Area Naming + Cross-Area State APIs
+
+- Renamed the authored `world`-variable family to `current_area` so the JSON surface now matches the real runtime meaning of those values
+- Renamed the runtime token family from `$world...` to `$current_area...`
+- Added first-pass cross-area persistent state commands `set_area_var`, `set_area_entity_var`, and `set_area_entity_field`
+- Added `$area_entity_ref` for explicit area-id/entity-id reads against area-owned authored state plus that area's persistent overrides
+- Kept first-pass cross-area reads intentionally simple by excluding globals and travelers from `$area_entity_ref`
+- Updated active tests and docs to describe the current-area naming and the new cross-area state surface
+
 ## Primitive Command Cleanup
 
 - Reworked command scheduling so top-level flows now run independently by default instead of through one privileged main lane plus detached/background exceptions

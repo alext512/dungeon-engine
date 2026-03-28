@@ -22,6 +22,7 @@ from dungeon_engine.commands.runner import (
     SequenceCommandHandle,
     WaitFramesHandle,
     execute_command_spec,
+    load_area_owned_snapshot,
 )
 from dungeon_engine.world.entity import DIRECTION_VECTORS
 from dungeon_engine.world.loader import instantiate_entity
@@ -435,16 +436,16 @@ def _require_exact_entity_variables(world: Any, entity_id: str) -> dict[str, Any
     return _require_exact_entity(world, entity_id).variables
 
 
-def _persist_world_variable_value(
+def _persist_current_area_variable_value(
     persistence_runtime: Any | None,
     *,
     name: str,
     value: Any,
 ) -> None:
-    """Mirror one explicit world-variable write into persistence when available."""
+    """Mirror one explicit current-area variable write into persistence when available."""
     if persistence_runtime is None:
         return
-    persistence_runtime.set_world_variable(name, copy.deepcopy(value))
+    persistence_runtime.set_current_area_variable(name, copy.deepcopy(value))
 
 
 def _persist_exact_entity_variable_value(
@@ -467,6 +468,57 @@ def _persist_exact_entity_variable_value(
         entity=entity,
         tile_size=area.tile_size,
     )
+
+
+def _require_cross_area_persistence_runtime(
+    persistence_runtime: Any | None,
+    *,
+    command_name: str,
+) -> Any:
+    """Return the active persistence runtime or raise a clear error for cross-area state APIs."""
+    if persistence_runtime is None:
+        raise ValueError(f"{command_name} requires an active persistence runtime.")
+    return persistence_runtime
+
+
+def _require_area_reference(
+    project: Any | None,
+    area_id: str,
+    *,
+    command_name: str,
+) -> str:
+    """Return one resolved authored area id or raise a clear cross-area API error."""
+    if project is None:
+        raise ValueError(f"{command_name} requires an active project context.")
+    resolved_area_id = str(area_id).strip()
+    if not resolved_area_id:
+        raise ValueError(f"{command_name} requires a non-empty area_id.")
+    if project.resolve_area_reference(resolved_area_id) is None:
+        raise KeyError(f"Unknown area '{resolved_area_id}'.")
+    return resolved_area_id
+
+
+def _resolve_authored_area_entity_snapshot(
+    *,
+    project: Any | None,
+    area_id: str,
+    entity_id: str,
+    asset_manager: Any | None = None,
+) -> Any:
+    """Return one authored area-owned entity for validation in cross-area state APIs."""
+    _, snapshot_world = load_area_owned_snapshot(
+        project=project,
+        area_id=area_id,
+        asset_manager=asset_manager,
+        include_persistent=False,
+    )
+    resolved_entity_id = str(entity_id).strip()
+    entity = snapshot_world.area_entities.get(resolved_entity_id)
+    if entity is None:
+        raise KeyError(
+            f"Area '{str(area_id).strip()}' does not define authored entity '{resolved_entity_id}'."
+        )
+    return entity
 
 
 def _persist_entity_field(
@@ -663,7 +715,7 @@ def _normalize_entity_field_mutation(
 
     raise ValueError(
         f"Unsupported entity field '{field_name}'. "
-        "Use set_world_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
+        "Use set_current_area_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
     )
 
 
@@ -730,7 +782,7 @@ def _apply_normalized_entity_field_mutation(
 
     raise ValueError(
         f"Unsupported entity field path '{'.'.join(path)}'. "
-        "Use set_world_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
+        "Use set_current_area_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
     )
 
 
@@ -2646,8 +2698,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("set_world_var")
-    def set_world_var(
+    @registry.register("set_current_area_var")
+    def set_current_area_var(
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -2655,11 +2707,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         value: Any,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Set one explicit world variable to a value."""
+        """Set one explicit current-area variable to a value."""
         persisted_value = copy.deepcopy(value)
         world.variables[name] = persisted_value
         if persistent:
-            _persist_world_variable_value(persistence_runtime, name=name, value=persisted_value)
+            _persist_current_area_variable_value(persistence_runtime, name=name, value=persisted_value)
         return ImmediateHandle()
 
     @registry.register("set_entity_var")
@@ -2688,8 +2740,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("add_world_var")
-    def add_world_var(
+    @registry.register("add_current_area_var")
+    def add_current_area_var(
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -2697,11 +2749,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         amount: int | float = 1,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Add an amount to one explicit world variable."""
+        """Add an amount to one explicit current-area variable."""
         current_value = world.variables.get(name, 0) + amount
         world.variables[name] = current_value
         if persistent:
-            _persist_world_variable_value(persistence_runtime, name=name, value=current_value)
+            _persist_current_area_variable_value(persistence_runtime, name=name, value=current_value)
         return ImmediateHandle()
 
     @registry.register("add_entity_var")
@@ -2730,26 +2782,27 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("toggle_world_var")
-    def toggle_world_var(
+    @registry.register("toggle_current_area_var")
+    def toggle_current_area_var(
         world: Any,
         persistence_runtime: Any | None,
         *,
         name: str,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Flip one explicit world variable between True and False."""
+        """Flip one explicit current-area variable between True and False."""
         current_value = world.variables.get(name, False)
         if current_value is None:
             current_value = False
         if not isinstance(current_value, bool):
             raise TypeError(
-                f"toggle_world_var requires boolean state for '{name}', got {type(current_value).__name__}."
+                "toggle_current_area_var requires boolean state "
+                f"for '{name}', got {type(current_value).__name__}."
             )
         next_value = not current_value
         world.variables[name] = next_value
         if persistent:
-            _persist_world_variable_value(persistence_runtime, name=name, value=next_value)
+            _persist_current_area_variable_value(persistence_runtime, name=name, value=next_value)
         return ImmediateHandle()
 
     @registry.register("toggle_entity_var")
@@ -2784,8 +2837,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("set_world_var_length")
-    def set_world_var_length(
+    @registry.register("set_current_area_var_length")
+    def set_current_area_var_length(
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -2793,17 +2846,17 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         value: Any = None,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Store the length of a value into one explicit world variable."""
+        """Store the length of a value into one explicit current-area variable."""
         if value is None:
             length_value = 0
         else:
             try:
                 length_value = len(value)
             except TypeError as exc:
-                raise TypeError("set_world_var_length requires a sized value or null.") from exc
+                raise TypeError("set_current_area_var_length requires a sized value or null.") from exc
         world.variables[name] = length_value
         if persistent:
-            _persist_world_variable_value(persistence_runtime, name=name, value=length_value)
+            _persist_current_area_variable_value(persistence_runtime, name=name, value=length_value)
         return ImmediateHandle()
 
     @registry.register("set_entity_var_length")
@@ -2838,8 +2891,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("append_world_var")
-    def append_world_var(
+    @registry.register("append_current_area_var")
+    def append_current_area_var(
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -2847,18 +2900,20 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         value: Any,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Append one item to one explicit world list variable."""
+        """Append one item to one explicit current-area list variable."""
         current_value = world.variables.get(name)
         if current_value is None:
             current_items: list[Any] = []
         elif isinstance(current_value, list):
             current_items = [copy.deepcopy(item) for item in current_value]
         else:
-            raise TypeError("append_world_var requires the target variable to be a list or null.")
+            raise TypeError(
+                "append_current_area_var requires the target variable to be a list or null."
+            )
         current_items.append(copy.deepcopy(value))
         world.variables[name] = current_items
         if persistent:
-            _persist_world_variable_value(persistence_runtime, name=name, value=current_items)
+            _persist_current_area_variable_value(persistence_runtime, name=name, value=current_items)
         return ImmediateHandle()
 
     @registry.register("append_entity_var")
@@ -2894,8 +2949,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         return ImmediateHandle()
 
-    @registry.register("pop_world_var")
-    def pop_world_var(
+    @registry.register("pop_current_area_var")
+    def pop_current_area_var(
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -2904,14 +2959,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         default: Any = None,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Pop the last item from one explicit world list variable."""
+        """Pop the last item from one explicit current-area list variable."""
         current_value = world.variables.get(name)
         if current_value is None:
             current_items: list[Any] = []
         elif isinstance(current_value, list):
             current_items = [copy.deepcopy(item) for item in current_value]
         else:
-            raise TypeError("pop_world_var requires the target variable to be a list or null.")
+            raise TypeError("pop_current_area_var requires the target variable to be a list or null.")
 
         popped_value = copy.deepcopy(default)
         if current_items:
@@ -2921,9 +2976,9 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             world.variables[store_var] = copy.deepcopy(popped_value)
 
         if persistent:
-            _persist_world_variable_value(persistence_runtime, name=name, value=current_items)
+            _persist_current_area_variable_value(persistence_runtime, name=name, value=current_items)
             if store_var:
-                _persist_world_variable_value(persistence_runtime, name=store_var, value=popped_value)
+                _persist_current_area_variable_value(persistence_runtime, name=store_var, value=popped_value)
         return ImmediateHandle()
 
     @registry.register("pop_entity_var")
@@ -2975,8 +3030,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 )
         return ImmediateHandle()
 
-    @registry.register("check_world_var", deferred_params={"then", "else"})
-    def check_world_var(
+    @registry.register("check_current_area_var", deferred_params={"then", "else"})
+    def check_current_area_var(
         context: CommandContext,
         world: Any,
         *,
@@ -2986,7 +3041,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         then: list[dict[str, Any]] | None = None,
         **runtime_params: Any,
     ) -> CommandHandle:
-        """Branch based on one explicit world-variable condition."""
+        """Branch based on one explicit current-area variable condition."""
         comparator = _COMPARE_OPS.get(op)
         if comparator is None:
             raise ValueError(f"Unknown comparison operator '{op}'.")
@@ -3000,6 +3055,135 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             runtime_params=runtime_params,
             excluded_param_names={"name", "op", "value", "then", "else"},
         )
+
+    @registry.register("set_area_var")
+    def set_area_var(
+        context: CommandContext,
+        world: Any,
+        persistence_runtime: Any | None,
+        *,
+        area_id: str,
+        name: str,
+        value: Any,
+    ) -> CommandHandle:
+        """Persist one area-level variable override for an explicitly chosen area."""
+        runtime = _require_cross_area_persistence_runtime(
+            persistence_runtime,
+            command_name="set_area_var",
+        )
+        resolved_area_id = _require_area_reference(
+            context.project,
+            area_id,
+            command_name="set_area_var",
+        )
+        persisted_value = copy.deepcopy(value)
+        runtime.set_area_variable(resolved_area_id, name, persisted_value)
+        if context.area is not None and context.area.area_id == resolved_area_id:
+            world.variables[name] = copy.deepcopy(persisted_value)
+        return ImmediateHandle()
+
+    @registry.register("set_area_entity_var")
+    def set_area_entity_var(
+        context: CommandContext,
+        world: Any,
+        persistence_runtime: Any | None,
+        *,
+        area_id: str,
+        entity_id: str,
+        name: str,
+        value: Any,
+    ) -> CommandHandle:
+        """Persist one variable override for an authored area entity in an explicit area."""
+        runtime = _require_cross_area_persistence_runtime(
+            persistence_runtime,
+            command_name="set_area_entity_var",
+        )
+        resolved_area_id = _require_area_reference(
+            context.project,
+            area_id,
+            command_name="set_area_entity_var",
+        )
+        resolved_entity_id = str(entity_id).strip()
+        if not resolved_entity_id:
+            raise ValueError("set_area_entity_var requires a non-empty entity_id.")
+        live_entity = None
+        if context.area is not None and context.area.area_id == resolved_area_id:
+            live_entity = world.area_entities.get(resolved_entity_id)
+        if live_entity is None:
+            _resolve_authored_area_entity_snapshot(
+                project=context.project,
+                area_id=resolved_area_id,
+                entity_id=resolved_entity_id,
+                asset_manager=context.asset_manager,
+            )
+        persisted_value = copy.deepcopy(value)
+        runtime.set_area_entity_variable(
+            resolved_area_id,
+            resolved_entity_id,
+            name,
+            persisted_value,
+        )
+        if live_entity is not None:
+            live_entity.variables[name] = copy.deepcopy(persisted_value)
+        return ImmediateHandle()
+
+    @registry.register("set_area_entity_field")
+    def set_area_entity_field(
+        context: CommandContext,
+        world: Any,
+        persistence_runtime: Any | None,
+        *,
+        area_id: str,
+        entity_id: str,
+        field_name: str,
+        value: Any,
+    ) -> CommandHandle:
+        """Persist one field override for an authored area entity in an explicit area."""
+        runtime = _require_cross_area_persistence_runtime(
+            persistence_runtime,
+            command_name="set_area_entity_field",
+        )
+        resolved_area_id = _require_area_reference(
+            context.project,
+            area_id,
+            command_name="set_area_entity_field",
+        )
+        resolved_entity_id = str(entity_id).strip()
+        if not resolved_entity_id:
+            raise ValueError("set_area_entity_field requires a non-empty entity_id.")
+
+        live_entity = None
+        if context.area is not None and context.area.area_id == resolved_area_id:
+            live_entity = world.area_entities.get(resolved_entity_id)
+
+        validation_entity = live_entity
+        if validation_entity is None:
+            validation_entity = _resolve_authored_area_entity_snapshot(
+                project=context.project,
+                area_id=resolved_area_id,
+                entity_id=resolved_entity_id,
+                asset_manager=context.asset_manager,
+            )
+
+        mutation = _normalize_entity_field_mutation(validation_entity, field_name, value)
+        if live_entity is not None:
+            persisted_field_name, persisted_value = _apply_normalized_entity_field_mutation(
+                live_entity,
+                mutation,
+            )
+        else:
+            persisted_field_name, persisted_value = _apply_normalized_entity_field_mutation(
+                copy.deepcopy(validation_entity),
+                mutation,
+            )
+
+        runtime.set_area_entity_field(
+            resolved_area_id,
+            resolved_entity_id,
+            persisted_field_name,
+            persisted_value,
+        )
+        return ImmediateHandle()
 
     @registry.register("check_entity_var", deferred_params={"then", "else"})
     def check_entity_var(

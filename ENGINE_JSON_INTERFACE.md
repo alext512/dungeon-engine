@@ -369,7 +369,7 @@ A command spec is a JSON object with a `"type"` field.
 Examples:
 
 ```json
-{ "type": "set_world_var", "name": "opened", "value": true }
+{ "type": "set_current_area_var", "name": "opened", "value": true }
 ```
 
 ```json
@@ -377,7 +377,7 @@ Examples:
   "type": "run_sequence",
   "commands": [
     { "type": "play_audio", "path": "assets/project/sfx/open.wav" },
-    { "type": "set_world_var", "name": "opened", "value": true }
+    { "type": "set_current_area_var", "name": "opened", "value": true }
   ]
 }
 ```
@@ -390,8 +390,8 @@ Command arrays currently appear in:
 - `run_parallel.commands`
 - `spawn_flow.commands`
 - `run_commands_for_collection.commands`
-- `check_world_var.then`
-- `check_world_var.else`
+- `check_current_area_var.then`
+- `check_current_area_var.else`
 - `check_entity_var.then`
 - `check_entity_var.else`
 
@@ -464,7 +464,7 @@ Exact current token families:
 - `$project...`
 - `$area...`
 - `$camera...`
-- `$world...`
+- `$current_area...`
 - `$entity.<entity_id>...`
 - `$self...`
 - `$actor...`
@@ -485,8 +485,8 @@ Meaning:
   - lookup in current area state
 - `$camera.x`
   - lookup in current camera state
-- `$world.some_var`
-  - lookup in the current live world/runtime variable store
+- `$current_area.some_var`
+  - lookup in the current live current-area/runtime variable store
 - `$entity.some_entity.some_var`
   - lookup in another entity's `variables`
 - `$self.some_var`
@@ -535,6 +535,7 @@ Current value sources:
 - `$wrapped_lines`
 - `$text_window`
 - `$entity_ref`
+- `$area_entity_ref`
 - `$cell_flags_at`
 - `$entities_at`
 - `$entity_at`
@@ -634,6 +635,35 @@ Notes:
 
 - `select` is required.
 - with `select`, missing entities return `default`.
+
+### `$area_entity_ref`
+
+Returns one plain-data area-owned entity reference from another area by explicit `area_id` plus `entity_id`.
+
+Shape:
+
+```json
+{
+  "$area_entity_ref": {
+    "area_id": "dungeon/room_b",
+    "entity_id": "gate_1",
+    "select": {
+      "fields": ["entity_id", "visible"],
+      "variables": ["opened"]
+    },
+    "default": null
+  }
+}
+```
+
+Notes:
+
+- `select` is required.
+- missing entities in the target area return `default`.
+- first-pass semantics are intentionally simple:
+  - read the target area's own authored entities
+  - apply that area's persistent overrides
+  - do not layer in globals or travelers
 
 ### `$entities_at`
 
@@ -1296,22 +1326,25 @@ These commands are gated by project `debug_inspection_enabled`.
 - `destroy_entity(entity_id, persistent?)`
 - `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)` - two forms: pass a full `entity` dict, or pass individual fields (`entity_id`, `x`, `y`, and optionally `template`, `kind`, `parameters`)
 
-### World And Entity Variables
+### Current-Area And Entity Variables
 
-- `set_world_var(name, value, persistent?)`
+- `set_current_area_var(name, value, persistent?)`
 - `set_entity_var(entity_id, name, value, persistent?)`
-- `add_world_var(name, amount?, persistent?)`
+- `add_current_area_var(name, amount?, persistent?)`
 - `add_entity_var(entity_id, name, amount?, persistent?)`
-- `toggle_world_var(name, persistent?)`
+- `toggle_current_area_var(name, persistent?)`
 - `toggle_entity_var(entity_id, name, persistent?)`
-- `set_world_var_length(name, value?, persistent?)`
+- `set_current_area_var_length(name, value?, persistent?)`
 - `set_entity_var_length(entity_id, name, value?, persistent?)`
-- `append_world_var(name, value, persistent?)`
+- `append_current_area_var(name, value, persistent?)`
 - `append_entity_var(entity_id, name, value, persistent?)`
-- `pop_world_var(name, store_var?, default?, persistent?)`
+- `pop_current_area_var(name, store_var?, default?, persistent?)`
 - `pop_entity_var(entity_id, name, store_var?, default?, persistent?)`
-- `check_world_var(name, op?, value?, then?, else?)`
+- `check_current_area_var(name, op?, value?, then?, else?)`
 - `check_entity_var(entity_id, name, op?, value?, then?, else?)`
+- `set_area_var(area_id, name, value)`
+- `set_area_entity_var(area_id, entity_id, name, value)`
+- `set_area_entity_field(area_id, entity_id, field_name, value)`
 
 Current comparison operators:
 - `eq`
@@ -1322,15 +1355,20 @@ Current comparison operators:
 - `lte`
 
 Notes:
-- `set_world_var` and related world-variable commands currently operate on the live world/runtime variable store for the active play session
+- `set_current_area_var` and related current-area-variable commands operate on the live current-area/runtime variable store for the active play session
 - in normal play, this is the authored surface for current area/runtime state that can also be persisted
-- `toggle_world_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
+- `toggle_current_area_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
+- persistence is chosen by the mutation command that writes the value, not by the variable name itself
+- authored content should treat each important variable consistently as either saved state or temporary session state
+- `set_area_var`, `set_area_entity_var`, and `set_area_entity_field` are always persistent cross-area writes
+- cross-area writes target area-owned authored state plus overrides for the named `area_id`; they do not run live commands in unloaded rooms
+- when a cross-area write targets the currently loaded area, the engine also mirrors the change into live runtime when possible
 
 Example:
 
 ```json
 {
-  "type": "check_world_var",
+  "type": "check_current_area_var",
   "name": "gate_open",
   "op": "eq",
   "value": true,
@@ -1378,8 +1416,8 @@ Current deferred command params:
 - `run_sequence.commands`
 - `run_parallel.commands`
 - `run_commands_for_collection.commands`
-- `check_world_var.then`
-- `check_world_var.else`
+- `check_current_area_var.then`
+- `check_current_area_var.else`
 - `check_entity_var.then`
 - `check_entity_var.else`
 

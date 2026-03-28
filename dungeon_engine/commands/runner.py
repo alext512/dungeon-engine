@@ -17,6 +17,8 @@ from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.systems.movement import MovementSystem
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import DIRECTION_VECTORS
+from dungeon_engine.world.loader import load_area
+from dungeon_engine.world.persistence import get_persistent_area_state
 from dungeon_engine.world.world import World
 from dungeon_engine.logging_utils import get_logger
 
@@ -609,6 +611,41 @@ def _serialize_selected_entity(entity: Any, *, select: dict[str, Any]) -> dict[s
     return data
 
 
+def load_area_owned_snapshot(
+    *,
+    project: Any,
+    area_id: str,
+    persistence_runtime: Any | None = None,
+    asset_manager: Any | None = None,
+    include_persistent: bool = True,
+) -> tuple[Area, World]:
+    """Load one area-owned snapshot without layering globals or travelers on top."""
+    if project is None:
+        raise ValueError("Area-targeted queries require an active project context.")
+    resolved_area_id = str(area_id).strip()
+    if not resolved_area_id:
+        raise ValueError("Area-targeted queries require a non-empty area_id.")
+    area_path = project.resolve_area_reference(resolved_area_id)
+    if area_path is None:
+        raise KeyError(f"Unknown area '{resolved_area_id}'.")
+
+    persistent_area_state = None
+    if include_persistent and persistence_runtime is not None:
+        persistent_area_state = get_persistent_area_state(
+            persistence_runtime.save_data,
+            resolved_area_id,
+        )
+
+    return load_area(
+        area_path,
+        project=project,
+        asset_manager=asset_manager,
+        persistent_area_state=copy.deepcopy(persistent_area_state)
+        if persistent_area_state is not None
+        else None,
+    )
+
+
 def _resolve_entity_ref_value(context: CommandContext, resolved_source: Any) -> dict[str, Any] | None:
     """Return one plain-data entity reference for an explicitly chosen entity id."""
     if not isinstance(resolved_source, dict):
@@ -624,6 +661,39 @@ def _resolve_entity_ref_value(context: CommandContext, resolved_source: Any) -> 
         source_name="$entity_ref",
     )
     entity = context.world.get_entity(entity_id)
+    if entity is None:
+        return default
+    return _serialize_selected_entity(entity, select=select)
+
+
+def _resolve_area_entity_ref_value(
+    context: CommandContext,
+    resolved_source: Any,
+) -> dict[str, Any] | None:
+    """Return one plain-data entity reference for an explicitly chosen area/entity pair."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$area_entity_ref value source requires a JSON object.")
+    area_id = str(resolved_source.get("area_id", "")).strip()
+    if not area_id:
+        raise ValueError("$area_entity_ref value source requires a non-empty area_id.")
+    entity_id = str(resolved_source.get("entity_id", "")).strip()
+    if not entity_id:
+        raise ValueError("$area_entity_ref value source requires a non-empty entity_id.")
+    default = copy.deepcopy(resolved_source.get("default"))
+    if "select" not in resolved_source:
+        raise ValueError("$area_entity_ref value source requires a select object.")
+    select = _resolve_entity_select_spec(
+        resolved_source.get("select"),
+        source_name="$area_entity_ref",
+    )
+    _, snapshot_world = load_area_owned_snapshot(
+        project=context.project,
+        area_id=area_id,
+        persistence_runtime=context.persistence_runtime,
+        asset_manager=context.asset_manager,
+        include_persistent=True,
+    )
+    entity = snapshot_world.area_entities.get(entity_id)
     if entity is None:
         return default
     return _serialize_selected_entity(entity, select=select)
@@ -974,6 +1044,9 @@ def _resolve_runtime_value_source(
     if source_name == "$entity_ref":
         return _resolve_entity_ref_value(context, resolved_source)
 
+    if source_name == "$area_entity_ref":
+        return _resolve_area_entity_ref_value(context, resolved_source)
+
     if source_name == "$sum":
         return _resolve_sum_value(resolved_source)
 
@@ -1123,7 +1196,7 @@ def _resolve_runtime_token(
             return copy.deepcopy(area_state)
         return copy.deepcopy(_lookup_nested_value(area_state, tail))
 
-    if head == "world":
+    if head == "current_area":
         return copy.deepcopy(_lookup_nested_value(context.world.variables, tail))
 
     if head == "entity":
@@ -1179,6 +1252,7 @@ def _resolve_runtime_values(
                 "$wrapped_lines",
                 "$text_window",
                 "$entity_ref",
+                "$area_entity_ref",
                 "$cell_flags_at",
                 "$entities_at",
                 "$entity_at",

@@ -584,11 +584,11 @@ The command runner also resolves tokens such as:
 - `$project.some.path`
 - `$area.tile_size`
 - `$camera.x`
-- `$world.some_value`
+- `$current_area.some_value`
 
 `$self...`, `$actor...`, `$caller...`, and `$entity.<id>...` read entity `variables`, not built-in entity fields. Use `$entity_ref` with a `select` block when you need built-in fields like `grid_x` or `pixel_y`.
 
-`$world...` reads the live world/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_world_var`, `add_world_var`, `toggle_world_var`, and `check_world_var` operate on.
+`$current_area...` reads the live current-area/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_current_area_var`, `add_current_area_var`, `toggle_current_area_var`, and `check_current_area_var` operate on.
 
 `$area...` exposes the current area's `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `name`.
 
@@ -1110,7 +1110,7 @@ Examples:
 
 ```json
 {
-  "type": "set_world_var",
+  "type": "set_current_area_var",
   "name": "both_switches_active",
   "value": {
     "$and": [
@@ -1137,7 +1137,7 @@ Examples:
 
 ```json
 {
-  "type": "set_world_var",
+  "type": "set_current_area_var",
   "name": "loot_roll",
   "value": {
     "$random_int": {
@@ -1254,14 +1254,29 @@ Terms:
 - `transient`
   - the change only affects the current live session and disappears when the runtime state is rebuilt or the game is reloaded
 
+Authoring guideline:
+
+- treat persistence as a property of the write command, not the variable name itself
+- for any important gameplay variable, decide whether it represents saved state or temporary session state
+- then write that same variable consistently
+
+Good examples:
+
+- lever or puzzle progress flags such as `toggled`, `opened`, or `boss_defeated`
+  - usually persistent
+- temporary controller/UI helpers such as `dialogue_open`, `selected_index`, or scratch movement vars
+  - usually transient
+
+Avoid mixing the same variable between persistent and transient writes unless you are doing it intentionally and understand the consequences. If a variable is sometimes saved and sometimes not, later behavior can become hard to reason about.
+
 Common examples:
 
-- `set_world_var` with `persistent: true`
+- `set_current_area_var` with `persistent: true`
 - `set_entity_var` with `persistent: true`
 - `set_entity_field` with `persistent: true`
 - `set_entity_fields` with `persistent: true`
 
-`set_world_var` is the current authored surface for live area/runtime state. Use it for room/session flags such as opened chests, current puzzle state, or temporary controller state that belongs to the current play session rather than one specific entity.
+`set_current_area_var` is the current authored surface for live area/runtime state. Use it for room/session flags such as opened chests, current puzzle state, or temporary controller state that belongs to the current play session rather than one specific entity.
 
 A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var` with `persistent: true` to remember whether the lever is toggled, and `set_entity_field` or `set_entity_fields` with `persistent: true` to update the gate's runtime presentation/state.
 
@@ -1292,6 +1307,42 @@ A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var`
 The command validates the full `set` payload before applying any changes, so invalid visual or field names do not partially mutate the entity.
 
 If you only need one runtime field, `set_entity_field` still works for focused updates. Its visual form now supports `visuals.<visual_id>.flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`.
+
+Cross-area state uses a different surface:
+
+- `set_area_var`
+- `set_area_entity_var`
+- `set_area_entity_field`
+
+These commands are always persistent. They edit the target area's saved/authored state by `area_id`; they do not run live events in unloaded rooms. If the target `area_id` is the area currently loaded right now, the engine also mirrors the change into the live runtime when possible.
+
+Example:
+
+```json
+{
+  "type": "set_area_entity_var",
+  "area_id": "dungeon/room_b",
+  "entity_id": "gate_1",
+  "name": "opened",
+  "value": true
+}
+```
+
+For cross-area reads, use `$area_entity_ref`. First-pass semantics are intentionally simple: it reads the target area's own authored entities plus that area's persistent overrides. It does not layer in globals or travelers.
+
+```json
+{
+  "$area_entity_ref": {
+    "area_id": "dungeon/room_b",
+    "entity_id": "gate_1",
+    "select": {
+      "fields": ["entity_id", "visible"],
+      "variables": ["opened"]
+    },
+    "default": null
+  }
+}
+```
 
 ## Audio Notes
 

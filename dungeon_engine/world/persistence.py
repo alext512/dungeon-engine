@@ -215,9 +215,15 @@ class PersistenceRuntime:
             return None
         return self.save_data.areas.get(self.current_area_id)
 
-    def set_world_variable(self, name: str, value: Any) -> None:
-        """Persist a world-level variable override for the current area."""
+    def set_current_area_variable(self, name: str, value: Any) -> None:
+        """Persist one current-area variable override for the bound area."""
         area_state = self._ensure_current_area_state()
+        area_state.variables[name] = copy.deepcopy(value)
+        self.dirty = True
+
+    def set_area_variable(self, area_id: str, name: str, value: Any) -> None:
+        """Persist one area-level variable override for an explicitly chosen area."""
+        area_state = self._ensure_area_state(area_id)
         area_state.variables[name] = copy.deepcopy(value)
         self.dirty = True
 
@@ -247,6 +253,20 @@ class PersistenceRuntime:
         entity_state.overrides[field_name] = copy.deepcopy(value)
         self.dirty = True
 
+    def set_area_entity_field(
+        self,
+        area_id: str,
+        entity_id: str,
+        field_name: str,
+        value: Any,
+    ) -> None:
+        """Persist one area-owned entity field override for an explicitly chosen area."""
+        entity_state = self._ensure_area_entity_state(area_id, entity_id)
+        entity_state.removed = False
+        entity_state.spawned = None
+        entity_state.overrides[field_name] = copy.deepcopy(value)
+        self.dirty = True
+
     def set_entity_variable(
         self,
         entity_id: str,
@@ -269,6 +289,21 @@ class PersistenceRuntime:
             self._record_spawned_entity(entity=entity, tile_size=tile_size)
             return
         entity_state = self._ensure_entity_state(entity_id, entity=entity)
+        entity_state.removed = False
+        entity_state.spawned = None
+        variables = entity_state.overrides.setdefault("variables", {})
+        variables[name] = copy.deepcopy(value)
+        self.dirty = True
+
+    def set_area_entity_variable(
+        self,
+        area_id: str,
+        entity_id: str,
+        name: str,
+        value: Any,
+    ) -> None:
+        """Persist one area-owned entity variable override for an explicitly chosen area."""
+        entity_state = self._ensure_area_entity_state(area_id, entity_id)
         entity_state.removed = False
         entity_state.spawned = None
         variables = entity_state.overrides.setdefault("variables", {})
@@ -402,15 +437,22 @@ class PersistenceRuntime:
             self.save_data.areas.pop(area_id, None)
         self.dirty = True
 
+    def _ensure_area_state(self, area_id: str) -> PersistentAreaState:
+        """Return one specific area's persistent state, creating it when missing."""
+        resolved_area_id = str(area_id).strip()
+        if not resolved_area_id:
+            raise ValueError("Area-targeted persistence updates require a non-empty area_id.")
+        area_state = self.save_data.areas.get(resolved_area_id)
+        if area_state is None:
+            area_state = PersistentAreaState()
+            self.save_data.areas[resolved_area_id] = area_state
+        return area_state
+
     def _ensure_current_area_state(self) -> PersistentAreaState:
         """Return the current area state, creating it when missing."""
         if not self.current_area_id:
             raise ValueError("No current area is bound for persistence updates.")
-        area_state = self.save_data.areas.get(self.current_area_id)
-        if area_state is None:
-            area_state = PersistentAreaState()
-            self.save_data.areas[self.current_area_id] = area_state
-        return area_state
+        return self._ensure_area_state(self.current_area_id)
 
     def _ensure_entity_state(
         self,
@@ -430,6 +472,22 @@ class PersistenceRuntime:
         if entity_state is None:
             entity_state = PersistentEntityState()
             area_state.entities[entity_id] = entity_state
+        return entity_state
+
+    def _ensure_area_entity_state(
+        self,
+        area_id: str,
+        entity_id: str,
+    ) -> PersistentEntityState:
+        """Return one specific area's persistent state for one authored area entity."""
+        resolved_entity_id = str(entity_id).strip()
+        if not resolved_entity_id:
+            raise ValueError("Area-targeted entity persistence updates require a non-empty entity_id.")
+        area_state = self._ensure_area_state(area_id)
+        entity_state = area_state.entities.get(resolved_entity_id)
+        if entity_state is None:
+            entity_state = PersistentEntityState()
+            area_state.entities[resolved_entity_id] = entity_state
         return entity_state
 
     def _record_spawned_entity(self, *, entity: Entity | None, tile_size: int | None) -> None:

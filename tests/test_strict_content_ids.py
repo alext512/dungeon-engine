@@ -2088,7 +2088,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "interact": EntityEvent(
                     commands=[
                         {
-                            "type": "set_world_var",
+                            "type": "set_current_area_var",
                             "name": "adjacent_interaction_triggered",
                             "value": True,
                         }
@@ -2239,13 +2239,13 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertTrue(controller.variables["branch_hit"])
 
-    def test_explicit_world_var_primitives_manage_values_and_branching(self) -> None:
+    def test_explicit_current_area_var_primitives_manage_values_and_branching(self) -> None:
         registry, context = self._make_command_context()
 
         execute_registered_command(
             registry,
             context,
-            "set_world_var",
+            "set_current_area_var",
             {
                 "name": "mode",
                 "value": "play",
@@ -2254,7 +2254,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "add_world_var",
+            "add_current_area_var",
             {
                 "name": "turn_count",
                 "amount": 3,
@@ -2263,7 +2263,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "append_world_var",
+            "append_current_area_var",
             {
                 "name": "visited_rooms",
                 "value": "village_square",
@@ -2272,7 +2272,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "append_world_var",
+            "append_current_area_var",
             {
                 "name": "visited_rooms",
                 "value": "village_house",
@@ -2281,7 +2281,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "set_world_var_length",
+            "set_current_area_var_length",
             {
                 "name": "visited_room_count",
                 "value": context.world.variables["visited_rooms"],
@@ -2291,7 +2291,7 @@ class StrictContentIdTests(unittest.TestCase):
             registry,
             context,
             {
-                "type": "set_world_var",
+                "type": "set_current_area_var",
                 "name": "latest_room",
                 "value": {
                     "$collection_item": {
@@ -2305,7 +2305,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "pop_world_var",
+            "pop_current_area_var",
             {
                 "name": "visited_rooms",
                 "store_var": "popped_room",
@@ -2315,14 +2315,14 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "check_world_var",
+            "check_current_area_var",
             {
                 "name": "mode",
                 "op": "eq",
                 "value": "play",
                 "then": [
                     {
-                        "type": "set_world_var",
+                        "type": "set_current_area_var",
                         "name": "world_branch_hit",
                         "value": True,
                     }
@@ -2364,7 +2364,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "toggle_world_var",
+            "toggle_current_area_var",
             {
                 "name": "paused",
             },
@@ -2496,7 +2496,7 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "set_world_var",
+            "set_current_area_var",
             {
                 "name": "door_open",
                 "value": True,
@@ -2521,6 +2521,235 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(
             area_state.entities["dialogue_controller"].overrides["variables"]["mode"],
             "choice",
+        )
+
+    def test_current_area_runtime_token_replaces_world_token(self) -> None:
+        world = World()
+        world.variables["phase"] = "opening"
+        world.add_entity(_make_runtime_entity("controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "controller",
+                "name": "copied_phase",
+                "value": "$current_area.phase",
+            },
+        ).update(0.0)
+
+        controller = world.get_entity("controller")
+        assert controller is not None
+        self.assertEqual(controller.variables["copied_phase"], "opening")
+
+        with self.assertRaises(KeyError):
+            execute_command_spec(
+                registry,
+                context,
+                {
+                    "type": "set_entity_var",
+                    "entity_id": "controller",
+                    "name": "legacy_phase",
+                    "value": "$world.phase",
+                },
+            ).update(0.0)
+
+    def test_cross_area_state_commands_persist_target_area_state_and_update_loaded_area(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "current_room.json": {
+                    **_minimal_area(name="Current Room"),
+                    "entities": [
+                        {
+                            "id": "switch_1",
+                            "kind": "switch",
+                            "x": 0,
+                            "y": 0,
+                            "variables": {"enabled": False},
+                        }
+                    ],
+                },
+                "other_room.json": {
+                    **_minimal_area(name="Other Room"),
+                    "entities": [
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "x": 0,
+                            "y": 0,
+                            "variables": {"open": False},
+                        }
+                    ],
+                },
+            }
+        )
+        runtime = PersistenceRuntime(project=project)
+        world = World()
+        switch = _make_runtime_entity("switch_1", kind="switch")
+        switch.variables["enabled"] = False
+        world.add_entity(switch)
+        current_area = Area(
+            area_id="current_room",
+            name="Current Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[],
+            cell_flags=[],
+        )
+        registry, context = self._make_command_context(
+            project=project,
+            world=world,
+            area=current_area,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_area_var",
+            {
+                "area_id": "other_room",
+                "name": "bridge_lowered",
+                "value": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_area_var",
+            {
+                "area_id": "current_room",
+                "name": "alarm_on",
+                "value": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_area_entity_var",
+            {
+                "area_id": "other_room",
+                "entity_id": "gate_1",
+                "name": "open",
+                "value": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_area_entity_var",
+            {
+                "area_id": "current_room",
+                "entity_id": "switch_1",
+                "name": "enabled",
+                "value": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_area_entity_field",
+            {
+                "area_id": "other_room",
+                "entity_id": "gate_1",
+                "field_name": "visible",
+                "value": False,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_area_entity_field",
+            {
+                "area_id": "current_room",
+                "entity_id": "switch_1",
+                "field_name": "visible",
+                "value": False,
+            },
+        ).update(0.0)
+
+        self.assertTrue(world.variables["alarm_on"])
+        updated_switch = world.get_entity("switch_1")
+        assert updated_switch is not None
+        self.assertTrue(updated_switch.variables["enabled"])
+        self.assertFalse(updated_switch.visible)
+
+        self.assertTrue(runtime.save_data.areas["other_room"].variables["bridge_lowered"])
+        self.assertTrue(runtime.save_data.areas["current_room"].variables["alarm_on"])
+        self.assertTrue(
+            runtime.save_data.areas["other_room"].entities["gate_1"].overrides["variables"]["open"]
+        )
+        self.assertTrue(
+            runtime.save_data.areas["current_room"].entities["switch_1"].overrides["variables"][
+                "enabled"
+            ]
+        )
+        self.assertFalse(runtime.save_data.areas["other_room"].entities["gate_1"].overrides["visible"])
+        self.assertFalse(
+            runtime.save_data.areas["current_room"].entities["switch_1"].overrides["visible"]
+        )
+
+    def test_area_entity_ref_reads_area_owned_state_plus_persistent_overrides(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "other_room.json": {
+                    **_minimal_area(name="Other Room"),
+                    "entities": [
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "x": 0,
+                            "y": 0,
+                            "variables": {"open": False},
+                        }
+                    ],
+                }
+            }
+        )
+        runtime = PersistenceRuntime(project=project)
+        runtime.set_area_entity_variable("other_room", "gate_1", "open", True)
+        runtime.set_area_entity_field("other_room", "gate_1", "visible", False)
+
+        world = World()
+        world.add_entity(_make_runtime_entity("controller", kind="system", space="screen"))
+        registry, context = self._make_command_context(
+            project=project,
+            world=world,
+            persistence_runtime=runtime,
+        )
+
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "controller",
+                "name": "snapshot",
+                "value": {
+                    "$area_entity_ref": {
+                        "area_id": "other_room",
+                        "entity_id": "gate_1",
+                        "select": {
+                            "fields": ["entity_id", "visible"],
+                            "variables": ["open"],
+                        },
+                        "default": None,
+                    }
+                },
+            },
+        ).update(0.0)
+
+        controller = world.get_entity("controller")
+        assert controller is not None
+        self.assertEqual(
+            controller.variables["snapshot"],
+            {
+                "entity_id": "gate_1",
+                "visible": False,
+                "variables": {"open": True},
+            },
         )
 
     def test_registry_filters_inherited_runtime_params_for_explicit_primitives(self) -> None:
@@ -2560,7 +2789,7 @@ class StrictContentIdTests(unittest.TestCase):
             registry.get_deferred_params("run_event"),
             {"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
         )
-        self.assertEqual(registry.get_deferred_params("check_world_var"), {"then", "else"})
+        self.assertEqual(registry.get_deferred_params("check_current_area_var"), {"then", "else"})
         self.assertEqual(registry.get_deferred_params("check_entity_var"), {"then", "else"})
 
     def test_append_and_pop_entity_var_support_nested_dialogue_snapshots(self) -> None:
@@ -4133,14 +4362,14 @@ class StrictContentIdTests(unittest.TestCase):
             "run_sequence",
             commands=[
                 {"type": "wait_frames", "frames": 1},
-                {"type": "set_world_var", "name": "first_done", "value": True},
+                {"type": "set_current_area_var", "name": "first_done", "value": True},
             ],
         )
         runner.enqueue(
             "run_sequence",
             commands=[
                 {"type": "wait_frames", "frames": 1},
-                {"type": "set_world_var", "name": "second_done", "value": True},
+                {"type": "set_current_area_var", "name": "second_done", "value": True},
             ],
         )
 
@@ -4162,10 +4391,10 @@ class StrictContentIdTests(unittest.TestCase):
                     "type": "spawn_flow",
                     "commands": [
                         {"type": "wait_frames", "frames": 1},
-                        {"type": "set_world_var", "name": "later", "value": True},
+                        {"type": "set_current_area_var", "name": "later", "value": True},
                     ],
                 },
-                {"type": "set_world_var", "name": "now", "value": True},
+                {"type": "set_current_area_var", "name": "now", "value": True},
             ],
         )
 
@@ -4204,12 +4433,12 @@ class StrictContentIdTests(unittest.TestCase):
                             "type": "run_sequence",
                             "commands": [
                                 {"type": "wait_frames", "frames": 2},
-                                {"type": "set_world_var", "name": "slow_done", "value": True},
+                                {"type": "set_current_area_var", "name": "slow_done", "value": True},
                             ],
                         },
                     ],
                 },
-                {"type": "set_world_var", "name": "after_fast", "value": True},
+                {"type": "set_current_area_var", "name": "after_fast", "value": True},
             ],
         )
 
@@ -4846,7 +5075,7 @@ class StrictContentIdTests(unittest.TestCase):
             registry,
             context,
             {
-                "type": "set_world_var",
+                "type": "set_current_area_var",
                 "name": "camera_bounds",
                 "value": "$camera.bounds",
             },
@@ -4878,7 +5107,7 @@ class StrictContentIdTests(unittest.TestCase):
             registry,
             context,
             {
-                "type": "set_world_var",
+                "type": "set_current_area_var",
                 "name": "follow_target",
                 "value": "$camera.follow_entity_id",
             },
