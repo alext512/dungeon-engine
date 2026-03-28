@@ -538,6 +538,8 @@ Current value sources:
 - `$cell_flags_at`
 - `$entities_at`
 - `$entity_at`
+- `$entities_query`
+- `$entity_query`
 - `$collection_item`
 - `$sum`
 - `$product`
@@ -647,6 +649,10 @@ Shape:
     "exclude_entity_id": "player",
     "include_hidden": false,
     "include_absent": false,
+    "where": {
+      "kind": "door",
+      "present": true
+    },
     "select": {
       "fields": ["entity_id"],
       "variables": ["blocks_movement", "pushable"]
@@ -671,6 +677,9 @@ Shape:
     "x": 5,
     "y": 7,
     "index": 0,
+    "where": {
+      "kind": "door"
+    },
     "select": {
       "fields": ["entity_id"],
       "variables": ["pushable"]
@@ -683,9 +692,60 @@ Shape:
 Negative indexes are supported through the shared collection lookup helper:
 - `index: -1` means last item
 
+### `$entities_query`
+
+Returns all selected entities from one filtered world scan.
+
+Shape:
+
+```json
+{
+  "$entities_query": {
+    "include_hidden": false,
+    "include_absent": false,
+    "where": {
+      "kind": "lever_toggle",
+      "scope": "area",
+      "present": true
+    },
+    "select": {
+      "fields": ["entity_id", "grid_x", "grid_y"],
+      "variables": ["toggled"]
+    }
+  }
+}
+```
+
+Ordering is stable and deterministic:
+- sorted by `(layer, stack_order, entity_id)`
+- `select` is required.
+
+### `$entity_query`
+
+Returns one entity selected from `$entities_query`.
+
+Shape:
+
+```json
+{
+  "$entity_query": {
+    "include_hidden": false,
+    "include_absent": false,
+    "where": {
+      "tags_any": ["save_point"]
+    },
+    "index": 0,
+    "select": {
+      "fields": ["entity_id", "grid_x", "grid_y"]
+    },
+    "default": null
+  }
+}
+```
+
 ### Shared Entity-Query `select` Shape
 
-`$entity_ref`, `$entities_at`, and `$entity_at` all use the same `select` object, and all three currently require it.
+`$entity_ref`, `$entities_at`, `$entity_at`, `$entities_query`, and `$entity_query` all use the same `select` object, and all five currently require it.
 
 Current shape:
 
@@ -766,6 +826,55 @@ Example selected result:
   }
 }
 ```
+
+### Shared Entity-Query `where` Shape
+
+`$entities_at`, `$entity_at`, `$entities_query`, and `$entity_query` all support the same optional `where` object.
+
+Current shape:
+
+```json
+{
+  "where": {
+    "kind": "lever_toggle",
+    "kinds": ["lever_toggle", "switch"],
+    "tags_any": ["interactive", "save_point"],
+    "tags_all": ["interactive", "powered"],
+    "space": "world",
+    "scope": "area",
+    "present": true,
+    "visible": true,
+    "events_enabled": true
+  }
+}
+```
+
+Rules:
+- different keys are combined with implicit `AND`
+- `kind` and `kinds` are mutually exclusive
+- unknown keys are invalid
+- empty `kinds`, `tags_any`, and `tags_all` lists are invalid
+
+Allowed `where` keys:
+- `kind`
+- `kinds`
+- `tags_any`
+- `tags_all`
+- `space`
+- `scope`
+- `present`
+- `visible`
+- `events_enabled`
+
+Allowed `where.space` values:
+- `world`
+- `screen`
+
+Allowed `where.scope` values:
+- `area`
+- `global`
+
+`include_hidden` and `include_absent` widen the candidate set before `where` filtering. A query with `where.visible: false` or `where.present: false` automatically widens that candidate set so hidden or absent entities can match.
 
 ### `$collection_item`
 
@@ -981,7 +1090,7 @@ Shape:
 
 ### Selected Entity Result Shape
 
-`$entity_ref`, `$entities_at`, and `$entity_at` now always return the exact selected subset described by `select`.
+`$entity_ref`, `$entities_at`, `$entity_at`, `$entities_query`, and `$entity_query` now always return the exact selected subset described by `select`.
 
 ## Logical Input Surface
 
@@ -1172,14 +1281,14 @@ These commands are gated by project `debug_inspection_enabled`.
 
 ### Entity State
 
-- `set_entity_field(entity_id, field_name, value, persistent?)` — supported field names: `present`, `visible`, `events_enabled`, `layer`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>` where visual field is one of `flip_x`, `visible`, `current_frame`, `tint`
+- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `events_enabled`, `layer`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
 - `set_visible(entity_id, visible, persistent?)`
 - `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
 - `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes
 - `set_present(entity_id, present, persistent?)`
 - `set_color(entity_id, color, persistent?)`
 - `destroy_entity(entity_id, persistent?)`
-- `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)` — two forms: pass a full `entity` dict, or pass individual fields (`entity_id`, `x`, `y`, and optionally `template`, `kind`, `parameters`)
+- `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)` - two forms: pass a full `entity` dict, or pass individual fields (`entity_id`, `x`, `y`, and optionally `template`, `kind`, `parameters`)
 
 ### World And Entity Variables
 

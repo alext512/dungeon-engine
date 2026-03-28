@@ -1653,6 +1653,295 @@ class StrictContentIdTests(unittest.TestCase):
         sum_handle.update(0.0)
         self.assertEqual(controller.variables["target_x"], 1)
 
+    def test_entity_query_value_sources_support_where_filters(self) -> None:
+        world = World()
+        sign = _make_runtime_entity("alpha_sign", kind="sign")
+        sign.grid_x = 2
+        sign.grid_y = 3
+        sign.layer = 1
+        sign.stack_order = 0
+        sign.tags = ["readable"]
+
+        lever_visible = _make_runtime_entity("beta_lever", kind="lever")
+        lever_visible.grid_x = 2
+        lever_visible.grid_y = 3
+        lever_visible.layer = 2
+        lever_visible.stack_order = 0
+        lever_visible.tags = ["switch", "red"]
+        lever_visible.variables["toggled"] = False
+
+        lever_hidden = _make_runtime_entity("aardvark_hidden", kind="lever")
+        lever_hidden.grid_x = 2
+        lever_hidden.grid_y = 3
+        lever_hidden.layer = 2
+        lever_hidden.stack_order = 0
+        lever_hidden.visible = False
+        lever_hidden.tags = ["switch", "red"]
+        lever_hidden.variables["toggled"] = True
+
+        lever_absent = _make_runtime_entity("absent_lever", kind="lever")
+        lever_absent.grid_x = 5
+        lever_absent.grid_y = 6
+        lever_absent.layer = 0
+        lever_absent.stack_order = 0
+        lever_absent.present = False
+        lever_absent.tags = ["switch", "blue"]
+        lever_absent.variables["toggled"] = True
+
+        save_point = _make_runtime_entity(
+            "global_save",
+            kind="save_point",
+            scope="global",
+        )
+        save_point.grid_x = 9
+        save_point.grid_y = 9
+        save_point.layer = 0
+        save_point.stack_order = 2
+        save_point.tags = ["save_point"]
+
+        controller = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        world.add_entity(sign)
+        world.add_entity(lever_visible)
+        world.add_entity(lever_hidden)
+        world.add_entity(lever_absent)
+        world.add_entity(save_point)
+        world.add_entity(controller)
+        registry, context = self._make_command_context(world=world)
+
+        all_switches_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "all_switches",
+                "value": {
+                    "$entities_query": {
+                        "where": {
+                            "tags_any": ["switch"],
+                        },
+                        "select": {
+                            "fields": ["entity_id", "visible"],
+                            "variables": ["toggled"],
+                        },
+                    }
+                },
+            },
+        )
+        all_switches_handle.update(0.0)
+
+        hidden_switches_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "hidden_switches",
+                "value": {
+                    "$entities_query": {
+                        "where": {
+                            "tags_all": ["switch", "red"],
+                            "visible": False,
+                        },
+                        "select": {
+                            "fields": ["entity_id", "visible"],
+                            "variables": ["toggled"],
+                        },
+                    }
+                },
+            },
+        )
+        hidden_switches_handle.update(0.0)
+
+        absent_switches_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "absent_switches",
+                "value": {
+                    "$entities_query": {
+                        "where": {
+                            "kind": "lever",
+                            "present": False,
+                        },
+                        "select": {
+                            "fields": ["entity_id", "present"],
+                            "variables": ["toggled"],
+                        },
+                    }
+                },
+            },
+        )
+        absent_switches_handle.update(0.0)
+
+        first_query_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "first_query_result",
+                "value": {
+                    "$entity_query": {
+                        "where": {
+                            "kinds": ["sign", "lever"],
+                        },
+                        "index": 0,
+                        "default": None,
+                        "select": {
+                            "fields": ["entity_id", "kind"],
+                        },
+                    }
+                },
+            },
+        )
+        first_query_handle.update(0.0)
+
+        last_query_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "last_query_result",
+                "value": {
+                    "$entity_query": {
+                        "where": {
+                            "kinds": ["sign", "lever"],
+                        },
+                        "index": -1,
+                        "default": None,
+                        "select": {
+                            "fields": ["entity_id", "kind"],
+                        },
+                    }
+                },
+            },
+        )
+        last_query_handle.update(0.0)
+
+        hidden_tile_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "hidden_tile_target",
+                "value": {
+                    "$entity_at": {
+                        "x": 2,
+                        "y": 3,
+                        "index": 0,
+                        "where": {
+                            "kind": "lever",
+                            "visible": False,
+                        },
+                        "select": {
+                            "fields": ["entity_id", "visible"],
+                        },
+                        "default": None,
+                    }
+                },
+            },
+        )
+        hidden_tile_handle.update(0.0)
+
+        controller_entity = world.get_entity("dialogue_controller")
+        assert controller_entity is not None
+        self.assertEqual(
+            controller_entity.variables["all_switches"],
+            [
+                {
+                    "entity_id": "beta_lever",
+                    "visible": True,
+                    "variables": {"toggled": False},
+                }
+            ],
+        )
+        self.assertEqual(
+            controller_entity.variables["hidden_switches"],
+            [
+                {
+                    "entity_id": "aardvark_hidden",
+                    "visible": False,
+                    "variables": {"toggled": True},
+                }
+            ],
+        )
+        self.assertEqual(
+            controller_entity.variables["absent_switches"],
+            [
+                {
+                    "entity_id": "absent_lever",
+                    "present": False,
+                    "variables": {"toggled": True},
+                }
+            ],
+        )
+        self.assertEqual(
+            controller_entity.variables["first_query_result"],
+            {"entity_id": "alpha_sign", "kind": "sign"},
+        )
+        self.assertEqual(
+            controller_entity.variables["last_query_result"],
+            {"entity_id": "beta_lever", "kind": "lever"},
+        )
+        self.assertEqual(
+            controller_entity.variables["hidden_tile_target"],
+            {"entity_id": "aardvark_hidden", "visible": False},
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"\$entities_query where does not allow both 'kind' and 'kinds'",
+        ):
+            execute_command_spec(
+                registry,
+                context,
+                {
+                    "type": "set_entity_var",
+                    "entity_id": "dialogue_controller",
+                    "name": "invalid_where",
+                    "value": {
+                        "$entities_query": {
+                            "where": {
+                                "kind": "lever",
+                                "kinds": ["lever", "sign"],
+                            },
+                            "select": {
+                                "fields": ["entity_id"],
+                            },
+                        }
+                    },
+                },
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"\$entities_query where\.tags_any requires a non-empty list",
+        ):
+            execute_command_spec(
+                registry,
+                context,
+                {
+                    "type": "set_entity_var",
+                    "entity_id": "dialogue_controller",
+                    "name": "invalid_where_tags",
+                    "value": {
+                        "$entities_query": {
+                            "where": {
+                                "tags_any": [],
+                            },
+                            "select": {
+                                "fields": ["entity_id"],
+                            },
+                        }
+                    },
+                },
+            )
+
     def test_debug_runtime_commands_are_gated_by_project_debug_flag(self) -> None:
         registry, context = self._make_command_context()
         paused_states: list[bool] = []
