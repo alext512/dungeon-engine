@@ -83,6 +83,22 @@ class TemplateCatalog:
             offset_y=v.get("offset_y", 0),
         )
 
+    def get_template_space(self, template_id: str) -> str | None:
+        """Return the authored space for one template, if known."""
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return None
+        return str(raw.get("space", "world")).strip().lower()
+
+    def get_template_render_order(self, template_id: str) -> int | None:
+        """Return the authored render order for one template, if known."""
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return None
+        space = str(raw.get("space", "world")).strip().lower()
+        default = 10 if space == "world" else 0
+        return int(raw.get("render_order", default))
+
     def template_ids(self) -> list[str]:
         """Return all loaded template ids."""
         return list(self._templates.keys())

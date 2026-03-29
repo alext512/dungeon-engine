@@ -16,9 +16,10 @@ Pan:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QWheelEvent
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsItemGroup,
@@ -32,6 +33,7 @@ from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
 from area_editor.documents.area_document import AreaDocument
 from area_editor.operations.cell_flags import cell_is_walkable, set_cell_walkable
+from area_editor.operations.entities import entities_at_cell
 from area_editor.operations.tiles import eyedrop_tile, paint_tile
 
 # ---------------------------------------------------------------------------
@@ -47,6 +49,9 @@ _ENTITY_FILL = QColor(0, 200, 220, 100)
 _ENTITY_BORDER = QColor(0, 200, 220, 200)
 _ENTITY_SCREEN_FILL = QColor(220, 140, 0, 100)
 _ENTITY_SCREEN_BORDER = QColor(220, 140, 0, 200)
+_ENTITY_GHOST_FILL = QColor(0, 200, 220, 100)
+_ENTITY_GHOST_BORDER = QColor(0, 200, 220, 180)
+_ENTITY_SELECT_BORDER = QColor(255, 220, 40, 230)
 
 # Grid overlay
 _GRID_COLOR = QColor(255, 255, 255, 40)
@@ -61,6 +66,13 @@ _BG_COLOR = QColor(30, 30, 30)
 class _CanvasRenderEntry:
     sort_key: tuple
     item: QGraphicsItem
+    entity_id: str | None = None
+
+
+class BrushType(str, Enum):
+    TILE = "tile"
+    ENTITY = "entity"
+    ERASER = "eraser"
 
 
 class TileCanvas(QGraphicsView):
@@ -72,6 +84,9 @@ class TileCanvas(QGraphicsView):
     cell_flag_edited = Signal(int, int, bool)
     tile_painted = Signal(int, int, int, int)  # (layer_idx, col, row, gid)
     tile_eyedropped = Signal(int)              # gid picked from canvas
+    entity_paint_requested = Signal(str, int, int)
+    entity_delete_requested = Signal(int, int)
+    entity_selection_changed = Signal(str, int, int)  # entity_id, position, total
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -107,12 +122,26 @@ class TileCanvas(QGraphicsView):
         self._grid_visible: bool = True
         self._cell_flags_edit_mode: bool = False
         self._tile_paint_mode: bool = False
+        self._select_mode: bool = False
+        self._active_brush_type: BrushType = BrushType.ERASER
         self._active_layer: int = 0
         self._selected_gid: int = 0
         self._tileset_index_hint: int = 0
         self._brush_erase_mode: bool = True
+        self._entity_brush_template: str | None = None
+        self._entity_brush_supported: bool = False
+        self._entity_ghost_pixmap: QPixmap | None = None
+        self._selected_entity_id: str | None = None
+        self._selected_entity_cycle_position: int = 0
+        self._selected_entity_cycle_total: int = 0
+        self._selection_cycle_cell: tuple[int, int] | None = None
+        self._selection_cycle_ids: tuple[str, ...] = ()
         self._last_painted: tuple[int, int, bool] | None = None
         self._last_tile_painted: tuple[int, int, int] | None = None
+        self._last_entity_painted: tuple[str, int, int] | None = None
+        self._last_entity_deleted: tuple[int, int] | None = None
+        self._entity_item_by_id: dict[str, QGraphicsItem] = {}
+        self._selection_item: QGraphicsRectItem | None = None
         self._middle_pan_pos = None
 
     # ------------------------------------------------------------------
@@ -134,6 +163,7 @@ class TileCanvas(QGraphicsView):
         self._templates = templates
         self._layer_items = [[] for _ in area.tile_layers]
         self._entity_items = []
+        self._entity_item_by_id = {}
         if len(previous_layer_visibility) == len(area.tile_layers):
             self._layer_visibility = previous_layer_visibility
         else:
@@ -142,8 +172,11 @@ class TileCanvas(QGraphicsView):
         self._cell_flag_group = None
         self._grid_group = None
         self._ghost_item = None
+        self._selection_item = None
         self._tileset_index_hint = 0
         self._brush_erase_mode = True
+        self._last_entity_painted = None
+        self._last_entity_deleted = None
         self._tile_size = area.tile_size or 16
 
         width_px = area.width * self._tile_size
@@ -160,11 +193,13 @@ class TileCanvas(QGraphicsView):
         self._templates = None
         self._layer_items.clear()
         self._entity_items.clear()
+        self._entity_item_by_id.clear()
         self._layer_visibility.clear()
         self._entities_visible = True
         self._cell_flag_group = None
         self._grid_group = None
         self._ghost_item = None
+        self._selection_item = None
 
     def refresh_scene_contents(self) -> None:
         """Redraw the current area without reinitialising editor state."""
@@ -195,9 +230,7 @@ class TileCanvas(QGraphicsView):
         self._cell_flags_edit_mode = enabled
         if self._cell_flag_group is not None:
             self._cell_flag_group.setVisible(enabled)
-        self.viewport().setCursor(
-            Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor
-        )
+        self._apply_cursor()
         self._update_drag_mode()
         self._last_painted = None
 
@@ -209,21 +242,32 @@ class TileCanvas(QGraphicsView):
 
     def set_tile_paint_mode(self, enabled: bool) -> None:
         self._tile_paint_mode = enabled
-        self.viewport().setCursor(
-            Qt.CursorShape.CrossCursor
-            if enabled
-            else Qt.CursorShape.ArrowCursor
-        )
+        self._apply_cursor()
         self._update_drag_mode()
         self._last_tile_painted = None
+        self._last_entity_painted = None
+        self._last_entity_deleted = None
         # Remove ghost when leaving paint mode
         if not enabled and self._ghost_item is not None:
             self._scene.removeItem(self._ghost_item)
             self._ghost_item = None
+        elif enabled:
+            self._update_ghost_pixmap()
 
     @property
     def tile_paint_mode(self) -> bool:
         return self._tile_paint_mode
+
+    def set_select_mode(self, enabled: bool) -> None:
+        self._select_mode = enabled
+        self._apply_cursor()
+        self._update_drag_mode()
+        if enabled:
+            self._hide_ghost()
+
+    @property
+    def select_mode(self) -> bool:
+        return self._select_mode
 
     @property
     def active_layer(self) -> int:
@@ -255,6 +299,112 @@ class TileCanvas(QGraphicsView):
 
     def set_brush_erase_mode(self, enabled: bool) -> None:
         self._brush_erase_mode = enabled
+        if enabled:
+            self._active_brush_type = BrushType.ERASER
+        self._update_ghost_pixmap()
+
+    @property
+    def active_brush_type(self) -> BrushType:
+        return self._active_brush_type
+
+    @property
+    def entity_brush_template(self) -> str | None:
+        return self._entity_brush_template
+
+    @property
+    def entity_brush_supported(self) -> bool:
+        return self._entity_brush_supported
+
+    @property
+    def selected_entity_id(self) -> str | None:
+        return self._selected_entity_id
+
+    @property
+    def selected_entity_cycle_position(self) -> int:
+        return self._selected_entity_cycle_position
+
+    @property
+    def selected_entity_cycle_total(self) -> int:
+        return self._selected_entity_cycle_total
+
+    def set_active_brush_type(self, brush_type: BrushType) -> None:
+        self._active_brush_type = brush_type
+        self._last_tile_painted = None
+        self._last_entity_painted = None
+        self._last_entity_deleted = None
+        self._update_ghost_pixmap()
+
+    def set_entity_brush(
+        self,
+        template_id: str,
+        ghost_pixmap: QPixmap | None,
+        *,
+        supported: bool,
+    ) -> None:
+        self._entity_brush_template = template_id
+        self._entity_ghost_pixmap = ghost_pixmap
+        self._entity_brush_supported = supported
+        self._update_ghost_pixmap()
+
+    def clear_entity_brush(self) -> None:
+        self._entity_brush_template = None
+        self._entity_ghost_pixmap = None
+        self._entity_brush_supported = False
+        if self._active_brush_type == BrushType.ENTITY:
+            self._active_brush_type = BrushType.ERASER if self._brush_erase_mode else BrushType.TILE
+        self._update_ghost_pixmap()
+
+    def set_selected_entity(
+        self,
+        entity_id: str | None,
+        *,
+        cycle_position: int = 0,
+        cycle_total: int = 0,
+        emit: bool = True,
+    ) -> None:
+        self._selected_entity_id = entity_id
+        self._selected_entity_cycle_position = cycle_position if entity_id else 0
+        self._selected_entity_cycle_total = cycle_total if entity_id else 0
+        self._update_selection_highlight()
+        if emit:
+            self.entity_selection_changed.emit(
+                entity_id or "",
+                self._selected_entity_cycle_position,
+                self._selected_entity_cycle_total,
+            )
+
+    def clear_selected_entity(self, *, emit: bool = True) -> None:
+        self._selection_cycle_cell = None
+        self._selection_cycle_ids = ()
+        self.set_selected_entity(None, emit=emit)
+
+    def select_entities_at_cell(self, col: int, row: int) -> bool:
+        if self._area is None:
+            return False
+        matches = entities_at_cell(self._area, col, row)
+        ids = tuple(entity.id for entity in matches)
+        if not ids:
+            self.clear_selected_entity()
+            return True
+
+        if (
+            self._selection_cycle_cell == (col, row)
+            and self._selection_cycle_ids == ids
+            and self._selected_entity_id in ids
+        ):
+            current_index = ids.index(self._selected_entity_id)
+            next_index = (current_index + 1) % len(ids)
+        else:
+            next_index = 0
+
+        self._selection_cycle_cell = (col, row)
+        self._selection_cycle_ids = ids
+        self.set_selected_entity(
+            ids[next_index],
+            cycle_position=next_index + 1,
+            cycle_total=len(ids),
+        )
+        return True
 
     def apply_cell_flag_brush(self, col: int, row: int, walkable: bool) -> bool:
         """Apply the cell-flag brush directly to one cell."""
@@ -299,6 +449,10 @@ class TileCanvas(QGraphicsView):
         if self._handle_edit_pointer_event(event, event.button()):
             event.accept()
             return
+        if self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode:
+            if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
@@ -338,6 +492,10 @@ class TileCanvas(QGraphicsView):
             if self._handle_edit_pointer_event(event, Qt.MouseButton.RightButton):
                 event.accept()
                 return
+        if self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode:
+            if buttons & (Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton):
+                event.accept()
+                return
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
@@ -347,14 +505,13 @@ class TileCanvas(QGraphicsView):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.MiddleButton and self._middle_pan_pos is not None:
             self._middle_pan_pos = None
-            if self._cell_flags_edit_mode or self._tile_paint_mode:
-                self.viewport().setCursor(Qt.CursorShape.CrossCursor)
-            else:
-                self.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+            self._apply_cursor()
             event.accept()
             return
         self._last_painted = None
         self._last_tile_painted = None
+        self._last_entity_painted = None
+        self._last_entity_deleted = None
         super().mouseReleaseEvent(event)
 
     # ------------------------------------------------------------------
@@ -448,6 +605,7 @@ class TileCanvas(QGraphicsView):
                             _CanvasRenderEntry(
                                 self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
                                 sprite_item,
+                                entity.id,
                             )
                         )
                         sprite_rendered = True
@@ -463,6 +621,7 @@ class TileCanvas(QGraphicsView):
                     _CanvasRenderEntry(
                         self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
                         rect,
+                        entity.id,
                     )
                 )
 
@@ -531,9 +690,11 @@ class TileCanvas(QGraphicsView):
         self._clear_scene_contents()
         self._layer_items = [[] for _ in self._area.tile_layers]
         self._entity_items = []
+        self._entity_item_by_id = {}
         self._cell_flag_group = None
         self._grid_group = None
         self._ghost_item = None
+        self._selection_item = None
 
         render_entries: list[_CanvasRenderEntry] = []
         for layer_index, layer in enumerate(self._area.tile_layers):
@@ -581,6 +742,8 @@ class TileCanvas(QGraphicsView):
         for z_index, entry in enumerate(sorted(render_entries, key=lambda item: item.sort_key)):
             entry.item.setZValue(float(z_index))
             self._scene.addItem(entry.item)
+            if entry.entity_id is not None:
+                self._entity_item_by_id[entry.entity_id] = entry.item
 
         for layer_index, items in enumerate(self._layer_items):
             visible = self._layer_visibility[layer_index] if layer_index < len(self._layer_visibility) else True
@@ -599,6 +762,7 @@ class TileCanvas(QGraphicsView):
         self._grid_group.setZValue(overlay_base + 100.0)
         self._grid_group.setVisible(self._grid_visible)
         self._scene.addItem(self._grid_group)
+        self._update_selection_highlight()
 
     def _clear_scene_contents(self) -> None:
         """Remove tracked render items without resetting the whole scene object."""
@@ -609,7 +773,12 @@ class TileCanvas(QGraphicsView):
         for item in self._entity_items:
             if item.scene() is self._scene:
                 self._scene.removeItem(item)
-        for overlay in (self._cell_flag_group, self._grid_group, self._ghost_item):
+        for overlay in (
+            self._cell_flag_group,
+            self._grid_group,
+            self._ghost_item,
+            self._selection_item,
+        ):
             if overlay is not None and overlay.scene() is self._scene:
                 self._scene.removeItem(overlay)
 
@@ -648,12 +817,42 @@ class TileCanvas(QGraphicsView):
             self.apply_cell_flag_brush(col, row, walkable)
             return True
 
-        # --- Tile painting ---
+        # --- Entity selection ---
+        if self._select_mode:
+            if button != Qt.MouseButton.LeftButton:
+                return False
+            scene_pos = self.mapToScene(event.position().toPoint())
+            col = int(scene_pos.x() / self._tile_size)
+            row = int(scene_pos.y() / self._tile_size)
+            if not (0 <= col < self._area.width and 0 <= row < self._area.height):
+                return False
+            return self.select_entities_at_cell(col, row)
+
+        # --- Unified paint tool ---
         if self._tile_paint_mode:
             scene_pos = self.mapToScene(event.position().toPoint())
             col = int(scene_pos.x() / self._tile_size)
             row = int(scene_pos.y() / self._tile_size)
             if not (0 <= col < self._area.width and 0 <= row < self._area.height):
+                return False
+
+            if self._active_brush_type == BrushType.ENTITY:
+                if self._entity_brush_template is None or not self._entity_brush_supported:
+                    return True
+                if button == Qt.MouseButton.LeftButton:
+                    marker = (self._entity_brush_template, col, row)
+                    if self._last_entity_painted == marker:
+                        return True
+                    self._last_entity_painted = marker
+                    self.entity_paint_requested.emit(self._entity_brush_template, col, row)
+                    return True
+                if button == Qt.MouseButton.RightButton:
+                    marker = (col, row)
+                    if self._last_entity_deleted == marker:
+                        return True
+                    self._last_entity_deleted = marker
+                    self.entity_delete_requested.emit(col, row)
+                    return True
                 return False
 
             # Eyedropper: Alt + left-click
@@ -686,12 +885,44 @@ class TileCanvas(QGraphicsView):
         return False
 
     def _update_drag_mode(self) -> None:
-        editing = self._cell_flags_edit_mode or self._tile_paint_mode
+        editing = self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode
         self.setDragMode(
             QGraphicsView.DragMode.NoDrag
             if editing
             else QGraphicsView.DragMode.ScrollHandDrag
         )
+
+    def _apply_cursor(self) -> None:
+        cursor = (
+            Qt.CursorShape.CrossCursor
+            if self._cell_flags_edit_mode or self._tile_paint_mode
+            else Qt.CursorShape.ArrowCursor
+        )
+        self.setCursor(cursor)
+        self.viewport().setCursor(cursor)
+
+    def _update_selection_highlight(self) -> None:
+        if self._selection_item is not None and self._selection_item.scene() is self._scene:
+            self._scene.removeItem(self._selection_item)
+        self._selection_item = None
+
+        if self._selected_entity_id is None:
+            return
+
+        item = self._entity_item_by_id.get(self._selected_entity_id)
+        if item is None or item.scene() is not self._scene:
+            self._selected_entity_id = None
+            self._selected_entity_cycle_position = 0
+            self._selected_entity_cycle_total = 0
+            return
+
+        rect = item.sceneBoundingRect().adjusted(-1.0, -1.0, 1.0, 1.0)
+        highlight = QGraphicsRectItem(rect)
+        highlight.setPen(QPen(_ENTITY_SELECT_BORDER, 2))
+        highlight.setBrush(Qt.BrushStyle.NoBrush)
+        highlight.setZValue(float(len(self._scene.items()) + 300))
+        self._selection_item = highlight
+        self._scene.addItem(highlight)
 
     # -- Tile layer rebuild after painting --------------------------------
 
@@ -704,8 +935,8 @@ class TileCanvas(QGraphicsView):
     # -- Ghost preview ----------------------------------------------------
 
     def _show_ghost(self, col: int, row: int) -> None:
-        """Show a semi-transparent preview of the selected tile at (col, row)."""
-        if self._catalog is None or self._area is None:
+        """Show a semi-transparent preview of the active brush at (col, row)."""
+        if self._area is None:
             return
 
         ts = self._tile_size
@@ -720,21 +951,41 @@ class TileCanvas(QGraphicsView):
             self._update_ghost_pixmap()
 
         self._ghost_item.setPos(px, py)
-        self._ghost_item.setVisible(True)
+        self._ghost_item.setVisible(not self._ghost_item.pixmap().isNull())
 
     def _hide_ghost(self) -> None:
         if self._ghost_item is not None:
             self._ghost_item.setVisible(False)
 
     def _update_ghost_pixmap(self) -> None:
-        """Update the ghost item's pixmap when the selected GID changes."""
+        """Update the ghost item's pixmap when the active brush changes."""
         if self._ghost_item is None:
             return
-        if self._catalog is None or self._area is None:
+        if self._area is None:
             return
 
-        if self._selected_gid == 0:
-            # Eraser: no ghost preview
+        if self._active_brush_type == BrushType.ERASER:
+            self._ghost_item.setVisible(False)
+            return
+
+        if self._active_brush_type == BrushType.ENTITY:
+            if not self._entity_brush_supported:
+                self._ghost_item.setVisible(False)
+                return
+            if self._entity_ghost_pixmap is not None and not self._entity_ghost_pixmap.isNull():
+                self._ghost_item.setPixmap(self._entity_ghost_pixmap)
+                return
+            placeholder = QPixmap(self._tile_size, self._tile_size)
+            placeholder.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(placeholder)
+            painter.setPen(QPen(_ENTITY_GHOST_BORDER, 1))
+            painter.setBrush(_ENTITY_GHOST_FILL)
+            painter.drawRect(0, 0, self._tile_size - 1, self._tile_size - 1)
+            painter.end()
+            self._ghost_item.setPixmap(placeholder)
+            return
+
+        if self._catalog is None or self._selected_gid == 0:
             self._ghost_item.setVisible(False)
             return
 

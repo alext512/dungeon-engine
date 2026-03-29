@@ -110,3 +110,27 @@ class TestTilesetBrowserPanel(unittest.TestCase):
             panel._sheet_widget.render(target)
 
             self.assertFalse(target.isNull())
+
+    def test_inactive_tile_brush_is_dimmed_but_remembered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            assets = root / "assets"
+            assets.mkdir()
+
+            sheet = QPixmap(16, 16)
+            sheet.fill(QColor("magenta"))
+            self.assertTrue(sheet.save(str(assets / "sheet.png")))
+
+            catalog = TilesetCatalog(AssetResolver([assets]))
+            panel = TilesetBrowserPanel()
+            panel.set_tilesets(
+                [TilesetRef(1, "assets/sheet.png", 16, 16)],
+                catalog,
+            )
+
+            panel.select_gid(1)
+            panel.set_brush_active(False)
+
+            self.assertFalse(panel.brush_active)
+            self.assertEqual(panel.selected_gid, 1)
+            self.assertIn("Remembered GID 1", panel._status.text())

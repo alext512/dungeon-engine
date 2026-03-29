@@ -9,17 +9,12 @@ selected as a paint target.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDockWidget,
-    QDoubleSpinBox,
-    QFormLayout,
-    QGroupBox,
     QListWidget,
     QListWidgetItem,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -37,7 +32,6 @@ class LayerListPanel(QDockWidget):
     layer_visibility_changed = Signal(int, bool)       # (layer_index, visible)
     entities_visibility_changed = Signal(bool)          # (visible)
     active_layer_changed = Signal(int)                  # layer_index
-    layer_properties_changed = Signal(int, int, bool, float, int)
 
     def __init__(self, parent=None) -> None:
         super().__init__("Layers", parent)
@@ -56,28 +50,6 @@ class LayerListPanel(QDockWidget):
         self._list.currentItemChanged.connect(self._on_current_item_changed)
         layout.addWidget(self._list)
 
-        self._properties_group = QGroupBox("Render Properties")
-        properties_layout = QFormLayout(self._properties_group)
-        properties_layout.setContentsMargins(8, 8, 8, 8)
-
-        self._render_order_spin = QSpinBox()
-        self._render_order_spin.setRange(-9999, 9999)
-        properties_layout.addRow("Render order", self._render_order_spin)
-
-        self._y_sort_check = QCheckBox()
-        properties_layout.addRow("Y-sort", self._y_sort_check)
-
-        self._sort_y_offset_spin = QDoubleSpinBox()
-        self._sort_y_offset_spin.setRange(-4096.0, 4096.0)
-        self._sort_y_offset_spin.setDecimals(2)
-        self._sort_y_offset_spin.setSingleStep(1.0)
-        properties_layout.addRow("Sort Y offset", self._sort_y_offset_spin)
-
-        self._stack_order_spin = QSpinBox()
-        self._stack_order_spin.setRange(-9999, 9999)
-        properties_layout.addRow("Stack order", self._stack_order_spin)
-        layout.addWidget(self._properties_group)
-
         self.setWidget(container)
         self.setMinimumWidth(220)
 
@@ -86,13 +58,6 @@ class LayerListPanel(QDockWidget):
         self._bold_font.setBold(True)
         self._normal_font = QFont()
         self._layers: list[TileLayerDocument] = []
-        self._syncing_controls = False
-
-        self._render_order_spin.valueChanged.connect(self._emit_layer_properties_changed)
-        self._y_sort_check.toggled.connect(self._emit_layer_properties_changed)
-        self._sort_y_offset_spin.valueChanged.connect(self._emit_layer_properties_changed)
-        self._stack_order_spin.valueChanged.connect(self._emit_layer_properties_changed)
-        self._set_property_controls_enabled(False)
 
     # ------------------------------------------------------------------
     # Public
@@ -128,13 +93,11 @@ class LayerListPanel(QDockWidget):
                 first.setFont(self._bold_font)
 
         self._list.blockSignals(False)
-        self._sync_property_controls()
 
     def clear_layers(self) -> None:
         self._list.clear()
         self._active_layer = 0
         self._layers = []
-        self._sync_property_controls()
 
     @property
     def active_layer(self) -> int:
@@ -167,7 +130,6 @@ class LayerListPanel(QDockWidget):
         self._list.blockSignals(False)
         item.setFont(self._bold_font)
         self._active_layer = index
-        self._sync_property_controls()
 
     def update_layer(self, index: int, layer: TileLayerDocument) -> None:
         """Refresh one visible row after layer properties change."""
@@ -179,8 +141,6 @@ class LayerListPanel(QDockWidget):
             return
         item.setText(self._format_layer_label(layer))
         item.setData(_LAYER_NAME_ROLE, layer.name)
-        if index == self._active_layer:
-            self._sync_property_controls()
 
     # ------------------------------------------------------------------
     # Slots
@@ -215,7 +175,6 @@ class LayerListPanel(QDockWidget):
         current.setFont(self._bold_font)
 
         self._active_layer = index
-        self._sync_property_controls()
         self.active_layer_changed.emit(index)
 
     def _format_layer_label(self, layer: TileLayerDocument) -> str:
@@ -240,46 +199,3 @@ class LayerListPanel(QDockWidget):
         if 0 <= index < len(self._layers):
             return self._layers[index]
         return None
-
-    def _set_property_controls_enabled(self, enabled: bool) -> None:
-        self._properties_group.setEnabled(enabled)
-
-    def _sync_property_controls(self) -> None:
-        layer = self._layer_for_index(self._active_layer)
-        self._syncing_controls = True
-        try:
-            blockers = [
-                QSignalBlocker(self._render_order_spin),
-                QSignalBlocker(self._y_sort_check),
-                QSignalBlocker(self._sort_y_offset_spin),
-                QSignalBlocker(self._stack_order_spin),
-            ]
-            if layer is None:
-                self._set_property_controls_enabled(False)
-                self._render_order_spin.setValue(0)
-                self._y_sort_check.setChecked(False)
-                self._sort_y_offset_spin.setValue(0.0)
-                self._stack_order_spin.setValue(0)
-            else:
-                self._set_property_controls_enabled(True)
-                self._render_order_spin.setValue(layer.render_order)
-                self._y_sort_check.setChecked(layer.y_sort)
-                self._sort_y_offset_spin.setValue(layer.sort_y_offset)
-                self._stack_order_spin.setValue(layer.stack_order)
-            del blockers
-        finally:
-            self._syncing_controls = False
-
-    def _emit_layer_properties_changed(self, *_args) -> None:
-        if self._syncing_controls:
-            return
-        layer = self._layer_for_index(self._active_layer)
-        if layer is None:
-            return
-        self.layer_properties_changed.emit(
-            self._active_layer,
-            self._render_order_spin.value(),
-            self._y_sort_check.isChecked(),
-            self._sort_y_offset_spin.value(),
-            self._stack_order_spin.value(),
-        )

@@ -46,12 +46,20 @@ from area_editor.operations.tilesets import (
     append_tileset,
     update_tileset_dimensions,
 )
+from area_editor.operations.entities import (
+    delete_entity_at,
+    delete_entity_by_id,
+    entity_by_id,
+    move_entity_by_id,
+    place_entity,
+)
 from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.file_tree_panel import FileTreePanel
 from area_editor.widgets.layer_list_panel import LayerListPanel
+from area_editor.widgets.render_properties_panel import RenderPropertiesPanel
 from area_editor.widgets.template_list_panel import TemplateListPanel
-from area_editor.widgets.tile_canvas import TileCanvas
+from area_editor.widgets.tile_canvas import BrushType, TileCanvas
 from area_editor.widgets.tileset_browser_panel import TilesetBrowserPanel
 
 _SETTINGS_KEY_LAST_PROJECT = "last_project_path"
@@ -156,6 +164,11 @@ class MainWindow(QMainWindow):
         # Per-tab area documents keyed by content_id
         self._area_docs: dict[str, AreaDocument] = {}
         self._connected_canvas: TileCanvas | None = None
+        self._active_brush_type: BrushType = BrushType.ERASER
+        self._entity_brush_template_id: str | None = None
+        self._entity_brush_supported: bool = False
+        self._render_target_kind: str | None = None
+        self._render_target_ref: int | str | None = None
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -188,6 +201,9 @@ class MainWindow(QMainWindow):
         # Right side: layer panel + tileset browser
         self._layer_panel = LayerListPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._layer_panel)
+
+        self._render_panel = RenderPropertiesPanel()
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._render_panel)
 
         self._tileset_panel = TilesetBrowserPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._tileset_panel)
@@ -242,10 +258,11 @@ class MainWindow(QMainWindow):
         self._tileset_panel.tile_selected.connect(self._on_tile_selected)
         self._tileset_panel.add_tileset_requested.connect(self._on_add_tileset_requested)
         self._tileset_panel.edit_tileset_requested.connect(self._on_edit_tileset_requested)
-        self._layer_panel.active_layer_changed.connect(self._on_active_layer_changed)
-        self._layer_panel.layer_properties_changed.connect(
-            self._on_layer_properties_changed
+        self._template_panel.template_brush_selected.connect(
+            self._on_template_brush_selected
         )
+        self._layer_panel.active_layer_changed.connect(self._on_active_layer_changed)
+        self._render_panel.properties_changed.connect(self._on_render_properties_changed)
 
     # ------------------------------------------------------------------
     # Public API (called from __main__ for --project arg)
@@ -277,7 +294,14 @@ class MainWindow(QMainWindow):
         self._tab_widget.close_all()
         self._area_docs.clear()
         self._connected_canvas = None
+        self._active_brush_type = BrushType.ERASER
+        self._entity_brush_template_id = None
+        self._entity_brush_supported = False
+        self._render_target_kind = None
+        self._render_target_ref = None
         self._layer_panel.clear_layers()
+        self._render_panel.clear_target()
+        self._template_panel.set_brush_active(None)
         self._tileset_panel.clear_tilesets()
 
         areas = discover_areas(self._manifest)
@@ -328,18 +352,57 @@ class MainWindow(QMainWindow):
 
         edit_menu = self.menuBar().addMenu("&Edit")
 
-        self._paint_tiles_action = QAction("Paint &Tiles", self)
+        self._paint_tiles_action = QAction("&Paint", self)
         self._paint_tiles_action.setCheckable(True)
         self._paint_tiles_action.setEnabled(False)
         self._paint_tiles_action.setShortcut(QKeySequence("P"))
         self._paint_tiles_action.toggled.connect(self._on_paint_tiles_toggled)
         edit_menu.addAction(self._paint_tiles_action)
 
+        self._select_action = QAction("&Select", self)
+        self._select_action.setCheckable(True)
+        self._select_action.setEnabled(False)
+        self._select_action.setShortcut(QKeySequence("S"))
+        self._select_action.toggled.connect(self._on_select_toggled)
+        edit_menu.addAction(self._select_action)
+
         self._cell_flags_action = QAction("Edit Cell &Flags", self)
         self._cell_flags_action.setCheckable(True)
         self._cell_flags_action.setEnabled(False)
         self._cell_flags_action.toggled.connect(self._on_cell_flags_toggled)
         edit_menu.addAction(self._cell_flags_action)
+
+        self._delete_selected_entity_action = QAction(self)
+        self._delete_selected_entity_action.setShortcut(QKeySequence(Qt.Key.Key_Delete))
+        self._delete_selected_entity_action.triggered.connect(
+            self._on_delete_selected_entity
+        )
+        self.addAction(self._delete_selected_entity_action)
+
+        self._clear_selection_action = QAction(self)
+        self._clear_selection_action.setShortcut(QKeySequence(Qt.Key.Key_Escape))
+        self._clear_selection_action.triggered.connect(self._on_clear_selection)
+        self.addAction(self._clear_selection_action)
+
+        self._nudge_left_action = QAction(self)
+        self._nudge_left_action.setShortcut(QKeySequence(Qt.Key.Key_Left))
+        self._nudge_left_action.triggered.connect(lambda: self._on_nudge_selected_entity(-1, 0))
+        self.addAction(self._nudge_left_action)
+
+        self._nudge_right_action = QAction(self)
+        self._nudge_right_action.setShortcut(QKeySequence(Qt.Key.Key_Right))
+        self._nudge_right_action.triggered.connect(lambda: self._on_nudge_selected_entity(1, 0))
+        self.addAction(self._nudge_right_action)
+
+        self._nudge_up_action = QAction(self)
+        self._nudge_up_action.setShortcut(QKeySequence(Qt.Key.Key_Up))
+        self._nudge_up_action.triggered.connect(lambda: self._on_nudge_selected_entity(0, -1))
+        self.addAction(self._nudge_up_action)
+
+        self._nudge_down_action = QAction(self)
+        self._nudge_down_action.setShortcut(QKeySequence(Qt.Key.Key_Down))
+        self._nudge_down_action.triggered.connect(lambda: self._on_nudge_selected_entity(0, 1))
+        self.addAction(self._nudge_down_action)
 
         # View menu
         view_menu = self.menuBar().addMenu("&View")
@@ -366,6 +429,8 @@ class MainWindow(QMainWindow):
         if last:
             last_path = Path(str(last))
             if last_path.is_file():
+                start_dir = str(last_path.parent)
+            elif last_path.is_dir():
                 start_dir = str(last_path)
             elif last_path.parent.is_dir():
                 start_dir = str(last_path.parent)
@@ -424,12 +489,16 @@ class MainWindow(QMainWindow):
             if canvas is not None:
                 self._layer_panel.set_active_layer(canvas.active_layer)
                 self._connect_canvas(canvas)
-                can_paint = bool(doc.tile_layers and doc.tilesets)
+                can_paint = bool(doc.tile_layers)
                 self._paint_tiles_action.setEnabled(can_paint)
+                self._select_action.setEnabled(True)
                 self._set_cell_flags_action_state(canvas.cell_flags_edit_mode)
                 self._set_paint_tiles_action_state(canvas.tile_paint_mode)
+                self._set_select_action_state(canvas.select_mode)
+                self._apply_active_brush_to_canvas(canvas)
                 self._status_zoom.setText(f"{canvas.zoom_level:.0%}")
-                if canvas.tile_paint_mode and can_paint:
+                self._refresh_render_properties_target()
+                if can_paint or canvas.select_mode:
                     self._update_paint_status()
                 else:
                     self._status_layer.setText("")
@@ -445,8 +514,13 @@ class MainWindow(QMainWindow):
             self._save_action.setEnabled(False)
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
+            self._select_action.setEnabled(False)
             self._set_cell_flags_action_state(False)
             self._set_paint_tiles_action_state(False)
+            self._set_select_action_state(False)
+            self._render_target_kind = None
+            self._render_target_ref = None
+            self._render_panel.clear_target()
         else:
             # No tabs open
             self._layer_panel.clear_layers()
@@ -464,8 +538,13 @@ class MainWindow(QMainWindow):
             self._save_action.setEnabled(False)
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
+            self._select_action.setEnabled(False)
             self._set_cell_flags_action_state(False)
             self._set_paint_tiles_action_state(False)
+            self._set_select_action_state(False)
+            self._render_target_kind = None
+            self._render_target_ref = None
+            self._render_panel.clear_target()
 
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
@@ -494,7 +573,10 @@ class MainWindow(QMainWindow):
         if canvas is None:
             self._set_paint_tiles_action_state(False)
             return
-        # Mutually exclusive with cell-flag mode
+        # Mutually exclusive with select + cell-flag mode
+        if enabled and self._select_action.isChecked():
+            self._set_select_action_state(False)
+            canvas.set_select_mode(False)
         if enabled and self._cell_flags_action.isChecked():
             self._set_cell_flags_action_state(False)
             canvas.set_cell_flags_edit_mode(False)
@@ -504,24 +586,46 @@ class MainWindow(QMainWindow):
             self._tileset_panel.raise_()
             self._update_paint_status()
             self.statusBar().showMessage(
-                "Paint mode: left-click paint, right-click erase, Alt+click eyedrop.",
+                "Paint mode: left-click uses the active brush, right-click erases tiles or deletes entities, Alt+click eyedrops tiles.",
                 4000,
             )
         else:
-            self._status_layer.setText("")
-            self._status_gid.setText("")
+            self._update_paint_status()
+
+    def _on_select_toggled(self, enabled: bool) -> None:
+        canvas = self._active_canvas()
+        if canvas is None:
+            self._set_select_action_state(False)
+            return
+        if enabled and self._paint_tiles_action.isChecked():
+            self._set_paint_tiles_action_state(False)
+            canvas.set_tile_paint_mode(False)
+        if enabled and self._cell_flags_action.isChecked():
+            self._set_cell_flags_action_state(False)
+            canvas.set_cell_flags_edit_mode(False)
+        canvas.set_select_mode(enabled)
+        if enabled:
+            self._update_paint_status()
+            self.statusBar().showMessage(
+                "Select mode: click entities to select, click again to cycle, Delete removes, arrows nudge, Escape clears.",
+                4000,
+            )
+        else:
+            self._update_paint_status()
 
     def _on_cell_flags_toggled(self, enabled: bool) -> None:
         canvas = self._active_canvas()
         if canvas is None:
             self._set_cell_flags_action_state(False)
             return
-        # Mutually exclusive with paint mode
+        # Mutually exclusive with paint/select modes
+        if enabled and self._select_action.isChecked():
+            self._set_select_action_state(False)
+            canvas.set_select_mode(False)
         if enabled and self._paint_tiles_action.isChecked():
             self._set_paint_tiles_action_state(False)
             canvas.set_tile_paint_mode(False)
-            self._status_layer.setText("")
-            self._status_gid.setText("")
+            self._update_paint_status()
         canvas.set_cell_flags_edit_mode(enabled)
         if enabled:
             self.statusBar().showMessage(
@@ -535,13 +639,43 @@ class MainWindow(QMainWindow):
             canvas.set_selected_gid(gid)
             canvas.set_tileset_index_hint(self._tileset_panel.current_tileset_index)
             canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
-        self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
+            canvas.set_active_brush_type(
+                BrushType.ERASER if self._tileset_panel.brush_is_erase else BrushType.TILE
+            )
+        self._active_brush_type = (
+            BrushType.ERASER if self._tileset_panel.brush_is_erase else BrushType.TILE
+        )
+        self._tileset_panel.set_brush_active(True)
+        self._template_panel.set_brush_active(None)
+        self._ensure_paint_mode()
+        self._update_paint_status()
+
+    def _on_template_brush_selected(self, template_id: str) -> None:
+        self._entity_brush_template_id = template_id
+        self._active_brush_type = BrushType.ENTITY
+        self._entity_brush_supported = self._entity_template_is_world_space(template_id)
+        self._template_panel.set_brush_active(template_id)
+        self._tileset_panel.set_brush_active(False)
+
+        canvas = self._active_canvas()
+        if canvas is not None:
+            self._apply_entity_brush_to_canvas(canvas)
+            canvas.set_active_brush_type(BrushType.ENTITY)
+
+        self._ensure_paint_mode()
+        self._update_paint_status()
+        if not self._entity_brush_supported:
+            self.statusBar().showMessage(
+                "Screen-space entity placement is not supported yet.",
+                3000,
+            )
 
     def _on_active_layer_changed(self, index: int) -> None:
         canvas = self._active_canvas()
         if canvas is not None:
             canvas.set_active_layer(index)
-        self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+        self._set_render_target_layer(index)
+        self._update_paint_status()
 
     def _on_add_tileset_requested(self) -> None:
         self._add_tileset_to_active_area()
@@ -549,9 +683,8 @@ class MainWindow(QMainWindow):
     def _on_edit_tileset_requested(self, index: int) -> None:
         self._edit_tileset_in_active_area(index)
 
-    def _on_layer_properties_changed(
+    def _on_render_properties_changed(
         self,
-        index: int,
         render_order: int,
         y_sort: bool,
         sort_y_offset: float,
@@ -562,9 +695,36 @@ class MainWindow(QMainWindow):
             return
 
         content_id, doc, canvas = context
-        if not (0 <= index < len(doc.tile_layers)):
+        if self._render_target_kind == "entity":
+            entity_id = self._render_target_ref if isinstance(self._render_target_ref, str) else None
+            if not entity_id:
+                return
+            entity = entity_by_id(doc, entity_id)
+            if entity is None:
+                return
+            if (
+                entity.render_order == render_order
+                and entity.y_sort == y_sort
+                and entity.sort_y_offset == sort_y_offset
+                and entity.stack_order == stack_order
+            ):
+                return
+            entity.render_order = render_order
+            entity.y_sort = y_sort
+            entity.sort_y_offset = sort_y_offset
+            entity.stack_order = stack_order
+            canvas.refresh_scene_contents()
+            self._tab_widget.set_dirty(content_id, True)
+            self._refresh_render_properties_target()
+            self.statusBar().showMessage(
+                f"Updated render properties for entity {entity.id}.",
+                2500,
+            )
             return
 
+        index = self._render_target_ref if isinstance(self._render_target_ref, int) else self._layer_panel.active_layer
+        if not (0 <= index < len(doc.tile_layers)):
+            return
         layer = doc.tile_layers[index]
         if (
             layer.render_order == render_order
@@ -573,15 +733,14 @@ class MainWindow(QMainWindow):
             and layer.stack_order == stack_order
         ):
             return
-
         layer.render_order = render_order
         layer.y_sort = y_sort
         layer.sort_y_offset = sort_y_offset
         layer.stack_order = stack_order
-
         self._layer_panel.update_layer(index, layer)
         canvas.refresh_scene_contents()
         self._tab_widget.set_dirty(content_id, True)
+        self._refresh_render_properties_target()
         self.statusBar().showMessage(
             f"Updated render properties for layer {layer.name}.",
             2500,
@@ -621,6 +780,122 @@ class MainWindow(QMainWindow):
         state = "walkable" if walkable else "blocked"
         self.statusBar().showMessage(
             f"Set cell ({col}, {row}) to {state}.",
+            2500,
+        )
+
+    def _on_entity_selection_changed(
+        self,
+        entity_id: str,
+        cycle_position: int,
+        cycle_total: int,
+    ) -> None:
+        if entity_id:
+            self._set_render_target_entity(entity_id)
+        else:
+            self._set_render_target_layer(self._layer_panel.active_layer)
+        self._update_paint_status()
+        if not entity_id:
+            self.statusBar().showMessage("Selection cleared.", 2000)
+            return
+        context = self._active_area_context()
+        if context is None:
+            return
+        _content_id, doc, _canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            return
+        template = entity.template.rsplit("/", 1)[-1] if entity.template else "entity"
+        detail = f" ({cycle_position} of {cycle_total})" if cycle_total > 1 else ""
+        self.statusBar().showMessage(
+            f"Selected {entity.id} [{template}]{detail}.",
+            2500,
+        )
+
+    def _on_entity_paint_requested(self, template_id: str, col: int, row: int) -> None:
+        context = self._active_area_context()
+        if context is None or not self._entity_brush_supported:
+            return
+        content_id, doc, canvas = context
+        created = place_entity(
+            doc,
+            template_id,
+            col,
+            row,
+            render_order=self._entity_render_order(template_id),
+            y_sort=True,
+        )
+        canvas.refresh_scene_contents()
+        self._tab_widget.set_dirty(content_id, True)
+        self.statusBar().showMessage(
+            f"Placed {created.id} at ({col}, {row}).",
+            2500,
+        )
+
+    def _on_entity_delete_requested(self, col: int, row: int) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, canvas = context
+        deleted_id = delete_entity_at(doc, col, row)
+        if deleted_id is None:
+            return
+        if canvas.selected_entity_id == deleted_id:
+            canvas.clear_selected_entity(emit=False)
+            self._set_render_target_layer(self._layer_panel.active_layer)
+        canvas.refresh_scene_contents()
+        self._tab_widget.set_dirty(content_id, True)
+        self._update_paint_status()
+        self.statusBar().showMessage(
+            f"Deleted {deleted_id} from ({col}, {row}).",
+            2500,
+        )
+
+    def _on_delete_selected_entity(self) -> None:
+        context = self._active_area_context()
+        if context is None or not self._select_action.isChecked():
+            return
+        content_id, doc, canvas = context
+        selected_id = canvas.selected_entity_id
+        if not selected_id:
+            return
+        deleted_id = delete_entity_by_id(doc, selected_id)
+        if deleted_id is None:
+            return
+        canvas.clear_selected_entity(emit=False)
+        self._set_render_target_layer(self._layer_panel.active_layer)
+        canvas.refresh_scene_contents()
+        self._tab_widget.set_dirty(content_id, True)
+        self._update_paint_status()
+        self.statusBar().showMessage(f"Deleted {deleted_id}.", 2500)
+
+    def _on_clear_selection(self) -> None:
+        canvas = self._active_canvas()
+        if canvas is None or not self._select_action.isChecked():
+            return
+        if not canvas.selected_entity_id:
+            return
+        canvas.clear_selected_entity()
+
+    def _on_nudge_selected_entity(self, dx: int, dy: int) -> None:
+        context = self._active_area_context()
+        if context is None or not self._select_action.isChecked():
+            return
+        content_id, doc, canvas = context
+        selected_id = canvas.selected_entity_id
+        if not selected_id:
+            return
+        if not move_entity_by_id(doc, selected_id, dx, dy):
+            return
+        canvas.set_selected_entity(selected_id, cycle_position=1, cycle_total=1, emit=False)
+        self._set_render_target_entity(selected_id)
+        canvas.refresh_scene_contents()
+        self._tab_widget.set_dirty(content_id, True)
+        self._update_paint_status()
+        entity = entity_by_id(doc, selected_id)
+        if entity is None:
+            return
+        self.statusBar().showMessage(
+            f"Moved {selected_id} to ({entity.x}, {entity.y}).",
             2500,
         )
 
@@ -702,6 +977,24 @@ class MainWindow(QMainWindow):
                     )
                 except (RuntimeError, TypeError):
                     pass
+                try:
+                    self._connected_canvas.entity_paint_requested.disconnect(
+                        self._on_entity_paint_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.entity_delete_requested.disconnect(
+                        self._on_entity_delete_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.entity_selection_changed.disconnect(
+                        self._on_entity_selection_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
             try:
                 self._layer_panel.layer_visibility_changed.disconnect()
             except (RuntimeError, TypeError):
@@ -717,6 +1010,9 @@ class MainWindow(QMainWindow):
         canvas.cell_flag_edited.connect(self._on_cell_flag_edited)
         canvas.tile_painted.connect(self._on_tile_painted)
         canvas.tile_eyedropped.connect(self._on_tile_eyedropped)
+        canvas.entity_paint_requested.connect(self._on_entity_paint_requested)
+        canvas.entity_delete_requested.connect(self._on_entity_delete_requested)
+        canvas.entity_selection_changed.connect(self._on_entity_selection_changed)
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
         self._layer_panel.entities_visibility_changed.connect(
             canvas.set_entities_visible
@@ -999,13 +1295,46 @@ class MainWindow(QMainWindow):
             canvas.set_selected_gid(gid)
             canvas.set_tileset_index_hint(self._tileset_panel.current_tileset_index)
             canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
-        self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
+            canvas.set_active_brush_type(
+                BrushType.ERASER if self._tileset_panel.brush_is_erase else BrushType.TILE
+            )
+        self._active_brush_type = (
+            BrushType.ERASER if self._tileset_panel.brush_is_erase else BrushType.TILE
+        )
+        self._tileset_panel.set_brush_active(True)
+        self._template_panel.set_brush_active(None)
+        self._update_paint_status()
 
     def _update_paint_status(self) -> None:
-        """Update status bar with current paint-mode info."""
-        self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+        """Update status bar with current tool info."""
+        if self._select_action.isChecked():
+            self._status_layer.setText("")
+            self._status_gid.setText(self._selection_status_text())
+            return
+
+        if self._active_brush_type in {BrushType.TILE, BrushType.ERASER}:
+            self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+        else:
+            self._status_layer.setText("")
+
+        if self._active_brush_type == BrushType.ENTITY:
+            if self._entity_brush_template_id is None:
+                self._status_gid.setText("(no brush)")
+                return
+            suffix = ""
+            if not self._entity_brush_supported:
+                suffix = " (screen - not supported)"
+            self._status_gid.setText(
+                f"Paint: entity {self._entity_brush_template_id.rsplit('/', 1)[-1]}{suffix}"
+            )
+            return
+
+        if self._active_brush_type == BrushType.ERASER:
+            self._status_gid.setText("Erase")
+            return
+
         gid = self._tileset_panel.selected_gid
-        self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
+        self._status_gid.setText(f"Paint: tile GID {gid}" if gid else "(no brush)")
 
     def _set_cell_flags_action_state(self, enabled: bool) -> None:
         self._cell_flags_action.blockSignals(True)
@@ -1016,3 +1345,135 @@ class MainWindow(QMainWindow):
         self._paint_tiles_action.blockSignals(True)
         self._paint_tiles_action.setChecked(enabled)
         self._paint_tiles_action.blockSignals(False)
+
+    def _set_select_action_state(self, enabled: bool) -> None:
+        self._select_action.blockSignals(True)
+        self._select_action.setChecked(enabled)
+        self._select_action.blockSignals(False)
+
+    def _ensure_paint_mode(self) -> None:
+        """Turn on the shared Paint tool after an explicit brush selection."""
+        canvas = self._active_canvas()
+        if canvas is None or not self._paint_tiles_action.isEnabled():
+            return
+        if self._paint_tiles_action.isChecked() and canvas.tile_paint_mode:
+            return
+        self._set_paint_tiles_action_state(True)
+        self._on_paint_tiles_toggled(True)
+
+    def _apply_active_brush_to_canvas(self, canvas: TileCanvas) -> None:
+        self._apply_entity_brush_to_canvas(canvas)
+        canvas.set_selected_gid(self._tileset_panel.selected_gid)
+        canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
+        canvas.set_active_brush_type(self._active_brush_type)
+        self._tileset_panel.set_brush_active(self._active_brush_type != BrushType.ENTITY)
+        self._template_panel.set_brush_active(
+            self._entity_brush_template_id if self._active_brush_type == BrushType.ENTITY else None
+        )
+
+    def _set_render_target_layer(self, index: int) -> None:
+        self._render_target_kind = "layer"
+        self._render_target_ref = index
+        self._refresh_render_properties_target()
+
+    def _set_render_target_entity(self, entity_id: str) -> None:
+        self._render_target_kind = "entity"
+        self._render_target_ref = entity_id
+        self._refresh_render_properties_target()
+
+    def _refresh_render_properties_target(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            self._render_panel.clear_target()
+            return
+        _content_id, doc, _canvas = context
+
+        if self._render_target_kind == "entity" and isinstance(self._render_target_ref, str):
+            entity = entity_by_id(doc, self._render_target_ref)
+            if entity is not None:
+                label = f"Entity {entity.id}"
+                if entity.template:
+                    label += f" [{entity.template.rsplit('/', 1)[-1]}]"
+                self._render_panel.set_target(
+                    label=label,
+                    render_order=entity.render_order,
+                    y_sort=entity.y_sort,
+                    sort_y_offset=entity.sort_y_offset,
+                    stack_order=entity.stack_order,
+                )
+                return
+
+        index = self._render_target_ref if isinstance(self._render_target_ref, int) else self._layer_panel.active_layer
+        if 0 <= index < len(doc.tile_layers):
+            layer = doc.tile_layers[index]
+            self._render_target_kind = "layer"
+            self._render_target_ref = index
+            self._render_panel.set_target(
+                label=f"Layer {layer.name}",
+                render_order=layer.render_order,
+                y_sort=layer.y_sort,
+                sort_y_offset=layer.sort_y_offset,
+                stack_order=layer.stack_order,
+            )
+            return
+
+        self._render_target_kind = None
+        self._render_target_ref = None
+        self._render_panel.clear_target()
+
+    def _selection_status_text(self) -> str:
+        context = self._active_area_context()
+        if context is None:
+            return "Select: none"
+        _content_id, doc, canvas = context
+        if not canvas.selected_entity_id:
+            return "Select: none"
+        entity = entity_by_id(doc, canvas.selected_entity_id)
+        if entity is None:
+            return "Select: none"
+        template = entity.template.rsplit("/", 1)[-1] if entity.template else "entity"
+        detail = ""
+        if canvas.selected_entity_cycle_total > 1:
+            detail = (
+                f" ({canvas.selected_entity_cycle_position}"
+                f" of {canvas.selected_entity_cycle_total})"
+            )
+        return f"Select: {entity.id} [{template}]{detail}"
+
+    def _apply_entity_brush_to_canvas(self, canvas: TileCanvas) -> None:
+        if self._entity_brush_template_id is None:
+            canvas.clear_entity_brush()
+            self._entity_brush_supported = False
+            return
+        supported = self._entity_template_is_world_space(self._entity_brush_template_id)
+        canvas.set_entity_brush(
+            self._entity_brush_template_id,
+            self._entity_brush_preview(self._entity_brush_template_id),
+            supported=supported,
+        )
+        self._entity_brush_supported = supported
+
+    def _entity_template_is_world_space(self, template_id: str) -> bool:
+        if self._templates is None:
+            return False
+        return self._templates.get_template_space(template_id) != "screen"
+
+    def _entity_render_order(self, template_id: str) -> int:
+        if self._templates is None:
+            return 10
+        value = self._templates.get_template_render_order(template_id)
+        return 10 if value is None else value
+
+    def _entity_brush_preview(self, template_id: str):
+        if self._templates is None or self._catalog is None:
+            return None
+        visual = self._templates.get_first_visual(template_id)
+        if visual is None:
+            return None
+        frame_index = visual.frames[0] if visual.frames else 0
+        return self._catalog.get_sprite_frame(
+            visual.path,
+            visual.frame_width,
+            visual.frame_height,
+            frame_index,
+        )

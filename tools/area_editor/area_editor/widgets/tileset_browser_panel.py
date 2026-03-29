@@ -29,6 +29,7 @@ _GRID_COLOR = QColor(255, 255, 255, 70)
 _GRID_AXIS_COLOR = QColor(255, 255, 255, 120)
 _HOVER_PEN = QPen(QColor(255, 255, 255, 160), 1)
 _SELECTED_PEN = QPen(QColor(0, 200, 220), 2)
+_INACTIVE_SELECTED_PEN = QPen(QColor(110, 140, 150), 1)
 
 
 class _TilesetSheetWidget(QWidget):
@@ -51,6 +52,7 @@ class _TilesetSheetWidget(QWidget):
         self._zoom = 1.0
         self._panning = False
         self._pan_pos = QPoint()
+        self._brush_active = True
 
     @property
     def zoom_factor(self) -> float:
@@ -64,6 +66,10 @@ class _TilesetSheetWidget(QWidget):
         self.resize(1, 1)
         self.update()
         self.zoom_changed.emit(self._zoom)
+
+    def set_brush_active(self, active: bool) -> None:
+        self._brush_active = active
+        self.update()
 
     def set_tileset(
         self,
@@ -211,7 +217,8 @@ class _TilesetSheetWidget(QWidget):
         painter.drawPixmap(target, self._sheet)
         self._draw_grid(painter)
         self._draw_gid_outline(painter, self._hovered_gid, _HOVER_PEN)
-        self._draw_gid_outline(painter, self._selected_gid, _SELECTED_PEN)
+        selected_pen = _SELECTED_PEN if self._brush_active else _INACTIVE_SELECTED_PEN
+        self._draw_gid_outline(painter, self._selected_gid, selected_pen)
         painter.end()
 
     def _draw_grid(self, painter: QPainter) -> None:
@@ -359,6 +366,7 @@ class TilesetBrowserPanel(QDockWidget):
         self._remembered_gid = 0
         self._erase_mode = True
         self._zoom_factor = 1.0
+        self._brush_active = True
         self._apply_brush_state(erase_mode=True, emit=False)
 
     @property
@@ -376,6 +384,10 @@ class TilesetBrowserPanel(QDockWidget):
     @property
     def zoom_factor(self) -> float:
         return self._zoom_factor
+
+    @property
+    def brush_active(self) -> bool:
+        return self._brush_active
 
     def set_tilesets(
         self,
@@ -413,11 +425,19 @@ class TilesetBrowserPanel(QDockWidget):
         self._remembered_gid = 0
         self._erase_mode = True
         self._zoom_factor = 1.0
+        self._brush_active = True
         self._combo.blockSignals(True)
         self._combo.clear()
         self._combo.blockSignals(False)
         self._sheet_widget.clear_sheet()
+        self._sheet_widget.set_brush_active(True)
         self._apply_brush_state(erase_mode=True, emit=False)
+        self._update_status()
+
+    def set_brush_active(self, active: bool) -> None:
+        """Dim or emphasize the remembered tile brush selection."""
+        self._brush_active = active
+        self._sheet_widget.set_brush_active(active)
         self._update_status()
 
     def select_gid(self, gid: int) -> None:
@@ -431,6 +451,7 @@ class TilesetBrowserPanel(QDockWidget):
             self._combo.setCurrentIndex(index)
             self._combo.blockSignals(False)
             self._load_tileset(index, selected_gid=0, erase_mode=True)
+            self.tile_selected.emit(self.selected_gid)
             return
 
         owner = self._owner_index_for_gid(gid)
@@ -440,6 +461,7 @@ class TilesetBrowserPanel(QDockWidget):
         self._combo.setCurrentIndex(owner)
         self._combo.blockSignals(False)
         self._load_tileset(owner, selected_gid=gid, erase_mode=False)
+        self.tile_selected.emit(self.selected_gid)
 
     def _emit_edit_request(self) -> None:
         if self._current_tileset_index >= 0:
@@ -459,7 +481,7 @@ class TilesetBrowserPanel(QDockWidget):
         if not checked:
             return
         if self._remembered_gid <= 0:
-            self._apply_brush_state(erase_mode=True, emit=False)
+            self._apply_brush_state(erase_mode=True, emit=True)
             return
         self._apply_brush_state(erase_mode=False, emit=True)
 
@@ -524,7 +546,7 @@ class TilesetBrowserPanel(QDockWidget):
         if self._erase_mode:
             brush = "Erase"
         elif self._remembered_gid > 0:
-            brush = f"Paint GID {self._remembered_gid}"
+            brush = f"{'Paint' if self._brush_active else 'Remembered'} GID {self._remembered_gid}"
         else:
             brush = "No tile selected"
         self._status.setText(
