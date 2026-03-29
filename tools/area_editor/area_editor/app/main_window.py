@@ -308,7 +308,6 @@ class MainWindow(QMainWindow):
             self._status_area.setText(doc.name or content_id)
             self._save_action.setEnabled(True)
             self._cell_flags_action.setEnabled(True)
-            self._paint_tiles_action.setEnabled(True)
 
             # Populate tileset browser for this area
             if self._catalog is not None:
@@ -317,11 +316,15 @@ class MainWindow(QMainWindow):
             # Reconnect layer visibility signals to the active canvas
             canvas = self._active_canvas()
             if canvas is not None:
+                self._layer_panel.set_active_layer(canvas.active_layer)
+                self._tileset_panel.select_gid(canvas.selected_gid)
                 self._connect_canvas(canvas)
+                can_paint = bool(doc.tile_layers and doc.tilesets)
+                self._paint_tiles_action.setEnabled(can_paint)
                 self._set_cell_flags_action_state(canvas.cell_flags_edit_mode)
                 self._set_paint_tiles_action_state(canvas.tile_paint_mode)
                 self._status_zoom.setText(f"{canvas.zoom_level:.0%}")
-                if canvas.tile_paint_mode:
+                if canvas.tile_paint_mode and can_paint:
                     self._update_paint_status()
                 else:
                     self._status_layer.setText("")

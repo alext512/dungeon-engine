@@ -106,6 +106,27 @@ class LayerListPanel(QDockWidget):
             return ""
         return item.text().split("  [")[0]  # strip "[above]" suffix
 
+    def set_active_layer(self, index: int) -> None:
+        """Programmatically restore the active paint target layer."""
+        if index < 0 or index >= self._list.count():
+            return
+        item = self._list.item(index)
+        if item is None:
+            return
+        row_index = item.data(Qt.ItemDataRole.UserRole)
+        if row_index == _ENTITIES_INDEX:
+            return
+
+        previous = self._list.item(self._active_layer)
+        if previous is not None and previous is not item:
+            previous.setFont(self._normal_font)
+
+        self._list.blockSignals(True)
+        self._list.setCurrentItem(item)
+        self._list.blockSignals(False)
+        item.setFont(self._bold_font)
+        self._active_layer = index
+
     # ------------------------------------------------------------------
     # Slots
     # ------------------------------------------------------------------

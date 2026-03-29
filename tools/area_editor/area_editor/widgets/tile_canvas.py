@@ -100,6 +100,7 @@ class TileCanvas(QGraphicsView):
         self._selected_gid: int = 0
         self._last_painted: tuple[int, int, bool] | None = None
         self._last_tile_painted: tuple[int, int, int] | None = None
+        self._middle_pan_pos = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -238,8 +239,16 @@ class TileCanvas(QGraphicsView):
     def tile_paint_mode(self) -> bool:
         return self._tile_paint_mode
 
+    @property
+    def active_layer(self) -> int:
+        return self._active_layer
+
     def set_active_layer(self, index: int) -> None:
         self._active_layer = index
+
+    @property
+    def selected_gid(self) -> int:
+        return self._selected_gid
 
     def set_selected_gid(self, gid: int) -> None:
         self._selected_gid = gid
@@ -280,6 +289,11 @@ class TileCanvas(QGraphicsView):
             self.zoom_changed.emit(self._zoom)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._middle_pan_pos = event.position()
+            self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
         if self._handle_edit_pointer_event(event, event.button()):
             event.accept()
             return
@@ -293,6 +307,18 @@ class TileCanvas(QGraphicsView):
             col = int(scene_pos.x() / self._tile_size)
             row = int(scene_pos.y() / self._tile_size)
             self.cell_hovered.emit(col, row)
+
+        if self._middle_pan_pos is not None:
+            delta = event.position() - self._middle_pan_pos
+            self._middle_pan_pos = event.position()
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value() - int(delta.x())
+            )
+            self.verticalScrollBar().setValue(
+                self.verticalScrollBar().value() - int(delta.y())
+            )
+            event.accept()
+            return
 
         # Update ghost preview position
         if self._tile_paint_mode and self._area is not None:
@@ -317,6 +343,14 @@ class TileCanvas(QGraphicsView):
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.MiddleButton and self._middle_pan_pos is not None:
+            self._middle_pan_pos = None
+            if self._cell_flags_edit_mode or self._tile_paint_mode:
+                self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+            else:
+                self.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+            event.accept()
+            return
         self._last_painted = None
         self._last_tile_painted = None
         super().mouseReleaseEvent(event)

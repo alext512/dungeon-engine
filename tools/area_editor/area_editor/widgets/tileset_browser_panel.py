@@ -8,20 +8,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QRect, QRectF, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
-    QBrush,
     QColor,
     QMouseEvent,
     QPainter,
     QPen,
     QPixmap,
-    QWheelEvent,
 )
 from PySide6.QtWidgets import (
     QComboBox,
     QDockWidget,
     QLabel,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -202,7 +201,10 @@ class TilesetBrowserPanel(QDockWidget):
         # Tile grid
         self._grid = _TileGridWidget()
         self._grid.tile_clicked.connect(self._on_tile_clicked)
-        layout.addWidget(self._grid, 1)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setWidget(self._grid)
+        layout.addWidget(self._scroll, 1)
 
         # Status label
         self._status = QLabel("No tileset")
@@ -214,6 +216,7 @@ class TilesetBrowserPanel(QDockWidget):
         # State
         self._tilesets: list[TilesetRef] = []
         self._catalog: TilesetCatalog | None = None
+        self._current_tileset_index: int = -1
 
     # ------------------------------------------------------------------
     # Public
@@ -227,6 +230,7 @@ class TilesetBrowserPanel(QDockWidget):
         """Populate from an area's tileset list."""
         self._tilesets = list(tilesets)
         self._catalog = catalog
+        self._current_tileset_index = -1
 
         self._combo.blockSignals(True)
         self._combo.clear()
@@ -246,6 +250,7 @@ class TilesetBrowserPanel(QDockWidget):
     def clear_tilesets(self) -> None:
         self._tilesets.clear()
         self._catalog = None
+        self._current_tileset_index = -1
         self._combo.blockSignals(True)
         self._combo.clear()
         self._combo.blockSignals(False)
@@ -256,8 +261,16 @@ class TilesetBrowserPanel(QDockWidget):
     def selected_gid(self) -> int:
         return self._grid.selected_gid
 
+    @property
+    def current_tileset_index(self) -> int:
+        return self._current_tileset_index
+
     def select_gid(self, gid: int) -> None:
         """Programmatically select a GID (e.g. from eyedropper)."""
+        if self._tilesets:
+            owner = self._owner_index_for_gid(gid)
+            if owner != -1 and owner != self._combo.currentIndex():
+                self._combo.setCurrentIndex(owner)
         self._grid.select_gid(gid)
         self._update_status(gid)
 
@@ -282,6 +295,7 @@ class TilesetBrowserPanel(QDockWidget):
             return
 
         ts = self._tilesets[index]
+        self._current_tileset_index = index
         firstgid = ts.firstgid
 
         # Load the sheet to compute frame count
@@ -309,7 +323,7 @@ class TilesetBrowserPanel(QDockWidget):
             frames.append((gid, pm))
 
         self._grid.set_frames(frames)
-        self._grid.select_gid(self._grid.selected_gid)
+        self._grid.select_gid(0)
         self._update_status(self._grid.selected_gid)
 
     def _update_status(self, gid: int) -> None:
@@ -317,3 +331,14 @@ class TilesetBrowserPanel(QDockWidget):
             self._status.setText("Eraser")
         else:
             self._status.setText(f"GID: {gid}")
+
+    def _owner_index_for_gid(self, gid: int) -> int:
+        if not self._tilesets or gid == 0:
+            return 0 if self._tilesets else -1
+        best_index = -1
+        best_firstgid = -1
+        for index, ts in enumerate(self._tilesets):
+            if ts.firstgid <= gid and ts.firstgid > best_firstgid:
+                best_index = index
+                best_firstgid = ts.firstgid
+        return best_index
