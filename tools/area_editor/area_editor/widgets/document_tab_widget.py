@@ -168,6 +168,13 @@ class DocumentTabWidget(QStackedWidget):
             return None
         return self._tab_infos[index]
 
+    def widget_for_content(self, content_id: str) -> QWidget | None:
+        """Return the widget for a known content id, if open."""
+        index = self._index_for_content(content_id)
+        if index is None:
+            return None
+        return self._tabs.widget(index)
+
     def is_dirty(self, content_id: str) -> bool:
         info = self.content_info(content_id)
         return False if info is None else info.dirty

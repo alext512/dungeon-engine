@@ -7,6 +7,7 @@ menus, status bar, and cross-widget signals.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Callable
@@ -33,6 +34,7 @@ from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
 from area_editor.documents.area_document import (
     AreaDocument,
+    EntityDocument,
     load_area_document,
     save_area_document,
 )
@@ -55,7 +57,9 @@ from area_editor.operations.entities import (
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
+from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
 from area_editor.widgets.file_tree_panel import FileTreePanel
+from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.layer_list_panel import LayerListPanel
 from area_editor.widgets.render_properties_panel import RenderPropertiesPanel
 from area_editor.widgets.template_list_panel import TemplateListPanel
@@ -63,6 +67,7 @@ from area_editor.widgets.tile_canvas import BrushType, TileCanvas
 from area_editor.widgets.tileset_browser_panel import TilesetBrowserPanel
 
 _SETTINGS_KEY_LAST_PROJECT = "last_project_path"
+_SETTINGS_KEY_JSON_EDITING_ENABLED = "json_editing_enabled"
 _IMAGE_SUFFIXES = {".png", ".webp", ".bmp", ".jpg", ".jpeg"}
 
 log = logging.getLogger(__name__)
@@ -150,6 +155,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Area Editor")
         self.setMinimumSize(640, 480)
         self._size_to_screen()
+        self.setDockNestingEnabled(True)
         # Ensure standard window frame with resize handles
         self.setWindowFlags(
             Qt.WindowType.Window
@@ -169,6 +175,8 @@ class MainWindow(QMainWindow):
         self._entity_brush_supported: bool = False
         self._render_target_kind: str | None = None
         self._render_target_ref: int | str | None = None
+        self._active_instance_entity_id: str | None = None
+        self._json_dirty_bound: set[str] = set()
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -205,18 +213,31 @@ class MainWindow(QMainWindow):
         self._render_panel = RenderPropertiesPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._render_panel)
 
+        self._entity_instance_panel = EntityInstanceJsonPanel()
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._entity_instance_panel)
+
         self._tileset_panel = TilesetBrowserPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._tileset_panel)
 
-        # Stack all content browsers as tabs in the left dock
+        # Build the left side as one browser stack on top plus a separate
+        # entity-instance dock below it.
+        self.splitDockWidget(self._area_panel, self._entity_instance_panel, Qt.Orientation.Vertical)
         self.tabifyDockWidget(self._area_panel, self._template_panel)
         self.tabifyDockWidget(self._template_panel, self._dialogue_panel)
         self.tabifyDockWidget(self._dialogue_panel, self._command_panel)
         self.tabifyDockWidget(self._command_panel, self._asset_panel)
+        self.resizeDocks(
+            [self._area_panel, self._entity_instance_panel],
+            [430, 240],
+            Qt.Orientation.Vertical,
+        )
         self._area_panel.raise_()  # show area list tab by default
 
         # Settings
         self._settings = QSettings("PuzzleDungeon", "AreaEditor")
+        self._json_editing_enabled = bool(
+            self._settings.value(_SETTINGS_KEY_JSON_EDITING_ENABLED, False, type=bool)
+        )
 
         # Status bar
         self._status_area = QLabel("No project loaded")
@@ -263,6 +284,9 @@ class MainWindow(QMainWindow):
         )
         self._layer_panel.active_layer_changed.connect(self._on_active_layer_changed)
         self._render_panel.properties_changed.connect(self._on_render_properties_changed)
+        self._entity_instance_panel.apply_requested.connect(self._on_apply_entity_instance_json)
+        self._entity_instance_panel.revert_requested.connect(self._on_revert_entity_instance_json)
+        self._entity_instance_panel.dirty_changed.connect(self._on_entity_instance_json_dirty_changed)
 
     # ------------------------------------------------------------------
     # Public API (called from __main__ for --project arg)
@@ -299,10 +323,14 @@ class MainWindow(QMainWindow):
         self._entity_brush_supported = False
         self._render_target_kind = None
         self._render_target_ref = None
+        self._active_instance_entity_id = None
+        self._json_dirty_bound.clear()
         self._layer_panel.clear_layers()
         self._render_panel.clear_target()
+        self._entity_instance_panel.clear_entity()
         self._template_panel.set_brush_active(None)
         self._tileset_panel.clear_tilesets()
+        self._sync_json_edit_actions()
 
         areas = discover_areas(self._manifest)
         self._area_panel.set_areas(areas)
@@ -365,6 +393,12 @@ class MainWindow(QMainWindow):
         self._select_action.setShortcut(QKeySequence("S"))
         self._select_action.toggled.connect(self._on_select_toggled)
         edit_menu.addAction(self._select_action)
+
+        self._enable_json_editing_action = QAction("Enable JSON Editing", self)
+        self._enable_json_editing_action.setCheckable(True)
+        self._enable_json_editing_action.setChecked(self._json_editing_enabled)
+        self._enable_json_editing_action.toggled.connect(self._on_toggle_json_editing)
+        edit_menu.addAction(self._enable_json_editing_action)
 
         self._cell_flags_action = QAction("Edit Cell &Flags", self)
         self._cell_flags_action.setCheckable(True)
@@ -455,7 +489,13 @@ class MainWindow(QMainWindow):
         self, content_id: str, file_path: Path, content_type: ContentType
     ) -> None:
         """Open a non-area content item in a tab."""
-        self._tab_widget.open_tab(content_id, file_path, content_type)
+        widget = self._tab_widget.open_tab(content_id, file_path, content_type)
+        if isinstance(widget, JsonViewerWidget) and content_id not in self._json_dirty_bound:
+            widget.dirty_changed.connect(
+                lambda dirty, cid=content_id: self._tab_widget.set_dirty(cid, dirty)
+            )
+            self._json_dirty_bound.add(content_id)
+        self._sync_json_edit_actions()
 
     # ------------------------------------------------------------------
     # Slots — tab widget
@@ -498,6 +538,8 @@ class MainWindow(QMainWindow):
                 self._apply_active_brush_to_canvas(canvas)
                 self._status_zoom.setText(f"{canvas.zoom_level:.0%}")
                 self._refresh_render_properties_target()
+                self._refresh_entity_instance_panel()
+                self._sync_json_edit_actions()
                 if can_paint or canvas.select_mode:
                     self._update_paint_status()
                 else:
@@ -511,7 +553,7 @@ class MainWindow(QMainWindow):
             self._status_layer.setText("")
             self._status_gid.setText("")
             self._status_zoom.setText("")
-            self._save_action.setEnabled(False)
+            self._save_action.setEnabled(self._active_json_widget() is not None)
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
@@ -521,6 +563,9 @@ class MainWindow(QMainWindow):
             self._render_target_kind = None
             self._render_target_ref = None
             self._render_panel.clear_target()
+            self._active_instance_entity_id = None
+            self._entity_instance_panel.clear_entity()
+            self._sync_json_edit_actions()
         else:
             # No tabs open
             self._layer_panel.clear_layers()
@@ -545,6 +590,9 @@ class MainWindow(QMainWindow):
             self._render_target_kind = None
             self._render_target_ref = None
             self._render_panel.clear_target()
+            self._active_instance_entity_id = None
+            self._entity_instance_panel.clear_entity()
+            self._sync_json_edit_actions()
 
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
@@ -553,6 +601,7 @@ class MainWindow(QMainWindow):
 
     def _on_tab_closed(self, content_id: str) -> None:
         self._area_docs.pop(content_id, None)
+        self._json_dirty_bound.discard(content_id)
 
     # ------------------------------------------------------------------
     # Slots — view menu
@@ -612,6 +661,13 @@ class MainWindow(QMainWindow):
             )
         else:
             self._update_paint_status()
+
+    def _on_toggle_json_editing(self, enabled: bool) -> None:
+        self._json_editing_enabled = enabled
+        self._settings.setValue(_SETTINGS_KEY_JSON_EDITING_ENABLED, enabled)
+        self._apply_json_editing_state()
+        message = "JSON editing enabled." if enabled else "JSON editing locked."
+        self.statusBar().showMessage(message, 2000)
 
     def _on_cell_flags_toggled(self, enabled: bool) -> None:
         canvas = self._active_canvas()
@@ -748,9 +804,9 @@ class MainWindow(QMainWindow):
 
     def _on_save_active(self) -> None:
         info = self._tab_widget.active_info()
-        if info is None or info.content_type != ContentType.AREA:
+        if info is None:
             return
-        if self._save_area(info.content_id):
+        if self._save_content(info.content_id):
             self.statusBar().showMessage(f"Saved {info.content_id}", 3000)
 
     # ------------------------------------------------------------------
@@ -789,10 +845,22 @@ class MainWindow(QMainWindow):
         cycle_position: int,
         cycle_total: int,
     ) -> None:
+        if not self._prepare_for_entity_instance_target_change(entity_id or None):
+            canvas = self._active_canvas()
+            if canvas is not None:
+                if self._active_instance_entity_id:
+                    canvas.set_selected_entity(self._active_instance_entity_id, emit=False)
+                else:
+                    canvas.clear_selected_entity(emit=False)
+            return
         if entity_id:
             self._set_render_target_entity(entity_id)
+            self._active_instance_entity_id = entity_id
         else:
             self._set_render_target_layer(self._layer_panel.active_layer)
+            self._active_instance_entity_id = None
+        self._refresh_entity_instance_panel()
+        self._sync_json_edit_actions()
         self._update_paint_status()
         if not entity_id:
             self.statusBar().showMessage("Selection cleared.", 2000)
@@ -810,6 +878,11 @@ class MainWindow(QMainWindow):
             f"Selected {entity.id} [{template}]{detail}.",
             2500,
         )
+
+    def _on_entity_instance_json_dirty_changed(self, dirty: bool) -> None:
+        if not dirty:
+            return
+        self.statusBar().showMessage("Selected entity JSON has unapplied changes.", 2000)
 
     def _on_entity_paint_requested(self, template_id: str, col: int, row: int) -> None:
         context = self._active_area_context()
@@ -898,6 +971,62 @@ class MainWindow(QMainWindow):
             f"Moved {selected_id} to ({entity.x}, {entity.y}).",
             2500,
         )
+
+    def _on_apply_entity_instance_json(self) -> None:
+        context = self._active_area_context()
+        entity_id = self._active_instance_entity_id
+        if context is None or entity_id is None:
+            return
+        content_id, doc, canvas = context
+        current = entity_by_id(doc, entity_id)
+        if current is None:
+            return
+        try:
+            raw = json.loads(self._entity_instance_panel.json_text)
+        except Exception as exc:
+            QMessageBox.warning(self, "Invalid JSON", f"Could not parse entity JSON:\n{exc}")
+            return
+        if not isinstance(raw, dict):
+            QMessageBox.warning(self, "Invalid Entity", "Entity instance JSON must be an object.")
+            return
+        updated = EntityDocument.from_dict(raw)
+        if not updated.id:
+            QMessageBox.warning(self, "Invalid Entity", "Entity instance must have a non-empty id.")
+            return
+        if updated.space == "world" and not (0 <= updated.x < doc.width and 0 <= updated.y < doc.height):
+            QMessageBox.warning(
+                self,
+                "Invalid Position",
+                f"World-space entity position must stay inside the area bounds (0..{doc.width - 1}, 0..{doc.height - 1}).",
+            )
+            return
+        for other in doc.entities:
+            if other is current:
+                continue
+            if other.id == updated.id:
+                QMessageBox.warning(
+                    self,
+                    "Duplicate Entity ID",
+                    f"Another entity already uses id '{updated.id}'.",
+                )
+                return
+        index = doc.entities.index(current)
+        was_selected = canvas.selected_entity_id == entity_id or self._active_instance_entity_id == entity_id
+        doc.entities[index] = updated
+        self._active_instance_entity_id = updated.id
+        canvas.refresh_scene_contents()
+        if was_selected:
+            canvas.set_selected_entity(updated.id, cycle_position=1, cycle_total=1, emit=False)
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_render_properties_target()
+        self._refresh_entity_instance_panel()
+        self._sync_json_edit_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(f"Applied JSON changes to entity {updated.id}.", 2500)
+
+    def _on_revert_entity_instance_json(self) -> None:
+        self._refresh_entity_instance_panel()
+        self.statusBar().showMessage("Reverted selected entity JSON.", 2000)
 
     # ------------------------------------------------------------------
     # Internal
@@ -1251,6 +1380,28 @@ class MainWindow(QMainWindow):
         self._tab_widget.set_dirty(content_id, False)
         return True
 
+    def _save_content(self, content_id: str) -> bool:
+        info = self._tab_widget.content_info(content_id)
+        if info is None:
+            return True
+        if info.content_type == ContentType.AREA:
+            return self._save_area(content_id)
+
+        widget = self._tab_widget.widget_for_content(content_id)
+        if not isinstance(widget, JsonViewerWidget):
+            return True
+        try:
+            widget.save_to_file()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"Failed to save {content_id}:\n{exc}",
+            )
+            return False
+        self._tab_widget.set_dirty(content_id, False)
+        return True
+
     def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
         dirty_ids = self._tab_widget.dirty_content_ids()
         if content_ids is not None:
@@ -1278,7 +1429,7 @@ class MainWindow(QMainWindow):
         if choice == QMessageBox.StandardButton.Discard:
             return True
         for content_id in dirty_ids:
-            if not self._save_area(content_id):
+            if not self._save_content(content_id):
                 return False
         return True
 
@@ -1351,6 +1502,11 @@ class MainWindow(QMainWindow):
         self._select_action.setChecked(enabled)
         self._select_action.blockSignals(False)
 
+    def _set_json_editing_action_state(self, enabled: bool) -> None:
+        self._enable_json_editing_action.blockSignals(True)
+        self._enable_json_editing_action.setChecked(enabled)
+        self._enable_json_editing_action.blockSignals(False)
+
     def _ensure_paint_mode(self) -> None:
         """Turn on the shared Paint tool after an explicit brush selection."""
         canvas = self._active_canvas()
@@ -1420,6 +1576,56 @@ class MainWindow(QMainWindow):
         self._render_target_kind = None
         self._render_target_ref = None
         self._render_panel.clear_target()
+
+    def _refresh_entity_instance_panel(self) -> None:
+        context = self._active_area_context()
+        if context is None or self._active_instance_entity_id is None:
+            self._entity_instance_panel.clear_entity()
+            return
+        _content_id, doc, _canvas = context
+        entity = entity_by_id(doc, self._active_instance_entity_id)
+        if entity is None:
+            self._active_instance_entity_id = None
+            self._entity_instance_panel.clear_entity()
+            return
+        self._entity_instance_panel.load_entity(entity)
+
+    def _prepare_for_entity_instance_target_change(self, new_entity_id: str | None) -> bool:
+        if not self._entity_instance_panel.is_dirty:
+            return True
+        if new_entity_id == self._entity_instance_panel.entity_id:
+            return True
+        choice = QMessageBox.question(
+            self,
+            "Unsaved Entity JSON",
+            "Apply changes to the currently selected entity JSON before switching?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if choice == QMessageBox.StandardButton.Cancel:
+            return False
+        if choice == QMessageBox.StandardButton.Save:
+            self._on_apply_entity_instance_json()
+            return not self._entity_instance_panel.is_dirty
+        return True
+
+    def _active_json_widget(self) -> JsonViewerWidget | None:
+        widget = self._tab_widget.active_widget()
+        if isinstance(widget, JsonViewerWidget):
+            return widget
+        return None
+
+    def _sync_json_edit_actions(self) -> None:
+        self._set_json_editing_action_state(self._json_editing_enabled)
+        self._apply_json_editing_state()
+
+    def _apply_json_editing_state(self) -> None:
+        json_widget = self._active_json_widget()
+        if json_widget is not None:
+            json_widget.set_editing_enabled(self._json_editing_enabled)
+        self._entity_instance_panel.set_editing_enabled(self._json_editing_enabled)
 
     def _selection_status_text(self) -> str:
         context = self._active_area_context()

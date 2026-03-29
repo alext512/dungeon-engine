@@ -10,10 +10,13 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import QApplication
 
 from area_editor.app.main_window import MainWindow
+from area_editor.widgets.document_tab_widget import ContentType
+from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 
 _TEST_PROJECT = (
     Path(__file__).resolve().parent.parent.parent.parent / "projects" / "test_project"
@@ -420,6 +423,8 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             project_file = self._create_entity_select_project(Path(tmp))
             window = MainWindow()
             self.addCleanup(window.close)
+            window._json_editing_enabled = False
+            window._set_json_editing_action_state(False)
             window.open_project(project_file)
 
             canvas = window._active_canvas()
@@ -451,6 +456,109 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             self.assertEqual(canvas.selected_entity_id, "npc_2")
             window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_instance_panel_uses_its_own_left_dock_with_internal_tabs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            self.assertEqual(
+                window.dockWidgetArea(window._entity_instance_panel),
+                Qt.DockWidgetArea.LeftDockWidgetArea,
+            )
+            self.assertNotIn(
+                window._entity_instance_panel,
+                window.tabifiedDockWidgets(window._area_panel),
+            )
+            self.assertEqual(window._entity_instance_panel.windowTitle(), "Entity Instance")
+            self.assertEqual(window._entity_instance_panel.tab_count, 2)
+            self.assertEqual(
+                window._entity_instance_panel.tab_titles(),
+                ["Entity Instance JSON", "Entity Instance Editor"],
+            )
+
+    def test_entity_instance_json_panel_applies_selected_entity_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._select_action.setChecked(True)
+            canvas.select_entities_at_cell(0, 0)
+            QApplication.processEvents()
+
+            self.assertEqual(window._entity_instance_panel.entity_id, "npc_2")
+
+            window._enable_json_editing_action.setChecked(True)
+            raw = (
+                '{\n'
+                '  "id": "npc_custom",\n'
+                '  "x": 1,\n'
+                '  "y": 1,\n'
+                '  "render_order": 12,\n'
+                '  "y_sort": false,\n'
+                '  "sort_y_offset": 2.5,\n'
+                '  "stack_order": 9\n'
+                '}'
+            )
+            window._entity_instance_panel._editor.setPlainText(raw)
+            window._on_apply_entity_instance_json()
+
+            doc = window._area_docs["areas/demo"]
+            entity = next(entity for entity in doc.entities if entity.id == "npc_custom")
+            self.assertEqual((entity.x, entity.y), (1, 1))
+            self.assertEqual(entity.render_order, 12)
+            self.assertFalse(entity.y_sort)
+            self.assertEqual(entity.sort_y_offset, 2.5)
+            self.assertEqual(entity.stack_order, 9)
+            self.assertEqual(canvas.selected_entity_id, "npc_custom")
+            self.assertEqual(window._entity_instance_panel.entity_id, "npc_custom")
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            self.assertTrue(window._enable_json_editing_action.isChecked())
+
+            window._on_clear_selection()
+            self.assertTrue(window._enable_json_editing_action.isChecked())
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_template_json_tab_is_guarded_and_saveable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, JsonViewerWidget)
+            assert isinstance(widget, JsonViewerWidget)
+            self.assertTrue(widget.isReadOnly())
+            self.assertFalse(window._enable_json_editing_action.isChecked())
+
+            window._enable_json_editing_action.setChecked(True)
+            self.assertFalse(widget.isReadOnly())
+
+            text = widget.toPlainText()
+            self.assertIn('"render_order": 10', text)
+            widget.setPlainText(text.replace('"render_order": 10', '"render_order": 11'))
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"render_order": 11', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
+            self.assertTrue(window._enable_json_editing_action.isChecked())
 
     def test_template_brush_switches_active_paint_target_and_places_entities(self):
         with tempfile.TemporaryDirectory() as tmp:
