@@ -135,6 +135,44 @@ Modify `AreaListPanel`:
 
 ---
 
+## Implementation Status
+
+**Implemented (UI complete):**
+- Steps 1–7 are all implemented and verified
+- 28 existing tests pass, launch-tested with test_project
+- Tab deduplication, middle-click close, context menus all working
+
+**Known gaps for backend/follow-up agent to address:**
+
+1. **Per-tab layer visibility state is not persisted across tab switches.**
+   Currently when you switch between area tabs, the layer panel rebuilds
+   from the document. Any visibility toggles the user made are lost.
+   Fix: store a `dict[int, bool]` visibility map per tab in `_TabInfo` or
+   on the `TileCanvas` itself, and restore it in `_on_active_tab_changed`.
+
+2. **Canvas signal accumulation.** Each time `_connect_canvas` is called,
+   it connects `cell_hovered` and `zoom_changed` to the main window
+   slots. These connections are never disconnected when switching tabs,
+   so old canvases may still emit to the status bar. Fix: disconnect the
+   previous canvas's signals before connecting the new one.
+
+3. **No tests for the new widgets.** `DocumentTabWidget`,
+   `JsonViewerWidget`, and `ImageViewerWidget` have no automated tests.
+   Testing these requires a `QApplication` instance. Consider adding a
+   `conftest.py` with a session-scoped `qapp` fixture and writing basic
+   tests (open tab, verify deduplication, close tab, verify cleanup).
+
+4. **`_create_viewer` doesn't handle missing files gracefully.**
+   `JsonViewerWidget._load` catches `OSError` but `ImageViewerWidget`
+   silently shows a blank scene for missing/corrupt images. Consider
+   adding a visible error message.
+
+5. **Tab dirty indicator plumbing exists but is unused.**
+   `_TabInfo.dirty` is always `False`. When editing is added, the tab
+   title should show `*` prefix via `_tabs.setTabText(idx, f"*{label}")`.
+
+---
+
 ## What This Does NOT Include
 
 - Editing (still read-only)
