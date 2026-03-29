@@ -1,6 +1,6 @@
 # Area Editor
 
-This folder is reserved for a future external area editor for the puzzle dungeon project.
+This folder contains the external area editor for the puzzle dungeon project.
 
 It is intentionally separate from the runtime in `dungeon_engine/`.
 
@@ -16,9 +16,29 @@ The new direction is:
 
 ## Current State
 
-Right now this folder contains planning and onboarding docs only.
+Phase 1 is implemented.
+Phase 2 is implemented.
+Phase 3 has started with a first editable slice for area saving plus
+cell-flag painting.
 
-There is no editor implementation here yet.
+The current editor can:
+
+- open a project manifest
+- browse areas, entity templates, dialogues, commands, and assets
+- load an area into a read-only canvas
+- render tile layers plus entity markers and template sprite previews
+- toggle layers, entities, and the grid
+- zoom, pan, and show hovered cell coordinates
+- edit `cell_flags` on area tabs through a dedicated edit mode
+- save edited area files back to JSON with unknown-field preservation
+- run focused tests around manifest loading, asset resolution, and document round-tripping
+
+What is not implemented yet:
+
+- tile painting
+- entity placement, movement, deletion, or reordering
+- inspector editing for instance fields and parameters
+- validation or runtime handoff actions
 
 ## Expected Responsibilities
 
@@ -32,25 +52,32 @@ The future tool is expected to help with:
 - selecting other entity ids when parameters reference them
 - preserving room JSON without forcing the user to hand-edit common cases
 
-## Explicit Non-Goals For The Scaffold
+## Current Non-Goals
 
-This scaffold does not:
+The current editor still does not:
 
-- define a UI framework choice
-- create any app skeleton
-- create any runtime bridge
-- add editor code
+- simulate gameplay in-process
+- import runtime code from `dungeon_engine`
+- act as a second engine or persistence previewer
 - revive the archived built-in editor
 
 ## Folder Intent
 
-This folder should eventually host:
+This folder now hosts:
 
 - tool-specific code
 - tool-specific tests
 - tool-specific notes and decisions
 
-But only after the user asks for implementation work.
+## Running The Editor
+
+From `tools/area_editor/`:
+
+```text
+pip install -r requirements.txt
+python -m area_editor
+python -m area_editor --project ../../projects/test_project/project.json
+```
 
 ## Related Runtime Docs
 

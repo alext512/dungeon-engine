@@ -47,17 +47,18 @@ Current modules already include:
 - `catalogs/`
   - tileset image indexing, entity/template summaries
 - `operations/`
-  - paint tile, set cell flags, place entity, move entity, reorder entity, rename id
+  - current: cell-flag editing helpers, tile painting helpers
+  - planned: place entity, move entity, reorder entity, rename id
 - `widgets/`
   - tile canvas, layer panel, area list, template list, generic file-tree panels,
-    tabbed document area, JSON viewer, image viewer
+    tabbed document area, JSON viewer, image viewer, tileset browser
 - `tests/`
   - manifest loading, asset resolution, and area-document round-tripping
 
 Planned later modules/slices:
 
 - `operations/`
-  - paint tile, set cell flags, place entity, move entity, reorder entity, rename id
+  - expand beyond cell flags into tile and entity editing operations
 - `widgets/`
   - tileset browser, entity inspector, entity-ref picker, raw JSON pane
 - `settings/`

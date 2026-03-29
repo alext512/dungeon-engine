@@ -1,20 +1,33 @@
 # Agent Onboarding
 
-This folder is the starting point for any future work on the new external area editor.
+This folder is the starting point for work on the external area editor.
 
 Read this file first.
 
 ## Current Status
 
-This workspace is intentionally documentation-only.
+Phase 1 is implemented.
+Phase 2 is implemented.
+Phase 3 is in progress.
 
-Do not add editor code unless the user explicitly asks for implementation work.
+The current tool already supports:
 
-The goal of the current scaffold is to preserve decisions, boundaries, and planned workflows before any new editor code exists.
+- opening a `project.json` manifest
+- browsing areas, entity templates, dialogues, commands, and assets
+- loading an area into a read-only tile canvas
+- showing layer/entity visibility toggles plus a grid toggle
+- zooming, panning, and hovered-cell status feedback
+- showing entity markers and first-visual sprite previews when available
+- editing area `cell_flags` from the canvas in a dedicated edit mode
+- saving edited area files while preserving unknown JSON fields
+- running focused automated tests for manifest loading, asset resolution, and area-document round-tripping
+
+Tile painting, entity placement, inspector editing, validation, and
+runtime handoff are still later-phase work.
 
 ## What This Folder Is
 
-`tools/area_editor/` is the planned home for a future external authoring tool for:
+`tools/area_editor/` is the home of the external authoring tool for:
 
 - painting tilemaps
 - editing walkability or other cell flags
@@ -65,13 +78,13 @@ Do not treat the archived editor as the implementation baseline unless the user 
 
 ## Intended Relationship To The Runtime
 
-The future editor should:
+The editor should:
 
 - read project manifests and authored JSON files from disk
 - scan project assets and templates from disk
 - help the user edit those files faster and more safely
 
-The future editor should not:
+The editor should not:
 
 - import runtime classes or systems
 - depend on runtime-only object models
@@ -83,6 +96,7 @@ If the tool launches the game later, it should do so as an external process.
 
 If you are asked to extend this tool later:
 
+- build on the existing Phase 1 foundation instead of treating this folder as docs-only
 - start with the smallest workflow that removes painful manual JSON editing
 - keep the first versions narrow and boring
 - add strong save/load preservation before fancy UI behavior

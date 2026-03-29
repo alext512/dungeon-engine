@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
@@ -21,7 +21,11 @@ from PySide6.QtWidgets import (
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
-from area_editor.documents.area_document import AreaDocument, load_area_document
+from area_editor.documents.area_document import (
+    AreaDocument,
+    load_area_document,
+    save_area_document,
+)
 from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.project_io.manifest import (
     ProjectManifest,
@@ -34,6 +38,7 @@ from area_editor.widgets.file_tree_panel import FileTreePanel
 from area_editor.widgets.layer_list_panel import LayerListPanel
 from area_editor.widgets.template_list_panel import TemplateListPanel
 from area_editor.widgets.tile_canvas import TileCanvas
+from area_editor.widgets.tileset_browser_panel import TilesetBrowserPanel
 
 _SETTINGS_KEY_LAST_PROJECT = "last_project_path"
 
@@ -61,6 +66,7 @@ class MainWindow(QMainWindow):
         self._templates: TemplateCatalog | None = None
         # Per-tab area documents keyed by content_id
         self._area_docs: dict[str, AreaDocument] = {}
+        self._connected_canvas: TileCanvas | None = None
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -90,9 +96,12 @@ class MainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._asset_panel)
 
-        # Right side: layer panel
+        # Right side: layer panel + tileset browser
         self._layer_panel = LayerListPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._layer_panel)
+
+        self._tileset_panel = TilesetBrowserPanel()
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._tileset_panel)
 
         # Stack all content browsers as tabs in the left dock
         self.tabifyDockWidget(self._area_panel, self._template_panel)
@@ -107,9 +116,13 @@ class MainWindow(QMainWindow):
         # Status bar
         self._status_area = QLabel("No project loaded")
         self._status_cell = QLabel("")
+        self._status_layer = QLabel("")
+        self._status_gid = QLabel("")
         self._status_zoom = QLabel("100%")
         self.statusBar().addWidget(self._status_area, 1)
         self.statusBar().addPermanentWidget(self._status_cell)
+        self.statusBar().addPermanentWidget(self._status_layer)
+        self.statusBar().addPermanentWidget(self._status_gid)
         self.statusBar().addPermanentWidget(self._status_zoom)
 
         # Menus
@@ -132,7 +145,12 @@ class MainWindow(QMainWindow):
 
         # Tab widget signals
         self._tab_widget.active_tab_changed.connect(self._on_active_tab_changed)
+        self._tab_widget.tab_close_requested.connect(self._on_tab_close_requested)
         self._tab_widget.tab_closed.connect(self._on_tab_closed)
+
+        # Tileset browser + layer panel signals
+        self._tileset_panel.tile_selected.connect(self._on_tile_selected)
+        self._layer_panel.active_layer_changed.connect(self._on_active_layer_changed)
 
     # ------------------------------------------------------------------
     # Public API (called from __main__ for --project arg)
@@ -140,6 +158,9 @@ class MainWindow(QMainWindow):
 
     def open_project(self, project_path: Path) -> None:
         """Load a project manifest and populate the side panels."""
+        if not self._maybe_save_dirty_tabs():
+            return
+
         try:
             self._manifest = load_manifest(project_path)
         except Exception as exc:
@@ -160,6 +181,7 @@ class MainWindow(QMainWindow):
         # Close all existing tabs
         self._tab_widget.close_all()
         self._area_docs.clear()
+        self._connected_canvas = None
         self._layer_panel.clear_layers()
 
         areas = discover_areas(self._manifest)
@@ -195,12 +217,33 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self._on_open_project)
         file_menu.addAction(open_action)
 
+        self._save_action = QAction("&Save", self)
+        self._save_action.setShortcut(QKeySequence.StandardKey.Save)
+        self._save_action.setEnabled(False)
+        self._save_action.triggered.connect(self._on_save_active)
+        file_menu.addAction(self._save_action)
+
         file_menu.addSeparator()
 
         quit_action = QAction("&Quit", self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        edit_menu = self.menuBar().addMenu("&Edit")
+
+        self._paint_tiles_action = QAction("Paint &Tiles", self)
+        self._paint_tiles_action.setCheckable(True)
+        self._paint_tiles_action.setEnabled(False)
+        self._paint_tiles_action.setShortcut(QKeySequence("P"))
+        self._paint_tiles_action.toggled.connect(self._on_paint_tiles_toggled)
+        edit_menu.addAction(self._paint_tiles_action)
+
+        self._cell_flags_action = QAction("Edit Cell &Flags", self)
+        self._cell_flags_action.setCheckable(True)
+        self._cell_flags_action.setEnabled(False)
+        self._cell_flags_action.toggled.connect(self._on_cell_flags_toggled)
+        edit_menu.addAction(self._cell_flags_action)
 
         # View menu
         view_menu = self.menuBar().addMenu("&View")
@@ -258,24 +301,48 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_active_tab_changed(self, content_id: str, content_type: object) -> None:
-        """Update layer panel and status bar when the active tab changes."""
+        """Update layer panel, tileset browser, and status bar when the active tab changes."""
         if content_type == ContentType.AREA and content_id in self._area_docs:
             doc = self._area_docs[content_id]
             self._layer_panel.set_layers(doc.tile_layers)
             self._status_area.setText(doc.name or content_id)
+            self._save_action.setEnabled(True)
+            self._cell_flags_action.setEnabled(True)
+            self._paint_tiles_action.setEnabled(True)
+
+            # Populate tileset browser for this area
+            if self._catalog is not None:
+                self._tileset_panel.set_tilesets(doc.tilesets, self._catalog)
 
             # Reconnect layer visibility signals to the active canvas
             canvas = self._active_canvas()
             if canvas is not None:
                 self._connect_canvas(canvas)
+                self._set_cell_flags_action_state(canvas.cell_flags_edit_mode)
+                self._set_paint_tiles_action_state(canvas.tile_paint_mode)
+                self._status_zoom.setText(f"{canvas.zoom_level:.0%}")
+                if canvas.tile_paint_mode:
+                    self._update_paint_status()
+                else:
+                    self._status_layer.setText("")
+                    self._status_gid.setText("")
         elif content_id:
             self._layer_panel.clear_layers()
+            self._tileset_panel.clear_tilesets()
             self._status_area.setText(content_id)
             self._status_cell.setText("")
+            self._status_layer.setText("")
+            self._status_gid.setText("")
             self._status_zoom.setText("")
+            self._save_action.setEnabled(False)
+            self._cell_flags_action.setEnabled(False)
+            self._paint_tiles_action.setEnabled(False)
+            self._set_cell_flags_action_state(False)
+            self._set_paint_tiles_action_state(False)
         else:
             # No tabs open
             self._layer_panel.clear_layers()
+            self._tileset_panel.clear_tilesets()
             project_name = (
                 self._manifest.project_root.name if self._manifest else ""
             )
@@ -283,7 +350,19 @@ class MainWindow(QMainWindow):
                 f"Project: {project_name}" if project_name else "No project loaded"
             )
             self._status_cell.setText("")
+            self._status_layer.setText("")
+            self._status_gid.setText("")
             self._status_zoom.setText("")
+            self._save_action.setEnabled(False)
+            self._cell_flags_action.setEnabled(False)
+            self._paint_tiles_action.setEnabled(False)
+            self._set_cell_flags_action_state(False)
+            self._set_paint_tiles_action_state(False)
+
+    def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
+        if not self._maybe_save_dirty_tabs([content_id]):
+            return
+        self._tab_widget.close_content(content_id)
 
     def _on_tab_closed(self, content_id: str) -> None:
         self._area_docs.pop(content_id, None)
@@ -301,6 +380,65 @@ class MainWindow(QMainWindow):
         canvas = self._active_canvas()
         if canvas is not None:
             canvas.reset_zoom()
+
+    def _on_paint_tiles_toggled(self, enabled: bool) -> None:
+        canvas = self._active_canvas()
+        if canvas is None:
+            self._set_paint_tiles_action_state(False)
+            return
+        # Mutually exclusive with cell-flag mode
+        if enabled and self._cell_flags_action.isChecked():
+            self._set_cell_flags_action_state(False)
+            canvas.set_cell_flags_edit_mode(False)
+        canvas.set_tile_paint_mode(enabled)
+        if enabled:
+            self._tileset_panel.show()
+            self._tileset_panel.raise_()
+            self._update_paint_status()
+            self.statusBar().showMessage(
+                "Paint mode: left-click paint, right-click erase, Alt+click eyedrop.",
+                4000,
+            )
+        else:
+            self._status_layer.setText("")
+            self._status_gid.setText("")
+
+    def _on_cell_flags_toggled(self, enabled: bool) -> None:
+        canvas = self._active_canvas()
+        if canvas is None:
+            self._set_cell_flags_action_state(False)
+            return
+        # Mutually exclusive with paint mode
+        if enabled and self._paint_tiles_action.isChecked():
+            self._set_paint_tiles_action_state(False)
+            canvas.set_tile_paint_mode(False)
+            self._status_layer.setText("")
+            self._status_gid.setText("")
+        canvas.set_cell_flags_edit_mode(enabled)
+        if enabled:
+            self.statusBar().showMessage(
+                "Cell flag edit mode: left-click walkable, right-click blocked.",
+                4000,
+            )
+
+    def _on_tile_selected(self, gid: int) -> None:
+        canvas = self._active_canvas()
+        if canvas is not None:
+            canvas.set_selected_gid(gid)
+        self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
+
+    def _on_active_layer_changed(self, index: int) -> None:
+        canvas = self._active_canvas()
+        if canvas is not None:
+            canvas.set_active_layer(index)
+        self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+
+    def _on_save_active(self) -> None:
+        info = self._tab_widget.active_info()
+        if info is None or info.content_type != ContentType.AREA:
+            return
+        if self._save_area(info.content_id):
+            self.statusBar().showMessage(f"Saved {info.content_id}", 3000)
 
     # ------------------------------------------------------------------
     # Slots — canvas status
@@ -320,6 +458,17 @@ class MainWindow(QMainWindow):
 
     def _on_zoom_changed(self, zoom: float) -> None:
         self._status_zoom.setText(f"{zoom:.0%}")
+
+    def _on_cell_flag_edited(self, col: int, row: int, walkable: bool) -> None:
+        info = self._tab_widget.active_info()
+        if info is None or info.content_type != ContentType.AREA:
+            return
+        self._tab_widget.set_dirty(info.content_id, True)
+        state = "walkable" if walkable else "blocked"
+        self.statusBar().showMessage(
+            f"Set cell ({col}, {row}) to {state}.",
+            2500,
+        )
 
     # ------------------------------------------------------------------
     # Internal
@@ -365,10 +514,40 @@ class MainWindow(QMainWindow):
 
         Uses unique connections to avoid duplicates when switching tabs.
         """
-        # Disconnect previous canvas signals (safe even if not connected)
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
+            if self._connected_canvas is not None:
+                try:
+                    self._connected_canvas.cell_hovered.disconnect(
+                        self._on_cell_hovered
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.zoom_changed.disconnect(
+                        self._on_zoom_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.cell_flag_edited.disconnect(
+                        self._on_cell_flag_edited
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.tile_painted.disconnect(
+                        self._on_tile_painted
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.tile_eyedropped.disconnect(
+                        self._on_tile_eyedropped
+                    )
+                except (RuntimeError, TypeError):
+                    pass
             try:
                 self._layer_panel.layer_visibility_changed.disconnect()
             except (RuntimeError, TypeError):
@@ -378,8 +557,12 @@ class MainWindow(QMainWindow):
             except (RuntimeError, TypeError):
                 pass
 
+        self._connected_canvas = canvas
         canvas.cell_hovered.connect(self._on_cell_hovered)
         canvas.zoom_changed.connect(self._on_zoom_changed)
+        canvas.cell_flag_edited.connect(self._on_cell_flag_edited)
+        canvas.tile_painted.connect(self._on_tile_painted)
+        canvas.tile_eyedropped.connect(self._on_tile_eyedropped)
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
         self._layer_panel.entities_visibility_changed.connect(
             canvas.set_entities_visible
@@ -401,3 +584,86 @@ class MainWindow(QMainWindow):
                 self.move(x, y)
         except Exception:
             self.resize(1280, 900)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self._maybe_save_dirty_tabs():
+            event.accept()
+            return
+        event.ignore()
+
+    def _save_area(self, content_id: str) -> bool:
+        info = self._tab_widget.content_info(content_id)
+        document = self._area_docs.get(content_id)
+        if info is None or document is None:
+            return True
+        try:
+            save_area_document(info.file_path, document)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"Failed to save {content_id}:\n{exc}",
+            )
+            return False
+        self._tab_widget.set_dirty(content_id, False)
+        return True
+
+    def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
+        dirty_ids = self._tab_widget.dirty_content_ids()
+        if content_ids is not None:
+            wanted = set(content_ids)
+            dirty_ids = [content_id for content_id in dirty_ids if content_id in wanted]
+        if not dirty_ids:
+            return True
+
+        message = (
+            f"Save changes to {dirty_ids[0]} before continuing?"
+            if len(dirty_ids) == 1
+            else f"Save changes to {len(dirty_ids)} edited areas before continuing?"
+        )
+        choice = QMessageBox.question(
+            self,
+            "Unsaved Changes",
+            message,
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if choice == QMessageBox.StandardButton.Cancel:
+            return False
+        if choice == QMessageBox.StandardButton.Discard:
+            return True
+        for content_id in dirty_ids:
+            if not self._save_area(content_id):
+                return False
+        return True
+
+    def _on_tile_painted(self, layer_idx: int, col: int, row: int, gid: int) -> None:
+        info = self._tab_widget.active_info()
+        if info is None or info.content_type != ContentType.AREA:
+            return
+        self._tab_widget.set_dirty(info.content_id, True)
+
+    def _on_tile_eyedropped(self, gid: int) -> None:
+        self._tileset_panel.select_gid(gid)
+        canvas = self._active_canvas()
+        if canvas is not None:
+            canvas.set_selected_gid(gid)
+        self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
+
+    def _update_paint_status(self) -> None:
+        """Update status bar with current paint-mode info."""
+        self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+        gid = self._tileset_panel.selected_gid
+        self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
+
+    def _set_cell_flags_action_state(self, enabled: bool) -> None:
+        self._cell_flags_action.blockSignals(True)
+        self._cell_flags_action.setChecked(enabled)
+        self._cell_flags_action.blockSignals(False)
+
+    def _set_paint_tiles_action_state(self, enabled: bool) -> None:
+        self._paint_tiles_action.blockSignals(True)
+        self._paint_tiles_action.setChecked(enabled)
+        self._paint_tiles_action.blockSignals(False)

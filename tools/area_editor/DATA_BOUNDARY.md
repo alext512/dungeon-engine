@@ -13,7 +13,7 @@ The future tool may read:
 - `project.json`
 - authored area JSON files
 - entity template JSON files
-- named command JSON files if needed for reference
+- project command JSON files if needed for reference
 - ordinary project JSON data if needed for context
 - PNG assets and other discoverable project assets
 

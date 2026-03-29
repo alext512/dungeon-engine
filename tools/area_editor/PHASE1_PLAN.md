@@ -2,7 +2,7 @@
 
 ## Context
 
-The puzzle dungeon engine is data-driven — gameplay is authored via JSON files (areas, entity templates, named commands). Hand-editing these JSONs is painful for tile painting, entity placement, and cross-entity references. The area editor is an external convenience tool that reads/writes the same JSON files without importing the runtime.
+The puzzle dungeon engine is data-driven — gameplay is authored via JSON files (areas, entity templates, project commands). Hand-editing these JSONs is painful for tile painting, entity placement, and cross-entity references. The area editor is an external convenience tool that reads/writes the same JSON files without importing the runtime.
 
 Phase 0 (docs/planning) is complete. This plan covers **Phase 1: read-only project browser** — opening a project, viewing areas, and rendering tile grids with entity markers. No editing yet.
 

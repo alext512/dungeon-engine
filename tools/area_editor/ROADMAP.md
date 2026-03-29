@@ -61,19 +61,30 @@ Implemented:
 - welcome page shown when no tabs are open
 - tab deduplication (re-opening same content focuses existing tab)
 
-## Phase 3: Tile And Cell Editing
+## Phase 3: Tile And Cell Editing (In Progress)
 
 Goal:
 
 - edit room layout safely
 
+Implemented so far:
+
+- preservation-safe saving for edited area tabs
+- canvas-based `cell_flags` editing with dirty tracking
+- tileset browser panel with visual tile grid and dropdown
+- active layer selection in layer panel (click to set paint target)
+- tile paint mode with left-click paint, right-click erase, Alt+click eyedrop
+- ghost tile preview following the cursor during paint mode
+- mutually exclusive edit modes (paint tiles vs edit cell flags)
+- per-area tileset browser population on tab switch
+
 Deliverables:
 
-- layer selection
-- tile painting
-- erase/replace actions
-- walkability or cell-flag editing
-- save with preservation guarantees
+- layer selection (done)
+- tile painting (done)
+- erase/replace actions (erase done, flood fill future)
+- walkability or cell-flag editing (done)
+- save with preservation guarantees (done)
 
 ## Phase 4: Entity Placement And Movement
 

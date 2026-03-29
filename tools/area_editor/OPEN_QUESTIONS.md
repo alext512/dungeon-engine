@@ -4,12 +4,6 @@ These questions are intentionally unresolved.
 
 Do not treat them as blockers unless the user says they are.
 
-## UI Technology
-
-- Desktop native toolkit or something else?
-- Lightweight immediate-mode feel or more traditional widget toolkit?
-- Is cross-platform support important from the start, or is Windows-first acceptable?
-
 ## Save Preservation Strategy
 
 - How strict should unknown-field preservation be?
@@ -37,6 +31,7 @@ Do not treat them as blockers unless the user says they are.
 
 ## Launch Workflow
 
+- this is about launching the runtime from the editor, not opening a project in the editor itself
 - Should the tool eventually launch the game directly?
 - Should it launch a selected area only?
 - Should save-before-launch be mandatory?

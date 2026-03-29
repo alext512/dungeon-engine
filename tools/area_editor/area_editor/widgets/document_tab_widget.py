@@ -58,6 +58,7 @@ class DocumentTabWidget(QStackedWidget):
 
     # Emitted when the active tab changes. content_id is "" when no tabs.
     active_tab_changed = Signal(str, object)  # (content_id, ContentType | None)
+    tab_close_requested = Signal(str, object)  # (content_id, ContentType)
     tab_closed = Signal(str)  # content_id
 
     def __init__(self, parent=None) -> None:
@@ -77,7 +78,7 @@ class DocumentTabWidget(QStackedWidget):
         self._tabs.setTabsClosable(True)
         self._tabs.setMovable(True)
         self._tabs.setDocumentMode(True)
-        self._tabs.tabCloseRequested.connect(self._close_tab)
+        self._tabs.tabCloseRequested.connect(self._on_tab_close_requested)
         self._tabs.currentChanged.connect(self._on_current_changed)
         self.addWidget(self._tabs)
 
@@ -124,9 +125,7 @@ class DocumentTabWidget(QStackedWidget):
         info = _TabInfo(content_id, file_path, content_type)
         self._tab_infos.append(info)
 
-        # Tab label: last segment of the content id
-        label = content_id.rsplit("/", 1)[-1]
-        index = self._tabs.addTab(widget, label)
+        index = self._tabs.addTab(widget, self._tab_label(info))
         self._tabs.setTabToolTip(index, content_id)
         self._tabs.setCurrentIndex(index)
         self.setCurrentWidget(self._tabs)
@@ -137,6 +136,12 @@ class DocumentTabWidget(QStackedWidget):
         """Close all tabs (e.g. when loading a new project)."""
         while self._tabs.count() > 0:
             self._close_tab(0)
+
+    def close_content(self, content_id: str) -> None:
+        """Close the tab for *content_id* if it is open."""
+        index = self._index_for_content(content_id)
+        if index is not None:
+            self._close_tab(index)
 
     def active_content_id(self) -> str | None:
         """Return the content_id of the active tab, or None."""
@@ -156,6 +161,30 @@ class DocumentTabWidget(QStackedWidget):
             return self._tab_infos[idx]
         return None
 
+    def content_info(self, content_id: str) -> _TabInfo | None:
+        """Return the tab info for a known content id."""
+        index = self._index_for_content(content_id)
+        if index is None:
+            return None
+        return self._tab_infos[index]
+
+    def is_dirty(self, content_id: str) -> bool:
+        info = self.content_info(content_id)
+        return False if info is None else info.dirty
+
+    def dirty_content_ids(self) -> list[str]:
+        return [info.content_id for info in self._tab_infos if info.dirty]
+
+    def set_dirty(self, content_id: str, dirty: bool) -> None:
+        index = self._index_for_content(content_id)
+        if index is None:
+            return
+        info = self._tab_infos[index]
+        if info.dirty == dirty:
+            return
+        info.dirty = dirty
+        self._tabs.setTabText(index, self._tab_label(info))
+
     # ------------------------------------------------------------------
     # Event filter (middle-click close)
     # ------------------------------------------------------------------
@@ -166,13 +195,19 @@ class DocumentTabWidget(QStackedWidget):
             if me.button() == Qt.MouseButton.MiddleButton:
                 idx = self._tabs.tabBar().tabAt(me.position().toPoint())
                 if idx >= 0:
-                    self._close_tab(idx)
+                    self._on_tab_close_requested(idx)
                     return True
         return super().eventFilter(obj, event)
 
     # ------------------------------------------------------------------
     # Slots
     # ------------------------------------------------------------------
+
+    def _on_tab_close_requested(self, index: int) -> None:
+        if index < 0 or index >= len(self._tab_infos):
+            return
+        info = self._tab_infos[index]
+        self.tab_close_requested.emit(info.content_id, info.content_type)
 
     def _close_tab(self, index: int) -> None:
         if index < 0 or index >= len(self._tab_infos):
@@ -205,3 +240,14 @@ class DocumentTabWidget(QStackedWidget):
             if file_path.suffix.lower() in _IMAGE_EXTENSIONS:
                 return ImageViewerWidget(file_path)
         return JsonViewerWidget(file_path)
+
+    def _index_for_content(self, content_id: str) -> int | None:
+        for index, info in enumerate(self._tab_infos):
+            if info.content_id == content_id:
+                return index
+        return None
+
+    @staticmethod
+    def _tab_label(info: _TabInfo) -> str:
+        base = info.content_id.rsplit("/", 1)[-1]
+        return f"*{base}" if info.dirty else base
