@@ -55,3 +55,70 @@ class TestTemplateCatalog(unittest.TestCase):
         visual = catalog.get_first_visual("entity_templates/display_sprite")
 
         self.assertIsNone(visual)
+
+    def test_get_template_parameter_names_discovers_expected_variables(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/sign"] = {
+            "events": {
+                "interact": {
+                    "commands": [
+                        {
+                            "type": "run_event",
+                            "dialogue_path": "$dialogue_path",
+                            "actor_entity_id": "$actor_id",
+                            "caller_entity_id": "$self_id",
+                        }
+                    ]
+                }
+            }
+        }
+
+        names = catalog.get_template_parameter_names("entity_templates/sign")
+
+        self.assertEqual(names, ["dialogue_path"])
+
+    def test_get_template_parameter_names_caches_results_until_clear(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/door"] = {
+            "events": {
+                "interact": {
+                    "commands": [
+                        {"type": "change_area", "area_id": "$target_area"}
+                    ]
+                }
+            }
+        }
+
+        self.assertEqual(
+            catalog.get_template_parameter_names("entity_templates/door"),
+            ["target_area"],
+        )
+
+        catalog._templates["entity_templates/door"] = {
+            "events": {
+                "interact": {
+                    "commands": [
+                        {"type": "change_area", "entry_id": "$target_entry"}
+                    ]
+                }
+            }
+        }
+
+        self.assertEqual(
+            catalog.get_template_parameter_names("entity_templates/door"),
+            ["target_area"],
+        )
+        catalog.clear()
+        catalog._templates["entity_templates/door"] = {
+            "events": {
+                "interact": {
+                    "commands": [
+                        {"type": "change_area", "entry_id": "$target_entry"}
+                    ]
+                }
+            }
+        }
+        self.assertEqual(
+            catalog.get_template_parameter_names("entity_templates/door"),
+            ["target_entry"],
+        )

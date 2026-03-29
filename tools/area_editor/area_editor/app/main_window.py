@@ -205,6 +205,11 @@ class MainWindow(QMainWindow):
             file_extensions=(),  # show all file types
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._asset_panel)
+        self._area_panel.setMinimumWidth(540)
+        self._template_panel.setMinimumWidth(540)
+        self._dialogue_panel.setMinimumWidth(540)
+        self._command_panel.setMinimumWidth(540)
+        self._asset_panel.setMinimumWidth(540)
 
         # Right side: layer panel + tileset browser
         self._layer_panel = LayerListPanel()
@@ -230,6 +235,11 @@ class MainWindow(QMainWindow):
             [self._area_panel, self._entity_instance_panel],
             [430, 240],
             Qt.Orientation.Vertical,
+        )
+        self.resizeDocks(
+            [self._area_panel, self._layer_panel],
+            [560, 320],
+            Qt.Orientation.Horizontal,
         )
         self._area_panel.raise_()  # show area list tab by default
 
@@ -287,6 +297,15 @@ class MainWindow(QMainWindow):
         self._entity_instance_panel.apply_requested.connect(self._on_apply_entity_instance_json)
         self._entity_instance_panel.revert_requested.connect(self._on_revert_entity_instance_json)
         self._entity_instance_panel.dirty_changed.connect(self._on_entity_instance_json_dirty_changed)
+        self._entity_instance_panel.fields_apply_requested.connect(
+            self._on_apply_entity_instance_fields
+        )
+        self._entity_instance_panel.fields_revert_requested.connect(
+            self._on_revert_entity_instance_fields
+        )
+        self._entity_instance_panel.fields_dirty_changed.connect(
+            self._on_entity_instance_fields_dirty_changed
+        )
 
     # ------------------------------------------------------------------
     # Public API (called from __main__ for --project arg)
@@ -313,6 +332,7 @@ class MainWindow(QMainWindow):
         self._catalog = TilesetCatalog(resolver)
         self._templates = TemplateCatalog()
         self._templates.load_from_manifest(self._manifest)
+        self._entity_instance_panel.set_template_catalog(self._templates)
 
         # Close all existing tabs
         self._tab_widget.close_all()
@@ -884,6 +904,11 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage("Selected entity JSON has unapplied changes.", 2000)
 
+    def _on_entity_instance_fields_dirty_changed(self, dirty: bool) -> None:
+        if not dirty:
+            return
+        self.statusBar().showMessage("Selected entity fields have unapplied changes.", 2000)
+
     def _on_entity_paint_requested(self, template_id: str, col: int, row: int) -> None:
         context = self._active_area_context()
         if context is None or not self._entity_brush_supported:
@@ -990,43 +1015,55 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Invalid Entity", "Entity instance JSON must be an object.")
             return
         updated = EntityDocument.from_dict(raw)
-        if not updated.id:
-            QMessageBox.warning(self, "Invalid Entity", "Entity instance must have a non-empty id.")
+        if not self._apply_entity_instance_update(
+            content_id,
+            doc,
+            canvas,
+            current,
+            updated,
+            status_message=f"Applied JSON changes to entity {updated.id}.",
+        ):
             return
-        if updated.space == "world" and not (0 <= updated.x < doc.width and 0 <= updated.y < doc.height):
-            QMessageBox.warning(
-                self,
-                "Invalid Position",
-                f"World-space entity position must stay inside the area bounds (0..{doc.width - 1}, 0..{doc.height - 1}).",
-            )
-            return
-        for other in doc.entities:
-            if other is current:
-                continue
-            if other.id == updated.id:
-                QMessageBox.warning(
-                    self,
-                    "Duplicate Entity ID",
-                    f"Another entity already uses id '{updated.id}'.",
-                )
-                return
-        index = doc.entities.index(current)
-        was_selected = canvas.selected_entity_id == entity_id or self._active_instance_entity_id == entity_id
-        doc.entities[index] = updated
-        self._active_instance_entity_id = updated.id
-        canvas.refresh_scene_contents()
-        if was_selected:
-            canvas.set_selected_entity(updated.id, cycle_position=1, cycle_total=1, emit=False)
-        self._tab_widget.set_dirty(content_id, True)
-        self._refresh_render_properties_target()
-        self._refresh_entity_instance_panel()
-        self._sync_json_edit_actions()
-        self._update_paint_status()
-        self.statusBar().showMessage(f"Applied JSON changes to entity {updated.id}.", 2500)
 
     def _on_revert_entity_instance_json(self) -> None:
         self._refresh_entity_instance_panel()
         self.statusBar().showMessage("Reverted selected entity JSON.", 2000)
+
+    def _on_apply_entity_instance_fields(self) -> None:
+        context = self._active_area_context()
+        entity_id = self._active_instance_entity_id
+        if context is None or entity_id is None:
+            return
+        content_id, doc, canvas = context
+        current = entity_by_id(doc, entity_id)
+        if current is None:
+            return
+        try:
+            updated = self._entity_instance_panel.build_entity_from_fields()
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Invalid Entity",
+                f"Could not build entity fields:\n{exc}",
+            )
+            return
+        updated.render_order = current.render_order
+        updated.y_sort = current.y_sort
+        updated.sort_y_offset = current.sort_y_offset
+        updated.stack_order = current.stack_order
+        if not self._apply_entity_instance_update(
+            content_id,
+            doc,
+            canvas,
+            current,
+            updated,
+            status_message=f"Applied field changes to entity {updated.id}.",
+        ):
+            return
+
+    def _on_revert_entity_instance_fields(self) -> None:
+        self._refresh_entity_instance_panel()
+        self.statusBar().showMessage("Reverted selected entity fields.", 2000)
 
     # ------------------------------------------------------------------
     # Internal
@@ -1588,17 +1625,25 @@ class MainWindow(QMainWindow):
             self._active_instance_entity_id = None
             self._entity_instance_panel.clear_entity()
             return
+        self._entity_instance_panel.set_area_bounds(doc.width, doc.height)
         self._entity_instance_panel.load_entity(entity)
 
     def _prepare_for_entity_instance_target_change(self, new_entity_id: str | None) -> bool:
-        if not self._entity_instance_panel.is_dirty:
+        if not self._entity_instance_panel.is_dirty and not self._entity_instance_panel.fields_dirty:
             return True
         if new_entity_id == self._entity_instance_panel.entity_id:
             return True
+        tab_name = "JSON"
+        apply_handler = self._on_apply_entity_instance_json
+        dirty_check = lambda: self._entity_instance_panel.is_dirty
+        if self._entity_instance_panel.fields_dirty:
+            tab_name = "Fields"
+            apply_handler = self._on_apply_entity_instance_fields
+            dirty_check = lambda: self._entity_instance_panel.fields_dirty
         choice = QMessageBox.question(
             self,
-            "Unsaved Entity JSON",
-            "Apply changes to the currently selected entity JSON before switching?",
+            f"Unsaved Entity {tab_name}",
+            f"Apply changes in the {tab_name} tab before switching?",
             QMessageBox.StandardButton.Save
             | QMessageBox.StandardButton.Discard
             | QMessageBox.StandardButton.Cancel,
@@ -1607,9 +1652,73 @@ class MainWindow(QMainWindow):
         if choice == QMessageBox.StandardButton.Cancel:
             return False
         if choice == QMessageBox.StandardButton.Save:
-            self._on_apply_entity_instance_json()
-            return not self._entity_instance_panel.is_dirty
+            apply_handler()
+            return not dirty_check()
         return True
+
+    def _apply_entity_instance_update(
+        self,
+        content_id: str,
+        doc: AreaDocument,
+        canvas: TileCanvas,
+        current: EntityDocument,
+        updated: EntityDocument,
+        *,
+        status_message: str,
+    ) -> bool:
+        error = self._validate_entity_update(doc, current, updated)
+        if error is not None:
+            title, message = error
+            QMessageBox.warning(self, title, message)
+            return False
+        index = doc.entities.index(current)
+        was_selected = (
+            canvas.selected_entity_id == current.id
+            or self._active_instance_entity_id == current.id
+        )
+        doc.entities[index] = updated
+        self._active_instance_entity_id = updated.id
+        canvas.refresh_scene_contents()
+        if was_selected:
+            canvas.set_selected_entity(
+                updated.id,
+                cycle_position=1,
+                cycle_total=1,
+                emit=False,
+            )
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_render_properties_target()
+        self._refresh_entity_instance_panel()
+        self._sync_json_edit_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(status_message, 2500)
+        return True
+
+    def _validate_entity_update(
+        self,
+        doc: AreaDocument,
+        current: EntityDocument,
+        updated: EntityDocument,
+    ) -> tuple[str, str] | None:
+        if not updated.id:
+            return "Invalid Entity", "Entity instance must have a non-empty id."
+        if updated.space == "world" and not (
+            0 <= updated.x < doc.width and 0 <= updated.y < doc.height
+        ):
+            return (
+                "Invalid Position",
+                f"World-space entity position must stay inside the area bounds "
+                f"(0..{doc.width - 1}, 0..{doc.height - 1}).",
+            )
+        for other in doc.entities:
+            if other is current:
+                continue
+            if other.id == updated.id:
+                return (
+                    "Duplicate Entity ID",
+                    f"Another entity already uses id '{updated.id}'.",
+                )
+        return None
 
     def _active_json_widget(self) -> JsonViewerWidget | None:
         widget = self._tab_widget.active_widget()

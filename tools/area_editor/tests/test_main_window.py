@@ -337,6 +337,174 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         )
         return project / "project.json"
 
+    def _create_entity_fields_project(self, root: Path) -> Path:
+        project = root / "project"
+        assets = project / "assets"
+        areas = project / "areas"
+        templates = project / "entity_templates"
+        assets.mkdir(parents=True)
+        areas.mkdir()
+        templates.mkdir()
+
+        base = QPixmap(16, 16)
+        base.fill(QColor("blue"))
+        self.assertTrue(base.save(str(assets / "base.png")))
+
+        (project / "project.json").write_text(
+            (
+                '{\n'
+                '  "startup_area": "areas/demo",\n'
+                '  "entity_template_paths": ["entity_templates/"]\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (areas / "demo.json").write_text(
+            (
+                '{\n'
+                '  "name": "Demo",\n'
+                '  "tile_size": 16,\n'
+                '  "tilesets": [\n'
+                '    {\n'
+                '      "firstgid": 1,\n'
+                '      "path": "assets/base.png",\n'
+                '      "tile_width": 16,\n'
+                '      "tile_height": 16\n'
+                '    }\n'
+                '  ],\n'
+                '  "tile_layers": [\n'
+                '    {\n'
+                '      "name": "ground",\n'
+                '      "render_order": 0,\n'
+                '      "y_sort": false,\n'
+                '      "stack_order": 0,\n'
+                '      "grid": [[1, 1], [1, 1]]\n'
+                '    }\n'
+                '  ],\n'
+                '  "entities": [\n'
+                '    {\n'
+                '      "id": "house_door",\n'
+                '      "x": 0,\n'
+                '      "y": 0,\n'
+                '      "template": "entity_templates/area_door",\n'
+                '      "parameters": {\n'
+                '        "target_area": "areas/village_house",\n'
+                '        "target_entry": "from_square"\n'
+                '      },\n'
+                '      "render_order": 10,\n'
+                '      "y_sort": true,\n'
+                '      "stack_order": 0\n'
+                '    },\n'
+                '    {\n'
+                '      "id": "title_backdrop",\n'
+                '      "pixel_x": 12,\n'
+                '      "pixel_y": 18,\n'
+                '      "template": "entity_templates/display_sprite",\n'
+                '      "parameters": {\n'
+                '        "sprite_path": "assets/base.png"\n'
+                '      },\n'
+                '      "render_order": 0,\n'
+                '      "y_sort": false,\n'
+                '      "stack_order": 0\n'
+                '    }\n'
+                '  ],\n'
+                '  "variables": {}\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (templates / "area_door.json").write_text(
+            (
+                '{\n'
+                '  "events": {\n'
+                '    "interact": {\n'
+                '      "commands": [\n'
+                '        {\n'
+                '          "type": "change_area",\n'
+                '          "area_id": "$target_area",\n'
+                '          "entry_id": "$target_entry"\n'
+                '        }\n'
+                '      ]\n'
+                '    }\n'
+                '  },\n'
+                '  "render_order": 10\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (templates / "display_sprite.json").write_text(
+            (
+                '{\n'
+                '  "space": "screen",\n'
+                '  "render_order": 0,\n'
+                '  "y_sort": false,\n'
+                '  "visuals": [\n'
+                '    {\n'
+                '      "path": "$sprite_path"\n'
+                '    }\n'
+                '  ]\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        return project / "project.json"
+
+    def _create_dialogue_project(self, root: Path) -> Path:
+        project = root / "project"
+        assets = project / "assets"
+        areas = project / "areas"
+        dialogues = project / "dialogues"
+        assets.mkdir(parents=True)
+        areas.mkdir()
+        dialogues.mkdir()
+
+        base = QPixmap(16, 16)
+        base.fill(QColor("orange"))
+        self.assertTrue(base.save(str(assets / "base.png")))
+
+        (project / "project.json").write_text(
+            (
+                '{\n'
+                '  "startup_area": "areas/demo",\n'
+                '  "dialogue_paths": ["dialogues/"]\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (areas / "demo.json").write_text(
+            (
+                '{\n'
+                '  "name": "Demo",\n'
+                '  "tile_size": 16,\n'
+                '  "tilesets": [\n'
+                '    {\n'
+                '      "firstgid": 1,\n'
+                '      "path": "assets/base.png",\n'
+                '      "tile_width": 16,\n'
+                '      "tile_height": 16\n'
+                '    }\n'
+                '  ],\n'
+                '  "tile_layers": [\n'
+                '    {\n'
+                '      "name": "ground",\n'
+                '      "render_order": 0,\n'
+                '      "y_sort": false,\n'
+                '      "stack_order": 0,\n'
+                '      "grid": [[1]]\n'
+                '    }\n'
+                '  ],\n'
+                '  "entities": [],\n'
+                '  "variables": {}\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (dialogues / "intro.json").write_text(
+            '{\n  "text": "Hello"\n}\n',
+            encoding="utf-8",
+        )
+        return project / "project.json"
+
     def test_add_tileset_appends_safe_firstgid(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project(Path(tmp))
@@ -464,6 +632,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.addCleanup(window.close)
             window.open_project(project_file)
 
+            self.assertGreaterEqual(window._area_panel.minimumWidth(), 540)
             self.assertEqual(
                 window.dockWidgetArea(window._entity_instance_panel),
                 Qt.DockWidgetArea.LeftDockWidgetArea,
@@ -527,6 +696,72 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(window._enable_json_editing_action.isChecked())
             window._tab_widget.set_dirty("areas/demo", False)
 
+    def test_entity_instance_fields_panel_applies_changes_without_reverting_render_properties(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+            window._enable_json_editing_action.setChecked(True)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._select_action.setChecked(True)
+            canvas.select_entities_at_cell(0, 0)
+            QApplication.processEvents()
+
+            fields = window._entity_instance_panel._fields_editor
+            self.assertEqual(fields._id_edit.text(), "house_door")
+            self.assertEqual(
+                fields._parameter_edits["target_area"].text(),
+                "areas/village_house",
+            )
+
+            fields._id_edit.setText("front_door")
+            fields._x_spin.setValue(1)
+            fields._parameter_edits["target_area"].setText("areas/updated_house")
+            QApplication.processEvents()
+
+            self.assertTrue(window._entity_instance_panel.fields_dirty)
+            self.assertFalse(window._entity_instance_panel._json_editor.isEnabled())
+
+            window._render_panel._render_order_spin.setValue(14)
+            QApplication.processEvents()
+
+            window._on_apply_entity_instance_fields()
+
+            doc = window._area_docs["areas/demo"]
+            entity = next(entity for entity in doc.entities if entity.id == "front_door")
+            self.assertEqual(entity.x, 1)
+            self.assertEqual(entity.parameters, {
+                "target_area": "areas/updated_house",
+                "target_entry": "from_square",
+            })
+            self.assertEqual(entity.render_order, 14)
+            self.assertEqual(canvas.selected_entity_id, "front_door")
+            self.assertFalse(window._entity_instance_panel.fields_dirty)
+            self.assertTrue(window._entity_instance_panel._json_editor.isEnabled())
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_instance_fields_panel_uses_effective_space_from_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._active_instance_entity_id = "title_backdrop"
+            window._refresh_entity_instance_panel()
+
+            fields = window._entity_instance_panel._fields_editor
+            self.assertEqual(fields._space_label.text(), "screen")
+            self.assertTrue(fields._x_spin.isHidden())
+            self.assertTrue(fields._y_spin.isHidden())
+            self.assertFalse(fields._pixel_x_row.isHidden())
+            self.assertFalse(fields._pixel_y_row.isHidden())
+
     def test_template_json_tab_is_guarded_and_saveable(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_paint_project(Path(tmp))
@@ -559,6 +794,35 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"render_order": 11', saved)
             self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
             self.assertTrue(window._enable_json_editing_action.isChecked())
+
+    def test_dialogue_json_tab_is_guarded_and_saveable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_dialogue_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            dialogue_path = project_file.parent / "dialogues" / "intro.json"
+            window._open_content("dialogues/intro", dialogue_path, ContentType.DIALOGUE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, JsonViewerWidget)
+            assert isinstance(widget, JsonViewerWidget)
+            self.assertTrue(widget.isReadOnly())
+
+            window._enable_json_editing_action.setChecked(True)
+            self.assertFalse(widget.isReadOnly())
+
+            widget.setPlainText('{\n  "text": "Updated hello"\n}')
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("dialogues/intro"))
+            window._on_save_active()
+
+            saved = dialogue_path.read_text(encoding="utf-8")
+            self.assertIn('"text": "Updated hello"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("dialogues/intro"))
 
     def test_template_brush_switches_active_paint_target_and_places_entities(self):
         with tempfile.TemporaryDirectory() as tmp:

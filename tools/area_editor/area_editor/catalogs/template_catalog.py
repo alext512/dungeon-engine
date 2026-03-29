@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 _EXACT_TOKEN_RE = re.compile(r"^\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))$")
 _EMBEDDED_TOKEN_RE = re.compile(r"\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))")
+_BUILTIN_VARIABLES = frozenset({"self_id", "actor_id", "caller_id"})
 
 
 @dataclass
@@ -38,10 +39,12 @@ class TemplateCatalog:
 
     def __init__(self) -> None:
         self._templates: dict[str, dict[str, Any]] = {}
+        self._template_parameter_names: dict[str, list[str]] = {}
 
     def load_from_manifest(self, manifest: ProjectManifest) -> None:
         """Discover and load all entity templates for the project."""
         self._templates.clear()
+        self._template_parameter_names.clear()
         for entry in discover_entity_templates(manifest):
             try:
                 raw = json.loads(entry.file_path.read_text(encoding="utf-8"))
@@ -103,8 +106,23 @@ class TemplateCatalog:
         """Return all loaded template ids."""
         return list(self._templates.keys())
 
+    def get_template_parameter_names(self, template_id: str) -> list[str]:
+        """Return named instance parameters referenced by one template."""
+        cached = self._template_parameter_names.get(template_id)
+        if cached is not None:
+            return list(cached)
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return []
+        found: set[str] = set()
+        self._collect_variable_names(raw, found)
+        names = sorted(name for name in found if name not in _BUILTIN_VARIABLES)
+        self._template_parameter_names[template_id] = names
+        return list(names)
+
     def clear(self) -> None:
         self._templates.clear()
+        self._template_parameter_names.clear()
 
     def _substitute_template_parameters(
         self,
@@ -140,3 +158,20 @@ class TemplateCatalog:
     @staticmethod
     def _contains_unresolved_tokens(value: str) -> bool:
         return _EMBEDDED_TOKEN_RE.search(value) is not None
+
+    @staticmethod
+    def _collect_variable_names(value: Any, found: set[str]) -> None:
+        if isinstance(value, dict):
+            for subvalue in value.values():
+                TemplateCatalog._collect_variable_names(subvalue, found)
+            return
+        if isinstance(value, list):
+            for item in value:
+                TemplateCatalog._collect_variable_names(item, found)
+            return
+        if not isinstance(value, str):
+            return
+        for match in _EMBEDDED_TOKEN_RE.finditer(value):
+            key = match.group("braced") or match.group("plain")
+            if key:
+                found.add(key)
