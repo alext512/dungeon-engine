@@ -1,0 +1,172 @@
+{
+  "params": [
+    "direction",
+    "frames_needed"
+  ],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_offset",
+      "value": {
+        "$collection_item": {
+          "value": {
+            "up": { "x": 0, "y": -1 },
+            "down": { "x": 0, "y": 1 },
+            "left": { "x": -1, "y": 0 },
+            "right": { "x": 1, "y": 0 }
+          },
+          "key": "$direction",
+          "default": { "x": 0, "y": 0 }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_self_position",
+      "value": {
+        "$entity_ref": {
+          "entity_id": "$self_id",
+          "select": {
+            "fields": [
+              "grid_x",
+              "grid_y"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_x",
+      "value": {
+        "$sum": [
+          "$self.push_self_position.grid_x",
+          "$self.push_offset.x"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_y",
+      "value": {
+        "$sum": [
+          "$self.push_self_position.grid_y",
+          "$self.push_offset.y"
+        ]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_cell_flags",
+      "value": {
+        "$cell_flags_at": {
+          "x": "$self.push_target_x",
+          "y": "$self.push_target_y",
+          "default": {
+            "walkable": false
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_walkable",
+      "value": {
+        "$collection_item": {
+          "value": "$self.push_target_cell_flags",
+          "key": "walkable",
+          "default": false
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_entities",
+      "value": {
+        "$entities_at": {
+          "x": "$self.push_target_x",
+          "y": "$self.push_target_y",
+          "exclude_entity_id": "$self_id",
+          "include_hidden": true,
+          "select": {
+            "fields": [
+              "entity_id"
+            ],
+            "variables": [
+              "blocks_movement"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_blocking_entity",
+      "value": {
+        "$find_in_collection": {
+          "value": "$self.push_target_entities",
+          "field": "variables.blocks_movement",
+          "op": "eq",
+          "match": true,
+          "default": null
+        }
+      }
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_walkable",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "push_blocking_entity",
+          "op": "eq",
+          "value": null,
+          "then": [
+            {
+              "type": "set_entity_grid_position",
+              "entity_id": "$self_id",
+              "x": "$self.push_offset.x",
+              "y": "$self.push_offset.y",
+              "mode": "relative"
+            },
+            {
+              "type": "play_audio",
+              "path": "assets/project/sfx/push.wav"
+            },
+            {
+              "type": "move_entity_world_position",
+              "entity_id": "$self_id",
+              "x": {
+                "$product": [
+                  "$self.push_offset.x",
+                  "$area.tile_size"
+                ]
+              },
+              "y": {
+                "$product": [
+                  "$self.push_offset.y",
+                  "$area.tile_size"
+                ]
+              },
+              "mode": "relative",
+              "frames_needed": "$frames_needed",
+              "wait": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

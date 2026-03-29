@@ -9,8 +9,8 @@ from typing import Any
 
 from dungeon_engine import config
 from dungeon_engine.commands.library import (
-    instantiate_named_command_commands,
-    load_named_command_definition,
+    instantiate_project_command_commands,
+    load_project_command_definition,
 )
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
@@ -194,8 +194,8 @@ class ForEachCommandHandle(CommandHandle):
             self.complete = True
 
 
-class NamedCommandHandle(CommandHandle):
-    """Run a project-level named command definition while tracking recursion."""
+class ProjectCommandHandle(CommandHandle):
+    """Run a reusable project command definition while tracking recursion."""
 
     def __init__(
         self,
@@ -222,18 +222,18 @@ class NamedCommandHandle(CommandHandle):
             self.complete = True
 
     def _push_stack(self) -> None:
-        """Record entry into a named-command invocation."""
+        """Record entry into one project command invocation."""
         if self._stack_pushed:
             return
-        self.context.named_command_stack.append(self.command_id)
+        self.context.project_command_stack.append(self.command_id)
         self._stack_pushed = True
 
     def _pop_stack(self) -> None:
-        """Remove this invocation from the named-command call stack."""
+        """Remove this invocation from the project command call stack."""
         if not self._stack_pushed:
             return
-        if self.context.named_command_stack and self.context.named_command_stack[-1] == self.command_id:
-            self.context.named_command_stack.pop()
+        if self.context.project_command_stack and self.context.project_command_stack[-1] == self.command_id:
+            self.context.project_command_stack.pop()
         self._stack_pushed = False
 
 
@@ -563,6 +563,126 @@ def _persist_entity_event_enabled(
     )
 
 
+def _normalize_camera_follow_spec(
+    follow: Any,
+    *,
+    command_name: str,
+    world: Any | None = None,
+    source_entity_id: str | None = None,
+    actor_entity_id: str | None = None,
+    caller_entity_id: str | None = None,
+    require_exact_entity: bool,
+) -> dict[str, Any]:
+    """Validate one public camera follow spec and return normalized runtime data."""
+    if not isinstance(follow, dict):
+        raise TypeError(f"{command_name} follow must be a JSON object.")
+
+    allowed_keys = {"mode", "entity_id", "action", "offset_x", "offset_y"}
+    unknown_keys = set(follow) - allowed_keys
+    if unknown_keys:
+        unknown_list = ", ".join(sorted(unknown_keys))
+        raise ValueError(f"{command_name} follow contains unknown field(s): {unknown_list}.")
+
+    if "mode" not in follow:
+        raise ValueError(f"{command_name} follow requires an explicit mode.")
+    mode = str(follow.get("mode", "")).strip() or "none"
+    if mode not in {"none", "entity", "input_target"}:
+        raise ValueError(
+            f"{command_name} follow.mode must be 'none', 'entity', or 'input_target'."
+        )
+
+    offset_x = float(follow.get("offset_x", 0.0))
+    offset_y = float(follow.get("offset_y", 0.0))
+    normalized: dict[str, Any] = {
+        "mode": mode,
+        "offset_x": offset_x,
+        "offset_y": offset_y,
+    }
+
+    if mode == "none":
+        if "entity_id" in follow or "action" in follow or "offset_x" in follow or "offset_y" in follow:
+            raise ValueError(
+                f"{command_name} follow.mode 'none' must not provide entity_id, action, or offsets."
+            )
+        return normalized
+
+    if mode == "entity":
+        if "action" in follow:
+            raise ValueError(f"{command_name} follow.mode 'entity' must not provide action.")
+        raw_entity_id = str(follow.get("entity_id", "")).strip()
+        if not raw_entity_id:
+            raise ValueError(f"{command_name} follow.mode 'entity' requires a non-empty entity_id.")
+        if require_exact_entity:
+            if world is None:
+                raise ValueError(f"{command_name} requires an active world for entity follow.")
+            normalized["entity_id"] = _require_exact_entity(world, raw_entity_id).entity_id
+            return normalized
+        normalized["entity_id"] = _resolve_entity_id(
+            raw_entity_id,
+            source_entity_id=source_entity_id,
+            actor_entity_id=actor_entity_id,
+            caller_entity_id=caller_entity_id,
+        )
+        if not normalized["entity_id"]:
+            raise ValueError(f"{command_name} resolved a blank entity_id for follow.mode 'entity'.")
+        return normalized
+
+    if "entity_id" in follow:
+        raise ValueError(f"{command_name} follow.mode 'input_target' must not provide entity_id.")
+    action = str(follow.get("action", "")).strip()
+    if not action:
+        raise ValueError(f"{command_name} follow.mode 'input_target' requires a non-empty action.")
+    normalized["action"] = action
+    return normalized
+
+
+def _normalize_camera_rect_spec(
+    area: Any,
+    rect: Any,
+    *,
+    command_name: str,
+    rect_name: str,
+    pixel_space_name: str,
+    grid_space_name: str,
+) -> dict[str, float]:
+    """Validate and normalize one camera rect spec into pixel-space data."""
+    if not isinstance(rect, dict):
+        raise TypeError(f"{command_name} {rect_name} must be a JSON object.")
+
+    allowed_keys = {"x", "y", "width", "height", "space"}
+    unknown_keys = set(rect) - allowed_keys
+    if unknown_keys:
+        unknown_list = ", ".join(sorted(unknown_keys))
+        raise ValueError(f"{command_name} {rect_name} contains unknown field(s): {unknown_list}.")
+
+    try:
+        x = float(rect.get("x", 0.0))
+        y = float(rect.get("y", 0.0))
+        width = float(rect.get("width", 0.0))
+        height = float(rect.get("height", 0.0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{command_name} {rect_name} x/y/width/height must be numeric."
+        ) from exc
+
+    if width <= 0 or height <= 0:
+        raise ValueError(f"{command_name} {rect_name} width and height must be positive.")
+
+    space = str(rect.get("space", pixel_space_name)).strip() or pixel_space_name
+    if space not in {pixel_space_name, grid_space_name}:
+        raise ValueError(
+            f"{command_name} {rect_name}.space must be '{pixel_space_name}' or '{grid_space_name}'."
+        )
+
+    scale = area.tile_size if space == grid_space_name else 1
+    return {
+        "x": x * scale,
+        "y": y * scale,
+        "width": width * scale,
+        "height": height * scale,
+    }
+
+
 def _branch_with_runtime_context(
     registry: CommandRegistry,
     context: CommandContext,
@@ -661,10 +781,20 @@ def _normalize_entity_field_mutation(
             raise ValueError("events_enabled does not support nested field paths.")
         return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
-    if root == "layer":
+    if root == "render_order":
         if len(path) != 1:
-            raise ValueError("layer does not support nested field paths.")
+            raise ValueError(f"{root} does not support nested field paths.")
         return _EntityFieldMutation(path=path, normalized_value=int(value))
+
+    if root == "y_sort":
+        if len(path) != 1:
+            raise ValueError("y_sort does not support nested field paths.")
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
+
+    if root == "sort_y_offset":
+        if len(path) != 1:
+            raise ValueError("sort_y_offset does not support nested field paths.")
+        return _EntityFieldMutation(path=path, normalized_value=float(value))
 
     if root == "stack_order":
         if len(path) != 1:
@@ -740,9 +870,17 @@ def _apply_normalized_entity_field_mutation(
         entity.set_events_enabled(bool(value))
         return "events_enabled", entity.events_enabled
 
-    if root == "layer":
-        entity.layer = int(value)
-        return "layer", entity.layer
+    if root == "render_order":
+        entity.render_order = int(value)
+        return "render_order", entity.render_order
+
+    if root == "y_sort":
+        entity.y_sort = bool(value)
+        return "y_sort", entity.y_sort
+
+    if root == "sort_y_offset":
+        entity.sort_y_offset = float(value)
+        return "sort_y_offset", entity.sort_y_offset
 
     if root == "stack_order":
         entity.stack_order = int(value)
@@ -1926,8 +2064,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             base_params=base_params,
         )
 
-    @registry.register("run_named_command")
-    def run_named_command(
+    @registry.register("run_command")
+    def run_command(
         context: CommandContext,
         *,
         command_id: str,
@@ -1938,19 +2076,19 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Execute a reusable project-level command definition from the command library."""
         if context.project is None:
-            raise ValueError("Cannot run a named command without an active project context.")
+            raise ValueError("Cannot run a project command without an active project context.")
 
         resolved_command_id = str(command_id).strip()
         if not resolved_command_id:
-            logger.warning("run_named_command: skipping because command_id resolved to blank.")
+            logger.warning("run_command: skipping because command_id resolved to blank.")
             return ImmediateHandle()
 
-        if resolved_command_id in context.named_command_stack:
-            stack_preview = " -> ".join([*context.named_command_stack, resolved_command_id])
-            raise ValueError(f"Detected recursive named-command cycle: {stack_preview}")
+        if resolved_command_id in context.project_command_stack:
+            stack_preview = " -> ".join([*context.project_command_stack, resolved_command_id])
+            raise ValueError(f"Detected recursive project command cycle: {stack_preview}")
 
-        definition = load_named_command_definition(context.project, resolved_command_id)
-        instantiated_commands = instantiate_named_command_commands(definition, command_parameters)
+        definition = load_project_command_definition(context.project, resolved_command_id)
+        instantiated_commands = instantiate_project_command_commands(definition, command_parameters)
         if not instantiated_commands:
             return ImmediateHandle()
 
@@ -1971,7 +2109,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         )
         if sequence_handle.complete:
             return ImmediateHandle()
-        return NamedCommandHandle(context, resolved_command_id, sequence_handle)
+        return ProjectCommandHandle(context, resolved_command_id, sequence_handle)
 
     @registry.register("set_event_enabled")
     def set_event_enabled(
@@ -2118,10 +2256,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entry_id: str | None = None,
         transfer_entity_id: str | None = None,
         transfer_entity_ids: list[str] | None = None,
-        camera_follow_entity_id: str | None = None,
-        camera_follow_input_action: str | None = None,
-        camera_offset_x: int | float = 0,
-        camera_offset_y: int | float = 0,
+        camera_follow: dict[str, Any] | None = None,
         source_entity_id: str | None = None,
         actor_entity_id: str | None = None,
         caller_entity_id: str | None = None,
@@ -2134,11 +2269,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         resolved_reference = str(area_id).strip()
         if not resolved_reference:
             raise ValueError("change_area requires a non-empty area_id.")
-
-        if camera_follow_entity_id not in (None, "") and camera_follow_input_action not in (None, ""):
-            raise ValueError(
-                "change_area camera follow must target either one entity or one input action, not both."
-            )
 
         resolved_transfer_ids: list[str] = []
         raw_transfer_ids = []
@@ -2162,26 +2292,29 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 resolved_transfer_ids.append(resolved_entity_id)
 
         camera_follow_request: CameraFollowRequest | None = None
-        if camera_follow_entity_id not in (None, ""):
-            resolved_camera_entity_id = _resolve_entity_id(
-                camera_follow_entity_id,
+        if camera_follow is not None:
+            follow_spec = _normalize_camera_follow_spec(
+                camera_follow,
+                command_name="change_area",
                 source_entity_id=source_entity_id,
                 actor_entity_id=actor_entity_id,
                 caller_entity_id=caller_entity_id,
+                require_exact_entity=False,
             )
-            if resolved_camera_entity_id:
-                camera_follow_request = CameraFollowRequest(
-                    mode="entity",
-                    entity_id=resolved_camera_entity_id,
-                    offset_x=float(camera_offset_x),
-                    offset_y=float(camera_offset_y),
-                )
-        elif camera_follow_input_action not in (None, ""):
             camera_follow_request = CameraFollowRequest(
-                mode="input_target",
-                input_action=str(camera_follow_input_action).strip(),
-                offset_x=float(camera_offset_x),
-                offset_y=float(camera_offset_y),
+                mode=str(follow_spec["mode"]),
+                entity_id=(
+                    None
+                    if follow_spec.get("entity_id") in (None, "")
+                    else str(follow_spec["entity_id"])
+                ),
+                action=(
+                    None
+                    if follow_spec.get("action") in (None, "")
+                    else str(follow_spec["action"])
+                ),
+                offset_x=float(follow_spec.get("offset_x", 0.0)),
+                offset_y=float(follow_spec.get("offset_y", 0.0)),
             )
 
         context.request_area_change(
@@ -2200,10 +2333,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         area_id: str = "",
         entry_id: str | None = None,
-        camera_follow_entity_id: str | None = None,
-        camera_follow_input_action: str | None = None,
-        camera_offset_x: int | float = 0,
-        camera_offset_y: int | float = 0,
+        camera_follow: dict[str, Any] | None = None,
         source_entity_id: str | None = None,
         actor_entity_id: str | None = None,
         caller_entity_id: str | None = None,
@@ -2217,32 +2347,30 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if not resolved_reference:
             raise ValueError("new_game requires a non-empty area_id.")
 
-        if camera_follow_entity_id not in (None, "") and camera_follow_input_action not in (None, ""):
-            raise ValueError(
-                "new_game camera follow must target either one entity or one input action, not both."
-            )
-
         camera_follow_request: CameraFollowRequest | None = None
-        if camera_follow_entity_id not in (None, ""):
-            resolved_camera_entity_id = _resolve_entity_id(
-                camera_follow_entity_id,
+        if camera_follow is not None:
+            follow_spec = _normalize_camera_follow_spec(
+                camera_follow,
+                command_name="new_game",
                 source_entity_id=source_entity_id,
                 actor_entity_id=actor_entity_id,
                 caller_entity_id=caller_entity_id,
+                require_exact_entity=False,
             )
-            if resolved_camera_entity_id:
-                camera_follow_request = CameraFollowRequest(
-                    mode="entity",
-                    entity_id=resolved_camera_entity_id,
-                    offset_x=float(camera_offset_x),
-                    offset_y=float(camera_offset_y),
-                )
-        elif camera_follow_input_action not in (None, ""):
             camera_follow_request = CameraFollowRequest(
-                mode="input_target",
-                input_action=str(camera_follow_input_action).strip(),
-                offset_x=float(camera_offset_x),
-                offset_y=float(camera_offset_y),
+                mode=str(follow_spec["mode"]),
+                entity_id=(
+                    None
+                    if follow_spec.get("entity_id") in (None, "")
+                    else str(follow_spec["entity_id"])
+                ),
+                action=(
+                    None
+                    if follow_spec.get("action") in (None, "")
+                    else str(follow_spec["action"])
+                ),
+                offset_x=float(follow_spec.get("offset_x", 0.0)),
+                offset_y=float(follow_spec.get("offset_y", 0.0)),
             )
 
         context.request_new_game(
@@ -2352,61 +2480,131 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         adjust_output_scale(int(delta))
         return ImmediateHandle()
 
-    @registry.register("set_camera_follow_entity")
-    def set_camera_follow_entity(
+    @registry.register("set_camera_follow")
+    def set_camera_follow(
         world: Any,
         camera: Any | None,
         *,
-        entity_id: str,
-        offset_x: int | float = 0,
-        offset_y: int | float = 0,
+        follow: dict[str, Any],
+        **_: Any,
     ) -> CommandHandle:
-        """Make the camera follow a specific entity."""
+        """Replace the current follow policy with one explicit structured follow spec."""
         if camera is None:
             raise ValueError("Cannot change camera follow without an active camera.")
-        resolved_id = _require_exact_entity(world, entity_id).entity_id
-        camera.follow_entity(
-            resolved_id,
-            offset_x=float(offset_x),
-            offset_y=float(offset_y),
+        follow_spec = _normalize_camera_follow_spec(
+            follow,
+            command_name="set_camera_follow",
+            world=world,
+            require_exact_entity=True,
         )
+        if follow_spec["mode"] == "entity":
+            camera.follow_entity(
+                str(follow_spec["entity_id"]),
+                offset_x=float(follow_spec.get("offset_x", 0.0)),
+                offset_y=float(follow_spec.get("offset_y", 0.0)),
+            )
+        elif follow_spec["mode"] == "input_target":
+            camera.follow_input_target(
+                str(follow_spec["action"]),
+                offset_x=float(follow_spec.get("offset_x", 0.0)),
+                offset_y=float(follow_spec.get("offset_y", 0.0)),
+            )
+        else:
+            camera.clear_follow()
         camera.update(world, advance_tick=False)
         return ImmediateHandle()
 
-    @registry.register("set_camera_follow_input_target")
-    def set_camera_follow_input_target(
+    @registry.register("set_camera_state")
+    def set_camera_state(
+        world: Any,
+        area: Any,
+        camera: Any | None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Apply one validated partial camera state update atomically."""
+        if camera is None:
+            raise ValueError("Cannot change camera state without an active camera.")
+
+        allowed_keys = {
+            "follow",
+            "bounds",
+            "deadzone",
+            "source_entity_id",
+            "actor_entity_id",
+            "caller_entity_id",
+        }
+        unknown_keys = set(runtime_params) - allowed_keys
+        if unknown_keys:
+            unknown_list = ", ".join(sorted(unknown_keys))
+            raise ValueError(f"set_camera_state contains unknown field(s): {unknown_list}.")
+
+        next_state = camera.to_state_dict()
+        if "follow" in runtime_params:
+            raw_follow = runtime_params.get("follow")
+            if raw_follow is None:
+                next_state["follow"] = {"mode": "none", "offset_x": 0.0, "offset_y": 0.0}
+            else:
+                next_state["follow"] = _normalize_camera_follow_spec(
+                    raw_follow,
+                    command_name="set_camera_state",
+                    world=world,
+                    require_exact_entity=True,
+                )
+        if "bounds" in runtime_params:
+            raw_bounds = runtime_params.get("bounds")
+            if raw_bounds is None:
+                next_state.pop("bounds", None)
+            else:
+                next_state["bounds"] = _normalize_camera_rect_spec(
+                    area,
+                    raw_bounds,
+                    command_name="set_camera_state",
+                    rect_name="bounds",
+                    pixel_space_name="world_pixel",
+                    grid_space_name="world_grid",
+                )
+        if "deadzone" in runtime_params:
+            raw_deadzone = runtime_params.get("deadzone")
+            if raw_deadzone is None:
+                next_state.pop("deadzone", None)
+            else:
+                next_state["deadzone"] = _normalize_camera_rect_spec(
+                    area,
+                    raw_deadzone,
+                    command_name="set_camera_state",
+                    rect_name="deadzone",
+                    pixel_space_name="viewport_pixel",
+                    grid_space_name="viewport_grid",
+                )
+
+        camera.apply_state_dict(next_state, world)
+        return ImmediateHandle()
+
+    @registry.register("push_camera_state")
+    def push_camera_state(
+        camera: Any | None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Push the current camera state onto the runtime camera-state stack."""
+        if camera is None:
+            raise ValueError("Cannot push camera state without an active camera.")
+        camera.push_state()
+        return ImmediateHandle()
+
+    @registry.register("pop_camera_state")
+    def pop_camera_state(
         world: Any,
         camera: Any | None,
-        *,
-        action: str,
-        offset_x: int | float = 0,
-        offset_y: int | float = 0,
         **_: Any,
     ) -> CommandHandle:
-        """Make the camera follow whichever entity currently receives one logical input."""
+        """Restore the most recently pushed camera state."""
         if camera is None:
-            raise ValueError("Cannot change camera follow without an active camera.")
-        camera.follow_input_target(
-            str(action),
-            offset_x=float(offset_x),
-            offset_y=float(offset_y),
-        )
-        camera.update(world, advance_tick=False)
+            raise ValueError("Cannot pop camera state without an active camera.")
+        camera.pop_state(world)
         return ImmediateHandle()
 
-    @registry.register("clear_camera_follow")
-    def clear_camera_follow(
-        camera: Any | None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Stop automatically following any entity."""
-        if camera is None:
-            raise ValueError("Cannot clear camera follow without an active camera.")
-        camera.clear_follow()
-        return ImmediateHandle()
-
-    @registry.register("set_camera_bounds_rect")
-    def set_camera_bounds_rect(
+    @registry.register("set_camera_bounds")
+    def set_camera_bounds(
         world: Any,
         area: Any,
         camera: Any | None,
@@ -2415,34 +2613,27 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         y: int | float,
         width: int | float,
         height: int | float,
-        space: str = "pixel",
+        space: str = "world_pixel",
         **_: Any,
     ) -> CommandHandle:
-        """Clamp camera movement/follow to one rectangle in world or grid space."""
+        """Clamp camera movement/follow to one world-space rectangle."""
         if camera is None:
             raise ValueError("Cannot set camera bounds without an active camera.")
-        if space not in {"pixel", "grid"}:
-            raise ValueError(f"Unknown camera bounds space '{space}'.")
-        scale = area.tile_size if space == "grid" else 1
-        camera.set_bounds_rect(
-            float(x) * scale,
-            float(y) * scale,
-            float(width) * scale,
-            float(height) * scale,
+        rect = _normalize_camera_rect_spec(
+            area,
+            {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "space": space,
+            },
+            command_name="set_camera_bounds",
+            rect_name="bounds",
+            pixel_space_name="world_pixel",
+            grid_space_name="world_grid",
         )
-        camera.update(world, advance_tick=False)
-        return ImmediateHandle()
-
-    @registry.register("clear_camera_bounds")
-    def clear_camera_bounds(
-        world: Any,
-        camera: Any | None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Remove any active camera bounds rectangle."""
-        if camera is None:
-            raise ValueError("Cannot clear camera bounds without an active camera.")
-        camera.clear_bounds()
+        camera.set_bounds_rect(rect["x"], rect["y"], rect["width"], rect["height"])
         camera.update(world, advance_tick=False)
         return ImmediateHandle()
 
@@ -2456,34 +2647,27 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         y: int | float,
         width: int | float,
         height: int | float,
-        space: str = "pixel",
+        space: str = "viewport_pixel",
         **_: Any,
     ) -> CommandHandle:
-        """Keep followed targets inside one deadzone rectangle in viewport space."""
+        """Keep followed targets inside one viewport-space deadzone rectangle."""
         if camera is None:
             raise ValueError("Cannot set a camera deadzone without an active camera.")
-        if space not in {"pixel", "grid"}:
-            raise ValueError(f"Unknown camera deadzone space '{space}'.")
-        scale = area.tile_size if space == "grid" else 1
-        camera.set_deadzone_rect(
-            float(x) * scale,
-            float(y) * scale,
-            float(width) * scale,
-            float(height) * scale,
+        rect = _normalize_camera_rect_spec(
+            area,
+            {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "space": space,
+            },
+            command_name="set_camera_deadzone",
+            rect_name="deadzone",
+            pixel_space_name="viewport_pixel",
+            grid_space_name="viewport_grid",
         )
-        camera.update(world, advance_tick=False)
-        return ImmediateHandle()
-
-    @registry.register("clear_camera_deadzone")
-    def clear_camera_deadzone(
-        world: Any,
-        camera: Any | None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Remove any active camera deadzone rectangle."""
-        if camera is None:
-            raise ValueError("Cannot clear a camera deadzone without an active camera.")
-        camera.clear_deadzone()
+        camera.set_deadzone_rect(rect["x"], rect["y"], rect["width"], rect["height"])
         camera.update(world, advance_tick=False)
         return ImmediateHandle()
 
@@ -2494,24 +2678,26 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         x: int | float,
         y: int | float,
-        space: str = "pixel",
+        space: str = "world_pixel",
         mode: str = "absolute",
         duration: float | None = None,
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         **_: Any,
     ) -> CommandHandle:
-        """Move the camera in pixel or grid space, absolute or relative."""
+        """Move the camera in world pixel/grid space, absolute or relative."""
         if camera is None:
             raise ValueError("Cannot move camera without an active camera.")
-        if space not in {"pixel", "grid"}:
-            raise ValueError(f"Unknown camera movement space '{space}'.")
+        if space not in {"world_pixel", "world_grid"}:
+            raise ValueError(
+                "move_camera space must be 'world_pixel' or 'world_grid'."
+            )
         if mode not in {"absolute", "relative"}:
             raise ValueError(f"Unknown camera movement mode '{mode}'.")
 
         target_x = float(x)
         target_y = float(y)
-        if space == "grid":
+        if space == "world_grid":
             target_x *= area.tile_size
             target_y *= area.tile_size
         if mode == "relative":
@@ -2536,21 +2722,23 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         x: int | float,
         y: int | float,
-        space: str = "pixel",
+        space: str = "world_pixel",
         mode: str = "absolute",
         **_: Any,
     ) -> CommandHandle:
-        """Move the camera instantly in pixel or grid space."""
+        """Move the camera instantly in world pixel/grid space."""
         if camera is None:
             raise ValueError("Cannot teleport camera without an active camera.")
-        if space not in {"pixel", "grid"}:
-            raise ValueError(f"Unknown camera teleport space '{space}'.")
+        if space not in {"world_pixel", "world_grid"}:
+            raise ValueError(
+                "teleport_camera space must be 'world_pixel' or 'world_grid'."
+            )
         if mode not in {"absolute", "relative"}:
             raise ValueError(f"Unknown camera teleport mode '{mode}'.")
 
         target_x = float(x)
         target_y = float(y)
-        if space == "grid":
+        if space == "world_grid":
             target_x *= area.tile_size
             target_y *= area.tile_size
         if mode == "relative":

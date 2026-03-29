@@ -14,7 +14,7 @@
   "tile_layers": [
     {
       "name": "background",
-      "draw_above_entities": false,
+      "render_order": 0,
       "grid": [
         [
           0,
@@ -475,11 +475,14 @@
           "op": "eq",
           "value": "new_game",
           "then": [
-            {
-              "type": "new_game",
-              "area_id": "village_square",
-              "entry_id": "startup",
-              "camera_follow_entity_id": "player"
+              {
+                "type": "new_game",
+                "area_id": "areas/village_square",
+                "entry_id": "startup",
+                "camera_follow": {
+                  "mode": "entity",
+                "entity_id": "player"
+              }
             }
           ]
         },
@@ -554,8 +557,8 @@
       "id": "title_backdrop",
       "pixel_x": 0,
       "pixel_y": 0,
-      "layer": 0,
-      "template": "display_sprite",
+      "render_order": 0,
+      "template": "entity_templates/display_sprite",
       "parameters": {
         "sprite_path": "assets/project/ui/title/backdrop.png",
         "frame_width": 256,

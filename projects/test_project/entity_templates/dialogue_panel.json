@@ -2,7 +2,7 @@
   "kind": "system",
   "space": "screen",
   "visible": false,
-  "layer": 100,
+  "render_order": 100,
   "input_map": {
     "interact": "interact",
     "menu": "menu",
@@ -91,8 +91,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/interact"
+          "type": "run_command",
+          "command_id": "commands/dialogue/interact"
         }
       ]
     },
@@ -100,8 +100,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/cancel"
+          "type": "run_command",
+          "command_id": "commands/dialogue/cancel"
         }
       ]
     },
@@ -109,8 +109,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/move_selection",
+          "type": "run_command",
+          "command_id": "commands/dialogue/move_selection",
           "delta": -1
         }
       ]
@@ -119,8 +119,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/move_selection",
+          "type": "run_command",
+          "command_id": "commands/dialogue/move_selection",
           "delta": 1
         }
       ]
@@ -129,8 +129,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/open",
+          "type": "run_command",
+          "command_id": "commands/dialogue/open",
           "dialogue_path": "$dialogue_path",
           "dialogue_on_start": "$dialogue_on_start",
           "dialogue_on_end": "$dialogue_on_end",

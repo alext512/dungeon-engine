@@ -6,15 +6,16 @@ This file is the starting point for any AI agent working on this project. Read t
 
 A top-down RPG/puzzle game engine built with Python and `pygame-ce`.
 
-The active repo surface is the standalone game runtime:
+The active repo surface is the standalone game runtime plus the external area editor:
 
 - `run_game.py` / `Run_Game.cmd` for play mode
+- `tools/area_editor/` for external authoring tooling
 
 Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
 Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/test_project/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
-The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase.
+The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and currently has a Phase 1 read-only browser/viewer implementation.
 
 ## How to Run
 
@@ -42,12 +43,14 @@ Optional reference/planning docs:
 
 - `roadmap.md`
 - `plans/`
+- `tools/area_editor/`
 
 ## Project Structure
 
 ```text
 run_game.py                      # Preferred standalone game entry point
 Run_Game.cmd                     # Windows launcher for the game
+tools/area_editor/               # External area editor (current Phase 1 browser/viewer)
 archived_editor/                 # Archived editor code and notes kept for reference
 tests/                           # Focused unittest coverage for engine behavior regressions
 dungeon_engine/
@@ -82,8 +85,8 @@ dungeon_engine/
 
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
-- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `named_command_paths`, `shared_variables_path`, and project-level settings such as `global_entities`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
-- **Path-derived reusable IDs**: Areas, entity templates, and named commands derive identity from their path under the configured search roots instead of authored `id` fields.
+- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `command_paths`, `shared_variables_path`, and project-level settings such as `global_entities`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Path-derived reusable IDs**: Areas, entity templates, and commands derive identity from their path under the configured search roots instead of authored `id` fields.
 - **Project JSON data**: Reusable dialogue/menu data is now just ordinary project-relative JSON. The sample project keeps it under `dialogues/`, but that folder is conventional rather than a manifest-indexed content category.
 - **Authoring contract**: JSON area/entity/template files are the stable contract for the runtime and any future external tooling.
 - **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
@@ -103,8 +106,9 @@ dungeon_engine/
 ## Gotchas
 
 - The project uses `pygame-ce` (Community Edition), not vanilla `pygame`.
-- The active repo surface is game/runtime only. The previous editor lives under `archived_editor/` as disconnected reference material.
+- Runtime code lives under `dungeon_engine/`. The external editor lives under `tools/area_editor/`. The previous built-in editor lives under `archived_editor/` as disconnected reference material.
 - Tilesets are discovered recursively through the active project's `asset_paths`; folders under `assets/` are organizational, not restrictive.
 - Tile layers and walkability are independent systems. A tile can exist without a walk flag and vice versa.
-- Entity stacking: multiple entities can occupy the same grid cell, ordered by `stack_order`.
+- World rendering now uses a unified model across tile layers and entities: `render_order` is the coarse band, `y_sort` controls vertical interleaving inside a band, `sort_y_offset` adjusts the sort pivot, and `stack_order` is the local tie-breaker.
+- Multiple entities can still occupy the same grid cell; their stable per-cell query order is `render_order`, then `stack_order`, then `entity_id`.
 - The `asset_manager` is passed around widely. It is the central cache for loaded images and sliced frames.

@@ -38,7 +38,9 @@ _PLAIN_ENTITY_REF_FIELDS = (
     "present",
     "visible",
     "events_enabled",
-    "layer",
+    "render_order",
+    "y_sort",
+    "sort_y_offset",
     "stack_order",
     "tags",
 )
@@ -95,7 +97,7 @@ class CommandContext:
     get_simulation_paused: Callable[[], bool] | None = None
     request_step_simulation_tick: Callable[[], None] | None = None
     adjust_output_scale: Callable[[int], None] | None = None
-    named_command_stack: list[str] = field(default_factory=list)
+    project_command_stack: list[str] = field(default_factory=list)
     command_trace: list[str] = field(default_factory=list)
 
 
@@ -105,7 +107,7 @@ class CameraFollowRequest:
 
     mode: str = "preserve"
     entity_id: str | None = None
-    input_action: str | None = None
+    action: str | None = None
     offset_x: float = 0.0
     offset_y: float = 0.0
 
@@ -1163,18 +1165,20 @@ def _resolve_runtime_token(
         if context.camera is None:
             raise KeyError("No active camera context for $camera lookup.")
         camera_state = context.camera.to_state_dict()
-        camera_state.setdefault("follow_mode", "none")
-        camera_state.setdefault("follow_entity_id", None)
-        camera_state.setdefault("follow_input_action", None)
         camera_state.setdefault("x", None)
         camera_state.setdefault("y", None)
-        camera_state.setdefault("follow_offset_x", 0.0)
-        camera_state.setdefault("follow_offset_y", 0.0)
+        camera_state.setdefault(
+            "follow",
+            {
+                "mode": "none",
+                "offset_x": 0.0,
+                "offset_y": 0.0,
+            },
+        )
         camera_state.setdefault("bounds", None)
         camera_state.setdefault("deadzone", None)
         camera_state["has_bounds"] = camera_state.get("bounds") is not None
         camera_state["has_deadzone"] = camera_state.get("deadzone") is not None
-        camera_state["mode"] = camera_state.get("follow_mode")
         if not tail:
             return copy.deepcopy(camera_state)
         return copy.deepcopy(_lookup_nested_value(camera_state, tail))
@@ -1324,7 +1328,7 @@ def execute_registered_command(
     name: str,
     params: dict[str, Any],
 ) -> CommandHandle:
-    """Execute a named command with one already-resolved parameter dictionary."""
+    """Execute a registered command with one already-resolved parameter dictionary."""
     command_params = dict(params)
     disallowed_lifecycle_keys = {"on_complete", "on_start", "on_end"} & set(command_params)
     if disallowed_lifecycle_keys:

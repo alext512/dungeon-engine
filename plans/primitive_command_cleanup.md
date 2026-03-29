@@ -16,7 +16,7 @@ This file should be deleted once:
   - strict primitives such as `set_entity_field`, `set_event_enabled`, `set_input_target`, and `route_inputs_to_entity` now require explicit ids or resolved `$..._id` tokens
   - raw symbolic `self` / `actor` / `caller` ids are now rejected at startup validation and runtime for those primitives
 - camera follow/query primitives were tightened after that:
-  - `set_camera_follow_entity` now uses the same explicit-id rule
+  - the old explicit follow primitive was later replaced by structured `set_camera_follow` / `set_camera_state`
   - broad `set_var_from_camera` was replaced by `set_world_var_from_camera` and `set_entity_var_from_camera`
 - visual/animation primitives were tightened next:
   - strict primitives such as `set_facing`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x` now also require explicit ids or resolved `$..._id` tokens
@@ -62,7 +62,7 @@ Not every builtin command should be reduced to a tiny primitive.
 
 Some commands are useful precisely because they orchestrate authored logic:
 - `run_event`
-- `run_named_command`
+- `run_command`
 - `run_commands`
 
 These are not the main problem.
@@ -136,7 +136,7 @@ The important idea is that the commands are narrow and explicit.
 
 These likely remain higher-level:
 - `run_event`
-- `run_named_command`
+- `run_command`
 - `run_commands`
 - other dispatch/composition commands
 
@@ -199,7 +199,7 @@ Screen element commands should be checked too, especially if they currently inhe
 
 Do not accidentally cripple:
 - `run_event`
-- `run_named_command`
+- `run_command`
 - generic command composition
 
 These are part of the authored composition model and may legitimately carry richer call context.
@@ -224,7 +224,7 @@ Do not immediately remove the older broad versions until the new path is proven.
 Update:
 - authored sample content
 - higher-level builtins
-- named commands
+- project commands
 
 so they call the new primitive forms.
 
@@ -274,7 +274,7 @@ The exact implementation shape is still open.
 
 ### 4. Which Current Builtins Count As High-Level Enough To Keep Rich Context
 
-`run_event` and `run_named_command` clearly do.
+`run_event` and `run_command` clearly do.
 Some others may still need classification.
 
 ## Working Rule For This Plan

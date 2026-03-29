@@ -2,23 +2,23 @@
   "entity_template_paths": ["entity_templates/"],
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
-  "named_command_paths": ["named_commands/"],
+  "command_paths": ["commands/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
       "id": "dialogue_controller",
-      "template": "dialogue_panel"
+      "template": "entity_templates/dialogue_panel"
     },
     {
       "id": "pause_controller",
-      "template": "pause_controller"
+      "template": "entity_templates/pause_controller"
     },
     {
       "id": "debug_controller",
-      "template": "debug_controller"
+      "template": "entity_templates/debug_controller"
     }
   ],
-  "startup_area": "title_screen",
+  "startup_area": "areas/title_screen",
   "input_targets": {
     "menu": "pause_controller",
     "debug_toggle_pause": "debug_controller",

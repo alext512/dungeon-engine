@@ -15,7 +15,7 @@ For the philosophy behind this interface, see [PROJECT_SPIRIT.md](./PROJECT_SPIR
 ## Core Rules
 
 - Projects are loaded through a `project.json` manifest.
-- Area ids, entity-template ids, and named-command ids are path-derived. They are not authored `id` fields inside those files.
+- Area ids, entity-template ids, and project command ids are path-derived. They are not authored `id` fields inside those files.
 - Gameplay is driven by JSON command specs. A command spec is a JSON object with a `"type"` field.
 - Runtime token strings start with `$...` or `${...}`.
 - Structured value sources are single-key objects like `{ "$entity_at": { ... } }`.
@@ -27,21 +27,21 @@ For the philosophy behind this interface, see [PROJECT_SPIRIT.md](./PROJECT_SPIR
 - entity templates
 - assets
 - areas
-- named commands
+- project commands
 
 The engine derives these ids from the relative path under each configured root:
 - area id
 - entity template id
-- named command id
+- project command id
 
 Examples:
-- `areas/village_square.json` -> area id `village_square`
-- `entity_templates/npcs/guard.json` -> template id `npcs/guard`
-- `named_commands/dialogue/open.json` -> command id `dialogue/open`
+- `areas/village_square.json` -> area id `areas/village_square`
+- `entity_templates/npcs/guard.json` -> template id `entity_templates/npcs/guard`
+- `commands/dialogue/open.json` -> command id `commands/dialogue/open`
 
 These files must not author their own path-derived ids internally:
 - area files must not contain `area_id`
-- named command files must not contain `id`
+- project command files must not contain `id`
 
 ## Project Manifest: `project.json`
 
@@ -50,7 +50,7 @@ Current manifest fields the engine reads:
 - `entity_template_paths: string[]`
 - `asset_paths: string[]`
 - `area_paths: string[]`
-- `named_command_paths: string[]`
+- `command_paths: string[]`
 - `shared_variables_path: string`
 - `save_dir: string`
 - `global_entities: object[]`
@@ -63,7 +63,7 @@ Notes:
   - `entity_templates/`
   - `assets/`
   - `areas/`
-  - `named_commands/`
+  - `commands/`
 - `shared_variables_path` falls back to `shared_variables.json` if that file exists.
 - `save_dir` defaults to `saves`.
 - `global_entities` uses the same instance shape as area `entities`.
@@ -76,12 +76,12 @@ Minimal example:
   "entity_template_paths": ["entity_templates/"],
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
-  "named_command_paths": ["named_commands/"],
+  "command_paths": ["commands/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
-    { "id": "dialogue_controller", "template": "dialogue_panel" }
+    { "id": "dialogue_controller", "template": "entity_templates/dialogue_panel" }
   ],
-  "startup_area": "title_screen",
+  "startup_area": "areas/title_screen",
   "input_targets": {
     "menu": "pause_controller"
   },
@@ -140,13 +140,23 @@ Each tileset object currently uses:
 
 ### `tile_layers`
 
-Each tile layer object currently uses:
+Each tile layer object uses:
 
 - `name`
 - `grid`
-- `draw_above_entities`
+- `render_order`
+- `y_sort`
+- `sort_y_offset`
+- `stack_order`
 
 `grid` is a 2D array of integer GIDs.
+
+Current authored meaning:
+
+- `render_order` is the coarse render band
+- `y_sort: true` makes the layer participate in per-tile vertical interleaving
+- `sort_y_offset` adjusts the y-sort pivot in pixels
+- `stack_order` is the tie-breaker inside the same band / sort position
 
 ### `cell_flags`
 
@@ -176,7 +186,29 @@ Notes:
 
 ### `camera`
 
-The engine stores this object as-is as `camera_defaults`. Current authored examples use it for follow mode, offsets, bounds, and deadzones.
+The engine stores this object as-is as `camera_defaults`. Current authored examples use the same structured sections as the runtime camera commands:
+
+- `follow`
+- `bounds`
+- `deadzone`
+
+Example:
+
+```json
+{
+  "follow": {
+    "mode": "entity",
+    "entity_id": "player"
+  },
+  "bounds": {
+    "x": 0,
+    "y": 0,
+    "width": 20,
+    "height": 15,
+    "space": "world_grid"
+  }
+}
+```
 
 ### `input_targets`
 
@@ -237,7 +269,9 @@ Current engine-known entity fields:
 - `present`
 - `visible`
 - `events_enabled`
-- `layer`
+- `render_order`
+- `y_sort`
+- `sort_y_offset`
 - `stack_order`
 - `color`
 - `tags`
@@ -295,7 +329,7 @@ Simple list form:
 ```json
 "events": {
   "interact": [
-    { "type": "run_named_command", "command_id": "dialogue/open" }
+    { "type": "run_command", "command_id": "commands/dialogue/open" }
   ]
 }
 ```
@@ -307,7 +341,7 @@ Object form:
   "interact": {
     "enabled": true,
     "commands": [
-      { "type": "run_named_command", "command_id": "dialogue/open" }
+      { "type": "run_command", "command_id": "commands/dialogue/open" }
     ]
   }
 }
@@ -328,9 +362,9 @@ Object form:
 
 The engine routes a logical action to an entity through `input_targets`, then uses that entity's `input_map` to find the event name to run.
 
-## Named Command Files
+## Project Command Files
 
-Named command files are JSON objects with:
+Project command files are JSON objects with:
 
 - `params: string[]`
 - `commands: command[]`
@@ -351,7 +385,7 @@ Example:
 ```
 
 Current rules:
-- command id is path-derived from the file path
+- command id is a path-derived typed id from the file path, for example `commands/dialogue/open`
 - file must not declare `id`
 - `params` is optional and defaults to `[]`
 - `commands` is required
@@ -385,7 +419,7 @@ Examples:
 Command arrays currently appear in:
 - entity event command lists
 - area `enter_commands`
-- named command `commands`
+- project command `commands`
 - `run_sequence.commands`
 - `run_parallel.commands`
 - `spawn_flow.commands`
@@ -441,7 +475,7 @@ How to read it:
 - `"value": { "$sum": [...] }`
   `"$sum"` is a helper that computes the value before `set_entity_var` runs.
 
-When one command chain needs to call another JSON command file, use `run_named_command` and pass the named-command params as ordinary extra fields on that command object.
+When one command chain needs to call another JSON command file, use `run_command` and pass the project command params as ordinary extra fields on that command object.
 
 ## Runtime Tokens
 
@@ -496,7 +530,7 @@ Meaning:
 - `$caller.some_var`
   - lookup in caller entity `variables`
 - `$some_named_param`
-  - lookup in runtime params passed by named commands, collection loops, or composition commands
+- lookup in runtime params passed by project commands, collection loops, or composition commands
 
 Important limitation:
 - `$entity.<id>...`, `$self...`, `$actor...`, and `$caller...` read entity `variables`, not built-in entity fields
@@ -512,18 +546,18 @@ Current area token state exposes:
 - `camera`
 
 Current camera token state exposes:
-- `follow_mode`
-- `follow_entity_id`
-- `follow_input_action`
 - `x`
 - `y`
-- `follow_offset_x`
-- `follow_offset_y`
+- `follow`
+  - `follow.mode`
+  - `follow.entity_id`
+  - `follow.action`
+  - `follow.offset_x`
+  - `follow.offset_y`
 - `bounds`
 - `deadzone`
 - `has_bounds`
 - `has_deadzone`
-- `mode`
 
 ## Structured Value Sources
 
@@ -692,7 +726,7 @@ Shape:
 ```
 
 Ordering is the current runtime tile-query order:
-- sorted by `(layer, stack_order, entity_id)`
+- sorted by `(render_order, stack_order, entity_id)`
 - `select` is required.
 
 ### `$entity_at`
@@ -747,7 +781,7 @@ Shape:
 ```
 
 Ordering is stable and deterministic:
-- sorted by `(layer, stack_order, entity_id)`
+- sorted by `(render_order, stack_order, entity_id)`
 - `select` is required.
 
 ### `$entity_query`
@@ -807,7 +841,9 @@ Allowed `select.fields` values:
 - `present`
 - `visible`
 - `events_enabled`
-- `layer`
+- `render_order`
+- `y_sort`
+- `sort_y_offset`
 - `stack_order`
 - `tags`
 
@@ -1264,10 +1300,10 @@ Each `run_parallel.commands[]` child may also declare an optional `id` field, us
 
 Inside `commands`, `$item` resolves to the current list element and `$index` resolves to its zero-based position. The param names default to `item` and `index` but can be overridden with `item_param` and `index_param`.
 
-### Event And Named-Command Dispatch
+### Event And Project Command Dispatch
 
 - `run_event(entity_id, event_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
-- `run_named_command(command_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
+- `run_command(command_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
 
 Both commands forward any additional fields on the command object into the called flow as runtime parameters. The called commands can read those values with `$param_name` tokens. For example, passing `"dialogue_path": "dialogues/system/pause_menu.json"` on a `run_event` makes `$dialogue_path` available inside the target event's command chain.
 
@@ -1288,11 +1324,15 @@ Notes:
 
 ### Area / Save / Game Flow
 
-- `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow_entity_id?, camera_follow_input_action?, camera_offset_x?, camera_offset_y?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `new_game(area_id?, entry_id?, camera_follow_entity_id?, camera_follow_input_action?, camera_offset_x?, camera_offset_y?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `new_game(area_id?, entry_id?, camera_follow?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
 - `load_game(save_path?)`
 - `save_game(save_path?)`
 - `quit_game()`
+
+Notes:
+- `camera_follow` uses the same structured follow object as `set_camera_follow`
+- in `change_area` / `new_game`, `camera_follow.entity_id` may use symbolic `self`, `actor`, or `caller`
 
 ### Debug Runtime
 
@@ -1305,19 +1345,26 @@ These commands are gated by project `debug_inspection_enabled`.
 
 ### Camera
 
-- `set_camera_follow_entity(entity_id, offset_x?, offset_y?)`
-- `set_camera_follow_input_target(action, offset_x?, offset_y?)`
-- `clear_camera_follow()`
-- `set_camera_bounds_rect(x, y, width, height, space?)`
-- `clear_camera_bounds()`
+- `set_camera_follow(follow)`
+- `set_camera_state(follow?, bounds?, deadzone?)`
+- `push_camera_state()`
+- `pop_camera_state()`
+- `set_camera_bounds(x, y, width, height, space?)`
 - `set_camera_deadzone(x, y, width, height, space?)`
-- `clear_camera_deadzone()`
 - `move_camera(x, y, space?, mode?, duration?, frames_needed?, speed_px_per_second?)`
 - `teleport_camera(x, y, space?, mode?)`
 
+Notes:
+- `follow.mode` can be `none`, `entity`, or `input_target`
+- structured `follow` objects must declare `mode` explicitly
+- `set_camera_state` keeps omitted sections unchanged and clears explicit `null` sections
+- `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`
+- `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`
+- `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"`
+
 ### Entity State
 
-- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `events_enabled`, `layer`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
+- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `events_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
 - `set_visible(entity_id, visible, persistent?)`
 - `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
 - `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes
@@ -1442,7 +1489,9 @@ These fields are currently engine-known and actively interpreted, not just store
 - entity `present`
 - entity `visible`
 - entity `events_enabled`
-- entity `layer`
+- entity `render_order`
+- entity `y_sort`
+- entity `sort_y_offset`
 - entity `stack_order`
 - entity `color`
 - entity `input_map`

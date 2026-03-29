@@ -303,8 +303,7 @@ Segment fields:
 - `options`
 - `speaker_id`
 - `show_portrait`
-- `advance_mode`
-- `advance_seconds`
+- `advance`
 
 The supported controller pattern is:
 

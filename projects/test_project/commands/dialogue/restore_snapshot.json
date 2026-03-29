@@ -170,8 +170,8 @@
       "value": {}
     },
     {
-      "type": "run_named_command",
-      "command_id": "dialogue/load_and_render_segment"
+      "type": "run_command",
+      "command_id": "commands/dialogue/load_and_render_segment"
     }
   ]
 }

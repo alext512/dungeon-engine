@@ -259,8 +259,8 @@
       "value": "$self.dialogue_current_segment_revision_snapshot",
       "then": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/render_current_segment"
+          "type": "run_command",
+          "command_id": "commands/dialogue/render_current_segment"
         }
       ]
     }

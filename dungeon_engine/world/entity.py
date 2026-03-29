@@ -52,7 +52,7 @@ class AnimationPlaybackState:
 
 @dataclass(slots=True)
 class EntityEvent:
-    """A named command group owned by an entity."""
+    """A command group owned by an entity event."""
 
     enabled: bool = True
     commands: list[dict[str, Any]] = field(default_factory=list)
@@ -124,7 +124,9 @@ class Entity:
     present: bool = True
     visible: bool = True
     events_enabled: bool = True
-    layer: int = 1
+    render_order: int = 10
+    y_sort: bool = True
+    sort_y_offset: float = 0.0
     stack_order: int = 0
     color: tuple[int, int, int] = (255, 255, 255)
     template_id: str | None = None

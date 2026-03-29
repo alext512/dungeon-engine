@@ -70,6 +70,7 @@ class Camera:
         self.bounds_rect: CameraRect | None = None
         self.deadzone_rect: CameraRect | None = None
         self.motion = CameraMotionState()
+        self.state_stack: list[dict[str, Any]] = []
 
     def set_area(self, area: Area) -> None:
         """Rebind the camera to a different area and keep its position valid."""
@@ -163,6 +164,16 @@ class Camera:
         """Remove any active follow deadzone."""
         self.deadzone_rect = None
 
+    def push_state(self) -> None:
+        """Remember the current camera policy so it can be restored later."""
+        self.state_stack.append(self.to_state_dict())
+
+    def pop_state(self, world: World | None) -> None:
+        """Restore the most recently pushed camera policy snapshot."""
+        if not self.state_stack:
+            raise ValueError("Camera state stack is empty.")
+        self.apply_state_dict(self.state_stack.pop(), world)
+
     def get_followed_entity_id(self) -> str | None:
         """Return the explicit entity id currently followed, when any."""
         if self.follow_mode == "entity":
@@ -171,17 +182,20 @@ class Camera:
 
     def to_state_dict(self) -> dict[str, Any]:
         """Serialize the current runtime camera policy/state into plain data."""
+        follow: dict[str, Any] = {
+            "mode": self.follow_mode,
+            "offset_x": self.follow_offset_x,
+            "offset_y": self.follow_offset_y,
+        }
+        if self.follow_mode == "entity" and self.follow_entity_id is not None:
+            follow["entity_id"] = self.follow_entity_id
+        elif self.follow_mode == "input_target" and self.follow_input_action is not None:
+            follow["action"] = self.follow_input_action
         data: dict[str, Any] = {
             "x": self.x,
             "y": self.y,
-            "follow_mode": self.follow_mode,
-            "follow_offset_x": self.follow_offset_x,
-            "follow_offset_y": self.follow_offset_y,
+            "follow": follow,
         }
-        if self.follow_entity_id is not None:
-            data["follow_entity_id"] = self.follow_entity_id
-        if self.follow_input_action is not None:
-            data["follow_input_action"] = self.follow_input_action
         if self.bounds_rect is not None:
             data["bounds"] = self._rect_to_dict(self.bounds_rect)
         if self.deadzone_rect is not None:
@@ -191,30 +205,56 @@ class Camera:
     def apply_state_dict(self, state: dict[str, Any], world: World | None) -> None:
         """Restore one serialized runtime camera policy/state."""
         self.motion.active = False
-        self.bounds_rect = self._rect_from_dict(state.get("bounds"))
-        self.deadzone_rect = self._rect_from_dict(state.get("deadzone"))
-        mode = str(state.get("follow_mode", "none")).strip() or "none"
-        offset_x = float(state.get("follow_offset_x", 0.0))
-        offset_y = float(state.get("follow_offset_y", 0.0))
+        self.bounds_rect = self._rect_from_dict(
+            state.get("bounds"),
+            rect_name="bounds",
+            pixel_space_name="world_pixel",
+            grid_space_name="world_grid",
+        )
+        self.deadzone_rect = self._rect_from_dict(
+            state.get("deadzone"),
+            rect_name="deadzone",
+            pixel_space_name="viewport_pixel",
+            grid_space_name="viewport_grid",
+        )
+        follow_state = state.get("follow")
+        if follow_state is None:
+            follow_state = {"mode": "none"}
+        if not isinstance(follow_state, dict):
+            raise ValueError("Camera follow state must be a JSON object.")
+        if "mode" not in follow_state:
+            raise ValueError("Camera follow state requires an explicit mode.")
+
+        allowed_follow_keys = {"mode", "entity_id", "action", "offset_x", "offset_y"}
+        unknown_follow_keys = set(follow_state) - allowed_follow_keys
+        if unknown_follow_keys:
+            unknown_list = ", ".join(sorted(unknown_follow_keys))
+            raise ValueError(f"Unknown camera follow field(s): {unknown_list}.")
+
+        mode = str(follow_state.get("mode", "none")).strip() or "none"
+        if mode not in {"none", "entity", "input_target"}:
+            raise ValueError(f"Unknown camera follow mode '{mode}'.")
+        offset_x = float(follow_state.get("offset_x", 0.0))
+        offset_y = float(follow_state.get("offset_y", 0.0))
         saved_x = float(state.get("x", self.x))
         saved_y = float(state.get("y", self.y))
         if mode == "entity":
-            entity_id = str(state.get("follow_entity_id", "")).strip()
-            if entity_id:
-                self.set_position(saved_x, saved_y)
-                self.follow_entity(entity_id, offset_x=offset_x, offset_y=offset_y)
-                self.update(world, advance_tick=False)
-                return
-        elif mode == "input_target":
-            action = str(state.get("follow_input_action", "")).strip()
-            if action:
-                self.set_position(saved_x, saved_y)
-                self.follow_input_target(action, offset_x=offset_x, offset_y=offset_y)
-                self.update(world, advance_tick=False)
-                return
+            entity_id = str(follow_state.get("entity_id", "")).strip()
+            if not entity_id:
+                raise ValueError("Camera follow mode 'entity' requires a non-empty entity_id.")
+            self.set_position(saved_x, saved_y)
+            self.follow_entity(entity_id, offset_x=offset_x, offset_y=offset_y)
+            self.update(world, advance_tick=False)
+            return
+        if mode == "input_target":
+            action = str(follow_state.get("action", "")).strip()
+            if not action:
+                raise ValueError("Camera follow mode 'input_target' requires a non-empty action.")
+            self.set_position(saved_x, saved_y)
+            self.follow_input_target(action, offset_x=offset_x, offset_y=offset_y)
+            self.update(world, advance_tick=False)
+            return
         self.clear_follow()
-        self.follow_offset_x = offset_x
-        self.follow_offset_y = offset_y
         self.set_position(saved_x, saved_y)
 
     def start_move_to(
@@ -391,18 +431,36 @@ class Camera:
             "height": rect.height,
         }
 
-    def _rect_from_dict(self, raw_rect: Any) -> CameraRect | None:
+    def _rect_from_dict(
+        self,
+        raw_rect: Any,
+        *,
+        rect_name: str,
+        pixel_space_name: str,
+        grid_space_name: str,
+    ) -> CameraRect | None:
         """Parse one camera rectangle payload from plain data."""
-        if not isinstance(raw_rect, dict):
+        if raw_rect is None:
             return None
+        if not isinstance(raw_rect, dict):
+            raise ValueError(f"Camera {rect_name} must be a JSON object.")
+        allowed_keys = {"x", "y", "width", "height", "space"}
+        unknown_keys = set(raw_rect) - allowed_keys
+        if unknown_keys:
+            unknown_list = ", ".join(sorted(unknown_keys))
+            raise ValueError(f"Unknown camera {rect_name} field(s): {unknown_list}.")
+        space = str(raw_rect.get("space", pixel_space_name)).strip() or pixel_space_name
+        if space not in {pixel_space_name, grid_space_name}:
+            raise ValueError(f"Unknown camera {rect_name} space '{space}'.")
+        scale = self.area.tile_size if space == grid_space_name else 1
         width = float(raw_rect.get("width", 0.0))
         height = float(raw_rect.get("height", 0.0))
         if width <= 0 or height <= 0:
-            return None
+            raise ValueError(f"Camera {rect_name} width and height must be positive.")
         return CameraRect(
-            x=float(raw_rect.get("x", 0.0)),
-            y=float(raw_rect.get("y", 0.0)),
-            width=width,
-            height=height,
+            x=float(raw_rect.get("x", 0.0)) * scale,
+            y=float(raw_rect.get("y", 0.0)) * scale,
+            width=width * scale,
+            height=height * scale,
         )
 

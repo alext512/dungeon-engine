@@ -152,8 +152,8 @@
       "commands": "$dialogue_on_start"
     },
     {
-      "type": "run_named_command",
-      "command_id": "dialogue/show_current_segment"
+      "type": "run_command",
+      "command_id": "commands/dialogue/show_current_segment"
     }
   ]
 }

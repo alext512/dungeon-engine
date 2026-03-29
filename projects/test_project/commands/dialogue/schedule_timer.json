@@ -18,8 +18,8 @@
           "value": "$expected_revision",
           "then": [
             {
-              "type": "run_named_command",
-              "command_id": "dialogue/advance_text",
+              "type": "run_command",
+              "command_id": "commands/dialogue/advance_text",
               "actor_entity_id": "$self.dialogue_actor_id",
               "caller_entity_id": "$self.dialogue_caller_id"
             }

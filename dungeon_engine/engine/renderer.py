@@ -20,6 +20,17 @@ from dungeon_engine.world.area import Area
 from dungeon_engine.world.world import World
 
 
+class _WorldRenderItem:
+    """One sortable drawable in world space."""
+
+    __slots__ = ("sort_key", "draw_kind", "payload")
+
+    def __init__(self, sort_key: tuple, draw_kind: str, payload: tuple) -> None:
+        self.sort_key = sort_key
+        self.draw_kind = draw_kind
+        self.payload = payload
+
+
 class Renderer:
     """Draw tile data and entities."""
 
@@ -59,9 +70,7 @@ class Renderer:
     ) -> None:
         """Render the current area and all visible entities."""
         self.internal_surface.fill(config.COLOR_BACKGROUND)
-        self._draw_tile_layers(area, camera, draw_above_entities=False)
-        self._draw_world_entities(area, world, camera)
-        self._draw_tile_layers(area, camera, draw_above_entities=True)
+        self._draw_world_scene(area, world, camera)
         self._draw_screen_entities(world)
         if screen_elements is not None:
             self._draw_screen_elements(screen_elements)
@@ -76,54 +85,145 @@ class Renderer:
         self.display_surface.blit(scaled_surface, (0, 0))
         pygame.display.flip()
 
-    def _draw_tile_layers(
-        self,
-        area: Area,
-        camera: Camera,
-        *,
-        draw_above_entities: bool,
-    ) -> None:
-        """Draw all tile layers for the requested render phase using GID resolution."""
+    def _draw_world_scene(self, area: Area, world: World, camera: Camera) -> None:
+        """Draw world tile layers and world entities in one unified sort space."""
+        for item in sorted(self._collect_world_render_items(area, world), key=lambda current: current.sort_key):
+            if item.draw_kind == "tile_layer":
+                self._draw_tile_layer(area, camera, item.payload[0])
+                continue
+            if item.draw_kind == "tile_cell":
+                self._draw_tile_cell(area, camera, item.payload[0], item.payload[1], item.payload[2])
+                continue
+            self._draw_world_entity(area, camera, item.payload[0])
+
+    def _collect_world_render_items(self, area: Area, world: World) -> list[_WorldRenderItem]:
+        """Return all world-space drawables addressed with one stable sort key."""
+        items: list[_WorldRenderItem] = []
         tile_size = area.tile_size
-        for layer in area.iter_tile_layers(draw_above_entities=draw_above_entities):
-            for grid_y, row in enumerate(layer.grid):
-                for grid_x, gid in enumerate(row):
-                    if gid <= 0:
-                        continue
-
-                    resolved = area.resolve_gid(gid)
-                    if resolved is None:
-                        continue
-
-                    tileset_path, tile_w, tile_h, local_frame = resolved
-                    screen_x, screen_y = self._world_to_screen(
-                        grid_x * tile_size,
-                        grid_y * tile_size,
-                        camera,
-                    )
-                    frame_surface = self.asset_manager.get_frame(
-                        tileset_path, tile_w, tile_h, local_frame
-                    )
-                    self.internal_surface.blit(frame_surface, (screen_x, screen_y))
-
-    def _draw_world_entities(self, area: Area, world: World, camera: Camera) -> None:
-        tile_size = area.tile_size
-        for entity in sorted(
-            world.iter_entities_in_space("world"),
-            key=lambda item: (item.layer, item.pixel_y, item.stack_order, item.pixel_x, item.entity_id),
-        ):
+        for layer_index, layer in enumerate(area.tile_layers):
+            if layer.y_sort:
+                for grid_y, row in enumerate(layer.grid):
+                    for grid_x, gid in enumerate(row):
+                        if gid <= 0:
+                            continue
+                        items.append(
+                            _WorldRenderItem(
+                                self._tile_cell_sort_key(
+                                    tile_size,
+                                    layer,
+                                    layer_index=layer_index,
+                                    grid_x=grid_x,
+                                    grid_y=grid_y,
+                                ),
+                                "tile_cell",
+                                (layer, grid_x, grid_y),
+                            )
+                        )
+                continue
+            items.append(
+                _WorldRenderItem(
+                    self._tile_layer_sort_key(layer, layer_index=layer_index),
+                    "tile_layer",
+                    (layer,),
+                )
+            )
+        for entity in world.iter_entities_in_space("world"):
             if not entity.visible:
                 continue
-            if self._draw_entity_visuals(entity, camera=camera):
-                continue
-            screen_x, screen_y = self._world_to_screen(entity.pixel_x, entity.pixel_y, camera)
-            self._draw_entity_fallback(tile_size, entity, screen_x, screen_y)
+            items.append(
+                _WorldRenderItem(
+                    self._world_entity_sort_key(area, entity),
+                    "entity",
+                    (entity,),
+                )
+            )
+        return items
+
+    def _tile_layer_sort_key(self, layer, *, layer_index: int) -> tuple:
+        """Return the sort key for one non-y-sorted tile layer batch."""
+        return (layer.render_order, 0, 0.0, layer.stack_order, 0, layer_index, layer.name)
+
+    def _tile_cell_sort_key(
+        self,
+        tile_size: int,
+        layer,
+        *,
+        layer_index: int,
+        grid_x: int,
+        grid_y: int,
+    ) -> tuple:
+        """Return the sort key for one y-sorted tile cell."""
+        sort_y = ((grid_y + 1) * tile_size) + float(layer.sort_y_offset)
+        return (layer.render_order, 1, sort_y, layer.stack_order, 0, grid_x, f"{layer_index}:{grid_y}:{grid_x}")
+
+    def _world_entity_sort_key(self, area: Area, entity) -> tuple:
+        """Return the unified sort key for one world-space entity."""
+        if entity.y_sort:
+            sort_bucket = 1
+            sort_y = float(entity.pixel_y + area.tile_size + entity.sort_y_offset)
+        else:
+            sort_bucket = 0
+            sort_y = 0.0
+        return (
+            entity.render_order,
+            sort_bucket,
+            sort_y,
+            entity.stack_order,
+            1,
+            entity.pixel_x,
+            entity.entity_id,
+        )
+
+    def _draw_tile_layer(self, area: Area, camera: Camera, layer) -> None:
+        """Draw every non-empty tile from one layer batch."""
+        for grid_y, row in enumerate(layer.grid):
+            for grid_x, gid in enumerate(row):
+                if gid > 0:
+                    self._draw_tile_gid(area, camera, grid_x, grid_y, gid)
+
+    def _draw_tile_cell(self, area: Area, camera: Camera, layer, grid_x: int, grid_y: int) -> None:
+        """Draw exactly one tile cell from a y-sorted layer."""
+        gid = int(layer.grid[grid_y][grid_x])
+        if gid > 0:
+            self._draw_tile_gid(area, camera, grid_x, grid_y, gid)
+
+    def _draw_tile_gid(self, area: Area, camera: Camera, grid_x: int, grid_y: int, gid: int) -> None:
+        """Draw one resolved tile at the requested world-grid coordinate."""
+        resolved = area.resolve_gid(gid)
+        if resolved is None:
+            return
+        tileset_path, tile_w, tile_h, local_frame = resolved
+        screen_x, screen_y = self._world_to_screen(
+            grid_x * area.tile_size,
+            grid_y * area.tile_size,
+            camera,
+        )
+        frame_surface = self.asset_manager.get_frame(
+            tileset_path,
+            tile_w,
+            tile_h,
+            local_frame,
+        )
+        self.internal_surface.blit(frame_surface, (screen_x, screen_y))
+
+    def _draw_world_entity(self, area: Area, camera: Camera, entity) -> None:
+        """Draw one world-space entity."""
+        if self._draw_entity_visuals(entity, camera=camera):
+            return
+        screen_x, screen_y = self._world_to_screen(entity.pixel_x, entity.pixel_y, camera)
+        self._draw_entity_fallback(area.tile_size, entity, screen_x, screen_y)
 
     def _draw_screen_entities(self, world: World) -> None:
         """Draw screen-space entities above the world."""
         for entity in sorted(
             world.iter_entities_in_space("screen"),
-            key=lambda item: (item.layer, item.stack_order, item.entity_id),
+            key=lambda item: (
+                item.render_order,
+                1 if item.y_sort else 0,
+                float(item.pixel_y + item.sort_y_offset) if item.y_sort else 0.0,
+                item.stack_order,
+                item.entity_id,
+            ),
         ):
             if not entity.visible:
                 continue

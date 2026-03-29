@@ -1,0 +1,231 @@
+{
+  "version": 6,
+  "next_session_entity_serial": 1,
+  "globals": {},
+  "current_area": "areas/village_square",
+  "areas": {},
+  "current_input_targets": {
+    "menu": "pause_controller",
+    "debug_toggle_pause": "debug_controller",
+    "debug_step_tick": "debug_controller",
+    "debug_zoom_in": "debug_controller",
+    "debug_zoom_out": "debug_controller",
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
+  "current_camera": {
+    "x": 0.0,
+    "y": 0.0,
+    "follow_mode": "entity",
+    "follow_offset_x": 0.0,
+    "follow_offset_y": 0.0,
+    "follow_entity_id": "player"
+  },
+  "current_area_state": {
+    "entities": {
+      "player": {
+        "x": 3,
+        "y": 7,
+        "pixel_x": 48,
+        "pixel_y": 112,
+        "variables": {
+          "move_attempt_info": {
+            "state": "blocked",
+            "entity_id": "village_save_point",
+            "target_x": 3,
+            "target_y": 8,
+            "direction": "down"
+          },
+          "move_attempt_state": "blocked",
+          "interact_self_ref": {
+            "entity_id": "player",
+            "kind": "player",
+            "space": "world",
+            "scope": "area",
+            "grid_x": 3,
+            "grid_y": 7,
+            "present": true,
+            "visible": true,
+            "events_enabled": true,
+            "render_order": 1,
+            "stack_order": 0,
+            "tags": []
+          },
+          "interact_offset": {
+            "x": 0,
+            "y": 1
+          },
+          "interact_target_x": 3,
+          "interact_target_y": 8,
+          "interact_target": {
+            "entity_id": "village_save_point",
+            "kind": "save_point",
+            "space": "world",
+            "scope": "area",
+            "grid_x": 3,
+            "grid_y": 8,
+            "present": true,
+            "visible": true,
+            "events_enabled": true,
+            "render_order": 1,
+            "stack_order": 0,
+            "tags": []
+          }
+        }
+      }
+    }
+  },
+  "current_global_entities": {
+    "dialogue_controller": {
+      "variables": {
+        "dialogue_pending_on_end": [
+          {
+            "type": "check_entity_var",
+            "entity_id": "dialogue_controller",
+            "name": "pending_save_prompt_action",
+            "op": "eq",
+            "value": "save",
+            "then": [
+              {
+                "type": "save_game"
+              }
+            ]
+          },
+          {
+            "type": "set_entity_var",
+            "entity_id": "dialogue_controller",
+            "name": "pending_save_prompt_action",
+            "value": ""
+          }
+        ],
+        "dialogue_pending_actor_id": "player",
+        "dialogue_pending_caller_id": "village_save_point",
+        "dialogue_revision": 6,
+        "pending_save_prompt_action": "save",
+        "dialogue_segment_count": 2,
+        "dialogue_current_segment": {
+          "type": "choice",
+          "options": [
+            {
+              "text": "Save the game.",
+              "option_id": "save"
+            },
+            {
+              "text": "Keep going.",
+              "option_id": "cancel"
+            }
+          ]
+        },
+        "dialogue_current_segment_hook": {
+          "option_commands_by_id": {
+            "save": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "pending_save_prompt_action",
+                "value": "save"
+              }
+            ]
+          }
+        },
+        "dialogue_current_segment_type": "choice",
+        "dialogue_current_segment_pages": [],
+        "dialogue_current_segment_text": "",
+        "dialogue_current_segment_options": [
+          {
+            "text": "Save the game.",
+            "option_id": "save"
+          },
+          {
+            "text": "Keep going.",
+            "option_id": "cancel"
+          }
+        ],
+        "dialogue_current_option_count": 2,
+        "dialogue_current_segment_on_start_commands": [],
+        "dialogue_current_segment_on_end_commands": [],
+        "dialogue_current_option_commands_by_id": {
+          "save": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "dialogue_controller",
+              "name": "pending_save_prompt_action",
+              "value": "save"
+            }
+          ]
+        },
+        "dialogue_current_option_commands": [],
+        "dialogue_current_segment_speaker_marker": "__inherit__",
+        "dialogue_current_segment_show_portrait": "__unset__",
+        "dialogue_current_advance": {},
+        "dialogue_current_advance_mode": "interact",
+        "dialogue_current_advance_seconds": 0.0,
+        "dialogue_font_id": "pixelbet",
+        "dialogue_max_lines": 3,
+        "dialogue_text_color": [
+          245,
+          232,
+          190
+        ],
+        "dialogue_current_segment_revision_snapshot": 4,
+        "dialogue_phase": "choice",
+        "dialogue_current_participants": {},
+        "dialogue_current_participant": {},
+        "dialogue_current_portrait_path": "",
+        "dialogue_current_portrait_frame_width": 16,
+        "dialogue_current_portrait_frame_height": 16,
+        "dialogue_current_portrait_frame": 0,
+        "dialogue_show_portrait": false,
+        "text_box_x": 8,
+        "text_box_y": 154,
+        "text_box_width": 240,
+        "choice_text_x": 16,
+        "choice_width": 232,
+        "choice_cursor_x": 8,
+        "dialogue_current_source_page_count": 0,
+        "dialogue_current_source_text": "This little record shrine can write your progress into a save file.",
+        "dialogue_current_wrapped_lines": [
+          "This little record shrine can write your progress into",
+          "a save file."
+        ],
+        "dialogue_current_text_window": {
+          "visible_lines": [
+            "This little record shrine can write your progress into",
+            "a save file."
+          ],
+          "visible_text": "This little record shrine can write your progress into\na save file.",
+          "has_more": false,
+          "total_lines": 2
+        },
+        "dialogue_current_visible_text": "This little record shrine can write your progress into\na save file.",
+        "dialogue_current_has_more_text": false,
+        "dialogue_current_wrapped_line_count": 2,
+        "dialogue_next_source_page_index": 1,
+        "dialogue_finish_revision_snapshot": 5,
+        "dialogue_next_segment_index": 2,
+        "dialogue_render_option_element_id": "dialogue_option_1",
+        "dialogue_render_option_row_y": 164,
+        "dialogue_current_choice_cursor_y": 154,
+        "dialogue_current_selected_option": {
+          "text": "Save the game.",
+          "option_id": "save"
+        },
+        "dialogue_current_selected_option_id": "save",
+        "dialogue_current_option_commands_by_id_count": 1,
+        "dialogue_current_selected_option_commands": [
+          {
+            "type": "set_entity_var",
+            "entity_id": "dialogue_controller",
+            "name": "pending_save_prompt_action",
+            "value": "save"
+          }
+        ],
+        "dialogue_confirm_revision_snapshot": 5,
+        "dialogue_stack_count": 0
+      }
+    }
+  }
+}

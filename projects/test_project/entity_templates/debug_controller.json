@@ -2,7 +2,7 @@
   "kind": "system",
   "space": "screen",
   "visible": false,
-  "layer": 99,
+  "render_order": 99,
   "input_map": {
     "debug_toggle_pause": "toggle_pause",
     "debug_step_tick": "step_tick",

@@ -230,8 +230,7 @@ Each segment can also define:
 
 - `speaker_id`
 - `show_portrait`
-- `advance_mode`
-- `advance_seconds`
+- `advance`
 
 These JSON files do not directly own gameplay commands. Controller entities load them, store them in variables, and decide how input advances, branches, or closes.
 

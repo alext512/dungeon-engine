@@ -116,8 +116,8 @@
           "value": "$self.dialogue_confirm_revision_snapshot",
           "then": [
             {
-              "type": "run_named_command",
-              "command_id": "dialogue/finish_segment"
+              "type": "run_command",
+              "command_id": "commands/dialogue/finish_segment"
             }
           ]
         }

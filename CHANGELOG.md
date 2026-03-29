@@ -1,8 +1,26 @@
-﻿# Changelog
+# Changelog
 
 Reverse-chronological log of functionality changes. Each entry describes what was added or changed, not how.
 
 ---
+
+## Unified Render Ordering
+
+- Replaced the old tile-layer `draw_above_entities` split with a unified runtime render model shared by tile layers and entities
+- Added authored `render_order`, `y_sort`, `sort_y_offset`, and `stack_order` support for tile layers
+- Added authored `render_order`, `y_sort`, and `sort_y_offset` support for entities
+- Changed world rendering so non-y-sorted tile layers, y-sorted tile cells, and world entities can interleave in one sort space
+- Updated persistence, serialization, mutation commands, tests, and active docs to write and describe the new layering model
+
+## Camera API Cleanup
+
+- Replaced the old split camera-follow commands with structured `set_camera_follow` and `set_camera_state`
+- Added `push_camera_state` / `pop_camera_state` so cutscenes and temporary camera overrides can restore the previous camera policy cleanly
+- Renamed authored camera bounds to `set_camera_bounds` and made camera coordinate spaces explicit with `world_pixel`, `world_grid`, `viewport_pixel`, and `viewport_grid`
+- Updated `change_area`, `new_game`, and area `camera` defaults to use structured `camera_follow` / `follow` payloads instead of split camera-follow fields
+- Updated camera runtime tokens to expose structured `$camera.follow` state instead of separate top-level follow fields
+- Removed the old camera follow / clear / bounds-clear surface without compatibility aliases
+- Updated the sample project, active tests, and docs to match the cleaned camera contract
 
 ## Current-Area Naming + Cross-Area State APIs
 
@@ -45,7 +63,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Removed the engine-owned dialogue session handle and text-session manager from the active runtime model
 - Made legacy dialogue/session commands such as `start_dialogue_session`, `dialogue_advance`, `dialogue_confirm_choice`, `prepare_text_session`, and `close_dialogue` fail fast during validation and at runtime
 - Added generic controller-friendly helpers such as `set_var_from_json_file`, `set_var_from_wrapped_lines`, `set_var_from_text_window`, `append_to_var`, `pop_var`, `run_commands_for_collection`, and `wait_seconds`
-- Migrated the sample `dialogue_controller` to own its dialogue/menu state, nested `dialogue_state_stack`, and UI redraw flow through named commands instead of engine-owned session state
+- Migrated the sample `dialogue_controller` to own its dialogue/menu state, nested `dialogue_state_stack`, and UI redraw flow through project commands instead of engine-owned session state
 - Updated the sample project, tests, and active docs to describe controller-owned dialogue/menu flow plus ordinary JSON dialogue data
 
 ## Transfer-Aware Area Flow + Explicit Camera State
@@ -89,10 +107,10 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 - Reworked the sample project to start in a title-screen area with authored `New Game`, `Load`, and `Exit` menu options
 - Added a connected tilemap showcase slice with `village_square` and `village_house`, including a save point, a persistent lever/gate puzzle, and a non-persistent push block example
 
-## Named Command Startup Database
+## Project Command Startup Database
 
-- Build a full in-memory named-command database per project at startup instead of rediscovering command files during gameplay
-- Reuse that startup-built database for runtime `run_named_command` lookups so frequent movement/interaction command chains no longer rescan `named_command_paths`
+- Build a full in-memory project command database per project at startup instead of rediscovering command files during gameplay
+- Reuse that startup-built database for runtime `run_command` lookups so frequent movement/interaction command chains no longer rescan `command_paths`
 - Keep startup validation aligned with the same database-building path so malformed files, duplicate ids, and literal missing references are still caught before launch
 
 ## Dialogue UI Sample Refactor

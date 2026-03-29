@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "next_session_entity_serial": 1,
+  "globals": {},
+  "current_area": "areas/village_square",
+  "areas": {},
+  "current_input_targets": {
+    "menu": "pause_controller",
+    "debug_toggle_pause": "debug_controller",
+    "debug_step_tick": "debug_controller",
+    "debug_zoom_in": "debug_controller",
+    "debug_zoom_out": "debug_controller",
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
+  "current_camera": {
+    "x": -32.0,
+    "y": -24.0,
+    "follow": {
+      "mode": "entity",
+      "offset_x": 14.0,
+      "offset_y": -6.0,
+      "entity_id": "player"
+    },
+    "bounds": {
+      "x": 16.0,
+      "y": 16.0,
+      "width": 160.0,
+      "height": 112.0
+    },
+    "deadzone": {
+      "x": 80.0,
+      "y": 56.0,
+      "width": 32.0,
+      "height": 24.0
+    }
+  }
+}

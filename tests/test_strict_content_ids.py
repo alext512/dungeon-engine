@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import os
@@ -10,8 +10,8 @@ from unittest.mock import patch
 import run_game
 from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import (
-    NamedCommandValidationError,
-    validate_project_named_commands,
+    ProjectCommandValidationError,
+    validate_project_commands,
 )
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
@@ -24,7 +24,7 @@ from dungeon_engine.commands.runner import (
     execute_command_spec,
     execute_registered_command,
 )
-from dungeon_engine.world.area import Area
+from dungeon_engine.world.area import Area, TileLayer
 from dungeon_engine.world.entity import Entity, EntityEvent, EntityVisual
 from dungeon_engine.world.world import World
 from dungeon_engine.project import load_project
@@ -51,6 +51,7 @@ from dungeon_engine.world.persistence import (
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.input_handler import InputHandler
+from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.engine.text import TextRenderer
 
@@ -83,7 +84,7 @@ def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
         "tile_layers": [
             {
                 "name": "ground",
-                "draw_above_entities": False,
+                "render_order": 0,
                 "grid": [[1]],
             }
         ],
@@ -94,7 +95,7 @@ def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
 
 def _minimal_runtime_area() -> Area:
     return Area(
-        area_id="test_room",
+        area_id="areas/test_room",
         name="Test Room",
         tile_size=16,
         tilesets=[],
@@ -294,6 +295,7 @@ class _RecordingCamera:
         self.x = 0.0
         self.y = 0.0
         self.update_calls: list[tuple[World, bool]] = []
+        self.state_stack: list[dict[str, object]] = []
 
     def follow_entity(
         self,
@@ -353,23 +355,65 @@ class _RecordingCamera:
     def clear_deadzone(self) -> None:
         self.deadzone = None
 
+    def push_state(self) -> None:
+        self.state_stack.append(self.to_state_dict())
+
+    def pop_state(self, world: World | None) -> None:
+        if not self.state_stack:
+            raise ValueError("Camera state stack is empty.")
+        self.apply_state_dict(self.state_stack.pop(), world)
+
     def to_state_dict(self) -> dict[str, object]:
+        follow: dict[str, object] = {
+            "mode": self.follow_mode or "none",
+            "offset_x": self.follow_offset_x,
+            "offset_y": self.follow_offset_y,
+        }
+        if self.followed_entity_id is not None:
+            follow["entity_id"] = self.followed_entity_id
+        if self.follow_input_action is not None:
+            follow["action"] = self.follow_input_action
         data: dict[str, object] = {
             "x": self.x,
             "y": self.y,
-            "follow_mode": self.follow_mode,
-            "follow_offset_x": self.follow_offset_x,
-            "follow_offset_y": self.follow_offset_y,
+            "follow": follow,
         }
-        if self.followed_entity_id is not None:
-            data["follow_entity_id"] = self.followed_entity_id
-        if self.follow_input_action is not None:
-            data["follow_input_action"] = self.follow_input_action
         if self.bounds is not None:
             data["bounds"] = dict(self.bounds)
         if self.deadzone is not None:
             data["deadzone"] = dict(self.deadzone)
         return data
+
+    def apply_state_dict(self, state: dict[str, object], world: World | None) -> None:
+        _ = world
+        self.bounds = None
+        self.deadzone = None
+        if "bounds" in state and state["bounds"] is not None:
+            self.bounds = dict(state["bounds"])  # type: ignore[arg-type]
+        if "deadzone" in state and state["deadzone"] is not None:
+            self.deadzone = dict(state["deadzone"])  # type: ignore[arg-type]
+        self.x = float(state.get("x", self.x))
+        self.y = float(state.get("y", self.y))
+        raw_follow = state.get("follow")
+        follow = raw_follow if isinstance(raw_follow, dict) else {"mode": "none"}
+        mode = str(follow.get("mode", "none"))
+        self.follow_mode = mode
+        self.followed_entity_id = None
+        self.follow_input_action = None
+        self.follow_offset_x = float(follow.get("offset_x", 0.0))
+        self.follow_offset_y = float(follow.get("offset_y", 0.0))
+        if mode == "entity":
+            entity_id = str(follow.get("entity_id", "")).strip()
+            if entity_id:
+                self.followed_entity_id = entity_id
+            else:
+                self.follow_mode = "none"
+        elif mode == "input_target":
+            action = str(follow.get("action", "")).strip()
+            if action:
+                self.follow_input_action = action
+            else:
+                self.follow_mode = "none"
 
 
 class _StubTextRenderer:
@@ -580,7 +624,7 @@ class StrictContentIdTests(unittest.TestCase):
         project_payload: dict[str, object] = {
             "area_paths": ["areas/"],
             "entity_template_paths": ["entity_templates/"],
-            "named_command_paths": ["named_commands/"],
+            "command_paths": ["commands/"],
             "shared_variables_path": "shared_variables.json",
         }
         if startup_area is not None:
@@ -597,7 +641,7 @@ class StrictContentIdTests(unittest.TestCase):
         for relative_path, area_payload in (areas or {}).items():
             _write_json(project_root / "areas" / relative_path, area_payload)
         for relative_path, command_payload in (commands or {}).items():
-            _write_json(project_root / "named_commands" / relative_path, command_payload)
+            _write_json(project_root / "commands" / relative_path, command_payload)
         for relative_path, dialogue_payload in (dialogues or {}).items():
             _write_json(project_root / "dialogues" / relative_path, dialogue_payload)
 
@@ -627,10 +671,10 @@ class StrictContentIdTests(unittest.TestCase):
 
     def test_area_validation_rejects_authored_area_id(self) -> None:
         _, project = self._make_project(
-            startup_area="test_room",
+            startup_area="areas/test_room",
             areas={
                 "test_room.json": {
-                    "area_id": "test_room",
+                    "area_id": "areas/test_room",
                     **_minimal_area(),
                 }
             },
@@ -645,7 +689,7 @@ class StrictContentIdTests(unittest.TestCase):
 
     def test_area_validation_rejects_missing_startup_area_id(self) -> None:
         _, project = self._make_project(
-            startup_area="missing_room",
+            startup_area="areas/missing_room",
             areas={"test_room.json": _minimal_area()},
         )
 
@@ -653,7 +697,7 @@ class StrictContentIdTests(unittest.TestCase):
             validate_project_areas(project)
 
         self.assertTrue(
-            any("startup_area 'missing_room'" in issue for issue in raised.exception.issues)
+            any("startup_area 'areas/missing_room'" in issue for issue in raised.exception.issues)
         )
 
     def test_area_loader_preserves_enter_commands(self) -> None:
@@ -695,8 +739,12 @@ class StrictContentIdTests(unittest.TestCase):
             }
         }
         raw_area["camera"] = {
-            "follow_entity_id": "player",
-            "follow_offset_x": 10,
+            "follow": {
+                "mode": "entity",
+                "entity_id": "player",
+                "offset_x": 10,
+                "offset_y": 0,
+            },
             "bounds": {
                 "x": 16,
                 "y": 32,
@@ -712,8 +760,8 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(entry_point.facing, "up")
         self.assertEqual(entry_point.pixel_x, 52.0)
         self.assertEqual(entry_point.pixel_y, 68.0)
-        self.assertEqual(area.camera_defaults["follow_entity_id"], "player")
-        self.assertEqual(area.camera_defaults["follow_offset_x"], 10)
+        self.assertEqual(area.camera_defaults["follow"]["entity_id"], "player")
+        self.assertEqual(area.camera_defaults["follow"]["offset_x"], 10)
 
         serialized = serialize_area(area, world, project=project)
         self.assertEqual(
@@ -729,6 +777,120 @@ class StrictContentIdTests(unittest.TestCase):
             },
         )
         self.assertEqual(serialized["camera"], raw_area["camera"])
+
+    def test_area_loader_rejects_legacy_tile_layer_field(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["tile_layers"] = [
+            {
+                "name": "ground",
+                "draw_above_entities": False,
+                "grid": [[1]],
+            },
+        ]
+
+        with self.assertRaises(ValueError) as raised:
+            load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+        self.assertIn("must not declare 'draw_above_entities'", str(raised.exception))
+
+    def test_area_loader_rejects_legacy_entity_layer_field(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "player",
+                "kind": "player",
+                "x": 0,
+                "y": 0,
+                "layer": 3,
+            }
+        ]
+
+        with self.assertRaises(ValueError) as raised:
+            load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+        self.assertIn("must not declare 'layer'", str(raised.exception))
+
+    def test_serialize_area_writes_unified_layering_fields(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["tile_layers"] = [
+            {
+                "name": "front_wall",
+                "render_order": 10,
+                "y_sort": True,
+                "sort_y_offset": -2,
+                "stack_order": 4,
+                "grid": [[1]],
+            }
+        ]
+        raw_area["entities"] = [
+            {
+                "id": "player",
+                "kind": "player",
+                "x": 0,
+                "y": 0,
+                "render_order": 12,
+                "y_sort": False,
+                "sort_y_offset": 5,
+                "stack_order": 9,
+            }
+        ]
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        serialized = serialize_area(area, world, project=project)
+
+        tile_layer = serialized["tile_layers"][0]
+        self.assertEqual(tile_layer["render_order"], 10)
+        self.assertTrue(tile_layer["y_sort"])
+        self.assertEqual(tile_layer["sort_y_offset"], -2)
+        self.assertEqual(tile_layer["stack_order"], 4)
+        self.assertNotIn("draw_above_entities", tile_layer)
+
+        entity_data = serialized["entities"][0]
+        self.assertEqual(entity_data["render_order"], 12)
+        self.assertFalse(entity_data["y_sort"])
+        self.assertEqual(entity_data["sort_y_offset"], 5)
+        self.assertEqual(entity_data["stack_order"], 9)
+        self.assertNotIn("layer", entity_data)
+
+    def test_renderer_collect_world_render_items_interleaves_tiles_and_entities(self) -> None:
+        import pygame
+
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[
+                TileLayer(name="ground", grid=[[1]], render_order=0, y_sort=False, stack_order=0),
+                TileLayer(name="front_wall", grid=[[1]], render_order=10, y_sort=True, stack_order=0),
+                TileLayer(name="roof", grid=[[1]], render_order=20, y_sort=False, stack_order=0),
+            ],
+            cell_flags=[[{"walkable": True}]],
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.grid_x = 0
+        player.grid_y = 0
+        player.sync_pixel_position(area.tile_size)
+        player.render_order = 10
+        player.y_sort = True
+        player.stack_order = 0
+        world.add_entity(player)
+
+        renderer = Renderer(pygame.Surface((16, 16)), object())
+        items = sorted(renderer._collect_world_render_items(area, world), key=lambda item: item.sort_key)
+
+        self.assertEqual(
+            [item.draw_kind for item in items],
+            ["tile_layer", "tile_cell", "entity", "tile_layer"],
+        )
+        self.assertEqual(items[0].payload[0].name, "ground")
+        self.assertEqual(items[1].payload[0].name, "front_wall")
+        self.assertEqual(items[2].payload[0].entity_id, "player")
+        self.assertEqual(items[3].payload[0].name, "roof")
 
     def test_load_project_requires_manifest(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -865,7 +1027,7 @@ class StrictContentIdTests(unittest.TestCase):
             any("must not use 'sprite'" in issue for issue in raised.exception.issues)
         )
 
-    def test_named_command_validation_rejects_authored_id(self) -> None:
+    def test_project_command_validation_rejects_authored_id(self) -> None:
         _, project = self._make_project(
             commands={
                 "walk_one_tile.json": {
@@ -876,14 +1038,14 @@ class StrictContentIdTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
 
         self.assertTrue(
             any("must not declare 'id'" in issue for issue in raised.exception.issues)
         )
 
-    def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
+    def test_project_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
         _, project = self._make_project(
             commands={
                 "bad_primitive.json": {
@@ -900,8 +1062,8 @@ class StrictContentIdTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
 
         self.assertTrue(
             any(
@@ -911,7 +1073,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
-    def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_visual_primitives(self) -> None:
+    def test_project_command_validation_rejects_symbolic_entity_refs_for_strict_visual_primitives(self) -> None:
         _, project = self._make_project(
             commands={
                 "bad_visual_primitive.json": {
@@ -927,8 +1089,8 @@ class StrictContentIdTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
 
         self.assertTrue(
             any(
@@ -938,7 +1100,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
-    def test_named_command_validation_rejects_symbolic_entity_refs_for_strict_movement_primitives(self) -> None:
+    def test_project_command_validation_rejects_symbolic_entity_refs_for_strict_movement_primitives(self) -> None:
         _, project = self._make_project(
             commands={
                 "bad_move_primitive.json": {
@@ -956,8 +1118,8 @@ class StrictContentIdTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaises(NamedCommandValidationError) as raised:
-            validate_project_named_commands(project)
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
 
         self.assertTrue(
             any(
@@ -1260,7 +1422,7 @@ class StrictContentIdTests(unittest.TestCase):
 
     def test_explicit_movement_query_value_sources_resolve_cell_flags_and_blockers(self) -> None:
         area = Area(
-            area_id="test_room",
+            area_id="areas/test_room",
             name="Test Room",
             tile_size=16,
             tilesets=[],
@@ -1372,12 +1534,12 @@ class StrictContentIdTests(unittest.TestCase):
         low = _make_runtime_entity("low", kind="sign")
         low.grid_x = 2
         low.grid_y = 3
-        low.layer = 1
+        low.render_order = 1
         low.stack_order = 0
         high = _make_runtime_entity("high", kind="lever")
         high.grid_x = 2
         high.grid_y = 3
-        high.layer = 2
+        high.render_order = 2
         high.stack_order = 5
         high.variables["blocks_movement"] = True
         high.variables["pushable"] = True
@@ -1657,14 +1819,14 @@ class StrictContentIdTests(unittest.TestCase):
         sign = _make_runtime_entity("alpha_sign", kind="sign")
         sign.grid_x = 2
         sign.grid_y = 3
-        sign.layer = 1
+        sign.render_order = 1
         sign.stack_order = 0
         sign.tags = ["readable"]
 
         lever_visible = _make_runtime_entity("beta_lever", kind="lever")
         lever_visible.grid_x = 2
         lever_visible.grid_y = 3
-        lever_visible.layer = 2
+        lever_visible.render_order = 2
         lever_visible.stack_order = 0
         lever_visible.tags = ["switch", "red"]
         lever_visible.variables["toggled"] = False
@@ -1672,7 +1834,7 @@ class StrictContentIdTests(unittest.TestCase):
         lever_hidden = _make_runtime_entity("aardvark_hidden", kind="lever")
         lever_hidden.grid_x = 2
         lever_hidden.grid_y = 3
-        lever_hidden.layer = 2
+        lever_hidden.render_order = 2
         lever_hidden.stack_order = 0
         lever_hidden.visible = False
         lever_hidden.tags = ["switch", "red"]
@@ -1681,7 +1843,7 @@ class StrictContentIdTests(unittest.TestCase):
         lever_absent = _make_runtime_entity("absent_lever", kind="lever")
         lever_absent.grid_x = 5
         lever_absent.grid_y = 6
-        lever_absent.layer = 0
+        lever_absent.render_order = 0
         lever_absent.stack_order = 0
         lever_absent.present = False
         lever_absent.tags = ["switch", "blue"]
@@ -1694,7 +1856,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
         save_point.grid_x = 9
         save_point.grid_y = 9
-        save_point.layer = 0
+        save_point.render_order = 0
         save_point.stack_order = 2
         save_point.tags = ["save_point"]
 
@@ -2106,8 +2268,8 @@ class StrictContentIdTests(unittest.TestCase):
             registry,
             context,
             {
-                "type": "run_named_command",
-                "command_id": "interact_one_tile",
+                "type": "run_command",
+                "command_id": "commands/interact_one_tile",
             },
             base_params={
                 "source_entity_id": "player",
@@ -2266,7 +2428,7 @@ class StrictContentIdTests(unittest.TestCase):
             "append_current_area_var",
             {
                 "name": "visited_rooms",
-                "value": "village_square",
+                "value": "areas/village_square",
             },
         ).update(0.0)
         execute_registered_command(
@@ -2275,7 +2437,7 @@ class StrictContentIdTests(unittest.TestCase):
             "append_current_area_var",
             {
                 "name": "visited_rooms",
-                "value": "village_house",
+                "value": "areas/village_house",
             },
         ).update(0.0)
         execute_registered_command(
@@ -2333,9 +2495,9 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(context.world.variables["mode"], "play")
         self.assertEqual(context.world.variables["turn_count"], 3)
         self.assertEqual(context.world.variables["visited_room_count"], 2)
-        self.assertEqual(context.world.variables["latest_room"], "village_house")
-        self.assertEqual(context.world.variables["visited_rooms"], ["village_square"])
-        self.assertEqual(context.world.variables["popped_room"], "village_house")
+        self.assertEqual(context.world.variables["latest_room"], "areas/village_house")
+        self.assertEqual(context.world.variables["visited_rooms"], ["areas/village_square"])
+        self.assertEqual(context.world.variables["popped_room"], "areas/village_house")
         self.assertTrue(context.world.variables["world_branch_hit"])
 
     def test_toggle_var_primitives_flip_boolean_values(self) -> None:
@@ -2483,7 +2645,7 @@ class StrictContentIdTests(unittest.TestCase):
         authored_world = World()
         authored_world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
         runtime = PersistenceRuntime(project=project)
-        runtime.bind_area("test_room", authored_world=authored_world)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
 
         live_world = World()
         live_world.add_entity(_make_runtime_entity("dialogue_controller", kind="system", space="screen"))
@@ -2591,7 +2753,7 @@ class StrictContentIdTests(unittest.TestCase):
         switch.variables["enabled"] = False
         world.add_entity(switch)
         current_area = Area(
-            area_id="current_room",
+            area_id="areas/current_room",
             name="Current Room",
             tile_size=16,
             tilesets=[],
@@ -2610,7 +2772,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_area_var",
             {
-                "area_id": "other_room",
+                "area_id": "areas/other_room",
                 "name": "bridge_lowered",
                 "value": True,
             },
@@ -2620,7 +2782,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_area_var",
             {
-                "area_id": "current_room",
+                "area_id": "areas/current_room",
                 "name": "alarm_on",
                 "value": True,
             },
@@ -2630,7 +2792,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_area_entity_var",
             {
-                "area_id": "other_room",
+                "area_id": "areas/other_room",
                 "entity_id": "gate_1",
                 "name": "open",
                 "value": True,
@@ -2641,7 +2803,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_area_entity_var",
             {
-                "area_id": "current_room",
+                "area_id": "areas/current_room",
                 "entity_id": "switch_1",
                 "name": "enabled",
                 "value": True,
@@ -2652,7 +2814,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_area_entity_field",
             {
-                "area_id": "other_room",
+                "area_id": "areas/other_room",
                 "entity_id": "gate_1",
                 "field_name": "visible",
                 "value": False,
@@ -2663,7 +2825,7 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "set_area_entity_field",
             {
-                "area_id": "current_room",
+                "area_id": "areas/current_room",
                 "entity_id": "switch_1",
                 "field_name": "visible",
                 "value": False,
@@ -2676,19 +2838,19 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(updated_switch.variables["enabled"])
         self.assertFalse(updated_switch.visible)
 
-        self.assertTrue(runtime.save_data.areas["other_room"].variables["bridge_lowered"])
-        self.assertTrue(runtime.save_data.areas["current_room"].variables["alarm_on"])
+        self.assertTrue(runtime.save_data.areas["areas/other_room"].variables["bridge_lowered"])
+        self.assertTrue(runtime.save_data.areas["areas/current_room"].variables["alarm_on"])
         self.assertTrue(
-            runtime.save_data.areas["other_room"].entities["gate_1"].overrides["variables"]["open"]
+            runtime.save_data.areas["areas/other_room"].entities["gate_1"].overrides["variables"]["open"]
         )
         self.assertTrue(
-            runtime.save_data.areas["current_room"].entities["switch_1"].overrides["variables"][
+            runtime.save_data.areas["areas/current_room"].entities["switch_1"].overrides["variables"][
                 "enabled"
             ]
         )
-        self.assertFalse(runtime.save_data.areas["other_room"].entities["gate_1"].overrides["visible"])
+        self.assertFalse(runtime.save_data.areas["areas/other_room"].entities["gate_1"].overrides["visible"])
         self.assertFalse(
-            runtime.save_data.areas["current_room"].entities["switch_1"].overrides["visible"]
+            runtime.save_data.areas["areas/current_room"].entities["switch_1"].overrides["visible"]
         )
 
     def test_area_entity_ref_reads_area_owned_state_plus_persistent_overrides(self) -> None:
@@ -2709,8 +2871,8 @@ class StrictContentIdTests(unittest.TestCase):
             }
         )
         runtime = PersistenceRuntime(project=project)
-        runtime.set_area_entity_variable("other_room", "gate_1", "open", True)
-        runtime.set_area_entity_field("other_room", "gate_1", "visible", False)
+        runtime.set_area_entity_variable("areas/other_room", "gate_1", "open", True)
+        runtime.set_area_entity_field("areas/other_room", "gate_1", "visible", False)
 
         world = World()
         world.add_entity(_make_runtime_entity("controller", kind="system", space="screen"))
@@ -2729,7 +2891,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "name": "snapshot",
                 "value": {
                     "$area_entity_ref": {
-                        "area_id": "other_room",
+                        "area_id": "areas/other_room",
                         "entity_id": "gate_1",
                         "select": {
                             "fields": ["entity_id", "visible"],
@@ -3111,16 +3273,19 @@ class StrictContentIdTests(unittest.TestCase):
 
     def test_game_launcher_resolves_startup_area_and_cli_ids(self) -> None:
         _, project = self._make_project(
-            startup_area="intro/title_screen",
+            startup_area="areas/intro/title_screen",
             areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
         )
 
-        self.assertEqual(run_game._resolve_project_startup_area(project), "intro/title_screen")
-        self.assertEqual(run_game._resolve_area_argument(project, "intro/title_screen"), "intro/title_screen")
+        self.assertEqual(run_game._resolve_project_startup_area(project), "areas/intro/title_screen")
+        self.assertEqual(
+            run_game._resolve_area_argument(project, "areas/intro/title_screen"),
+            "areas/intro/title_screen",
+        )
 
     def test_game_launcher_rejects_area_paths_as_cli_arguments(self) -> None:
         _, project = self._make_project(
-            startup_area="intro/title_screen",
+            startup_area="areas/intro/title_screen",
             areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
         )
 
@@ -3146,14 +3311,14 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "new_game",
             {
-                "area_id": "village_square",
+                "area_id": "areas/village_square",
                 "entry_id": "startup",
             },
         )
         handle.update(0.0)
 
         self.assertEqual(len(recorded_requests), 1)
-        self.assertEqual(recorded_requests[0].area_id, "village_square")
+        self.assertEqual(recorded_requests[0].area_id, "areas/village_square")
         self.assertEqual(recorded_requests[0].entry_id, "startup")
 
     def test_change_area_command_queues_transfer_and_camera_request(self) -> None:
@@ -3177,12 +3342,15 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             "change_area",
             {
-                "area_id": "village_house",
+                "area_id": "areas/village_house",
                 "entry_id": "from_square",
                 "transfer_entity_ids": ["actor"],
-                "camera_follow_entity_id": "actor",
-                "camera_offset_x": 12,
-                "camera_offset_y": -8,
+                "camera_follow": {
+                    "mode": "entity",
+                    "entity_id": "actor",
+                    "offset_x": 12,
+                    "offset_y": -8,
+                },
                 "actor_entity_id": "player",
             },
         )
@@ -3190,7 +3358,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(len(recorded_requests), 1)
         request = recorded_requests[0]
-        self.assertEqual(request.area_id, "village_house")
+        self.assertEqual(request.area_id, "areas/village_house")
         self.assertEqual(request.entry_id, "from_square")
         self.assertEqual(request.transfer_entity_ids, ["player"])
         self.assertIsNotNone(request.camera_follow)
@@ -3237,7 +3405,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        title_area_path = project.resolve_area_reference("title_screen")
+        title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
         game = Game(area_path=title_area_path, project=project)
 
@@ -3294,7 +3462,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        title_area_path = project.resolve_area_reference("title_screen")
+        title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
         game = Game(area_path=title_area_path, project=project)
 
@@ -3327,7 +3495,7 @@ class StrictContentIdTests(unittest.TestCase):
         from dungeon_engine.engine.game import Game
 
         _, project = self._make_project(
-            startup_area="title_screen",
+            startup_area="areas/title_screen",
             areas={
                 "title_screen.json": {
                     "name": "Title",
@@ -3337,7 +3505,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "tile_layers": [
                         {
                             "name": "ground",
-                            "draw_above_entities": False,
+                            "render_order": 0,
                             "grid": [[0]],
                         }
                     ],
@@ -3359,7 +3527,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "tile_layers": [
                         {
                             "name": "ground",
-                            "draw_above_entities": False,
+                            "render_order": 0,
                             "grid": [[0]],
                         }
                     ],
@@ -3376,7 +3544,7 @@ class StrictContentIdTests(unittest.TestCase):
             },
         )
 
-        title_area_path = project.resolve_area_reference("title_screen")
+        title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
         game = Game(area_path=title_area_path, project=project)
         self.addCleanup(pygame.quit)
@@ -3384,10 +3552,10 @@ class StrictContentIdTests(unittest.TestCase):
         save_path = project.project_root / "saves" / "slot_1.json"
         game.persistence_runtime.save_data.globals["seen_intro"] = True
         game.persistence_runtime.set_save_path(save_path)
-        game.request_new_game(AreaTransitionRequest(area_id="village_square"))
+        game.request_new_game(AreaTransitionRequest(area_id="areas/village_square"))
         game._apply_pending_new_game_if_idle()
 
-        self.assertEqual(game.area.area_id, "village_square")
+        self.assertEqual(game.area.area_id, "areas/village_square")
         self.assertEqual(game.persistence_runtime.save_data.globals, {})
         self.assertIsNone(game.persistence_runtime.save_path)
         self.assertIsNone(game.persistence_runtime.save_data.current_input_targets)
@@ -3399,7 +3567,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        title_area_path = project.resolve_area_reference("title_screen")
+        title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
 
         game = Game(area_path=title_area_path, project=project)
@@ -3427,7 +3595,7 @@ class StrictContentIdTests(unittest.TestCase):
         for _ in range(6):
             game._advance_simulation_tick(1 / 60)
 
-        self.assertEqual(game.area.area_id, "village_square")
+        self.assertEqual(game.area.area_id, "areas/village_square")
         self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_title_screen_dialogue_held_direction_repeats_after_delay(self) -> None:
@@ -3437,7 +3605,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        title_area_path = project.resolve_area_reference("title_screen")
+        title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
 
         game = Game(area_path=title_area_path, project=project)
@@ -3478,7 +3646,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3508,7 +3676,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3537,7 +3705,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3575,7 +3743,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3651,7 +3819,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3686,13 +3854,54 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(player.variables["direction"], "right")
         self.assertIsNone(game.command_runner.last_error_notice)
 
+    def test_sample_push_block_does_not_move_into_non_walkable_cells(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("areas/village_house")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        block = game.world.get_entity("house_block")
+        assert block is not None
+
+        game.movement_system.set_grid_position("house_block", 10, 8)
+        game.movement_system.set_pixel_position(
+            "house_block",
+            10 * game.area.tile_size,
+            8 * game.area.tile_size,
+        )
+
+        game.command_runner.enqueue(
+            "run_event",
+            entity_id="house_block",
+            event_id="push_from_left",
+        )
+        game._advance_simulation_tick(1 / 60)
+
+        self.assertEqual((block.grid_x, block.grid_y), (10, 8))
+        self.assertEqual(
+            (block.pixel_x, block.pixel_y),
+            (10 * game.area.tile_size, 8 * game.area.tile_size),
+        )
+        self.assertFalse(block.movement.active)
+        self.assertIsNone(game.command_runner.last_error_notice)
+
     def test_dialogue_choice_window_scrolls_after_three_visible_rows(self) -> None:
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
         controller = instantiate_entity(
             {
                 "id": "dialogue_controller",
-                "template": "dialogue_panel",
+                "template": "entity_templates/dialogue_panel",
                 "space": "screen",
                 "scope": "global",
             },
@@ -3724,7 +3933,7 @@ class StrictContentIdTests(unittest.TestCase):
             handle = execute_registered_command(
                 registry,
                 context,
-                "run_named_command",
+                "run_command",
                 {
                     "command_id": command_id,
                     "source_entity_id": "dialogue_controller",
@@ -3734,7 +3943,7 @@ class StrictContentIdTests(unittest.TestCase):
             while not handle.complete:
                 handle.update(0.0)
 
-        _run_named("dialogue/render_choice")
+        _run_named("commands/dialogue/render_choice")
 
         option_0 = context.screen_manager.get_element("dialogue_option_0")
         option_1 = context.screen_manager.get_element("dialogue_option_1")
@@ -3746,9 +3955,9 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(option_1.text, " Two")
         self.assertEqual(option_2.text, " Three")
 
-        _run_named("dialogue/move_selection", delta=1)
-        _run_named("dialogue/move_selection", delta=1)
-        _run_named("dialogue/move_selection", delta=1)
+        _run_named("commands/dialogue/move_selection", delta=1)
+        _run_named("commands/dialogue/move_selection", delta=1)
+        _run_named("commands/dialogue/move_selection", delta=1)
 
         self.assertEqual(controller.variables["dialogue_choice_index"], 3)
         self.assertEqual(controller.variables["dialogue_choice_scroll_offset"], 1)
@@ -3771,7 +3980,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3820,7 +4029,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_house")
+        area_path = project.resolve_area_reference("areas/village_house")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3869,7 +4078,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3937,8 +4146,8 @@ class StrictContentIdTests(unittest.TestCase):
             self.assertEqual(game.world.get_input_target_id(action), "dialogue_controller")
 
         game.command_runner.enqueue(
-            "run_named_command",
-            command_id="dialogue/close_current_dialogue",
+            "run_command",
+            command_id="commands/dialogue/close_current_dialogue",
             source_entity_id="dialogue_controller",
             actor_entity_id="player",
             caller_entity_id="lever",
@@ -3955,8 +4164,8 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.world.get_input_target_id("menu"), "dialogue_controller")
 
         game.command_runner.enqueue(
-            "run_named_command",
-            command_id="dialogue/close_current_dialogue",
+            "run_command",
+            command_id="commands/dialogue/close_current_dialogue",
             source_entity_id="dialogue_controller",
             actor_entity_id="player",
             caller_entity_id="lever",
@@ -3976,7 +4185,7 @@ class StrictContentIdTests(unittest.TestCase):
         from dungeon_engine.engine.game import Game
 
         _, project = self._make_project(
-            startup_area="room_a",
+            startup_area="areas/room_a",
             global_entities=[
                 {
                     "id": "dialogue_controller",
@@ -4002,7 +4211,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "tile_layers": [
                         {
                             "name": "ground",
-                            "draw_above_entities": False,
+                            "render_order": 0,
                             "grid": [[0]],
                         }
                     ],
@@ -4019,7 +4228,7 @@ class StrictContentIdTests(unittest.TestCase):
             },
         )
 
-        area_path = project.resolve_area_reference("room_a")
+        area_path = project.resolve_area_reference("areas/room_a")
         assert area_path is not None
         game = Game(area_path=area_path, project=project)
         self.addCleanup(pygame.quit)
@@ -4075,7 +4284,7 @@ class StrictContentIdTests(unittest.TestCase):
         from dungeon_engine.engine.game import Game
 
         _, project = self._make_project(
-            startup_area="room_a",
+            startup_area="areas/room_a",
             global_entities=[
                 {
                     "id": "dialogue_controller",
@@ -4101,7 +4310,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "tile_layers": [
                         {
                             "name": "ground",
-                            "draw_above_entities": False,
+                            "render_order": 0,
                             "grid": [[0]],
                         }
                     ],
@@ -4118,7 +4327,7 @@ class StrictContentIdTests(unittest.TestCase):
             },
         )
 
-        area_path = project.resolve_area_reference("room_a")
+        area_path = project.resolve_area_reference("areas/room_a")
         assert area_path is not None
         game = Game(area_path=area_path, project=project)
         self.addCleanup(pygame.quit)
@@ -4228,7 +4437,7 @@ class StrictContentIdTests(unittest.TestCase):
     def test_runtime_token_lookup_rejects_removed_source_alias(self) -> None:
         context = CommandContext(
             area=Area(
-                area_id="test_room",
+                area_id="areas/test_room",
                 name="Test Room",
                 tile_size=16,
                 tilesets=[],
@@ -4291,7 +4500,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
-    def test_run_named_command_propagates_caller_entity_id(self) -> None:
+    def test_run_command_propagates_caller_entity_id(self) -> None:
         _, project = self._make_project(
             commands={
                 "toggle_caller.json": {
@@ -4315,9 +4524,9 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_named_command",
+            "run_command",
             {
-                "command_id": "toggle_caller",
+                "command_id": "commands/toggle_caller",
                 "actor_entity_id": "lever",
                 "caller_entity_id": "lever",
             },
@@ -4696,9 +4905,12 @@ class StrictContentIdTests(unittest.TestCase):
                 },
             ),
             (
-                "set_camera_follow_entity",
+                "set_camera_follow",
                 {
-                    "entity_id": "actor",
+                    "follow": {
+                        "mode": "entity",
+                        "entity_id": "actor",
+                    },
                 },
             ),
             (
@@ -4885,7 +5097,7 @@ class StrictContentIdTests(unittest.TestCase):
             [("lever", 16.0, 0.0, None, 8, None, "none", None, None)],
         )
 
-    def test_set_camera_follow_entity_supports_caller_token_via_run_sequence(self) -> None:
+    def test_set_camera_follow_supports_caller_token_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -4901,8 +5113,13 @@ class StrictContentIdTests(unittest.TestCase):
                 "caller_entity_id": "lever",
                 "commands": [
                     {
-                        "type": "set_camera_follow_entity",
-                        "entity_id": "$caller_id",
+                        "type": "set_camera_follow",
+                        "follow": {
+                            "mode": "entity",
+                            "entity_id": "$caller_id",
+                            "offset_x": 4,
+                            "offset_y": -2,
+                        },
                     }
                 ],
             },
@@ -4910,11 +5127,13 @@ class StrictContentIdTests(unittest.TestCase):
         handle.update(0.0)
 
         self.assertEqual(camera.followed_entity_id, "lever")
+        self.assertEqual(camera.follow_offset_x, 4.0)
+        self.assertEqual(camera.follow_offset_y, -2.0)
         self.assertEqual(len(camera.update_calls), 1)
         self.assertIs(camera.update_calls[0][0], world)
         self.assertFalse(camera.update_calls[0][1])
 
-    def test_set_camera_follow_input_target_tracks_routed_action(self) -> None:
+    def test_set_camera_follow_tracks_routed_action(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -4933,8 +5152,13 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_camera_follow_input_target",
-            {"action": "menu"},
+            "set_camera_follow",
+            {
+                "follow": {
+                    "mode": "input_target",
+                    "action": "menu",
+                }
+            },
         )
         handle.update(0.0)
 
@@ -4943,6 +5167,71 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(len(camera.update_calls), 1)
         self.assertIs(camera.update_calls[0][0], world)
         self.assertFalse(camera.update_calls[0][1])
+
+    def test_set_camera_state_push_and_pop_restore_previous_camera_policy(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        registry, context = self._make_command_context(world=world)
+        camera = _RecordingCamera()
+        context.camera = camera
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_camera_state",
+            {
+                "follow": {
+                    "mode": "entity",
+                    "entity_id": "player",
+                    "offset_x": 3,
+                    "offset_y": -1,
+                },
+                "bounds": {
+                    "x": 1,
+                    "y": 2,
+                    "width": 3,
+                    "height": 4,
+                    "space": "world_grid",
+                },
+                "deadzone": {
+                    "x": 2,
+                    "y": 1,
+                    "width": 5,
+                    "height": 4,
+                    "space": "viewport_grid",
+                },
+            },
+        ).update(0.0)
+        execute_registered_command(registry, context, "push_camera_state", {}).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_camera_state",
+            {
+                "follow": None,
+                "bounds": None,
+                "deadzone": None,
+            },
+        ).update(0.0)
+
+        self.assertEqual(camera.follow_mode, "none")
+        self.assertIsNone(camera.bounds)
+        self.assertIsNone(camera.deadzone)
+
+        execute_registered_command(registry, context, "pop_camera_state", {}).update(0.0)
+
+        self.assertEqual(camera.follow_mode, "entity")
+        self.assertEqual(camera.followed_entity_id, "player")
+        self.assertEqual(camera.follow_offset_x, 3.0)
+        self.assertEqual(camera.follow_offset_y, -1.0)
+        self.assertEqual(
+            camera.bounds,
+            {"x": 16.0, "y": 32.0, "width": 48.0, "height": 64.0},
+        )
+        self.assertEqual(
+            camera.deadzone,
+            {"x": 32.0, "y": 16.0, "width": 80.0, "height": 64.0},
+        )
 
     def test_set_camera_follow_player_is_removed(self) -> None:
         world = World()
@@ -4960,6 +5249,25 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertIsNotNone(raised.exception.__cause__)
         self.assertIn("Unknown command 'set_camera_follow_player'", str(raised.exception.__cause__))
+
+    def test_legacy_camera_commands_are_removed(self) -> None:
+        world = World()
+        registry, context = self._make_command_context(world=world)
+        context.camera = _RecordingCamera()
+
+        for command_name in (
+            "set_camera_follow_entity",
+            "set_camera_follow_input_target",
+            "clear_camera_follow",
+            "set_camera_bounds_rect",
+            "clear_camera_bounds",
+            "clear_camera_deadzone",
+        ):
+            with self.subTest(command_name=command_name):
+                with self.assertRaises(CommandExecutionError) as raised:
+                    execute_registered_command(registry, context, command_name, {})
+                self.assertIsNotNone(raised.exception.__cause__)
+                self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
 
     def test_set_var_from_camera_is_removed(self) -> None:
         world = World()
@@ -5039,13 +5347,13 @@ class StrictContentIdTests(unittest.TestCase):
         bounds_handle = execute_registered_command(
             registry,
             context,
-            "set_camera_bounds_rect",
+            "set_camera_bounds",
             {
                 "x": 1,
                 "y": 2,
                 "width": 3,
                 "height": 4,
-                "space": "grid",
+                "space": "world_grid",
             },
         )
         bounds_handle.update(0.0)
@@ -5063,6 +5371,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "y": 12,
                 "width": 24,
                 "height": 30,
+                "space": "viewport_pixel",
             },
         )
         deadzone_handle.update(0.0)
@@ -5070,6 +5379,21 @@ class StrictContentIdTests(unittest.TestCase):
             camera.deadzone,
             {"x": 8.0, "y": 12.0, "width": 24.0, "height": 30.0},
         )
+
+        follow_set_handle = execute_registered_command(
+            registry,
+            context,
+            "set_camera_follow",
+            {
+                "follow": {
+                    "mode": "entity",
+                    "entity_id": "player",
+                    "offset_x": 6,
+                    "offset_y": -2,
+                }
+            },
+        )
+        follow_set_handle.update(0.0)
 
         query_handle = execute_command_spec(
             registry,
@@ -5109,11 +5433,23 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "type": "set_current_area_var",
                 "name": "follow_target",
-                "value": "$camera.follow_entity_id",
+                "value": "$camera.follow.entity_id",
             },
         )
         follow_handle.update(0.0)
-        self.assertIsNone(world.variables["follow_target"])
+        self.assertEqual(world.variables["follow_target"], "player")
+
+        follow_mode_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_current_area_var",
+                "name": "follow_mode",
+                "value": "$camera.follow.mode",
+            },
+        )
+        follow_mode_handle.update(0.0)
+        self.assertEqual(world.variables["follow_mode"], "entity")
 
     def test_save_game_restores_explicit_camera_state(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -5126,7 +5462,7 @@ class StrictContentIdTests(unittest.TestCase):
                 r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"
             )
         )
-        area_path = project.resolve_area_reference("village_square")
+        area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
         game = Game(area_path=area_path, project=project)
         self.addCleanup(pygame.quit)
@@ -5145,10 +5481,10 @@ class StrictContentIdTests(unittest.TestCase):
 
         assert game.camera is not None
         camera_state = game.camera.to_state_dict()
-        self.assertEqual(camera_state["follow_mode"], "entity")
-        self.assertEqual(camera_state["follow_entity_id"], "player")
-        self.assertEqual(camera_state["follow_offset_x"], 14.0)
-        self.assertEqual(camera_state["follow_offset_y"], -6.0)
+        self.assertEqual(camera_state["follow"]["mode"], "entity")
+        self.assertEqual(camera_state["follow"]["entity_id"], "player")
+        self.assertEqual(camera_state["follow"]["offset_x"], 14.0)
+        self.assertEqual(camera_state["follow"]["offset_y"], -6.0)
         self.assertEqual(
             camera_state["bounds"],
             {"x": 16.0, "y": 16.0, "width": 160.0, "height": 112.0},
@@ -5325,7 +5661,7 @@ class StrictContentIdTests(unittest.TestCase):
     def test_traveler_state_round_trips_and_installs_in_destination_area(self) -> None:
         _, project = self._make_project()
         area_a = Area(
-            area_id="room_a",
+            area_id="areas/room_a",
             name="Room A",
             tile_size=16,
             tilesets=[],
@@ -5333,7 +5669,7 @@ class StrictContentIdTests(unittest.TestCase):
             cell_flags=[],
         )
         area_b = Area(
-            area_id="room_b",
+            area_id="areas/room_b",
             name="Room B",
             tile_size=16,
             tilesets=[],
@@ -5373,7 +5709,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(restored_crate.grid_y, 6)
         self.assertTrue(restored_crate.variables["moved"])  # type: ignore[index]
         self.assertIsNotNone(restored_crate.session_entity_id)
-        self.assertEqual(restored_crate.origin_area_id, "room_a")
+        self.assertEqual(restored_crate.origin_area_id, "areas/room_a")
         self.assertEqual(restored_crate.origin_entity_id, "crate")
 
     def test_game_area_change_without_returning_traveler_suppresses_origin_placeholder(self) -> None:
@@ -5382,7 +5718,7 @@ class StrictContentIdTests(unittest.TestCase):
         from dungeon_engine.engine.game import Game
 
         _, project = self._make_project(
-            startup_area="room_a",
+            startup_area="areas/room_a",
             areas={
                 "room_a.json": {
                     "name": "Room A",
@@ -5392,7 +5728,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "tile_layers": [
                         {
                             "name": "ground",
-                            "draw_above_entities": False,
+                            "render_order": 0,
                             "grid": [[0, 0, 0]],
                         }
                     ],
@@ -5420,7 +5756,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "tile_layers": [
                         {
                             "name": "ground",
-                            "draw_above_entities": False,
+                            "render_order": 0,
                             "grid": [[0, 0, 0]],
                         }
                     ],
@@ -5436,7 +5772,7 @@ class StrictContentIdTests(unittest.TestCase):
             },
         )
 
-        area_a_path = project.resolve_area_reference("room_a")
+        area_a_path = project.resolve_area_reference("areas/room_a")
         assert area_a_path is not None
         game = Game(area_path=area_a_path, project=project)
         self.addCleanup(pygame.quit)
@@ -5447,24 +5783,24 @@ class StrictContentIdTests(unittest.TestCase):
 
         game.request_area_change(
             AreaTransitionRequest(
-                area_id="room_b",
+                area_id="areas/room_b",
                 entry_id="landing",
                 transfer_entity_ids=["crate"],
             )
         )
         game._apply_pending_area_change_if_idle()
 
-        self.assertEqual(game.area.area_id, "room_b")
+        self.assertEqual(game.area.area_id, "areas/room_b")
         moved_crate = game.world.get_entity("crate")
         assert moved_crate is not None
         self.assertEqual(moved_crate.grid_x, 2)
         self.assertEqual(moved_crate.grid_y, 0)
         self.assertTrue(moved_crate.variables["moved"])  # type: ignore[index]
 
-        game.request_area_change(AreaTransitionRequest(area_id="room_a"))
+        game.request_area_change(AreaTransitionRequest(area_id="areas/room_a"))
         game._apply_pending_area_change_if_idle()
 
-        self.assertEqual(game.area.area_id, "room_a")
+        self.assertEqual(game.area.area_id, "areas/room_a")
         self.assertIsNone(game.world.get_entity("crate"))
 
 

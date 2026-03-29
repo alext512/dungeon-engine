@@ -53,7 +53,10 @@ class TileLayer:
 
     name: str
     grid: list[list[int]]
-    draw_above_entities: bool = False
+    render_order: int = 0
+    y_sort: bool = False
+    sort_y_offset: float = 0.0
+    stack_order: int = 0
 
 
 @dataclass(slots=True)
@@ -119,19 +122,9 @@ class Area:
         """Return True when the tile coordinate is inside the room."""
         return 0 <= grid_x < self.width and 0 <= grid_y < self.height
 
-    def iter_tile_layers(
-        self,
-        *,
-        draw_above_entities: bool | None = None,
-    ) -> list[TileLayer]:
-        """Return all tile layers or only those matching the requested render phase."""
-        if draw_above_entities is None:
-            return list(self.tile_layers)
-        return [
-            layer
-            for layer in self.tile_layers
-            if layer.draw_above_entities == draw_above_entities
-        ]
+    def iter_tile_layers(self) -> list[TileLayer]:
+        """Return all authored tile layers in their stored order."""
+        return list(self.tile_layers)
 
     def cell_flags_at(self, grid_x: int, grid_y: int) -> dict[str, Any]:
         """Return the per-cell flags for the requested tile coordinate."""

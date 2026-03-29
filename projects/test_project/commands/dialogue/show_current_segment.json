@@ -15,14 +15,14 @@
       "value": "$self.dialogue_segment_count",
       "then": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/close_current_dialogue"
+          "type": "run_command",
+          "command_id": "commands/dialogue/close_current_dialogue"
         }
       ],
       "else": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/load_and_render_segment"
+          "type": "run_command",
+          "command_id": "commands/dialogue/load_and_render_segment"
         }
       ]
     }

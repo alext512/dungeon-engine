@@ -10,9 +10,9 @@ Example ``project.json``::
         "entity_template_paths": ["entity_templates/"],
         "asset_paths": ["assets/"],
         "area_paths": ["areas/"],
-        "named_command_paths": ["named_commands/"],
+        "command_paths": ["commands/"],
         "shared_variables_path": "shared_variables.json",
-        "startup_area": "title_screen",
+        "startup_area": "areas/title_screen",
         "input_targets": {
             "menu": "pause_controller"
         },
@@ -25,7 +25,7 @@ the selected project root:
 - ``entity_templates/``
 - ``assets/``
 - ``areas/``
-- ``named_commands/``
+- ``commands/``
 """
 
 from __future__ import annotations
@@ -34,6 +34,42 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+AREA_ID_PREFIX = "areas"
+ENTITY_TEMPLATE_ID_PREFIX = "entity_templates"
+COMMAND_ID_PREFIX = "commands"
+
+
+def _normalize_content_id(value: str) -> str:
+    """Return one normalized authored content id string."""
+    return str(value).replace("\\", "/").strip().strip("/")
+
+
+def _prefix_relative_id(relative_id: str, *, prefix: str) -> str:
+    """Return one canonical type-prefixed id from a relative id."""
+    normalized_relative = _normalize_content_id(relative_id)
+    if not normalized_relative:
+        raise ValueError(f"Cannot build a canonical content id for empty relative path under '{prefix}'.")
+    return f"{prefix}/{normalized_relative}"
+
+
+def _relative_id_from_canonical(value: str, *, prefix: str) -> Path | None:
+    """Return one relative path from a canonical type-prefixed id.
+
+    Canonical authored ids are logical ids, not literal file paths, so they
+    must not include the backing ``.json`` extension.
+    """
+    normalized = _normalize_content_id(value)
+    prefix_with_sep = f"{prefix}/"
+    if not normalized.startswith(prefix_with_sep):
+        return None
+    relative = normalized[len(prefix_with_sep):].strip("/")
+    if not relative:
+        return None
+    if relative.lower().endswith(".json"):
+        return None
+    return Path(relative)
 
 @dataclass
 class ProjectContext:
@@ -44,7 +80,7 @@ class ProjectContext:
     entity_template_paths: list[Path] = field(default_factory=list)
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
-    named_command_paths: list[Path] = field(default_factory=list)
+    command_paths: list[Path] = field(default_factory=list)
     shared_variables_path: Path | None = None
     global_entities: list[dict[str, Any]] = field(default_factory=list)
     startup_area: str | None = None
@@ -62,17 +98,21 @@ class ProjectContext:
         """Return the canonical template id for an entity-template file.
 
         The id is derived from the file's path relative to its entity root
-        directory, with the ``.json`` suffix stripped and backslashes
+        directory, with the ``.json`` suffix stripped, the
+        ``entity_templates/`` type prefix added, and backslashes
         normalized to forward slashes.
         """
         resolved = template_path.resolve()
         for directory in self.entity_template_paths:
             try:
                 relative = resolved.relative_to(directory.resolve())
-                return str(relative.with_suffix("")).replace("\\", "/")
+                return _prefix_relative_id(
+                    str(relative.with_suffix("")).replace("\\", "/"),
+                    prefix=ENTITY_TEMPLATE_ID_PREFIX,
+                )
             except ValueError:
                 continue
-        return template_path.stem
+        return _prefix_relative_id(template_path.stem, prefix=ENTITY_TEMPLATE_ID_PREFIX)
 
     def list_entity_template_files(self) -> list[Path]:
         """Return all entity-template JSON files across all entity paths."""
@@ -98,11 +138,16 @@ class ProjectContext:
 
     def find_entity_template_matches(self, template_id: str) -> list[Path]:
         """Return all matching entity-template JSON files for the requested id."""
-        normalized_id = str(template_id).replace("\\", "/").strip()
+        normalized_id = _normalize_content_id(template_id)
         if not normalized_id:
             return []
 
-        relative_id = Path(normalized_id)
+        relative_id = _relative_id_from_canonical(
+            normalized_id,
+            prefix=ENTITY_TEMPLATE_ID_PREFIX,
+        )
+        if relative_id is None:
+            return []
         matches: list[Path] = []
         seen: set[Path] = set()
 
@@ -139,25 +184,28 @@ class ProjectContext:
         return matches[0]
 
     # ------------------------------------------------------------------
-    # Named command discovery
+    # Project command discovery
     # ------------------------------------------------------------------
 
-    def named_command_id(self, command_path: Path) -> str:
-        """Return the canonical id for a named-command file."""
+    def command_id(self, command_path: Path) -> str:
+        """Return the canonical id for a project command file."""
         resolved = command_path.resolve()
-        for directory in self.named_command_paths:
+        for directory in self.command_paths:
             try:
                 relative = resolved.relative_to(directory.resolve())
-                return str(relative.with_suffix("")).replace("\\", "/")
+                return _prefix_relative_id(
+                    str(relative.with_suffix("")).replace("\\", "/"),
+                    prefix=COMMAND_ID_PREFIX,
+                )
             except ValueError:
                 continue
-        return command_path.stem
+        return _prefix_relative_id(command_path.stem, prefix=COMMAND_ID_PREFIX)
 
-    def list_named_command_files(self) -> list[Path]:
-        """Return all named-command JSON files across all named-command paths."""
+    def list_command_files(self) -> list[Path]:
+        """Return all project command JSON files across all command paths."""
         files: list[Path] = []
         seen: set[Path] = set()
-        for directory in self.named_command_paths:
+        for directory in self.command_paths:
             if not directory.is_dir():
                 continue
             for file_path in sorted(directory.rglob("*.json")):
@@ -168,13 +216,18 @@ class ProjectContext:
                 files.append(file_path)
         return files
 
-    def find_named_command_matches(self, command_id: str) -> list[Path]:
-        """Return all matching named-command JSON files for the requested id."""
-        normalized_id = str(command_id).replace("\\", "/").strip()
+    def find_command_matches(self, command_id: str) -> list[Path]:
+        """Return all matching project command JSON files for the requested id."""
+        normalized_id = _normalize_content_id(command_id)
         if not normalized_id:
             return []
 
-        relative_id = Path(normalized_id)
+        relative_id = _relative_id_from_canonical(
+            normalized_id,
+            prefix=COMMAND_ID_PREFIX,
+        )
+        if relative_id is None:
+            return []
         matches: list[Path] = []
         seen: set[Path] = set()
 
@@ -185,7 +238,7 @@ class ProjectContext:
             seen.add(resolved)
             matches.append(candidate)
 
-        for directory in self.named_command_paths:
+        for directory in self.command_paths:
             direct_candidate = directory / relative_id
             if direct_candidate.suffix.lower() != ".json":
                 direct_candidate = direct_candidate.with_suffix(".json")
@@ -193,14 +246,14 @@ class ProjectContext:
                 _record(direct_candidate)
 
             for candidate in directory.rglob("*.json"):
-                relative_candidate = self.named_command_id(candidate)
+                relative_candidate = self.command_id(candidate)
                 if relative_candidate == normalized_id:
                     _record(candidate)
         return matches
 
-    def find_named_command(self, command_id: str) -> Path | None:
-        """Return the single matching named-command JSON file, or *None*."""
-        matches = self.find_named_command_matches(command_id)
+    def find_command(self, command_id: str) -> Path | None:
+        """Return the single matching project command JSON file, or *None*."""
+        matches = self.find_command_matches(command_id)
         if not matches:
             return None
         if len(matches) > 1:
@@ -264,17 +317,20 @@ class ProjectContext:
         """Return the canonical area id for an area JSON file.
 
         The id is derived from the file's path relative to its area root
-        directory, with the ``.json`` suffix stripped and backslashes
-        normalized to forward slashes.
+        directory, with the ``.json`` suffix stripped, the ``areas/``
+        type prefix added, and backslashes normalized to forward slashes.
         """
         resolved = area_path.resolve()
         for directory in self.area_paths:
             try:
                 relative = resolved.relative_to(directory.resolve())
-                return str(relative.with_suffix("")).replace("\\", "/")
+                return _prefix_relative_id(
+                    str(relative.with_suffix("")).replace("\\", "/"),
+                    prefix=AREA_ID_PREFIX,
+                )
             except ValueError:
                 continue
-        return area_path.stem
+        return _prefix_relative_id(area_path.stem, prefix=AREA_ID_PREFIX)
 
     def list_area_files(self) -> list[Path]:
         """Return all area JSON files across all area paths."""
@@ -302,11 +358,16 @@ class ProjectContext:
 
         Raises ``ValueError`` if the id matches multiple files.
         """
-        normalized_id = str(area_id_str).replace("\\", "/").strip()
+        normalized_id = _normalize_content_id(area_id_str)
         if not normalized_id:
             return None
 
-        relative_id = Path(normalized_id)
+        relative_id = _relative_id_from_canonical(
+            normalized_id,
+            prefix=AREA_ID_PREFIX,
+        )
+        if relative_id is None:
+            return None
         matches: list[Path] = []
         seen: set[Path] = set()
 
@@ -355,7 +416,10 @@ class ProjectContext:
         for directory in self.area_paths:
             try:
                 relative = resolved.relative_to(directory.resolve())
-                return str(relative.with_suffix("")).replace("\\", "/")
+                return _prefix_relative_id(
+                    str(relative.with_suffix("")).replace("\\", "/"),
+                    prefix=AREA_ID_PREFIX,
+                )
             except ValueError:
                 continue
         raise ValueError(
@@ -429,7 +493,7 @@ def load_project(project_path: Path) -> ProjectContext:
         entity_template_paths=_resolve_paths("entity_template_paths", "entity_templates"),
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
-        named_command_paths=_resolve_paths("named_command_paths", "named_commands"),
+        command_paths=_resolve_paths("command_paths", "commands"),
         shared_variables_path=shared_variables_path,
         global_entities=_resolve_global_entities(raw.get("global_entities")),
         startup_area=_optional_manifest_str(raw.get("startup_area")),

@@ -10,7 +10,7 @@ import pygame
 
 from dungeon_engine import config
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.library import build_named_command_database
+from dungeon_engine.commands.library import build_project_command_database
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import AreaTransitionRequest, CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
@@ -80,7 +80,7 @@ class Game:
         self.camera: Camera | None = None
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
-        build_named_command_database(self.project)
+        build_project_command_database(self.project)
 
         self.collision_system: CollisionSystem | None = None
         self.interaction_system: InteractionSystem | None = None
@@ -824,9 +824,9 @@ class Game:
                 offset_x=float(camera_follow.offset_x),
                 offset_y=float(camera_follow.offset_y),
             )
-        elif camera_follow.mode == "input_target" and camera_follow.input_action:
+        elif camera_follow.mode == "input_target" and camera_follow.action:
             self.camera.follow_input_target(
-                camera_follow.input_action,
+                camera_follow.action,
                 offset_x=float(camera_follow.offset_x),
                 offset_y=float(camera_follow.offset_y),
             )
@@ -954,13 +954,4 @@ class Game:
 
     def _build_area_camera_state(self) -> dict[str, object]:
         """Translate one area's authored camera defaults into runtime camera state data."""
-        defaults = copy.deepcopy(self.area.camera_defaults)
-        if "follow_entity_id" in defaults:
-            defaults["follow_mode"] = "entity"
-            defaults.setdefault("follow_entity_id", defaults.get("follow_entity_id"))
-        elif "follow_input_action" in defaults:
-            defaults["follow_mode"] = "input_target"
-            defaults.setdefault("follow_input_action", defaults.get("follow_input_action"))
-        else:
-            defaults.setdefault("follow_mode", "none")
-        return defaults
+        return copy.deepcopy(self.area.camera_defaults)

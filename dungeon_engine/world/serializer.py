@@ -35,11 +35,7 @@ def serialize_area(
             for ts in area.tilesets
         ],
         "tile_layers": [
-            {
-                "name": layer.name,
-                "draw_above_entities": layer.draw_above_entities,
-                "grid": layer.grid,
-            }
+            _serialize_tile_layer(layer)
             for layer in area.tile_layers
         ],
         "cell_flags": [
@@ -83,6 +79,20 @@ def _serialize_tileset(tileset: Any) -> dict[str, Any]:
         "tile_width": tileset.tile_width,
         "tile_height": tileset.tile_height,
     }
+
+
+def _serialize_tile_layer(layer: Any) -> dict[str, Any]:
+    """Serialize one tile layer using the unified render-order schema."""
+    data: dict[str, Any] = {
+        "name": layer.name,
+        "render_order": int(layer.render_order),
+        "y_sort": bool(layer.y_sort),
+        "stack_order": int(layer.stack_order),
+        "grid": layer.grid,
+    }
+    if not math.isclose(float(layer.sort_y_offset), 0.0, abs_tol=0.001):
+        data["sort_y_offset"] = _serialize_number(float(layer.sort_y_offset))
+    return data
 
 
 def _serialize_entry_point(entry_point: Any) -> dict[str, Any]:
@@ -197,7 +207,9 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "present": entity.present,
         "visible": entity.visible,
         "events_enabled": entity.events_enabled,
-        "layer": entity.layer,
+        "render_order": entity.render_order,
+        "y_sort": entity.y_sort,
+        "sort_y_offset": _serialize_number(entity.sort_y_offset),
         "stack_order": entity.stack_order,
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),
@@ -220,7 +232,9 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "present": entity.present,
         "visible": entity.visible,
         "events_enabled": entity.events_enabled,
-        "layer": entity.layer,
+        "render_order": entity.render_order,
+        "y_sort": entity.y_sort,
+        "sort_y_offset": _serialize_number(entity.sort_y_offset),
         "stack_order": entity.stack_order,
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),

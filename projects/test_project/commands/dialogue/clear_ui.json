@@ -14,8 +14,8 @@
       "element_id": "$self.text_element_id"
     },
     {
-      "type": "run_named_command",
-      "command_id": "dialogue/clear_choice_elements"
+      "type": "run_command",
+      "command_id": "commands/dialogue/clear_choice_elements"
     }
   ]
 }

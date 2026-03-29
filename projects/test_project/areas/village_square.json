@@ -14,7 +14,10 @@
     }
   },
   "camera": {
-    "follow_entity_id": "player"
+    "follow": {
+      "mode": "entity",
+      "entity_id": "player"
+    }
   },
   "input_targets": {
     "move_up": "player",
@@ -35,7 +38,7 @@
   "tile_layers": [
     {
       "name": "ground",
-      "draw_above_entities": false,
+      "render_order": 0,
       "grid": [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -53,7 +56,7 @@
     },
     {
       "name": "structure",
-      "draw_above_entities": false,
+      "render_order": 0,
       "grid": [
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0],
@@ -71,7 +74,7 @@
     },
     {
       "name": "overlay",
-      "draw_above_entities": true,
+      "render_order": 20,
       "grid": [
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -107,19 +110,19 @@
       "id": "player",
       "x": 8,
       "y": 8,
-      "template": "player"
+      "template": "entity_templates/player"
     },
     {
       "id": "village_save_point",
       "x": 3,
       "y": 8,
-      "template": "save_point"
+      "template": "entity_templates/save_point"
     },
     {
       "id": "village_note",
       "x": 12,
       "y": 8,
-      "template": "sign",
+      "template": "entity_templates/sign",
       "parameters": {
         "dialogue_path": "dialogues/showcase/village_square_note.json"
       }
@@ -128,9 +131,9 @@
       "id": "house_door",
       "x": 8,
       "y": 5,
-      "template": "area_door",
+      "template": "entity_templates/area_door",
       "parameters": {
-        "target_area": "village_house",
+        "target_area": "areas/village_house",
         "target_entry": "from_square"
       }
     }

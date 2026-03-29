@@ -18,8 +18,8 @@ The repo includes a working sample project under [projects/test_project](./proje
 ## Current Features
 
 - standalone game launcher
-- project manifests with configurable search paths for areas, entity templates, named commands, assets, shared variables, and project-level `global_entities`
-- path-derived IDs for areas, entity templates, and named commands
+- project manifests with configurable search paths for areas, entity templates, project commands, assets, shared variables, and project-level `global_entities`
+- path-derived typed IDs for areas, entity templates, and project commands, for example `areas/village_square`
 - layered tilemaps with separate walkability data
 - reusable entity templates with per-instance parameters
 - entities with `visuals`, `space`, `scope`, `input_map`, events, and variables
@@ -28,10 +28,12 @@ The repo includes a working sample project under [projects/test_project](./proje
 - per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
 - transfer-aware `change_area` and `new_game` flow using authored area `entry_points`
 - traveler persistence so transferred entities exist in one area at a time and do not duplicate on re-entry
-- explicit camera runtime state with authored area defaults, follow offsets, bounds, deadzones, and save/load restore
+- explicit camera runtime state with structured `follow` / `bounds` / `deadzone` state, camera-state stack support, and save/load restore
 - save-slot persistence layered on top of authored room data
 
 The previous built-in editor implementation now lives under [archived_editor](./archived_editor/) for reference only and is not part of the active runtime surface.
+
+A new external editor now lives under [tools/area_editor](./tools/area_editor/). Its current Phase 1 implementation is a read-only project browser and area viewer built around the same JSON contract as the runtime.
 
 ## Sample Project
 
@@ -41,10 +43,10 @@ The included sample project currently demonstrates:
 - connected showcase areas: `village_square` and `village_house`
 - project-level global `dialogue_controller`, `pause_controller`, and `debug_controller` entities defined in `project.json`
 - player movement with authored walk animation timing
-- pushable blocks
+- pushable blocks that respect room walkability and blockers
 - lever/gate interaction with persistent puzzle state
 - authored area `entry_points` and door-driven actor transfer between showcase areas
-- explicit per-area camera defaults that follow the transferred gameplay entity
+- explicit per-area structured camera defaults that follow the transferred gameplay entity
 - signs, save prompts, pause menus, and title menus routed through controller entities with stack-based input restore
 
 Useful files to inspect:
@@ -84,7 +86,7 @@ pip install pygame-ce
 
 ```bash
 python run_game.py --project projects/test_project
-python run_game.py --project projects/test_project village_square
+python run_game.py --project projects/test_project areas/village_square
 ```
 
 On Windows, you can also use:
@@ -110,6 +112,7 @@ If debug inspection is enabled in the active project's `project.json`:
 ```text
 python_puzzle_engine/
     dungeon_engine/             # Active runtime code
+    tools/area_editor/          # External area editor (Phase 1 read-only browser/viewer)
     archived_editor/            # Archived built-in editor kept for reference
     projects/
         test_project/           # Example project content
@@ -125,7 +128,7 @@ my_project/
     shared_variables.json
     areas/
     entity_templates/
-    named_commands/
+    commands/
     dialogues/                  # Optional ordinary JSON data used by your commands/controllers
     assets/
 ```
@@ -175,22 +178,23 @@ Useful commands during development:
 
 ```text
 .venv/Scripts/python -m unittest discover -s tests -v
-.venv/Scripts/python run_game.py --project projects/test_project title_screen --headless --max-frames 2
-.venv/Scripts/python run_game.py --project projects/test_project village_square --headless --max-frames 2
-.venv/Scripts/python run_game.py --project projects/test_project village_house --headless --max-frames 2
+.venv/Scripts/python run_game.py --project projects/test_project areas/title_screen --headless --max-frames 2
+.venv/Scripts/python run_game.py --project projects/test_project areas/village_square --headless --max-frames 2
+.venv/Scripts/python run_game.py --project projects/test_project areas/village_house --headless --max-frames 2
 ```
 
 ## Current Limits
 
 - save/load UX is functional but still basic
 - external PNG import flow is not finished
+- the external area editor is still read-only; editing/saving workflows are not finished yet
 - movement/render feel should still be checked periodically on real hardware as the project grows
 
 ## Suggested Next Steps
 
 - expand dialogue authoring with stronger data-validation and authoring support
 - build more real JSON content and let authoring pressure reveal the next engine changes
-- design a new external authoring tool around the current JSON contract
+- continue expanding the external area editor into a full authoring workflow around the current JSON contract
 - revisit movement/render feel and finish the pixel-perfect quality pass
 
 ## License

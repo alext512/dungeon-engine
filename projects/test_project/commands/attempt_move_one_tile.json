@@ -220,8 +220,8 @@
                   "value": null,
                   "then": [
                     {
-                      "type": "run_named_command",
-                      "command_id": "walk_one_tile",
+                      "type": "run_command",
+                      "command_id": "commands/walk_one_tile",
                       "offset_x": "$self.move_offset.x",
                       "offset_y": "$self.move_offset.y",
                       "phase_a_frames": "$phase_a_frames",
@@ -301,8 +301,8 @@
                           "value": null,
                           "then": [
                             {
-                              "type": "run_named_command",
-                              "command_id": "walk_one_tile",
+                              "type": "run_command",
+                              "command_id": "commands/walk_one_tile",
                               "offset_x": "$self.move_offset.x",
                               "offset_y": "$self.move_offset.y",
                               "phase_a_frames": "$phase_a_frames",

@@ -53,8 +53,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "interact_one_tile"
+          "type": "run_command",
+          "command_id": "commands/interact_one_tile"
         }
       ]
     },
@@ -126,8 +126,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_named_command",
-          "command_id": "attempt_move_one_tile",
+          "type": "run_command",
+          "command_id": "commands/attempt_move_one_tile",
           "direction": "$direction",
           "flip_x": "$flip_x",
           "push_event_id": "$push_event_id",

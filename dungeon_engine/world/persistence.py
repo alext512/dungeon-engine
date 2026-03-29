@@ -1125,8 +1125,12 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.visible = bool(value)
         elif key == "events_enabled":
             entity.events_enabled = bool(value)
-        elif key == "layer":
-            entity.layer = int(value)
+        elif key == "render_order":
+            entity.render_order = int(value)
+        elif key == "y_sort":
+            entity.y_sort = bool(value)
+        elif key == "sort_y_offset":
+            entity.sort_y_offset = float(value)
         elif key == "stack_order":
             entity.stack_order = int(value)
         elif key == "color":
@@ -1232,8 +1236,12 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["visible"] = current_entity.visible
     if current_entity.events_enabled != authored_entity.events_enabled:
         overrides["events_enabled"] = current_entity.events_enabled
-    if current_entity.layer != authored_entity.layer:
-        overrides["layer"] = current_entity.layer
+    if current_entity.render_order != authored_entity.render_order:
+        overrides["render_order"] = current_entity.render_order
+    if current_entity.y_sort != authored_entity.y_sort:
+        overrides["y_sort"] = current_entity.y_sort
+    if not math.isclose(current_entity.sort_y_offset, authored_entity.sort_y_offset, abs_tol=0.001):
+        overrides["sort_y_offset"] = current_entity.sort_y_offset
     if current_entity.stack_order != authored_entity.stack_order:
         overrides["stack_order"] = current_entity.stack_order
     if current_entity.color != authored_entity.color:

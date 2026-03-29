@@ -21,7 +21,10 @@
           "area_id": "$target_area",
           "entry_id": "$target_entry",
           "transfer_entity_ids": ["actor"],
-          "camera_follow_entity_id": "actor"
+          "camera_follow": {
+            "mode": "entity",
+            "entity_id": "actor"
+          }
         }
       ]
     }

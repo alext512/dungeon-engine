@@ -142,7 +142,7 @@ Remaining follow-through:
 Files:
 
 - `dungeon_engine/commands/builtin.py`
-- `projects/test_project/named_commands/attempt_move_one_tile.json`
+- `projects/test_project/commands/attempt_move_one_tile.json`
 
 Current examples:
 
@@ -173,7 +173,7 @@ Files:
 - `MANUAL.md`
 - `AUTHORING_GUIDE.md`
 - `projects/test_project/project.json`
-- `projects/test_project/named_commands/dialogue/*.json`
+- `projects/test_project/commands/dialogue/*.json`
 
 Current examples:
 

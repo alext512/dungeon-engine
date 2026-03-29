@@ -78,18 +78,18 @@ Implemented in the first movement-foundation slice:
   player-specific.
 - Project manifests now define default `input_targets` and default
   `input_events`, while areas may still override `input_targets`.
-- Project manifests now also define `named_command_paths`, and `run_named_command`
+- Project manifests now also define `command_paths`, and `run_command`
   loads reusable JSON command definitions from there on demand.
-- Command ids are now path-based relative to `named_command_paths`, so nested command
+- Command ids are now path-based relative to `command_paths`, so nested command
   folders stay unambiguous.
-- Named-command validation now runs at project startup for both the game and
+- Project command validation now runs at project startup for both the game and
   related tooling:
   - malformed command files
   - duplicate command ids
-  - literal missing `run_named_command` targets in command files, entity
+  - literal missing `run_command` targets in command files, entity
     templates, and area JSON
   are logged to `logs/error.log` and block launch early.
-- Named-command runtime failures still log full detail to `logs/error.log`, and
+- Project command runtime failures still log full detail to `logs/error.log`, and
   active play mode surfaces a short in-game hint to check the log.
 - Built-in movement/query primitives now also include:
   - `set_facing`

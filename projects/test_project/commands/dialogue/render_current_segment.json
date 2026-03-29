@@ -281,14 +281,14 @@
           "element_id": "$self.text_element_id"
         },
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/render_choice"
+          "type": "run_command",
+          "command_id": "commands/dialogue/render_choice"
         }
       ],
       "else": [
         {
-          "type": "run_named_command",
-          "command_id": "dialogue/render_text"
+          "type": "run_command",
+          "command_id": "commands/dialogue/render_text"
         },
         {
           "type": "check_entity_var",
@@ -298,8 +298,8 @@
           "value": "timer",
           "then": [
             {
-              "type": "run_named_command",
-              "command_id": "dialogue/schedule_timer",
+              "type": "run_command",
+              "command_id": "commands/dialogue/schedule_timer",
               "expected_revision": "$self.dialogue_revision"
             }
           ],
@@ -312,8 +312,8 @@
               "value": "interact_or_timer",
               "then": [
                 {
-                  "type": "run_named_command",
-                  "command_id": "dialogue/schedule_timer",
+                  "type": "run_command",
+                  "command_id": "commands/dialogue/schedule_timer",
                   "expected_revision": "$self.dialogue_revision"
                 }
               ]

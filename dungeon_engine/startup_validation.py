@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dungeon_engine.commands.library import (
-    NamedCommandValidationError,
-    log_named_command_validation_error,
-    validate_project_named_commands,
+    ProjectCommandValidationError,
+    log_project_command_validation_error,
+    validate_project_commands,
 )
 from dungeon_engine.world.loader import (
     AreaValidationError,
@@ -23,7 +23,7 @@ def validate_project_startup(
     ui_title: str,
     show_dialog: bool = True,
 ) -> (
-    NamedCommandValidationError
+    ProjectCommandValidationError
     | EntityTemplateValidationError
     | AreaValidationError
     | None
@@ -51,12 +51,12 @@ def validate_project_startup(
             _show_error_dialog(ui_title, message)
         return error
 
-    # Validate named commands.
+    # Validate project commands.
     try:
-        validate_project_named_commands(project)
+        validate_project_commands(project)
         return None
-    except NamedCommandValidationError as error:
-        log_named_command_validation_error(error)
+    except ProjectCommandValidationError as error:
+        log_project_command_validation_error(error)
         message = error.format_user_message()
         print(message)
         if show_dialog:

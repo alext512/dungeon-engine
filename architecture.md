@@ -171,7 +171,7 @@ Systems should not become giant one-off gameplay scripts. If a behavior is conte
 
 The camera should be command-addressable too:
 
-- authored areas can provide initial camera defaults such as `follow_entity_id`
+- authored areas can provide initial camera defaults through structured `follow`, `bounds`, and `deadzone` sections
 - commands can retarget it to a specific entity or to the current recipient of one routed input action
 - follow state should include offsets, so content can frame a target intentionally
 - commands can apply or clear bounds and deadzone policies
@@ -191,8 +191,8 @@ The project needs a central command runner that can:
 - wait for async commands to finish
 - pass context between related commands
 
-Named command libraries should be indexed at project startup so runtime
-`run_named_command` calls only use in-memory definitions instead of rediscovering
+Project command libraries should be indexed at project startup so runtime
+`run_command` calls only use in-memory definitions instead of rediscovering
 files from disk during active play.
 
 ### Command context
@@ -259,7 +259,7 @@ projects/
         areas/
         entity_templates/
         assets/
-        named_commands/
+        commands/
 
 dungeon_engine/
     config.py

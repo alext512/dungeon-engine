@@ -1,4 +1,4 @@
-﻿# Authoring Guide
+# Authoring Guide
 
 ## Purpose
 
@@ -10,7 +10,7 @@ It focuses on:
 - `shared_variables.json`
 - area JSON
 - entity template JSON
-- named command JSON
+- project command JSON
 - dialogue JSON
 - the current controller-owned dialogue/menu pattern
 
@@ -24,7 +24,7 @@ The engine is built from a few content layers:
 2. `shared_variables.json`
 3. `areas/*.json`
 4. `entity_templates/*.json`
-5. `named_commands/*.json`
+5. `commands/*.json`
 6. ordinary project JSON data such as `dialogues/*.json`
 
 The engine provides primitive commands. Your project combines them into behavior using JSON.
@@ -42,7 +42,7 @@ How the categories connect:
 project.json
 |-- points to areas/
 |-- points to entity_templates/
-|-- points to named_commands/
+|-- points to commands/
 |-- points to assets/
 |-- points to shared_variables.json
 `-- instantiates global_entities
@@ -55,13 +55,13 @@ areas
 
 entity templates
 |-- define visuals, events, input maps, variables
-|-- call named commands
+|-- call project commands
 `-- call controller events to start dialogues
 
 ordinary JSON data
 `-- provide reusable dialogue/menu content or any other project-specific payloads
 
-named commands
+project commands
 `-- provide reusable behavior chains
 ```
 
@@ -75,7 +75,7 @@ my_project/
     shared_variables.json
     areas/
     entity_templates/
-    named_commands/
+    commands/
     dialogues/                  # Optional ordinary JSON data
     assets/
 ```
@@ -93,23 +93,23 @@ Example:
   "entity_template_paths": ["entity_templates/"],
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
-  "named_command_paths": ["named_commands/"],
+  "command_paths": ["commands/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
       "id": "dialogue_controller",
-      "template": "dialogue_panel"
+      "template": "entity_templates/dialogue_panel"
     },
     {
       "id": "pause_controller",
-      "template": "pause_controller"
+      "template": "entity_templates/pause_controller"
     },
     {
       "id": "debug_controller",
-      "template": "debug_controller"
+      "template": "entity_templates/debug_controller"
     }
   ],
-  "startup_area": "title_screen",
+  "startup_area": "areas/title_screen",
   "input_targets": {
     "menu": "pause_controller",
     "debug_toggle_pause": "debug_controller",
@@ -129,14 +129,14 @@ Example:
   Folders containing images, sounds, fonts, and tilesets.
 - `area_paths`
   Folders containing area JSON files.
-- `named_command_paths`
-  Folders containing reusable named command JSON files.
+- `command_paths`
+  Folders containing reusable project command JSON files.
 - `shared_variables_path`
   Project-wide shared variable file.
 - `global_entities`
   Entity instances that should exist in every runtime world.
 - `startup_area`
-  Default area id to open when only the project is selected.
+  Default typed area id to open when only the project is selected, for example `areas/title_screen`.
 - `input_targets`
   Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
 - `save_dir`
@@ -194,7 +194,10 @@ Example structure:
     }
   },
   "camera": {
-    "follow_entity_id": "player"
+    "follow": {
+      "mode": "entity",
+      "entity_id": "player"
+    }
   },
   "input_targets": {
     "interact": "player",
@@ -266,7 +269,9 @@ Each tile layer has a `grid` field: a 2D array of integer GIDs arranged as `[row
 ```json
 {
   "name": "ground",
-  "draw_above_entities": false,
+  "render_order": 0,
+  "y_sort": false,
+  "stack_order": 0,
   "grid": [
     [1, 1, 1, 1],
     [1, 2, 2, 1],
@@ -274,6 +279,23 @@ Each tile layer has a `grid` field: a 2D array of integer GIDs arranged as `[row
   ]
 }
 ```
+
+Tile-layer rendering is now controlled by four fields:
+
+- `render_order`
+  Coarse draw band. Lower values render first.
+- `y_sort`
+  When `true`, the layer is exploded into per-tile draw items so its cells can interleave with entities in the same render band.
+- `sort_y_offset`
+  Extra pixel offset added to the tile cell's y-sort pivot.
+- `stack_order`
+  Fine-grained tie-breaker inside the same render band / y-sort position.
+
+Recommended defaults:
+
+- ground and floor art: `render_order: 0`, `y_sort: false`
+- actors and front walls that should interleave: `render_order: 10`, `y_sort: true`
+- roofs / canopy overlays: `render_order: 20`, `y_sort: false`
 
 `cell_flags` uses the same `[row][col]` layout. `true` means walkable, `false` means blocked:
 
@@ -354,12 +376,25 @@ Example:
 - `scope`
 - `present`
 - `visible`
-- `layer`
+- `render_order`
+- `y_sort`
+- `sort_y_offset`
 - `stack_order`
 - `tags`
 - `variables`
 - `input_map`
 - `events`
+
+Entity rendering follows the same model as tile layers:
+
+- `render_order`
+  Coarse draw band. Lower values render first.
+- `y_sort`
+  When `true`, the entity is vertically interleaved with other y-sorted drawables in the same `render_order` band.
+- `sort_y_offset`
+  Pixel adjustment applied to the entity's y-sort pivot.
+- `stack_order`
+  Local tie-breaker after `render_order` and y-sort position.
 
 Gameplay flags such as `blocks_movement`, `pushable`, `toggled`, and project-specific state like `dialogue_path` should live under `variables`. Top-level `facing`, `solid`, and `pushable` fields are removed.
 
@@ -447,9 +482,9 @@ For modal flows, the intended pattern is:
 
 The route stack is runtime-only control state. It is not saved.
 
-## Named Commands
+## Project Commands
 
-Named commands are reusable command chains stored in separate files.
+Project commands are reusable command chains stored in separate files under `commands/`.
 
 Example:
 
@@ -489,9 +524,9 @@ Example:
 
 Notes:
 
-- named-command ids are path-derived from file location
+- project command ids are path-derived typed ids from file location, for example `commands/walk_one_tile`
 - do not author a top-level `id`
-- use `run_named_command` to call them
+- use `run_command` to call them
 
 ### How To Read Command JSON
 
@@ -529,20 +564,20 @@ How to read it:
 - `"value": { "$sum": [...] }`
   `"$sum"` is a helper that computes the value before `set_entity_var` runs.
 
-When one JSON command chain needs to call another JSON command file, use `run_named_command`:
+When one JSON command chain needs to call another JSON command file, use `run_command`:
 
 ```json
 {
-  "type": "run_named_command",
-  "command_id": "walk_one_tile",
+  "type": "run_command",
+  "command_id": "commands/walk_one_tile",
   "offset_x": 1,
   "offset_y": 0
 }
 ```
 
-In the called named command file, `$offset_x` and `$offset_y` resolve from those passed params.
+In the called project command file, `$offset_x` and `$offset_y` resolve from those passed params.
 
-This is a general rule: both `run_named_command` and `run_event` forward any extra fields on the command object into the called flow as runtime parameters. The called commands can then read those values with `$param_name` tokens. This is how the dialogue examples pass `dialogue_path`, `dialogue_on_start`, `segment_hooks`, and other caller-supplied data into the controller's event.
+This is a general rule: both `run_command` and `run_event` forward any extra fields on the command object into the called flow as runtime parameters. The called commands can then read those values with `$param_name` tokens. This is how the dialogue examples pass `dialogue_path`, `dialogue_on_start`, `segment_hooks`, and other caller-supplied data into the controller's event.
 
 ## Runtime References and Tokens
 
@@ -592,7 +627,8 @@ The command runner also resolves tokens such as:
 
 `$area...` exposes the current area's `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `name`.
 
-`$camera...` exposes `x`, `y`, `follow_entity_id`, `follow_mode`, `follow_offset_x`, `follow_offset_y`, `bounds`, `has_bounds`, `deadzone`, and `has_deadzone`.
+`$camera...` exposes `x`, `y`, `follow`, `bounds`, `has_bounds`, `deadzone`, and `has_deadzone`.
+Use nested follow fields such as `$camera.follow.mode`, `$camera.follow.entity_id`, `$camera.follow.action`, `$camera.follow.offset_x`, and `$camera.follow.offset_y`.
 
 Example:
 
@@ -606,7 +642,7 @@ Example:
 }
 ```
 
-For strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_entity_fields`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow_entity`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
+For strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_entity_fields`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow`, `set_camera_state`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
 
 ## Ordinary JSON Dialogue Data
 
@@ -715,7 +751,7 @@ Current pattern:
 
 1. call `run_event` on the dialogue controller entity
 2. let that event load JSON dialogue data and store the session state on the controller entity
-3. let controller-owned named commands redraw the UI and react to later input
+3. let controller-owned project commands redraw the UI and react to later input
 
 Detailed lifecycle when a dialogue starts:
 
@@ -782,8 +818,8 @@ Example caller command:
       "option_commands_by_id": {
         "continue": [
           {
-            "type": "run_named_command",
-            "command_id": "dialogue/close_current_dialogue"
+            "type": "run_command",
+            "command_id": "commands/dialogue/close_current_dialogue"
           }
         ],
         "load": [
@@ -794,8 +830,8 @@ Example caller command:
             "value": "load"
           },
           {
-            "type": "run_named_command",
-            "command_id": "dialogue/close_current_dialogue"
+            "type": "run_command",
+            "command_id": "commands/dialogue/close_current_dialogue"
           }
         ],
         "exit": [
@@ -806,8 +842,8 @@ Example caller command:
             "value": "exit"
           },
           {
-            "type": "run_named_command",
-            "command_id": "dialogue/close_current_dialogue"
+            "type": "run_command",
+            "command_id": "commands/dialogue/close_current_dialogue"
           }
         ]
       }
@@ -915,7 +951,7 @@ Entity queries now also support an optional `where` block for broad lookups by s
 
 Different `where` keys combine with implicit `AND`. Multi-result query helpers return matches in stable runtime order:
 
-1. `layer`
+1. `render_order`
 2. `stack_order`
 3. `entity_id`
 
@@ -968,18 +1004,20 @@ These patterns are worth copying when building new JSON behavior.
 
 ### Movement And Collision Are JSON-Authored
 
-The engine does **not** automatically block movement against entities. It only provides tile walkability through `cell_flags`. Everything else — checking whether another entity blocks the target tile, pushing blocks, playing bump sounds — is authored in your project's named commands.
+The engine does **not** automatically block movement against entities. It only provides tile walkability through `cell_flags`. Everything else — checking whether another entity blocks the target tile, pushing blocks, playing bump sounds — is authored in your project's command files.
 
 A typical movement flow:
 
 1. The player entity's `input_map` maps `move_up` to a `move_up` event.
-2. That event calls a named command like `attempt_move_one_tile` with the direction offset.
-3. The named command:
+2. That event calls a command like `commands/attempt_move_one_tile` with the direction offset.
+3. The project command:
    - computes the target tile using `$sum` with the current position and the offset
    - checks `$cell_flags_at` for walkability
    - checks `$entities_at` for entities with `blocks_movement: true`
    - if the tile is clear, calls `set_entity_grid_position` (instant grid update) and `move_entity_world_position` (smooth pixel animation)
    - if blocked, optionally plays a bump animation or pushes a pushable entity
+
+If your movement flow allows pushing, the push command should repeat the same destination validation for the pushed entity's own target tile before moving it. Otherwise, the bug is in authored JSON rather than the engine primitives: low-level move commands intentionally reposition without doing gameplay collision policy on their own.
 
 Minimal player `move_up` event:
 
@@ -987,8 +1025,8 @@ Minimal player `move_up` event:
 "move_up": {
   "commands": [
     {
-      "type": "run_named_command",
-      "command_id": "attempt_move_one_tile",
+      "type": "run_command",
+      "command_id": "commands/attempt_move_one_tile",
       "direction": "up",
       "offset_x": 0,
       "offset_y": -1
@@ -997,7 +1035,7 @@ Minimal player `move_up` event:
 }
 ```
 
-Gate-style blocking works the same way: a gate entity has `variables.blocks_movement: true`. The movement named command queries `$entities_at` at the target tile and finds the gate. When the lever toggles the gate, it sets `blocks_movement: false` and hides the gate visual, both with `persistent: true`.
+Gate-style blocking works the same way: a gate entity has `variables.blocks_movement: true`. The movement project command queries `$entities_at` at the target tile and finds the gate. When the lever toggles the gate, it sets `blocks_movement: false` and hides the gate visual, both with `persistent: true`.
 
 This approach keeps all movement logic visible in your project's JSON instead of hidden inside the engine.
 
@@ -1155,13 +1193,13 @@ The current dialogue model is:
 1. another entity sends an event to the dialogue controller
 2. the controller loads dialogue JSON data
 3. the controller stores session state on itself
-4. controller-owned named commands redraw the screen-space UI and handle later input
+4. controller-owned project commands redraw the screen-space UI and handle later input
 
 That means dialogue/menu logic should usually be built by composing:
 
 - one controller entity
 - ordinary JSON dialogue data
-- controller-owned named commands
+- controller-owned project commands
 - explicit `push_input_routes` / `pop_input_routes`
 - explicit `dialogue_on_start` / `dialogue_on_end` hooks when callers need setup or cleanup
 
@@ -1175,10 +1213,7 @@ Common fields:
 - `entry_id`
 - `transfer_entity_id`
 - `transfer_entity_ids`
-- `camera_follow_entity_id`
-- `camera_follow_input_action`
-- `camera_offset_x`
-- `camera_offset_y`
+- `camera_follow`
 
 Typical door example:
 
@@ -1188,7 +1223,10 @@ Typical door example:
   "area_id": "$target_area",
   "entry_id": "$target_entry",
   "transfer_entity_ids": ["actor"],
-  "camera_follow_entity_id": "actor"
+  "camera_follow": {
+    "mode": "entity",
+    "entity_id": "actor"
+  }
 }
 ```
 
@@ -1196,7 +1234,8 @@ Rules:
 
 - use `entry_id` to land on an authored area entry point
 - use `transfer_entity_ids` when the live entity itself should travel to the new area
-- use one camera follow field or the other, not both
+- `camera_follow.mode` can be `entity`, `input_target`, or `none`
+- `camera_follow.entity_id` supports symbolic `self` / `actor` / `caller` in these high-level transition commands
 - transferred entities are tracked as session travelers:
   - a transferred entity keeps one live identity across areas
   - its authored origin placeholder is suppressed while it is away
@@ -1209,14 +1248,16 @@ Camera behavior is explicit runtime state controlled by commands.
 
 Useful commands:
 
-- `set_camera_follow_entity`
-- `set_camera_follow_input_target`
-- `clear_camera_follow`
-- `set_camera_bounds_rect`
-- `clear_camera_bounds`
+- `set_camera_follow`
+- `set_camera_state`
+- `push_camera_state`
+- `pop_camera_state`
+- `set_camera_bounds`
 - `set_camera_deadzone`
-- `clear_camera_deadzone`
-Follow commands support `offset_x` and `offset_y`. Bounds and deadzone commands accept `space: "pixel"` or `space: "grid"`. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow_entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
+- `move_camera`
+- `teleport_camera`
+
+`set_camera_follow` uses one structured follow object, and that object must declare `mode` explicitly. `set_camera_state` updates `follow`, `bounds`, and `deadzone` atomically; omitted sections stay unchanged, and explicit `null` clears that section. `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`. `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`. `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"` plus `mode: "absolute"` or `mode: "relative"`. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow.entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
 
 Example:
 
@@ -1224,10 +1265,13 @@ Example:
 {
   "commands": [
     {
-      "type": "set_camera_follow_entity",
-      "entity_id": "$self_id",
-      "offset_x": 0,
-      "offset_y": -8
+      "type": "set_camera_follow",
+      "follow": {
+        "mode": "entity",
+        "entity_id": "$self_id",
+        "offset_x": 0,
+        "offset_y": -8
+      }
     },
     {
       "type": "set_camera_deadzone",
@@ -1235,7 +1279,7 @@ Example:
       "y": 3,
       "width": 8,
       "height": 6,
-      "space": "grid"
+      "space": "viewport_grid"
     }
   ]
 }

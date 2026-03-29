@@ -2,8 +2,8 @@
   "params": [],
   "commands": [
     {
-      "type": "run_named_command",
-      "command_id": "dialogue/clear_choice_elements"
+      "type": "run_command",
+      "command_id": "commands/dialogue/clear_choice_elements"
     },
     {
       "type": "set_entity_var",

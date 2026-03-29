@@ -83,8 +83,8 @@
               ]
             },
             {
-              "type": "run_named_command",
-              "command_id": "dialogue/render_choice"
+              "type": "run_command",
+              "command_id": "commands/dialogue/render_choice"
             }
           ]
         }

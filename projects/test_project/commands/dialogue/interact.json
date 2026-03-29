@@ -16,8 +16,8 @@
           "value": "choice",
           "then": [
             {
-              "type": "run_named_command",
-              "command_id": "dialogue/confirm_choice"
+              "type": "run_command",
+              "command_id": "commands/dialogue/confirm_choice"
             }
           ],
           "else": [
@@ -30,8 +30,8 @@
               "then": [],
               "else": [
                 {
-                  "type": "run_named_command",
-                  "command_id": "dialogue/advance_text"
+                  "type": "run_command",
+                  "command_id": "commands/dialogue/advance_text"
                 }
               ]
             }

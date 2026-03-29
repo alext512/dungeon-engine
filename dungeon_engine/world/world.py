@@ -221,7 +221,7 @@ class World:
 
     def entity_sort_key(self, entity: Entity) -> tuple[int, int, str]:
         """Return a stable per-cell stacking key for spatial queries."""
-        return (entity.layer, entity.stack_order, entity.entity_id)
+        return (entity.render_order, entity.stack_order, entity.entity_id)
 
     def get_entities_at(
         self,

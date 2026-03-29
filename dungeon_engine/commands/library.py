@@ -29,7 +29,7 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_field",
     "set_entity_fields",
     "route_inputs_to_entity",
-    "set_camera_follow_entity",
+    "set_camera_follow",
     "set_entity_grid_position",
     "set_entity_world_position",
     "set_entity_screen_position",
@@ -49,8 +49,31 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
 _RESERVED_ENTITY_IDS = {"self", "actor", "caller"}
 
 
+def _validate_strict_camera_follow(
+    value: dict[str, Any],
+    *,
+    source_name: str,
+    location: str,
+) -> None:
+    """Reject symbolic follow.entity_id values on strict camera primitives."""
+    command_type = value.get("type")
+    if command_type not in {"set_camera_follow", "set_camera_state"}:
+        return
+    raw_follow = value.get("follow")
+    if not isinstance(raw_follow, dict):
+        return
+    symbolic_id = raw_follow.get("entity_id")
+    if symbolic_id not in _RESERVED_ENTITY_IDS:
+        return
+    raise ValueError(
+        f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
+        f"inside '{command_type}.follow.entity_id'; use '${symbolic_id}_id' or resolve the id "
+        "before invoking the primitive."
+    )
+
+
 @dataclass(slots=True)
-class NamedCommandDefinition:
+class ProjectCommandDefinition:
     """A reusable JSON-authored command chain."""
 
     command_id: str
@@ -60,26 +83,26 @@ class NamedCommandDefinition:
 
 
 @dataclass(slots=True)
-class NamedCommandDatabase:
-    """In-memory index of all named command definitions for one project."""
+class ProjectCommandDatabase:
+    """In-memory index of all project command definitions for one project."""
 
     project_root: Path
-    definitions: dict[str, NamedCommandDefinition]
+    definitions: dict[str, ProjectCommandDefinition]
     discovered_ids: set[str]
 
 
 _COMMAND_CACHE: dict[Path, dict[str, Any]] = {}
-_DATABASE_CACHE: dict[Path, NamedCommandDatabase] = {}
+_DATABASE_CACHE: dict[Path, ProjectCommandDatabase] = {}
 
 
-class NamedCommandValidationError(ValueError):
+class ProjectCommandValidationError(ValueError):
     """Raised when project command-library content fails startup validation."""
 
     def __init__(self, project_root: Path, issues: list[str]) -> None:
         self.project_root = project_root
         self.issues = list(issues)
         super().__init__(
-            f"Named-command validation failed for '{project_root}' with {len(self.issues)} issue(s)."
+            f"Project command validation failed for '{project_root}' with {len(self.issues)} issue(s)."
         )
 
     def format_user_message(self, *, max_issues: int = 8) -> str:
@@ -98,18 +121,18 @@ class NamedCommandValidationError(ValueError):
         return "\n".join(lines)
 
 
-def load_named_command_definition(
+def load_project_command_definition(
     project: ProjectContext,
     command_id: str,
-) -> NamedCommandDefinition:
-    """Load one named command definition from the prebuilt project database."""
+) -> ProjectCommandDefinition:
+    """Load one project command definition from the prebuilt project database."""
     resolved_command_id = str(command_id).replace("\\", "/").strip()
     if not resolved_command_id:
         raise FileNotFoundError(
             f"Missing command definition '{command_id}' in project '{project.project_root}'."
         )
 
-    database = build_named_command_database(project)
+    database = build_project_command_database(project)
     definition = database.definitions.get(resolved_command_id)
     if definition is None:
         raise FileNotFoundError(
@@ -118,36 +141,36 @@ def load_named_command_definition(
     return copy.deepcopy(definition)
 
 
-def build_named_command_database(
+def build_project_command_database(
     project: ProjectContext,
     *,
     force: bool = False,
-) -> NamedCommandDatabase:
-    """Build and cache the full named-command database for one project."""
+) -> ProjectCommandDatabase:
+    """Build and cache the full project command database for one project."""
     cache_key = project.project_root.resolve()
     if not force:
         cached_database = _DATABASE_CACHE.get(cache_key)
         if cached_database is not None:
             return cached_database
 
-    database, issues = _scan_named_command_database(project)
+    database, issues = _scan_project_command_database(project)
     if issues:
-        raise NamedCommandValidationError(project.project_root, issues)
+        raise ProjectCommandValidationError(project.project_root, issues)
     _DATABASE_CACHE[cache_key] = database
     return database
 
 
-def _scan_named_command_database(
+def _scan_project_command_database(
     project: ProjectContext,
-) -> tuple[NamedCommandDatabase, list[str]]:
-    """Scan named-command files into an in-memory database plus any validation issues."""
+) -> tuple[ProjectCommandDatabase, list[str]]:
+    """Scan project command files into an in-memory database plus any validation issues."""
     known_ids: dict[str, list[Path]] = {}
-    for command_path in project.list_named_command_files():
-        command_id = project.named_command_id(command_path)
+    for command_path in project.list_command_files():
+        command_id = project.command_id(command_path)
         known_ids.setdefault(command_id, []).append(command_path)
 
     issues: list[str] = []
-    definitions: dict[str, NamedCommandDefinition] = {}
+    definitions: dict[str, ProjectCommandDefinition] = {}
     discovered_ids = set(known_ids.keys())
     for command_id, paths in sorted(known_ids.items()):
         if len(paths) > 1:
@@ -157,7 +180,7 @@ def _scan_named_command_database(
 
         command_path = paths[0]
         try:
-            definitions[command_id] = _load_named_command_definition_from_path(
+            definitions[command_id] = _load_project_command_definition_from_path(
                 project,
                 command_id,
                 command_path,
@@ -170,7 +193,7 @@ def _scan_named_command_database(
             issues.append(f"{command_path}: {exc}")
 
     return (
-        NamedCommandDatabase(
+        ProjectCommandDatabase(
             project_root=project.project_root.resolve(),
             definitions=definitions,
             discovered_ids=discovered_ids,
@@ -179,11 +202,11 @@ def _scan_named_command_database(
     )
 
 
-def _load_named_command_definition_from_path(
+def _load_project_command_definition_from_path(
     project: ProjectContext,
     command_id: str,
     command_path: Path,
-) -> NamedCommandDefinition:
+) -> ProjectCommandDefinition:
     """Parse and validate one command-definition file from a known path."""
     resolved_command_id = str(command_id).replace("\\", "/").strip()
 
@@ -196,7 +219,7 @@ def _load_named_command_definition_from_path(
     if not isinstance(raw, dict):
         raise ValueError(f"Command definition '{resolved_command_id}' must be a JSON object.")
 
-    expected_id = project.named_command_id(command_path)
+    expected_id = project.command_id(command_path)
     if "id" in raw:
         raise ValueError(
             f"Command definition '{expected_id}' must not declare 'id'; command ids are path-derived."
@@ -228,7 +251,7 @@ def _load_named_command_definition_from_path(
             location=f"commands[{index}]",
         )
 
-    return NamedCommandDefinition(
+    return ProjectCommandDefinition(
         command_id=resolved_id,
         params=[str(param) for param in raw_params],
         commands=[dict(command) for command in raw_commands],
@@ -237,7 +260,7 @@ def _load_named_command_definition_from_path(
 
 
 def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
-    """Enforce current command-tree invariants for named-command content."""
+    """Enforce current command-tree invariants for project command content."""
     if isinstance(value, dict):
         command_type = value.get("type")
         if command_type in _STRICT_ENTITY_TARGET_COMMANDS and value.get("entity_id") in _RESERVED_ENTITY_IDS:
@@ -247,6 +270,7 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
                 f"with strict primitive '{command_type}'; use '${symbolic_id}_id' or resolve the id "
                 "before invoking the primitive."
             )
+        _validate_strict_camera_follow(value, source_name=source_name, location=location)
         for key, item in value.items():
             _validate_command_tree(
                 item,
@@ -264,16 +288,16 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
             )
 
 
-def instantiate_named_command_commands(
-    definition: NamedCommandDefinition,
+def instantiate_project_command_commands(
+    definition: ProjectCommandDefinition,
     parameters: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Return a fully substituted command list for one named-command invocation."""
+    """Return a fully substituted command list for one project command invocation."""
     missing = [param for param in definition.params if param not in parameters]
     if missing:
         missing_list = ", ".join(missing)
         raise ValueError(
-            f"Named command '{definition.command_id}' is missing required parameters: {missing_list}."
+            f"Project command '{definition.command_id}' is missing required parameters: {missing_list}."
         )
 
     instantiated = _substitute_parameters(definition.commands, parameters)
@@ -301,52 +325,52 @@ def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
     return value
 
 
-def validate_project_named_commands(project: ProjectContext) -> None:
-    """Validate command-library files and literal named-command references for a project."""
+def validate_project_commands(project: ProjectContext) -> None:
+    """Validate command-library files and literal run_command references for a project."""
     issues: list[str] = []
-    database, database_issues = _scan_named_command_database(project)
+    database, database_issues = _scan_project_command_database(project)
     issues.extend(database_issues)
-    _validate_literal_named_command_references(
+    _validate_literal_command_references(
         project,
         set(database.definitions.keys()),
         database.discovered_ids,
         issues,
     )
     if issues:
-        raise NamedCommandValidationError(project.project_root, issues)
+        raise ProjectCommandValidationError(project.project_root, issues)
     _DATABASE_CACHE[project.project_root.resolve()] = database
 
 
-def log_named_command_validation_error(error: NamedCommandValidationError) -> None:
+def log_project_command_validation_error(error: ProjectCommandValidationError) -> None:
     """Write a full startup-validation failure report to the persistent log."""
     logger.error(
-        "Named-command validation failed for %s with %d issue(s):\n%s",
+        "Project command validation failed for %s with %d issue(s):\n%s",
         error.project_root,
         len(error.issues),
         "\n".join(f"- {issue}" for issue in error.issues),
     )
 
 
-def _validate_literal_named_command_references(
+def _validate_literal_command_references(
     project: ProjectContext,
     valid_command_ids: set[str],
     discovered_command_ids: set[str],
     issues: list[str],
 ) -> None:
-    """Check literal run_named_command references that can be resolved statically."""
+    """Check literal run_command references that can be resolved statically."""
     seen_missing_refs: set[tuple[Path, str, str]] = set()
-    for source_path in _iter_named_command_reference_files(project):
+    for source_path in _iter_command_reference_files(project):
         try:
             raw = json.loads(source_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            if source_path.suffix.lower() == ".json" and not _path_is_under_roots(source_path, project.named_command_paths):
+            if source_path.suffix.lower() == ".json" and not _path_is_under_roots(source_path, project.command_paths):
                 issues.append(
-                    f"{source_path}: invalid JSON while validating named-command references "
+                    f"{source_path}: invalid JSON while validating project command references "
                     f"({exc.msg} at line {exc.lineno}, column {exc.colno})."
                 )
             continue
 
-        for command_id, location in _find_literal_named_command_references(raw):
+        for command_id, location in _find_literal_command_references(raw):
             normalized_id = str(command_id).replace("\\", "/").strip()
             if not normalized_id or normalized_id.startswith("$"):
                 continue
@@ -357,12 +381,12 @@ def _validate_literal_named_command_references(
                 continue
             seen_missing_refs.add(key)
             issues.append(
-                f"{source_path} ({location}): missing named command '{normalized_id}'."
+                f"{source_path} ({location}): missing project command '{normalized_id}'."
             )
 
 
-def _iter_named_command_reference_files(project: ProjectContext) -> list[Path]:
-    """Return JSON files that may contain literal run_named_command references."""
+def _iter_command_reference_files(project: ProjectContext) -> list[Path]:
+    """Return JSON files that may contain literal run_command references."""
     files: list[Path] = []
     seen: set[Path] = set()
 
@@ -376,7 +400,7 @@ def _iter_named_command_reference_files(project: ProjectContext) -> list[Path]:
             seen.add(resolved)
             files.append(file_path)
 
-    for root in project.named_command_paths:
+    for root in project.command_paths:
         _add_files(root)
     for root in project.entity_template_paths:
         _add_files(root)
@@ -397,29 +421,29 @@ def _path_is_under_roots(path: Path, roots: list[Path]) -> bool:
     return False
 
 
-def _find_literal_named_command_references(
+def _find_literal_command_references(
     value: Any,
     *,
     location: str = "$",
 ) -> list[tuple[str, str]]:
-    """Return literal run_named_command references with a human-readable JSON path."""
+    """Return literal run_command references with a human-readable JSON path."""
     references: list[tuple[str, str]] = []
 
     if isinstance(value, dict):
         command_type = value.get("type")
         command_id = value.get("command_id")
-        if command_type == "run_named_command" and isinstance(command_id, str):
+        if command_type == "run_command" and isinstance(command_id, str):
             references.append((command_id, location))
 
         for key, item in value.items():
             child_location = f"{location}.{key}" if location != "$" else f"$.{key}"
-            references.extend(_find_literal_named_command_references(item, location=child_location))
+            references.extend(_find_literal_command_references(item, location=child_location))
         return references
 
     if isinstance(value, list):
         for index, item in enumerate(value):
             child_location = f"{location}[{index}]"
-            references.extend(_find_literal_named_command_references(item, location=child_location))
+            references.extend(_find_literal_command_references(item, location=child_location))
         return references
 
     return references

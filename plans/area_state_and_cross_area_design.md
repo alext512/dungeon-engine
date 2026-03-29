@@ -111,11 +111,9 @@ The current token family is:
 
 - `$world...`
 
-This is also misleading for the same reason. A future rename should probably move toward something like:
+This was also misleading for the same reason. The authored token family has now been renamed to:
 
 - `$current_area...`
-
-However, this is a bigger breaking change than the command rename, so it can be treated as a separate follow-up if needed.
 
 ## Persistence Semantics
 

@@ -44,7 +44,7 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_field",
     "set_entity_fields",
     "route_inputs_to_entity",
-    "set_camera_follow_entity",
+    "set_camera_follow",
     "set_entity_grid_position",
     "set_entity_world_position",
     "set_entity_screen_position",
@@ -61,6 +61,29 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_color",
     "destroy_entity",
 }
+
+
+def _validate_strict_camera_follow(
+    value: dict[str, Any],
+    *,
+    source_name: str,
+    location: str,
+) -> None:
+    """Reject symbolic follow.entity_id values on strict camera primitives."""
+    command_type = value.get("type")
+    if command_type not in {"set_camera_follow", "set_camera_state"}:
+        return
+    raw_follow = value.get("follow")
+    if not isinstance(raw_follow, dict):
+        return
+    symbolic_id = raw_follow.get("entity_id")
+    if symbolic_id not in _RESERVED_ENTITY_IDS:
+        return
+    raise ValueError(
+        f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
+        f"inside '{command_type}.follow.entity_id'; use '${symbolic_id}_id' or resolve the id "
+        "before invoking the primitive."
+    )
 
 
 def load_area(
@@ -206,6 +229,10 @@ def instantiate_entity(
                 f"{source_name} must not declare '{removed_field}'; store that data under "
                 "'variables' instead."
             )
+    if "layer" in entity_data:
+        raise ValueError(
+            f"{source_name} must not declare 'layer'; use 'render_order' instead."
+        )
     space = _parse_entity_space(entity_data, source_name=source_name)
     scope = _parse_entity_scope(entity_data, source_name=source_name)
     if space == "world":
@@ -236,7 +263,9 @@ def instantiate_entity(
         present=bool(entity_data.get("present", True)),
         visible=bool(entity_data.get("visible", True)),
         events_enabled=bool(entity_data.get("events_enabled", True)),
-        layer=int(entity_data.get("layer", 1)),
+        render_order=_parse_entity_render_order(entity_data, space=space),
+        y_sort=_parse_entity_y_sort(entity_data, space=space),
+        sort_y_offset=float(entity_data.get("sort_y_offset", 0.0)),
         stack_order=int(entity_data.get("stack_order", 0)),
         color=_parse_color(entity_data.get("color")),
         template_id=template_id,
@@ -264,6 +293,20 @@ def _parse_entity_scope(entity_data: dict[str, Any], *, source_name: str) -> str
     if scope not in {"area", "global"}:
         raise ValueError(f"{source_name} field 'scope' must be 'area' or 'global'.")
     return scope
+
+
+def _parse_entity_render_order(entity_data: dict[str, Any], *, space: str) -> int:
+    """Parse the unified entity render band."""
+    if "render_order" in entity_data:
+        return int(entity_data.get("render_order", 0))
+    return 10 if space == "world" else 0
+
+
+def _parse_entity_y_sort(entity_data: dict[str, Any], *, space: str) -> bool:
+    """Parse whether one entity participates in vertical interleaving."""
+    if "y_sort" in entity_data:
+        return bool(entity_data.get("y_sort", False))
+    return space == "world"
 
 
 def _parse_entity_visuals(
@@ -405,6 +448,11 @@ def _parse_tile_layers(raw_data: dict[str, Any]) -> list[TileLayer]:
     for index, raw_layer in enumerate(raw_layers):
         if not isinstance(raw_layer, dict):
             raise ValueError(f"Area tile_layers[{index}] must be a JSON object.")
+        if "draw_above_entities" in raw_layer:
+            raise ValueError(
+                f"Area tile_layers[{index}] must not declare 'draw_above_entities'; "
+                "use 'render_order' instead."
+            )
         raw_grid = raw_layer.get("grid")
         if not isinstance(raw_grid, list):
             raise ValueError(f"Area tile_layers[{index}] field 'grid' must be a JSON array.")
@@ -419,10 +467,20 @@ def _parse_tile_layers(raw_data: dict[str, Any]) -> list[TileLayer]:
                     [int(tile) if tile is not None else 0 for tile in row]
                     for row in raw_grid
                 ],
-                draw_above_entities=bool(raw_layer.get("draw_above_entities", False)),
+                render_order=_parse_tile_layer_render_order(raw_layer),
+                y_sort=bool(raw_layer.get("y_sort", False)),
+                sort_y_offset=float(raw_layer.get("sort_y_offset", 0.0)),
+                stack_order=int(raw_layer.get("stack_order", index)),
             )
         )
     return parsed_layers
+
+
+def _parse_tile_layer_render_order(raw_layer: dict[str, Any]) -> int:
+    """Parse one tile layer's unified render band."""
+    if "render_order" in raw_layer:
+        return int(raw_layer.get("render_order", 0))
+    return 0
 
 
 def _validate_tile_layers(tile_layers: list[TileLayer], source_name: str) -> None:
@@ -573,6 +631,7 @@ def _validate_command_tree(value: Any, *, source_name: str, location: str) -> No
                 f"with strict primitive '{command_type}'; use '${symbolic_id}_id' or resolve the id "
                 "before invoking the primitive."
             )
+        _validate_strict_camera_follow(value, source_name=source_name, location=location)
         for key, item in value.items():
             child_location = f"{location}.{key}"
             _validate_command_tree(item, source_name=source_name, location=child_location)
@@ -616,7 +675,7 @@ def _resolve_entity_instance(
 def _load_entity_template(template_id: str, *, project: ProjectContext) -> dict[str, Any]:
     """Load and cache a reusable entity template by its path-derived id.
 
-    Template ids support subdirectories (e.g. ``"npcs/village_guard"``).
+    Template ids support subdirectories (e.g. ``"entity_templates/npcs/village_guard"``).
     """
     normalized_id = str(template_id).replace("\\", "/").strip()
     cache_key = (project.project_root.resolve(), normalized_id)
@@ -798,7 +857,7 @@ def _derive_area_id(
     slug = "".join(slug_chars).strip("_")
     while "__" in slug:
         slug = slug.replace("__", "_")
-    return slug or "untitled_area"
+    return f"areas/{slug or 'untitled_area'}"
 
 
 def _optional_string(value: Any, *, field_name: str, source_name: str) -> str | None:
@@ -937,6 +996,10 @@ def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: 
     if "sprite" in raw_template:
         raise ValueError(
             f"{source_name} must not use 'sprite'; entities now define a 'visuals' array."
+        )
+    if "layer" in raw_template:
+        raise ValueError(
+            f"{source_name} must not declare 'layer'; use 'render_order' instead."
         )
     if "interact_commands" in raw_template:
         raise ValueError(
