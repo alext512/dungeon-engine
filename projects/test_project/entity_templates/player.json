@@ -18,7 +18,9 @@
       "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frames": [0],
+      "frames": [
+        0
+      ],
       "animation_fps": 0,
       "animate_when_moving": false
     }
@@ -68,8 +70,14 @@
           "direction": "up",
           "flip_x": false,
           "push_event_id": "push_from_down",
-          "phase_a_frames": [5, 2],
-          "phase_b_frames": [8, 2],
+          "phase_a_frames": [
+            5,
+            2
+          ],
+          "phase_b_frames": [
+            8,
+            2
+          ],
           "idle_frame": 2
         }
       ]
@@ -84,8 +92,14 @@
           "direction": "down",
           "flip_x": false,
           "push_event_id": "push_from_up",
-          "phase_a_frames": [3, 0],
-          "phase_b_frames": [6, 0],
+          "phase_a_frames": [
+            3,
+            0
+          ],
+          "phase_b_frames": [
+            6,
+            0
+          ],
           "idle_frame": 0
         }
       ]
@@ -100,8 +114,14 @@
           "direction": "left",
           "flip_x": false,
           "push_event_id": "push_from_right",
-          "phase_a_frames": [4, 1],
-          "phase_b_frames": [7, 1],
+          "phase_a_frames": [
+            4,
+            1
+          ],
+          "phase_b_frames": [
+            7,
+            1
+          ],
           "idle_frame": 1
         }
       ]
@@ -116,8 +136,14 @@
           "direction": "right",
           "flip_x": true,
           "push_event_id": "push_from_left",
-          "phase_a_frames": [4, 1],
-          "phase_b_frames": [7, 1],
+          "phase_a_frames": [
+            4,
+            1
+          ],
+          "phase_b_frames": [
+            7,
+            1
+          ],
           "idle_frame": 1
         }
       ]
@@ -139,5 +165,6 @@
         }
       ]
     }
-  }
+  },
+  "render_order": 10
 }

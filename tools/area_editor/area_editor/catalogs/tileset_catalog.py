@@ -130,6 +130,19 @@ class TilesetCatalog:
         """Return the full tileset sheet pixmap, or ``None`` if missing."""
         return self._load_sheet(authored_path)
 
+    def get_frame_count(self, authored_path: str, tile_width: int, tile_height: int) -> int:
+        """Return the number of whole frames in a sheet for the given slice size."""
+        if tile_width <= 0 or tile_height <= 0:
+            return 0
+        sheet = self._load_sheet(authored_path)
+        if sheet is None:
+            return 0
+        return (sheet.width() // tile_width) * (sheet.height() // tile_height)
+
+    def get_tileset_frame_count(self, tileset: TilesetRef) -> int:
+        """Return the frame count for one tileset reference."""
+        return self.get_frame_count(tileset.path, tileset.tile_width, tileset.tile_height)
+
     def clear(self) -> None:
         """Drop all cached data (e.g. when switching projects)."""
         self._sheet_cache.clear()

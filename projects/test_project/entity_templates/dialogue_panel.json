@@ -62,8 +62,16 @@
     "text_layer": 101,
     "default_font_id": "pixelbet",
     "default_max_lines": 3,
-    "default_text_color": [245, 232, 190],
-    "choice_text_color": [238, 242, 248],
+    "default_text_color": [
+      245,
+      232,
+      190
+    ],
+    "choice_text_color": [
+      238,
+      242,
+      248
+    ],
     "dialogue_open": false,
     "dialogue_state_stack": [],
     "dialogue_pending_on_end": [],
@@ -141,5 +149,6 @@
         }
       ]
     }
-  }
+  },
+  "y_sort": false
 }

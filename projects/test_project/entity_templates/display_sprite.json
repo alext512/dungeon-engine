@@ -12,5 +12,7 @@
       "animation_fps": "$animation_fps",
       "animate_when_moving": false
     }
-  ]
+  ],
+  "render_order": 0,
+  "y_sort": false
 }

@@ -1,10 +1,9 @@
 """Zoomable, pannable tile-map canvas built on QGraphicsView.
 
 Renders tile layers as composited pixmap items, entity markers as
-coloured rectangles, and an optional grid overlay.  Z-ordering respects
-the ``draw_above_entities`` flag on each tile layer so that overlay
-layers are drawn on top of entity markers, matching the runtime's
-rendering contract.
+coloured rectangles, and an optional grid overlay. Tile layers and
+entity markers now share one unified render-order model so y-sorted tile
+cells can interleave with entities the same way the runtime does.
 
 Zoom:
     Mouse-wheel with anchor-under-mouse.  Range 0.25x .. 10x.
@@ -16,9 +15,12 @@ Pan:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (
+    QGraphicsItem,
     QGraphicsItemGroup,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
@@ -55,6 +57,12 @@ _CELL_FLAG_BLOCKED_BORDER = QColor(220, 40, 40, 180)
 _BG_COLOR = QColor(30, 30, 30)
 
 
+@dataclass(slots=True)
+class _CanvasRenderEntry:
+    sort_key: tuple
+    item: QGraphicsItem
+
+
 class TileCanvas(QGraphicsView):
     """Central widget: renders tile layers, entity markers, and grid."""
 
@@ -88,8 +96,11 @@ class TileCanvas(QGraphicsView):
         self._tile_size: int = 16
         self._area: AreaDocument | None = None
         self._catalog: TilesetCatalog | None = None
-        self._layer_groups: list[QGraphicsItemGroup] = []
-        self._entity_group: QGraphicsItemGroup | None = None
+        self._templates: TemplateCatalog | None = None
+        self._layer_items: list[list[QGraphicsItem]] = []
+        self._entity_items: list[QGraphicsItem] = []
+        self._layer_visibility: list[bool] = []
+        self._entities_visible: bool = True
         self._cell_flag_group: QGraphicsItemGroup | None = None
         self._grid_group: QGraphicsItemGroup | None = None
         self._ghost_item: QGraphicsPixmapItem | None = None
@@ -98,6 +109,8 @@ class TileCanvas(QGraphicsView):
         self._tile_paint_mode: bool = False
         self._active_layer: int = 0
         self._selected_gid: int = 0
+        self._tileset_index_hint: int = 0
+        self._brush_erase_mode: bool = True
         self._last_painted: tuple[int, int, bool] | None = None
         self._last_tile_painted: tuple[int, int, int] | None = None
         self._middle_pan_pos = None
@@ -113,69 +126,30 @@ class TileCanvas(QGraphicsView):
         templates: TemplateCatalog | None = None,
     ) -> None:
         """Populate the scene from an area document."""
-        self._scene.clear()
+        previous_layer_visibility = list(self._layer_visibility)
+        previous_entities_visible = self._entities_visible
+        self._clear_scene_contents()
         self._area = area
         self._catalog = catalog
-        self._layer_groups.clear()
-        self._entity_group = None
+        self._templates = templates
+        self._layer_items = [[] for _ in area.tile_layers]
+        self._entity_items = []
+        if len(previous_layer_visibility) == len(area.tile_layers):
+            self._layer_visibility = previous_layer_visibility
+        else:
+            self._layer_visibility = [True for _ in area.tile_layers]
+        self._entities_visible = previous_entities_visible
         self._cell_flag_group = None
         self._grid_group = None
         self._ghost_item = None
+        self._tileset_index_hint = 0
+        self._brush_erase_mode = True
         self._tile_size = area.tile_size or 16
 
         width_px = area.width * self._tile_size
         height_px = area.height * self._tile_size
         self._scene.setSceneRect(QRectF(0, 0, max(width_px, 1), max(height_px, 1)))
-
-        # ----- Tile layers + entity markers with correct z-order -----
-        #
-        # Z-value allocation:
-        #   below-entity layers  : 0, 1, 2, ...
-        #   entity markers       : 1000
-        #   above-entity layers  : 2000, 2001, ...
-        #   grid overlay         : 3000
-
-        z_below = 0
-        z_above = 2000
-        below_groups: list[QGraphicsItemGroup] = []
-        above_groups: list[QGraphicsItemGroup] = []
-
-        for layer in area.tile_layers:
-            group = self._build_tile_layer_group(layer.grid, area, catalog)
-            if layer.draw_above_entities:
-                group.setZValue(z_above)
-                z_above += 1
-                above_groups.append(group)
-            else:
-                group.setZValue(z_below)
-                z_below += 1
-                below_groups.append(group)
-            self._scene.addItem(group)
-
-        # Store all groups in draw order (below first, then above) so the
-        # layer-list panel indices map 1:1.
-        self._layer_groups = []
-        for layer in area.tile_layers:
-            if not layer.draw_above_entities:
-                self._layer_groups.append(below_groups.pop(0))
-            else:
-                self._layer_groups.append(above_groups.pop(0))
-
-        # Entity markers (with sprites when templates are available)
-        self._entity_group = self._build_entity_group(area, catalog, templates)
-        self._entity_group.setZValue(1000)
-        self._scene.addItem(self._entity_group)
-
-        self._cell_flag_group = self._build_cell_flag_group(area)
-        self._cell_flag_group.setZValue(2500)
-        self._cell_flag_group.setVisible(self._cell_flags_edit_mode)
-        self._scene.addItem(self._cell_flag_group)
-
-        # Grid overlay
-        self._grid_group = self._build_grid_group(area)
-        self._grid_group.setZValue(3000)
-        self._grid_group.setVisible(self._grid_visible)
-        self._scene.addItem(self._grid_group)
+        self._rebuild_scene_contents()
         self._update_drag_mode()
 
     def clear_area(self) -> None:
@@ -183,22 +157,34 @@ class TileCanvas(QGraphicsView):
         self._scene.clear()
         self._area = None
         self._catalog = None
-        self._layer_groups.clear()
-        self._entity_group = None
+        self._templates = None
+        self._layer_items.clear()
+        self._entity_items.clear()
+        self._layer_visibility.clear()
+        self._entities_visible = True
         self._cell_flag_group = None
         self._grid_group = None
         self._ghost_item = None
+
+    def refresh_scene_contents(self) -> None:
+        """Redraw the current area without reinitialising editor state."""
+        if self._area is None or self._catalog is None:
+            return
+        self._rebuild_scene_contents()
 
     # -- Layer visibility ------------------------------------------------
 
     def set_layer_visible(self, index: int, visible: bool) -> None:
         """Show or hide the tile-layer group at *index*."""
-        if 0 <= index < len(self._layer_groups):
-            self._layer_groups[index].setVisible(visible)
+        if 0 <= index < len(self._layer_items):
+            self._layer_visibility[index] = visible
+            for item in self._layer_items[index]:
+                item.setVisible(visible)
 
     def set_entities_visible(self, visible: bool) -> None:
-        if self._entity_group is not None:
-            self._entity_group.setVisible(visible)
+        self._entities_visible = visible
+        for item in self._entity_items:
+            item.setVisible(visible)
 
     def set_grid_visible(self, visible: bool) -> None:
         self._grid_visible = visible
@@ -252,7 +238,23 @@ class TileCanvas(QGraphicsView):
 
     def set_selected_gid(self, gid: int) -> None:
         self._selected_gid = gid
+        if gid != 0:
+            self._brush_erase_mode = False
         self._update_ghost_pixmap()
+
+    @property
+    def tileset_index_hint(self) -> int:
+        return self._tileset_index_hint
+
+    def set_tileset_index_hint(self, index: int) -> None:
+        self._tileset_index_hint = max(index, 0)
+
+    @property
+    def brush_erase_mode(self) -> bool:
+        return self._brush_erase_mode
+
+    def set_brush_erase_mode(self, enabled: bool) -> None:
+        self._brush_erase_mode = enabled
 
     def apply_cell_flag_brush(self, col: int, row: int, walkable: bool) -> bool:
         """Apply the cell-flag brush directly to one cell."""
@@ -379,13 +381,29 @@ class TileCanvas(QGraphicsView):
                 item.setParentItem(group)
         return group
 
-    def _build_entity_group(
+    def _build_tile_cell_item(
+        self,
+        gid: int,
+        *,
+        col_idx: int,
+        row_idx: int,
+        area: AreaDocument,
+        catalog: TilesetCatalog,
+    ) -> QGraphicsPixmapItem | None:
+        pm = catalog.get_tile_pixmap(gid, area.tilesets, fallback_size=self._tile_size)
+        if pm is None:
+            return None
+        item = QGraphicsPixmapItem(pm)
+        item.setPos(col_idx * self._tile_size, row_idx * self._tile_size)
+        return item
+
+    def _build_entity_items(
         self,
         area: AreaDocument,
         catalog: TilesetCatalog,
         templates: TemplateCatalog | None,
-    ) -> QGraphicsItemGroup:
-        group = QGraphicsItemGroup()
+    ) -> list[_CanvasRenderEntry]:
+        items: list[_CanvasRenderEntry] = []
         ts = self._tile_size
 
         for entity in area.entities:
@@ -407,7 +425,10 @@ class TileCanvas(QGraphicsView):
             # Try to render the actual sprite from the template visual
             sprite_rendered = False
             if templates and entity.template:
-                visual = templates.get_first_visual(entity.template)
+                visual = templates.get_first_visual(
+                    entity.template,
+                    entity.parameters or {},
+                )
                 if visual:
                     frame_index = visual.frames[0] if visual.frames else 0
                     sprite = catalog.get_sprite_frame(
@@ -423,7 +444,12 @@ class TileCanvas(QGraphicsView):
                             py + visual.offset_y,
                         )
                         sprite_item.setToolTip(tooltip)
-                        sprite_item.setParentItem(group)
+                        items.append(
+                            _CanvasRenderEntry(
+                                self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
+                                sprite_item,
+                            )
+                        )
                         sprite_rendered = True
 
             # Fallback: coloured rectangle marker when no sprite available
@@ -433,9 +459,14 @@ class TileCanvas(QGraphicsView):
                 rect.setBrush(fill)
                 rect.setPen(QPen(border, 1))
                 rect.setToolTip(tooltip)
-                rect.setParentItem(group)
+                items.append(
+                    _CanvasRenderEntry(
+                        self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
+                        rect,
+                    )
+                )
 
-        return group
+        return items
 
     def _build_cell_flag_group(self, area: AreaDocument) -> QGraphicsItemGroup:
         group = QGraphicsItemGroup()
@@ -469,13 +500,126 @@ class TileCanvas(QGraphicsView):
             line.setParentItem(group)
         return group
 
+    def _tile_layer_sort_key(self, layer, *, layer_index: int) -> tuple:
+        return (layer.render_order, 0, 0.0, layer.stack_order, 0, layer_index, layer.name)
+
+    def _tile_cell_sort_key(self, layer, *, layer_index: int, grid_x: int, grid_y: int) -> tuple:
+        sort_y = ((grid_y + 1) * self._tile_size) + float(layer.sort_y_offset)
+        return (layer.render_order, 1, sort_y, layer.stack_order, 0, grid_x, f"{layer_index}:{grid_y}:{grid_x}")
+
+    def _entity_sort_key(self, entity, *, px: float, py: float, tile_size: int) -> tuple:
+        if entity.y_sort:
+            sort_bucket = 1
+            sort_y = float(py + tile_size + entity.sort_y_offset)
+        else:
+            sort_bucket = 0
+            sort_y = 0.0
+        return (
+            entity.render_order,
+            sort_bucket,
+            sort_y,
+            entity.stack_order,
+            1,
+            px,
+            entity.id,
+        )
+
+    def _rebuild_scene_contents(self) -> None:
+        if self._area is None or self._catalog is None:
+            return
+
+        self._clear_scene_contents()
+        self._layer_items = [[] for _ in self._area.tile_layers]
+        self._entity_items = []
+        self._cell_flag_group = None
+        self._grid_group = None
+        self._ghost_item = None
+
+        render_entries: list[_CanvasRenderEntry] = []
+        for layer_index, layer in enumerate(self._area.tile_layers):
+            if layer.y_sort:
+                for row_idx, row in enumerate(layer.grid):
+                    for col_idx, gid in enumerate(row):
+                        if gid == 0:
+                            continue
+                        item = self._build_tile_cell_item(
+                            gid,
+                            col_idx=col_idx,
+                            row_idx=row_idx,
+                            area=self._area,
+                            catalog=self._catalog,
+                        )
+                        if item is None:
+                            continue
+                        self._layer_items[layer_index].append(item)
+                        render_entries.append(
+                            _CanvasRenderEntry(
+                                self._tile_cell_sort_key(
+                                    layer,
+                                    layer_index=layer_index,
+                                    grid_x=col_idx,
+                                    grid_y=row_idx,
+                                ),
+                                item,
+                            )
+                        )
+                continue
+
+            group = self._build_tile_layer_group(layer.grid, self._area, self._catalog)
+            self._layer_items[layer_index].append(group)
+            render_entries.append(
+                _CanvasRenderEntry(
+                    self._tile_layer_sort_key(layer, layer_index=layer_index),
+                    group,
+                )
+            )
+
+        for entry in self._build_entity_items(self._area, self._catalog, self._templates):
+            self._entity_items.append(entry.item)
+            render_entries.append(entry)
+
+        for z_index, entry in enumerate(sorted(render_entries, key=lambda item: item.sort_key)):
+            entry.item.setZValue(float(z_index))
+            self._scene.addItem(entry.item)
+
+        for layer_index, items in enumerate(self._layer_items):
+            visible = self._layer_visibility[layer_index] if layer_index < len(self._layer_visibility) else True
+            for item in items:
+                item.setVisible(visible)
+        for item in self._entity_items:
+            item.setVisible(self._entities_visible)
+
+        overlay_base = float(len(render_entries) + 100)
+        self._cell_flag_group = self._build_cell_flag_group(self._area)
+        self._cell_flag_group.setZValue(overlay_base)
+        self._cell_flag_group.setVisible(self._cell_flags_edit_mode)
+        self._scene.addItem(self._cell_flag_group)
+
+        self._grid_group = self._build_grid_group(self._area)
+        self._grid_group.setZValue(overlay_base + 100.0)
+        self._grid_group.setVisible(self._grid_visible)
+        self._scene.addItem(self._grid_group)
+
+    def _clear_scene_contents(self) -> None:
+        """Remove tracked render items without resetting the whole scene object."""
+        for items in self._layer_items:
+            for item in items:
+                if item.scene() is self._scene:
+                    self._scene.removeItem(item)
+        for item in self._entity_items:
+            if item.scene() is self._scene:
+                self._scene.removeItem(item)
+        for overlay in (self._cell_flag_group, self._grid_group, self._ghost_item):
+            if overlay is not None and overlay.scene() is self._scene:
+                self._scene.removeItem(overlay)
+
     def _rebuild_cell_flag_group(self) -> None:
         if self._area is None:
             return
         if self._cell_flag_group is not None:
             self._scene.removeItem(self._cell_flag_group)
         self._cell_flag_group = self._build_cell_flag_group(self._area)
-        self._cell_flag_group.setZValue(2500)
+        self._cell_flag_group.setZValue(float(len(self._scene.items()) + 50))
         self._cell_flag_group.setVisible(self._cell_flags_edit_mode)
         self._scene.addItem(self._cell_flag_group)
 
@@ -535,7 +679,7 @@ class TileCanvas(QGraphicsView):
             self._last_tile_painted = marker
 
             if paint_tile(self._area, self._active_layer, col, row, gid):
-                self._rebuild_tile_layer(self._active_layer)
+                self._rebuild_scene_contents()
                 self.tile_painted.emit(self._active_layer, col, row, gid)
             return True
 
@@ -552,26 +696,10 @@ class TileCanvas(QGraphicsView):
     # -- Tile layer rebuild after painting --------------------------------
 
     def _rebuild_tile_layer(self, layer_index: int) -> None:
-        """Rebuild the graphics group for one tile layer after editing."""
-        if (
-            self._area is None
-            or self._catalog is None
-            or layer_index < 0
-            or layer_index >= len(self._layer_groups)
-        ):
+        """Rebuild the canvas render items after tile edits."""
+        if self._area is None or self._catalog is None or layer_index < 0:
             return
-
-        old_group = self._layer_groups[layer_index]
-        z = old_group.zValue()
-        visible = old_group.isVisible()
-        self._scene.removeItem(old_group)
-
-        layer = self._area.tile_layers[layer_index]
-        new_group = self._build_tile_layer_group(layer.grid, self._area, self._catalog)
-        new_group.setZValue(z)
-        new_group.setVisible(visible)
-        self._scene.addItem(new_group)
-        self._layer_groups[layer_index] = new_group
+        self._rebuild_scene_contents()
 
     # -- Ghost preview ----------------------------------------------------
 
@@ -586,7 +714,7 @@ class TileCanvas(QGraphicsView):
 
         if self._ghost_item is None:
             self._ghost_item = QGraphicsPixmapItem()
-            self._ghost_item.setZValue(2999)
+            self._ghost_item.setZValue(float(len(self._scene.items()) + 100))
             self._ghost_item.setOpacity(0.5)
             self._scene.addItem(self._ghost_item)
             self._update_ghost_pixmap()

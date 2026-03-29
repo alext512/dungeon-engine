@@ -45,10 +45,9 @@ class TestVillageSquareLoading(unittest.TestCase):
     def test_has_tilesets(self):
         self.assertGreater(len(self.doc.tilesets), 0)
 
-    def test_draw_above_entities_preserved(self):
-        """At least one layer should have draw_above_entities=True."""
-        flags = [l.draw_above_entities for l in self.doc.tile_layers]
-        self.assertIn(True, flags, "Expected at least one above-entity layer")
+    def test_render_order_fields_preserved(self):
+        overlay_layers = [l for l in self.doc.tile_layers if l.render_order == 20]
+        self.assertTrue(overlay_layers, "Expected at least one overlay layer with render_order=20")
 
 
 @unittest.skipUnless(_TITLE_SCREEN.is_file(), "title_screen.json not found")
@@ -80,7 +79,7 @@ class TestUnknownFieldPreservation(unittest.TestCase):
         self.assertTrue(out["custom"])
 
     def test_layer_extra_fields(self):
-        raw = {"name": "bg", "draw_above_entities": False, "grid": [], "opacity": 0.5}
+        raw = {"name": "bg", "render_order": 0, "y_sort": False, "stack_order": 0, "grid": [], "opacity": 0.5}
         layer = TileLayerDocument.from_dict(raw)
         out = layer.to_dict()
         self.assertAlmostEqual(out["opacity"], 0.5)
@@ -90,6 +89,7 @@ class TestUnknownFieldPreservation(unittest.TestCase):
             "id": "e1",
             "x": 0,
             "y": 0,
+            "render_order": 10,
             "kind": "lever",
             "visuals": [{"id": "main"}],
             "events": {"interact": []},
@@ -133,7 +133,9 @@ class TestSaveAreaDocument(unittest.TestCase):
             "tile_layers": [
                 {
                     "name": "ground",
-                    "draw_above_entities": False,
+                    "render_order": 0,
+                    "y_sort": False,
+                    "stack_order": 0,
                     "grid": [[0]],
                 }
             ],

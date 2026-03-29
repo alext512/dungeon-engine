@@ -9,14 +9,24 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
@@ -32,6 +42,10 @@ from area_editor.project_io.manifest import (
     discover_areas,
     load_manifest,
 )
+from area_editor.operations.tilesets import (
+    append_tileset,
+    update_tileset_dimensions,
+)
 from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.file_tree_panel import FileTreePanel
@@ -41,8 +55,83 @@ from area_editor.widgets.tile_canvas import TileCanvas
 from area_editor.widgets.tileset_browser_panel import TilesetBrowserPanel
 
 _SETTINGS_KEY_LAST_PROJECT = "last_project_path"
+_IMAGE_SUFFIXES = {".png", ".webp", ".bmp", ".jpg", ".jpeg"}
 
 log = logging.getLogger(__name__)
+
+
+class _TilesetDetailsDialog(QDialog):
+    """Small dialog for adding or re-slicing a tileset."""
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        *,
+        path_value: str,
+        tile_width: int,
+        tile_height: int,
+        allow_path_edit: bool,
+        browse_callback: Callable[[], str | None] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Tileset Details")
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._path_edit = QLineEdit(path_value)
+        self._path_edit.setReadOnly(not allow_path_edit)
+        path_row = QHBoxLayout()
+        path_row.addWidget(self._path_edit, 1)
+        if allow_path_edit:
+            browse_button = QPushButton("Browse...")
+            browse_button.clicked.connect(lambda: self._browse_for_path(browse_callback))
+            path_row.addWidget(browse_button)
+        form.addRow("Path", self._wrap_layout(path_row))
+
+        self._tile_width = QSpinBox()
+        self._tile_width.setRange(1, 4096)
+        self._tile_width.setValue(tile_width)
+        form.addRow("Tile width", self._tile_width)
+
+        self._tile_height = QSpinBox()
+        self._tile_height.setRange(1, 4096)
+        self._tile_height.setValue(tile_height)
+        form.addRow("Tile height", self._tile_height)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def _wrap_layout(inner: QHBoxLayout) -> QWidget:
+        wrapper = QWidget()
+        wrapper.setLayout(inner)
+        return wrapper
+
+    def _browse_for_path(self, callback: Callable[[], str | None] | None) -> None:
+        if callback is None:
+            return
+        selected = callback()
+        if selected:
+            self._path_edit.setText(selected)
+
+    @property
+    def authored_path(self) -> str:
+        return self._path_edit.text().strip()
+
+    @property
+    def tile_width(self) -> int:
+        return self._tile_width.value()
+
+    @property
+    def tile_height(self) -> int:
+        return self._tile_height.value()
 
 
 class MainWindow(QMainWindow):
@@ -142,6 +231,7 @@ class MainWindow(QMainWindow):
         self._asset_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ASSET)
         )
+        self._asset_panel.set_context_menu_builder(self._populate_asset_context_menu)
 
         # Tab widget signals
         self._tab_widget.active_tab_changed.connect(self._on_active_tab_changed)
@@ -150,7 +240,12 @@ class MainWindow(QMainWindow):
 
         # Tileset browser + layer panel signals
         self._tileset_panel.tile_selected.connect(self._on_tile_selected)
+        self._tileset_panel.add_tileset_requested.connect(self._on_add_tileset_requested)
+        self._tileset_panel.edit_tileset_requested.connect(self._on_edit_tileset_requested)
         self._layer_panel.active_layer_changed.connect(self._on_active_layer_changed)
+        self._layer_panel.layer_properties_changed.connect(
+            self._on_layer_properties_changed
+        )
 
     # ------------------------------------------------------------------
     # Public API (called from __main__ for --project arg)
@@ -183,6 +278,7 @@ class MainWindow(QMainWindow):
         self._area_docs.clear()
         self._connected_canvas = None
         self._layer_panel.clear_layers()
+        self._tileset_panel.clear_tilesets()
 
         areas = discover_areas(self._manifest)
         self._area_panel.set_areas(areas)
@@ -311,13 +407,22 @@ class MainWindow(QMainWindow):
 
             # Populate tileset browser for this area
             if self._catalog is not None:
-                self._tileset_panel.set_tilesets(doc.tilesets, self._catalog)
+                canvas = self._active_canvas()
+                current_index = canvas.tileset_index_hint if canvas is not None else 0
+                selected_gid = canvas.selected_gid if canvas is not None else 0
+                erase_mode = canvas.brush_erase_mode if canvas is not None else True
+                self._tileset_panel.set_tilesets(
+                    doc.tilesets,
+                    self._catalog,
+                    current_index=current_index,
+                    selected_gid=selected_gid,
+                    erase_mode=erase_mode,
+                )
 
             # Reconnect layer visibility signals to the active canvas
             canvas = self._active_canvas()
             if canvas is not None:
                 self._layer_panel.set_active_layer(canvas.active_layer)
-                self._tileset_panel.select_gid(canvas.selected_gid)
                 self._connect_canvas(canvas)
                 can_paint = bool(doc.tile_layers and doc.tilesets)
                 self._paint_tiles_action.setEnabled(can_paint)
@@ -428,6 +533,8 @@ class MainWindow(QMainWindow):
         canvas = self._active_canvas()
         if canvas is not None:
             canvas.set_selected_gid(gid)
+            canvas.set_tileset_index_hint(self._tileset_panel.current_tileset_index)
+            canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
         self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
 
     def _on_active_layer_changed(self, index: int) -> None:
@@ -435,6 +542,50 @@ class MainWindow(QMainWindow):
         if canvas is not None:
             canvas.set_active_layer(index)
         self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+
+    def _on_add_tileset_requested(self) -> None:
+        self._add_tileset_to_active_area()
+
+    def _on_edit_tileset_requested(self, index: int) -> None:
+        self._edit_tileset_in_active_area(index)
+
+    def _on_layer_properties_changed(
+        self,
+        index: int,
+        render_order: int,
+        y_sort: bool,
+        sort_y_offset: float,
+        stack_order: int,
+    ) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+
+        content_id, doc, canvas = context
+        if not (0 <= index < len(doc.tile_layers)):
+            return
+
+        layer = doc.tile_layers[index]
+        if (
+            layer.render_order == render_order
+            and layer.y_sort == y_sort
+            and layer.sort_y_offset == sort_y_offset
+            and layer.stack_order == stack_order
+        ):
+            return
+
+        layer.render_order = render_order
+        layer.y_sort = y_sort
+        layer.sort_y_offset = sort_y_offset
+        layer.stack_order = stack_order
+
+        self._layer_panel.update_layer(index, layer)
+        canvas.refresh_scene_contents()
+        self._tab_widget.set_dirty(content_id, True)
+        self.statusBar().showMessage(
+            f"Updated render properties for layer {layer.name}.",
+            2500,
+        )
 
     def _on_save_active(self) -> None:
         info = self._tab_widget.active_info()
@@ -571,6 +722,199 @@ class MainWindow(QMainWindow):
             canvas.set_entities_visible
         )
 
+    def _populate_asset_context_menu(
+        self,
+        menu,
+        _content_id: str,
+        file_path: Path,
+    ) -> None:
+        if file_path.suffix.lower() not in _IMAGE_SUFFIXES:
+            return
+        menu.addSeparator()
+        add_action = QAction("Add Tileset To Active Area...", self)
+        add_action.setEnabled(self._active_area_context() is not None)
+        add_action.triggered.connect(
+            lambda: self._add_tileset_to_active_area(file_path=file_path)
+        )
+        menu.addAction(add_action)
+
+    def _add_tileset_to_active_area(self, file_path: Path | None = None) -> None:
+        context = self._active_area_context()
+        if context is None or self._catalog is None:
+            QMessageBox.information(
+                self,
+                "No Active Area",
+                "Open an area tab before adding a tileset.",
+            )
+            return
+
+        content_id, doc, canvas = context
+        authored_path = (
+            self._authored_asset_path_for(file_path) if file_path is not None else None
+        )
+        details = self._show_tileset_details_dialog(
+            path_value=authored_path or "",
+            tile_width=doc.tile_size or 16,
+            tile_height=doc.tile_size or 16,
+            allow_path_edit=file_path is None,
+        )
+        if details is None:
+            return
+
+        authored_path, tile_width, tile_height = details
+        frame_count = self._catalog.get_frame_count(authored_path, tile_width, tile_height)
+        if frame_count <= 0:
+            QMessageBox.warning(
+                self,
+                "Invalid Tileset",
+                "The selected image could not be sliced into any whole tiles.",
+            )
+            return
+
+        existing_counts = self._current_tileset_counts(doc)
+        tileset = append_tileset(
+            doc,
+            authored_path,
+            tile_width,
+            tile_height,
+            existing_tile_counts=existing_counts,
+        )
+        canvas.set_tileset_index_hint(len(doc.tilesets) - 1)
+        canvas.set_selected_gid(0)
+        canvas.set_brush_erase_mode(True)
+        self._tab_widget.set_dirty(content_id, True)
+        self._tileset_panel.set_tilesets(
+            doc.tilesets,
+            self._catalog,
+            current_index=len(doc.tilesets) - 1,
+            selected_gid=0,
+            erase_mode=True,
+        )
+        self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
+        self.statusBar().showMessage(
+            f"Added tileset {Path(tileset.path).stem} to {content_id}.",
+            3000,
+        )
+
+    def _edit_tileset_in_active_area(self, index: int) -> None:
+        context = self._active_area_context()
+        if context is None or self._catalog is None:
+            return
+
+        content_id, doc, canvas = context
+        if index < 0 or index >= len(doc.tilesets):
+            return
+        tileset = doc.tilesets[index]
+        details = self._show_tileset_details_dialog(
+            path_value=tileset.path,
+            tile_width=tileset.tile_width,
+            tile_height=tileset.tile_height,
+            allow_path_edit=False,
+        )
+        if details is None:
+            return
+
+        _path_value, tile_width, tile_height = details
+        frame_count = self._catalog.get_frame_count(tileset.path, tile_width, tile_height)
+        if frame_count <= 0:
+            QMessageBox.warning(
+                self,
+                "Invalid Tile Size",
+                "Those dimensions produce zero whole tiles for this image.",
+            )
+            return
+
+        if not update_tileset_dimensions(doc, index, tile_width, tile_height):
+            return
+
+        canvas.set_tileset_index_hint(index)
+        self._tab_widget.set_dirty(content_id, True)
+        self._tileset_panel.set_tilesets(
+            doc.tilesets,
+            self._catalog,
+            current_index=index,
+            selected_gid=canvas.selected_gid,
+            erase_mode=canvas.brush_erase_mode,
+        )
+        self.statusBar().showMessage(
+            f"Updated tile size for {Path(tileset.path).stem}.",
+            3000,
+        )
+
+    def _show_tileset_details_dialog(
+        self,
+        *,
+        path_value: str,
+        tile_width: int,
+        tile_height: int,
+        allow_path_edit: bool,
+    ) -> tuple[str, int, int] | None:
+        dialog = _TilesetDetailsDialog(
+            self,
+            path_value=path_value,
+            tile_width=tile_width,
+            tile_height=tile_height,
+            allow_path_edit=allow_path_edit,
+            browse_callback=self._browse_project_asset if allow_path_edit else None,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        authored_path = dialog.authored_path
+        if not authored_path:
+            QMessageBox.warning(self, "Missing Path", "Choose an asset image first.")
+            return None
+        return authored_path, dialog.tile_width, dialog.tile_height
+
+    def _browse_project_asset(self) -> str | None:
+        if self._manifest is None:
+            return None
+        start_dir = str(self._manifest.asset_paths[0]) if self._manifest.asset_paths else str(
+            self._manifest.project_root
+        )
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Tileset Image",
+            start_dir,
+            "Image files (*.png *.webp *.bmp *.jpg *.jpeg);;All files (*)",
+        )
+        if not path:
+            return None
+        return self._authored_asset_path_for(Path(path))
+
+    def _authored_asset_path_for(self, file_path: Path | None) -> str | None:
+        if self._manifest is None or file_path is None:
+            return None
+        resolved = file_path.resolve()
+        for asset_dir in self._manifest.asset_paths:
+            try:
+                return str(resolved.relative_to(asset_dir.parent.resolve())).replace("\\", "/")
+            except ValueError:
+                pass
+            try:
+                return str(resolved.relative_to(asset_dir.resolve())).replace("\\", "/")
+            except ValueError:
+                pass
+        try:
+            return str(resolved.relative_to(self._manifest.project_root)).replace("\\", "/")
+        except ValueError:
+            return None
+
+    def _active_area_context(self) -> tuple[str, AreaDocument, TileCanvas] | None:
+        info = self._tab_widget.active_info()
+        canvas = self._active_canvas()
+        if info is None or info.content_type != ContentType.AREA or canvas is None:
+            return None
+        document = self._area_docs.get(info.content_id)
+        if document is None:
+            return None
+        return info.content_id, document, canvas
+
+    def _current_tileset_counts(self, document: AreaDocument) -> list[int]:
+        if self._catalog is None:
+            return [0 for _ in document.tilesets]
+        return [self._catalog.get_tileset_frame_count(ts) for ts in document.tilesets]
+
     def _size_to_screen(self) -> None:
         """Set initial window size to ~80% of the primary screen."""
         try:
@@ -653,6 +997,8 @@ class MainWindow(QMainWindow):
         canvas = self._active_canvas()
         if canvas is not None:
             canvas.set_selected_gid(gid)
+            canvas.set_tileset_index_hint(self._tileset_panel.current_tileset_index)
+            canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
         self._status_gid.setText(f"GID: {gid}" if gid else "Eraser")
 
     def _update_paint_status(self) -> None:

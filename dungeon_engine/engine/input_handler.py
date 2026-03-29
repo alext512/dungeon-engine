@@ -118,7 +118,7 @@ class InputHandler:
         return result
 
     def enqueue_held_movement_if_idle(self) -> None:
-        """Legacy compatibility wrapper for the unified held-repeat path."""
+        """No-op shim retained for the unified held-repeat path."""
         return
 
     def update_held_direction_repeat(self, dt: float) -> None:

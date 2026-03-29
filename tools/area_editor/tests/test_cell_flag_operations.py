@@ -16,7 +16,10 @@ def _make_area(*, cell_flags=None) -> AreaDocument:
         tile_layers=[
             TileLayerDocument(
                 name="ground",
-                draw_above_entities=False,
+                render_order=0,
+                y_sort=False,
+                sort_y_offset=0.0,
+                stack_order=0,
                 grid=[[0, 0], [0, 0]],
             )
         ],

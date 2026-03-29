@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,9 @@ from typing import Any
 from area_editor.project_io.manifest import ProjectManifest, discover_entity_templates
 
 log = logging.getLogger(__name__)
+
+_EXACT_TOKEN_RE = re.compile(r"^\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))$")
+_EMBEDDED_TOKEN_RE = re.compile(r"\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))")
 
 
 @dataclass
@@ -45,7 +49,11 @@ class TemplateCatalog:
             except Exception as exc:
                 log.warning("Failed to load template %s: %s", entry.template_id, exc)
 
-    def get_first_visual(self, template_id: str) -> VisualInfo | None:
+    def get_first_visual(
+        self,
+        template_id: str,
+        parameters: dict[str, Any] | None = None,
+    ) -> VisualInfo | None:
         """Return the first visual from the named template, or ``None``."""
         raw = self._templates.get(template_id)
         if raw is None:
@@ -53,15 +61,24 @@ class TemplateCatalog:
         visuals = raw.get("visuals")
         if not visuals:
             return None
-        v = visuals[0]
+        v = self._substitute_template_parameters(visuals[0], parameters or {})
+        if not isinstance(v, dict):
+            return None
         path = v.get("path")
-        if not path:
+        if not isinstance(path, str) or not path or self._contains_unresolved_tokens(path):
+            return None
+        frame_width = v.get("frame_width", 16)
+        frame_height = v.get("frame_height", 16)
+        frames = v.get("frames", [0])
+        if not isinstance(frame_width, int) or not isinstance(frame_height, int):
+            return None
+        if not isinstance(frames, list) or not all(isinstance(frame, int) for frame in frames):
             return None
         return VisualInfo(
             path=path,
-            frame_width=v.get("frame_width", 16),
-            frame_height=v.get("frame_height", 16),
-            frames=v.get("frames", [0]),
+            frame_width=frame_width,
+            frame_height=frame_height,
+            frames=frames,
             offset_x=v.get("offset_x", 0),
             offset_y=v.get("offset_y", 0),
         )
@@ -72,3 +89,38 @@ class TemplateCatalog:
 
     def clear(self) -> None:
         self._templates.clear()
+
+    def _substitute_template_parameters(
+        self,
+        value: Any,
+        parameters: dict[str, Any],
+    ) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: self._substitute_template_parameters(subvalue, parameters)
+                for key, subvalue in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                self._substitute_template_parameters(item, parameters)
+                for item in value
+            ]
+        if not isinstance(value, str):
+            return value
+
+        exact_match = _EXACT_TOKEN_RE.fullmatch(value)
+        if exact_match:
+            key = exact_match.group("braced") or exact_match.group("plain")
+            return parameters.get(key, value)
+
+        def replace(match: re.Match[str]) -> str:
+            key = match.group("braced") or match.group("plain")
+            if key not in parameters:
+                return match.group(0)
+            return str(parameters[key])
+
+        return _EMBEDDED_TOKEN_RE.sub(replace, value)
+
+    @staticmethod
+    def _contains_unresolved_tokens(value: str) -> bool:
+        return _EMBEDDED_TOKEN_RE.search(value) is not None

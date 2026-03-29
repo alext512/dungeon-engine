@@ -47,6 +47,7 @@ class FileTreePanel(QDockWidget):
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
         self._file_extensions = file_extensions
+        self._context_menu_builder: Callable[[QMenu, str, Path], None] | None = None
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -119,6 +120,13 @@ class FileTreePanel(QDockWidget):
     def clear_tree(self) -> None:
         self._tree.clear()
 
+    def set_context_menu_builder(
+        self,
+        builder: Callable[[QMenu, str, Path], None] | None,
+    ) -> None:
+        """Install an optional callback that can add file-specific actions."""
+        self._context_menu_builder = builder
+
     def select_by_id(self, content_id: str) -> None:
         """Select the item with matching id without emitting a signal."""
         self._tree.blockSignals(True)
@@ -159,7 +167,10 @@ class FileTreePanel(QDockWidget):
             lambda: self.file_open_requested.emit(content_id, file_path)
         )
         menu.addAction(open_action)
-        menu.exec(self._tree.viewport().mapToGlobal(position))
+        if self._context_menu_builder is not None:
+            self._context_menu_builder(menu, content_id, file_path)
+        if menu.actions():
+            menu.exec(self._tree.viewport().mapToGlobal(position))
 
     # ------------------------------------------------------------------
     # Helpers

@@ -229,10 +229,6 @@ def instantiate_entity(
                 f"{source_name} must not declare '{removed_field}'; store that data under "
                 "'variables' instead."
             )
-    if "layer" in entity_data:
-        raise ValueError(
-            f"{source_name} must not declare 'layer'; use 'render_order' instead."
-        )
     space = _parse_entity_space(entity_data, source_name=source_name)
     scope = _parse_entity_scope(entity_data, source_name=source_name)
     if space == "world":
@@ -448,11 +444,6 @@ def _parse_tile_layers(raw_data: dict[str, Any]) -> list[TileLayer]:
     for index, raw_layer in enumerate(raw_layers):
         if not isinstance(raw_layer, dict):
             raise ValueError(f"Area tile_layers[{index}] must be a JSON object.")
-        if "draw_above_entities" in raw_layer:
-            raise ValueError(
-                f"Area tile_layers[{index}] must not declare 'draw_above_entities'; "
-                "use 'render_order' instead."
-            )
         raw_grid = raw_layer.get("grid")
         if not isinstance(raw_grid, list):
             raise ValueError(f"Area tile_layers[{index}] field 'grid' must be a JSON array.")
@@ -996,10 +987,6 @@ def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: 
     if "sprite" in raw_template:
         raise ValueError(
             f"{source_name} must not use 'sprite'; entities now define a 'visuals' array."
-        )
-    if "layer" in raw_template:
-        raise ValueError(
-            f"{source_name} must not declare 'layer'; use 'render_order' instead."
         )
     if "interact_commands" in raw_template:
         raise ValueError(

@@ -778,40 +778,6 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertEqual(serialized["camera"], raw_area["camera"])
 
-    def test_area_loader_rejects_legacy_tile_layer_field(self) -> None:
-        _, project = self._make_project()
-        raw_area = _minimal_area()
-        raw_area["tile_layers"] = [
-            {
-                "name": "ground",
-                "draw_above_entities": False,
-                "grid": [[1]],
-            },
-        ]
-
-        with self.assertRaises(ValueError) as raised:
-            load_area_from_data(raw_area, source_name="<memory>", project=project)
-
-        self.assertIn("must not declare 'draw_above_entities'", str(raised.exception))
-
-    def test_area_loader_rejects_legacy_entity_layer_field(self) -> None:
-        _, project = self._make_project()
-        raw_area = _minimal_area()
-        raw_area["entities"] = [
-            {
-                "id": "player",
-                "kind": "player",
-                "x": 0,
-                "y": 0,
-                "layer": 3,
-            }
-        ]
-
-        with self.assertRaises(ValueError) as raised:
-            load_area_from_data(raw_area, source_name="<memory>", project=project)
-
-        self.assertIn("must not declare 'layer'", str(raised.exception))
-
     def test_serialize_area_writes_unified_layering_fields(self) -> None:
         _, project = self._make_project()
         raw_area = _minimal_area()

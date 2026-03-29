@@ -20,6 +20,10 @@ from typing import Any
 CellFlag = bool | dict[str, Any] | None
 
 
+def _default_entity_y_sort(space: str) -> bool:
+    return str(space).strip().lower() == "world"
+
+
 @dataclass
 class TilesetRef:
     firstgid: int
@@ -53,7 +57,10 @@ class TilesetRef:
 @dataclass
 class TileLayerDocument:
     name: str
-    draw_above_entities: bool
+    render_order: int
+    y_sort: bool
+    sort_y_offset: float
+    stack_order: int
     grid: list[list[int]]
     _extra: dict[str, Any] = field(default_factory=dict)
 
@@ -62,7 +69,10 @@ class TileLayerDocument:
         d = dict(d)
         return cls(
             name=d.pop("name", ""),
-            draw_above_entities=d.pop("draw_above_entities", False),
+            render_order=int(d.pop("render_order", 0)),
+            y_sort=bool(d.pop("y_sort", False)),
+            sort_y_offset=float(d.pop("sort_y_offset", 0.0)),
+            stack_order=int(d.pop("stack_order", 0)),
             grid=d.pop("grid", []),
             _extra=d,
         )
@@ -70,9 +80,13 @@ class TileLayerDocument:
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
             "name": self.name,
-            "draw_above_entities": self.draw_above_entities,
+            "render_order": self.render_order,
+            "y_sort": self.y_sort,
+            "stack_order": self.stack_order,
             "grid": self.grid,
         }
+        if self.sort_y_offset != 0:
+            out["sort_y_offset"] = self.sort_y_offset
         out.update(self._extra)
         return out
 
@@ -92,7 +106,10 @@ class EntityDocument:
     pixel_x: int | None = None
     pixel_y: int | None = None
     space: str = "world"
-    layer: int = 0
+    render_order: int = 10
+    y_sort: bool = True
+    sort_y_offset: float = 0.0
+    stack_order: int = 0
     template: str | None = None
     parameters: dict[str, Any] | None = None
     _extra: dict[str, Any] = field(default_factory=dict)
@@ -100,14 +117,18 @@ class EntityDocument:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> EntityDocument:
         d = dict(d)
+        space = d.pop("space", "world")
         return cls(
             id=d.pop("id", ""),
             x=d.pop("x", 0),
             y=d.pop("y", 0),
             pixel_x=d.pop("pixel_x", None),
             pixel_y=d.pop("pixel_y", None),
-            space=d.pop("space", "world"),
-            layer=d.pop("layer", 0),
+            space=space,
+            render_order=int(d.pop("render_order", 10 if str(space).strip().lower() == "world" else 0)),
+            y_sort=bool(d.pop("y_sort", _default_entity_y_sort(space))),
+            sort_y_offset=float(d.pop("sort_y_offset", 0.0)),
+            stack_order=int(d.pop("stack_order", 0)),
             template=d.pop("template", None),
             parameters=d.pop("parameters", None),
             _extra=d,
@@ -124,8 +145,10 @@ class EntityDocument:
             out["pixel_y"] = self.pixel_y
         if self.space != "world":
             out["space"] = self.space
-        if self.layer:
-            out["layer"] = self.layer
+        out["render_order"] = self.render_order
+        out["y_sort"] = self.y_sort
+        out["sort_y_offset"] = self.sort_y_offset
+        out["stack_order"] = self.stack_order
         if self.template is not None:
             out["template"] = self.template
         if self.parameters is not None:

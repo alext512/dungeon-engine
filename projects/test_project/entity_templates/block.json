@@ -10,7 +10,9 @@
       "path": "assets/project/sprites/object_sheet.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frames": [0]
+      "frames": [
+        0
+      ]
     }
   ],
   "events": {
@@ -69,5 +71,6 @@
         }
       ]
     }
-  }
+  },
+  "render_order": 10
 }

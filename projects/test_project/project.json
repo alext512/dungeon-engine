@@ -1,21 +1,32 @@
 {
-  "entity_template_paths": ["entity_templates/"],
-  "asset_paths": ["assets/"],
-  "area_paths": ["areas/"],
-  "command_paths": ["commands/"],
+  "entity_template_paths": [
+    "entity_templates/"
+  ],
+  "asset_paths": [
+    "assets/"
+  ],
+  "area_paths": [
+    "areas/"
+  ],
+  "command_paths": [
+    "commands/"
+  ],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
       "id": "dialogue_controller",
-      "template": "entity_templates/dialogue_panel"
+      "template": "entity_templates/dialogue_panel",
+      "render_order": 100
     },
     {
       "id": "pause_controller",
-      "template": "entity_templates/pause_controller"
+      "template": "entity_templates/pause_controller",
+      "render_order": 99
     },
     {
       "id": "debug_controller",
-      "template": "entity_templates/debug_controller"
+      "template": "entity_templates/debug_controller",
+      "render_order": 99
     }
   ],
   "startup_area": "areas/title_screen",
@@ -28,4 +39,3 @@
   },
   "debug_inspection_enabled": true
 }
-

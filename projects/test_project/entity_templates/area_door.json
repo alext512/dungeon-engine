@@ -9,7 +9,9 @@
       "path": "assets/project/sprites/doorway.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frames": [0]
+      "frames": [
+        0
+      ]
     }
   ],
   "events": {
@@ -20,7 +22,9 @@
           "type": "change_area",
           "area_id": "$target_area",
           "entry_id": "$target_entry",
-          "transfer_entity_ids": ["actor"],
+          "transfer_entity_ids": [
+            "actor"
+          ],
           "camera_follow": {
             "mode": "entity",
             "entity_id": "actor"
@@ -28,6 +32,6 @@
         }
       ]
     }
-  }
+  },
+  "render_order": 10
 }
-

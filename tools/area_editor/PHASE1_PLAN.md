@@ -93,7 +93,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 - `widgets/tile_canvas.py`: QGraphicsView + QGraphicsScene
 - Scene sized to (width * tile_size, height * tile_size)
 - One QGraphicsItemGroup per tile layer (bottom-up draw order)
-- **Z-order must respect `draw_above_entities`**: render below-entity layers first, then entity markers, then above-entity layers. Each group gets an explicit z-value to enforce this ordering.
+- **Z-order must follow the runtime render model**: tile layers and entity markers need unified `render_order` support, with y-sorted layers/cells and entity markers able to interleave in the same band.
 - For each cell: resolve GID -> tileset frame -> QGraphicsPixmapItem at (col * tile_size, row * tile_size)
 - Entity markers: colored semi-transparent rectangles with tooltips showing id + template
 - Entity marker placement: use (x * tile_size, y * tile_size) for world-space entities, (pixel_x, pixel_y) for screen-space entities
@@ -101,7 +101,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 - Zoom: mouse wheel, anchor under mouse, 0.25x-10x range, nearest-neighbor (no smooth transform — pixel art)
 - Pan: ScrollHandDrag mode (middle mouse or hold-drag)
 - Mouse move -> emit cell coordinates for status bar
-- **Verify**: village_square renders with all 3 tile layers composited, above-entity layers draw over entity markers, entities visible at correct positions
+- **Verify**: village_square renders with all 3 tile layers composited, and the canvas can preview the runtime ordering model (`render_order`, `y_sort`, `stack_order`) instead of the retired below/above split
 
 ### Step 6: Area list panel
 - `widgets/area_list_panel.py`: QDockWidget with QListWidget
@@ -124,7 +124,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 ### Step 9: Automated tests
 - `tests/test_manifest.py`: test against `projects/test_project/` — area discovery finds 3 areas, area_id derivation matches expected ids, path fallback logic works when keys are missing
 - `tests/test_asset_resolver.py`: test against `projects/test_project/` — resolves known tileset paths, returns None for missing paths
-- `tests/test_area_document.py`: load village_square.json — correct dimensions, layer count, entity count, `draw_above_entities` flags preserved, unknown fields round-trip through `from_dict()`/`to_dict()`
+- `tests/test_area_document.py`: load village_square.json — correct dimensions, layer count, entity count, `render_order` / `y_sort` fields preserved, unknown fields round-trip through `from_dict()`/`to_dict()`
 - Run with: `python -m pytest tests/` from `tools/area_editor/`
 - These tests are pure Python (no Qt dependency) and use the real test_project fixtures via relative path
 
@@ -143,7 +143,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 1. **Dataclass documents with `_extra` passthrough** — every document level preserves unknown fields for safe round-tripping (Phase 2 saving)
 2. **Independent path resolution** — replicates runtime's algorithms from `dungeon_engine/project.py` without importing it (JSON-only contract)
 3. **QGraphicsItemGroup per layer** — O(1) visibility toggling, clean compositing
-4. **Z-order respects draw_above_entities** — below-entity layers, then entity markers, then above-entity layers, matching the runtime's rendering contract
+4. **Z-order matches the unified runtime render model** — tile layers and entity markers share `render_order`, with y-sorted content interleaving inside a band
 5. **No entity sprite rendering in Phase 1** — just colored markers with tooltips; sprite visuals are Phase 3+
 6. **Automated tests against real fixtures** — area discovery, asset resolution, and document round-trip tested against test_project to catch drift from runtime conventions
 7. **Pixel-perfect rendering** — SmoothPixmapTransform disabled for crisp pixel art at all zoom levels
