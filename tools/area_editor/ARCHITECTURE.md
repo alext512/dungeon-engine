@@ -1,22 +1,26 @@
 # Architecture
 
-This document describes the intended shape of a future implementation.
+This document describes the current editor architecture plus the intended shape of later slices.
 
-It is a design target, not current code.
+Phase 1 is implemented. Editing, saving, validation, and runtime handoff remain planned work.
 
 ## High-Level Shape
 
-The future tool should look like a normal standalone application with a small number of clearly separated concerns.
+The tool is a normal standalone application with a small number of clearly separated concerns.
 
-Suggested future slices:
+Current slices:
 
 - app shell
 - project scanner
 - area document loading/saving
 - tileset and asset catalog
+- UI layer
+- tests
+
+Planned later slices:
+
 - entity reference helpers
 - editing operations
-- UI layer
 - tool-owned settings
 
 ## Dependency Direction
@@ -32,7 +36,7 @@ Nothing in the tool should depend on `dungeon_engine`.
 
 ## Proposed Future Internal Modules
 
-These are namespaced ideas, not files to create right now:
+Current modules already include:
 
 - `app/`
   - startup, configuration, session lifecycle
@@ -45,11 +49,19 @@ These are namespaced ideas, not files to create right now:
 - `operations/`
   - paint tile, set cell flags, place entity, move entity, reorder entity, rename id
 - `widgets/`
-  - tileset browser, layer panel, entity inspector, entity-ref picker, raw JSON pane
+  - tile canvas, layer panel, area list, template list, generic file-tree panels,
+    tabbed document area, JSON viewer, image viewer
+- `tests/`
+  - manifest loading, asset resolution, and area-document round-tripping
+
+Planned later modules/slices:
+
+- `operations/`
+  - paint tile, set cell flags, place entity, move entity, reorder entity, rename id
+- `widgets/`
+  - tileset browser, entity inspector, entity-ref picker, raw JSON pane
 - `settings/`
   - tool-owned preferences and UI state
-- `tests/`
-  - document preservation, editing operations, project scanning, field widget behavior
 
 ## Recommended Data Flow
 
@@ -110,12 +122,16 @@ It should not embed or import the runtime loop.
 
 ## Recommended First Implementation Order
 
-When implementation starts later, a safe order is:
+The implementation order so far has covered:
 
 1. project scan and area list
 2. load area and render read-only grid
-3. tile painting
-4. entity placement and movement
-5. entity inspector with entity-ref fields
-6. preservation-focused saving
-7. launch runtime externally
+
+The next recommended order is:
+
+3. tabbed document area (done — multiple documents open in tabs, JSON/image viewers for non-area content)
+4. tile painting
+5. entity placement and movement
+6. entity inspector with entity-ref fields
+7. preservation-focused saving
+8. launch runtime externally

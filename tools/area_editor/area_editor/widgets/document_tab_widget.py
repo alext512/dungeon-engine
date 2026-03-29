@@ -1,0 +1,207 @@
+"""Central tabbed document area.
+
+Manages open document tabs — areas render in TileCanvas, JSON files
+in a read-only viewer, images in a zoomable preview.  Tracks open
+documents by content_id to prevent duplicates.
+"""
+
+from __future__ import annotations
+
+import logging
+from enum import Enum, auto
+from pathlib import Path
+
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QFont, QMouseEvent
+from PySide6.QtWidgets import (
+    QLabel,
+    QStackedWidget,
+    QTabBar,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from area_editor.widgets.image_viewer_widget import ImageViewerWidget
+from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.tile_canvas import TileCanvas
+
+log = logging.getLogger(__name__)
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+
+
+class ContentType(Enum):
+    AREA = auto()
+    ENTITY_TEMPLATE = auto()
+    DIALOGUE = auto()
+    NAMED_COMMAND = auto()
+    ASSET = auto()
+
+
+class _TabInfo:
+    """Metadata stored per open tab."""
+
+    __slots__ = ("content_id", "file_path", "content_type", "dirty")
+
+    def __init__(
+        self, content_id: str, file_path: Path, content_type: ContentType
+    ) -> None:
+        self.content_id = content_id
+        self.file_path = file_path
+        self.content_type = content_type
+        self.dirty = False
+
+
+class DocumentTabWidget(QStackedWidget):
+    """Stacked widget: either an empty welcome page or the tab widget."""
+
+    # Emitted when the active tab changes. content_id is "" when no tabs.
+    active_tab_changed = Signal(str, object)  # (content_id, ContentType | None)
+    tab_closed = Signal(str)  # content_id
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+        # Welcome page (shown when no tabs are open)
+        self._welcome = QLabel("Open a file from the side panels")
+        self._welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        welcome_font = QFont()
+        welcome_font.setPointSize(14)
+        self._welcome.setFont(welcome_font)
+        self._welcome.setStyleSheet("color: #888;")
+        self.addWidget(self._welcome)
+
+        # Tab widget
+        self._tabs = QTabWidget()
+        self._tabs.setTabsClosable(True)
+        self._tabs.setMovable(True)
+        self._tabs.setDocumentMode(True)
+        self._tabs.tabCloseRequested.connect(self._close_tab)
+        self._tabs.currentChanged.connect(self._on_current_changed)
+        self.addWidget(self._tabs)
+
+        # Install event filter on the tab bar for middle-click close
+        self._tabs.tabBar().installEventFilter(self)
+
+        # Open tab registry: content_id -> tab index
+        self._tab_infos: list[_TabInfo] = []
+
+        # Start on welcome page
+        self.setCurrentWidget(self._welcome)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def open_tab(
+        self,
+        content_id: str,
+        file_path: Path,
+        content_type: ContentType,
+        *,
+        widget: QWidget | None = None,
+    ) -> QWidget:
+        """Open a document tab, or focus it if already open.
+
+        For areas, the caller should pass a pre-configured ``TileCanvas``
+        as *widget*.  For other types, the appropriate viewer is created
+        automatically.
+
+        Returns the tab's widget.
+        """
+        # Check for existing tab
+        for i, info in enumerate(self._tab_infos):
+            if info.content_id == content_id:
+                self._tabs.setCurrentIndex(i)
+                self.setCurrentWidget(self._tabs)
+                return self._tabs.widget(i)
+
+        # Create widget if not provided
+        if widget is None:
+            widget = self._create_viewer(file_path, content_type)
+
+        info = _TabInfo(content_id, file_path, content_type)
+        self._tab_infos.append(info)
+
+        # Tab label: last segment of the content id
+        label = content_id.rsplit("/", 1)[-1]
+        index = self._tabs.addTab(widget, label)
+        self._tabs.setTabToolTip(index, content_id)
+        self._tabs.setCurrentIndex(index)
+        self.setCurrentWidget(self._tabs)
+
+        return widget
+
+    def close_all(self) -> None:
+        """Close all tabs (e.g. when loading a new project)."""
+        while self._tabs.count() > 0:
+            self._close_tab(0)
+
+    def active_content_id(self) -> str | None:
+        """Return the content_id of the active tab, or None."""
+        idx = self._tabs.currentIndex()
+        if 0 <= idx < len(self._tab_infos):
+            return self._tab_infos[idx].content_id
+        return None
+
+    def active_widget(self) -> QWidget | None:
+        """Return the widget of the active tab."""
+        return self._tabs.currentWidget()
+
+    def active_info(self) -> _TabInfo | None:
+        """Return the _TabInfo for the active tab."""
+        idx = self._tabs.currentIndex()
+        if 0 <= idx < len(self._tab_infos):
+            return self._tab_infos[idx]
+        return None
+
+    # ------------------------------------------------------------------
+    # Event filter (middle-click close)
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        if obj is self._tabs.tabBar() and event.type() == QEvent.Type.MouseButtonRelease:
+            me: QMouseEvent = event
+            if me.button() == Qt.MouseButton.MiddleButton:
+                idx = self._tabs.tabBar().tabAt(me.position().toPoint())
+                if idx >= 0:
+                    self._close_tab(idx)
+                    return True
+        return super().eventFilter(obj, event)
+
+    # ------------------------------------------------------------------
+    # Slots
+    # ------------------------------------------------------------------
+
+    def _close_tab(self, index: int) -> None:
+        if index < 0 or index >= len(self._tab_infos):
+            return
+        info = self._tab_infos.pop(index)
+        widget = self._tabs.widget(index)
+        self._tabs.removeTab(index)
+        widget.deleteLater()
+        self.tab_closed.emit(info.content_id)
+
+        if self._tabs.count() == 0:
+            self.setCurrentWidget(self._welcome)
+            self.active_tab_changed.emit("", None)
+
+    def _on_current_changed(self, index: int) -> None:
+        if 0 <= index < len(self._tab_infos):
+            info = self._tab_infos[index]
+            self.active_tab_changed.emit(info.content_id, info.content_type)
+        else:
+            self.active_tab_changed.emit("", None)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _create_viewer(
+        self, file_path: Path, content_type: ContentType
+    ) -> QWidget:
+        if content_type == ContentType.ASSET:
+            if file_path.suffix.lower() in _IMAGE_EXTENSIONS:
+                return ImageViewerWidget(file_path)
+        return JsonViewerWidget(file_path)

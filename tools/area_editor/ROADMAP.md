@@ -2,9 +2,9 @@
 
 This roadmap is for the future external area editor only.
 
-It does not imply that implementation should start immediately.
+Phase 0 and Phase 1 are complete. Later phases remain planned work.
 
-## Phase 0: Documentation And Boundary Lock
+## Phase 0: Documentation And Boundary Lock (Completed)
 
 Goal:
 
@@ -17,7 +17,7 @@ Exit criteria:
 - this folder exists
 - future agents can understand the intended direction from docs alone
 
-## Phase 1: Read-Only Project Browser
+## Phase 1: Read-Only Project Browser (Completed)
 
 Goal:
 
@@ -32,7 +32,36 @@ Deliverables:
 - tileset discovery
 - basic area rendering or structured inspection
 
-## Phase 2: Tile And Cell Editing
+Implemented in the current tool:
+
+- PySide6 app shell with docked panels
+- read-only browsing for areas, entity templates, dialogues, commands, and assets
+- area loading into a zoomable, pannable tile canvas
+- layer/entity visibility toggles plus grid toggle
+- entity markers and template sprite previews
+- focused automated tests for manifest loading, asset resolution, and area documents
+
+## Phase 2: Tabbed Document Area (Completed)
+
+Goal:
+
+- open multiple documents simultaneously in tabs
+- view any content type (areas, templates, dialogues, commands, assets)
+
+Implemented:
+
+- central QTabWidget replacing single-canvas layout
+- double-click in side panels opens document in a tab (or focuses existing)
+- right-click context menu with "Open" on all side panels
+- closable, reorderable, middle-click-closable tabs
+- area tabs render in the existing tile canvas with full zoom/pan
+- entity templates, dialogues, and commands open in a read-only JSON viewer
+- image assets open in a zoomable preview with checkerboard transparency
+- layer panel contextually binds to whichever area tab is active
+- welcome page shown when no tabs are open
+- tab deduplication (re-opening same content focuses existing tab)
+
+## Phase 3: Tile And Cell Editing
 
 Goal:
 
@@ -46,7 +75,7 @@ Deliverables:
 - walkability or cell-flag editing
 - save with preservation guarantees
 
-## Phase 3: Entity Placement And Movement
+## Phase 4: Entity Placement And Movement
 
 Goal:
 
@@ -60,7 +89,7 @@ Deliverables:
 - reorder stack or layer-related fields
 - id generation assistance
 
-## Phase 4: Inspector And Entity References
+## Phase 5: Inspector And Entity References
 
 Goal:
 
@@ -73,7 +102,7 @@ Deliverables:
 - entity-reference picker widgets
 - broken-reference warnings
 
-## Phase 5: Raw JSON Escape Hatches
+## Phase 6: Raw JSON Escape Hatches
 
 Goal:
 
@@ -84,7 +113,7 @@ Deliverables:
 - controlled raw JSON view or editor for advanced fields
 - preservation tests for unknown data
 
-## Phase 6: Validation And Runtime Handoff
+## Phase 7: Validation And Runtime Handoff
 
 Goal:
 
@@ -96,7 +125,7 @@ Deliverables:
 - optional external runtime launch for the current project/area
 - clearer save/test workflow
 
-## Phase 7: Quality Pass
+## Phase 8: Quality Pass
 
 Possible later improvements:
 
