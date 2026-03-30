@@ -1,0 +1,21 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "remove_screen_element",
+      "element_id": "$self.panel_element_id"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "$self.portrait_element_id"
+    },
+    {
+      "type": "remove_screen_element",
+      "element_id": "$self.text_element_id"
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/dialogue/clear_choice_elements"
+    }
+  ]
+}

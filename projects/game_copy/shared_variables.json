@@ -1,0 +1,39 @@
+{
+  "display": {
+    "internal_width": 256,
+    "internal_height": 192
+  },
+  "dialogue": {
+    "panel_path": "assets/project/ui/dialogue/panel.png",
+    "max_lines": 3,
+    "plain_box": {
+      "x": 8,
+      "y": 132,
+      "width": 240
+    },
+    "portrait_box": {
+      "x": 56,
+      "y": 132,
+      "width": 192
+    },
+    "portrait_position": {
+      "x": 8,
+      "y": 130
+    },
+    "choice_box": {
+      "x": 56,
+      "width": 188
+    },
+    "plain_choice_box": {
+      "x": 12,
+      "width": 232
+    },
+    "choice_rows_y": [132, 142, 152]
+  },
+  "movement": {
+    "ticks_per_tile": 16
+  },
+  "progress": {
+    "save_path": "progress.json"
+  }
+}

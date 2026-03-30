@@ -1,0 +1,40 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "present": true,
+  "visible": false,
+  "variables": {
+    "levels_completed": 0,
+    "last_level_played": 0,
+    "level_select_entry": "level_1"
+  },
+  "visuals": [],
+  "events": {
+    "refresh_level_select_entry": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "level_select_entry",
+          "value": {
+            "$collection_item": {
+              "value": {
+                "0": "level_1",
+                "1": "level_1",
+                "2": "level_2",
+                "3": "level_3",
+                "4": "level_4",
+                "5": "level_5"
+              },
+              "key": "$self.last_level_played",
+              "default": "level_1"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "render_order": 0,
+  "y_sort": false
+}

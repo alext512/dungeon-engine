@@ -1,0 +1,94 @@
+{
+  "params": [
+    "delta"
+  ],
+  "commands": [
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_phase",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": "choice",
+      "then": [
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_current_option_count",
+          "entity_id": "$self_id",
+          "op": "gt",
+          "value": 0,
+          "then": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "dialogue_choice_index",
+              "value": {
+                "$wrap_index": {
+                  "value": {
+                    "$sum": [
+                      "$self.dialogue_choice_index",
+                      "$delta"
+                    ]
+                  },
+                  "count": "$self.dialogue_current_option_count",
+                  "default": 0
+                }
+              }
+            },
+            {
+              "type": "check_entity_var",
+              "name": "dialogue_choice_index",
+              "entity_id": "$self_id",
+              "op": "lt",
+              "value": "$self.dialogue_choice_scroll_offset",
+              "then": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "dialogue_choice_scroll_offset",
+                  "value": "$self.dialogue_choice_index"
+                }
+              ],
+              "else": [
+                {
+                  "type": "check_entity_var",
+                  "name": "dialogue_choice_index",
+                  "entity_id": "$self_id",
+                  "op": "gte",
+                  "value": {
+                    "$sum": [
+                      "$self.dialogue_choice_scroll_offset",
+                      "$self.layout.choice.visible_rows"
+                    ]
+                  },
+                  "then": [
+                    {
+                      "type": "set_entity_var",
+                      "entity_id": "$self_id",
+                      "name": "dialogue_choice_scroll_offset",
+                      "value": {
+                        "$sum": [
+                          "$self.dialogue_choice_index",
+                          {
+                            "$product": [
+                              -1,
+                              "$self.layout.choice.visible_rows"
+                            ]
+                          },
+                          1
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "run_command",
+              "command_id": "commands/dialogue/render_choice"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

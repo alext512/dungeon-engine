@@ -1,0 +1,75 @@
+{
+  "kind": "pushable",
+  "variables": {
+    "blocks_movement": true,
+    "pushable": true,
+    "shape": "$shape",
+    "walk_phase": 0,
+    "direction": "down",
+    "phase_a_frames": [
+      "$idle_frame"
+    ],
+    "phase_b_frames": [
+      "$idle_frame"
+    ],
+    "idle_frame": "$idle_frame"
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "$sprite_path",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        "$idle_frame"
+      ]
+    }
+  ],
+  "events": {
+    "push_from_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/push_one_tile",
+          "direction": "up",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    },
+    "push_from_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/push_one_tile",
+          "direction": "down",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    },
+    "push_from_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/push_one_tile",
+          "direction": "right",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    },
+    "push_from_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/push_one_tile",
+          "direction": "left",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

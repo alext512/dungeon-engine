@@ -1,0 +1,308 @@
+{
+  "kind": "gate",
+  "variables": {
+    "blocks_movement": true,
+    "open": false,
+    "input_value_0": 0,
+    "input_value_1": 0,
+    "input_value_2": 0,
+    "correct_value_0": "$correct_value_0",
+    "correct_value_1": "$correct_value_1",
+    "correct_value_2": "$correct_value_2",
+    "pending_index": 0,
+    "pending_value": 0,
+    "pending_amount": 0
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/original/Iron_Gate.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "events": {
+    "set_input_value": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "pending_index",
+          "value": "$index"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "pending_value",
+          "value": "$value"
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "pending_index",
+          "op": "eq",
+          "value": 0,
+          "then": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "input_value_0",
+              "value": "$self.pending_value"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
+              "name": "pending_index",
+              "op": "eq",
+              "value": 1,
+              "then": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "input_value_1",
+                  "value": "$self.pending_value"
+                }
+              ],
+              "else": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "input_value_2",
+                  "value": "$self.pending_value"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "run_event",
+          "entity_id": "$self_id",
+          "event_id": "recalc"
+        }
+      ]
+    },
+    "add_input_value": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "pending_index",
+          "value": "$index"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "pending_amount",
+          "value": "$amount"
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "pending_index",
+          "op": "eq",
+          "value": 0,
+          "then": [
+            {
+              "type": "add_entity_var",
+              "entity_id": "$self_id",
+              "name": "input_value_0",
+              "amount": "$self.pending_amount"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
+              "name": "pending_index",
+              "op": "eq",
+              "value": 1,
+              "then": [
+                {
+                  "type": "add_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "input_value_1",
+                  "amount": "$self.pending_amount"
+                }
+              ],
+              "else": [
+                {
+                  "type": "add_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "input_value_2",
+                  "amount": "$self.pending_amount"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "run_event",
+          "entity_id": "$self_id",
+          "event_id": "recalc"
+        }
+      ]
+    },
+    "recalc": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "input_value_0",
+          "op": "eq",
+          "value": "$self.correct_value_0",
+          "then": [
+            {
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
+              "name": "input_value_1",
+              "op": "eq",
+              "value": "$self.correct_value_1",
+              "then": [
+                {
+                  "type": "check_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "input_value_2",
+                  "op": "eq",
+                  "value": "$self.correct_value_2",
+                  "then": [
+                    {
+                      "type": "run_event",
+                      "entity_id": "$self_id",
+                      "event_id": "open_gate"
+                    }
+                  ],
+                  "else": [
+                    {
+                      "type": "run_event",
+                      "entity_id": "$self_id",
+                      "event_id": "close_gate"
+                    }
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "type": "run_event",
+                  "entity_id": "$self_id",
+                  "event_id": "close_gate"
+                }
+              ]
+            }
+          ],
+          "else": [
+            {
+              "type": "run_event",
+              "entity_id": "$self_id",
+              "event_id": "close_gate"
+            }
+          ]
+        }
+      ]
+    },
+    "open_gate": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "open",
+          "op": "eq",
+          "value": false,
+          "then": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "open",
+              "value": true
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "blocks_movement",
+              "value": false
+            },
+            {
+              "type": "set_entity_field",
+              "entity_id": "$self_id",
+              "field_name": "visible",
+              "value": true
+            },
+            {
+              "type": "set_visual_frame",
+              "entity_id": "$self_id",
+              "frame": 0
+            },
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "frame_sequence": [1, 2, 3, 4, 5],
+              "frames_per_sprite_change": 4,
+              "hold_last_frame": true,
+              "wait": true
+            },
+            {
+              "type": "set_entity_field",
+              "entity_id": "$self_id",
+              "field_name": "visible",
+              "value": false
+            }
+          ]
+        }
+      ]
+    },
+    "close_gate": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "open",
+          "op": "eq",
+          "value": true,
+          "then": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "open",
+              "value": false
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "blocks_movement",
+              "value": true
+            },
+            {
+              "type": "set_entity_field",
+              "entity_id": "$self_id",
+              "field_name": "visible",
+              "value": true
+            },
+            {
+              "type": "set_visual_frame",
+              "entity_id": "$self_id",
+              "frame": 5
+            },
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "frame_sequence": [4, 3, 2, 1, 0],
+              "frames_per_sprite_change": 4,
+              "hold_last_frame": true,
+              "wait": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

@@ -1,0 +1,940 @@
+{
+  "name": "Level2",
+  "tile_size": 16,
+  "variables": {},
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/original/Set_A_Hills2.png",
+      "tile_width": 16,
+      "tile_height": 16
+    },
+    {
+      "firstgid": 257,
+      "path": "assets/original/Set_A_Mines1.png",
+      "tile_width": 16,
+      "tile_height": 16
+    }
+  ],
+  "tile_layers": [
+    {
+      "name": "tilemap_floor",
+      "grid": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          21,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          21,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          21,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          21,
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          21,
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          21,
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          21,
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          21,
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          210,
+          0,
+          0,
+          0,
+          210,
+          0,
+          0,
+          210
+        ]
+      ],
+      "render_order": 0
+    },
+    {
+      "name": "tilemap_wall",
+      "grid": [
+        [
+          18,
+          18,
+          18,
+          18,
+          18,
+          18,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          18,
+          7,
+          119,
+          40,
+          18,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          18,
+          19,
+          0,
+          17,
+          18,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          18,
+          19,
+          0,
+          17,
+          18,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          7,
+          35,
+          0,
+          33,
+          8,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          19,
+          0,
+          0,
+          0,
+          17,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          19,
+          0,
+          0,
+          0,
+          17,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          19,
+          0,
+          0,
+          0,
+          17,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          19,
+          0,
+          0,
+          0,
+          17,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          19,
+          0,
+          0,
+          0,
+          17,
+          18,
+          0,
+          0
+        ],
+        [
+          18,
+          2,
+          2,
+          2,
+          2,
+          2,
+          18,
+          0,
+          0
+        ]
+      ],
+      "render_order": 0
+    },
+    {
+      "name": "tilemap_decors_1",
+      "grid": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          54,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          71,
+          0,
+          70,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "render_order": 0
+    },
+    {
+      "name": "tilemap_decors_2",
+      "grid": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          71,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "render_order": 0
+    },
+    {
+      "name": "colliders",
+      "grid": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          126,
+          126,
+          126,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          126,
+          0,
+          126,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          126,
+          0,
+          126,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          126,
+          126,
+          0,
+          126,
+          126,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          126,
+          0,
+          0,
+          0,
+          126,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          126,
+          0,
+          0,
+          0,
+          126,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          126,
+          0,
+          0,
+          0,
+          126,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          126,
+          0,
+          0,
+          126,
+          126,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          126,
+          126,
+          0,
+          126,
+          126,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          126,
+          126,
+          126,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "render_order": 0
+    }
+  ],
+  "cell_flags": [
+    [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ],
+    [
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  ],
+  "enter_commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "progress_controller",
+      "name": "last_level_played",
+      "value": 2,
+      "persistent": true
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/system/save_progress"
+    }
+  ],
+  "entry_points": {},
+  "camera": {
+    "follow": {
+      "mode": "entity",
+      "entity_id": "player"
+    },
+    "bounds": {
+      "x": 0,
+      "y": 0,
+      "width": 9,
+      "height": 11,
+      "space": "world_grid"
+    }
+  },
+  "input_targets": {
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
+  "entities": [
+    {
+      "id": "npc",
+      "x": 2,
+      "y": 8,
+      "template": "entity_templates/npc",
+      "parameters": {
+        "dialogue_path": "dialogues/levels/level2_npc.json"
+      },
+      "render_order": 10
+    },
+    {
+      "id": "gate",
+      "x": 3,
+      "y": 4,
+      "template": "entity_templates/gate",
+      "parameters": {
+        "correct_value_0": 1,
+        "correct_value_1": 1,
+        "correct_value_2": 0
+      },
+      "render_order": 10
+    },
+    {
+      "id": "button_a",
+      "x": 2,
+      "y": 5,
+      "template": "entity_templates/button",
+      "parameters": {
+        "single_use": true,
+        "target_gate_id": "gate",
+        "target_index": 0,
+        "press_value": 1,
+        "release_value": 1
+      },
+      "render_order": 0
+    },
+    {
+      "id": "button_b",
+      "x": 4,
+      "y": 5,
+      "template": "entity_templates/button",
+      "parameters": {
+        "single_use": true,
+        "target_gate_id": "gate",
+        "target_index": 1,
+        "press_value": 1,
+        "release_value": 1
+      },
+      "render_order": 0
+    },
+    {
+      "id": "exit",
+      "x": 3,
+      "y": 1,
+      "template": "entity_templates/prompt_object",
+      "parameters": {
+        "sprite_path": "assets/original/Door.png",
+        "frame_width": 16,
+        "frame_height": 16,
+        "frame": 0,
+        "offset_y": 0,
+        "blocks_movement": true,
+        "dialogue_path": "dialogues/levels/exit_next.json",
+        "dialogue_on_start": [],
+        "dialogue_on_end": [],
+        "segment_hooks": [
+          {},
+          {
+            "option_commands_by_id": {
+              "yes": [
+                {
+                  "type": "run_command",
+                  "command_id": "commands/system/complete_level_next",
+                  "level_number": 2,
+                  "next_level_number": 3,
+                  "area_id": "areas/level3"
+                }
+              ],
+              "return": [
+                {
+                  "type": "run_command",
+                  "command_id": "commands/system/complete_level_return",
+                  "level_number": 2
+                }
+              ]
+            }
+          }
+        ],
+        "allow_cancel": false
+      },
+      "render_order": 10
+    },
+    {
+      "id": "ball",
+      "x": 3,
+      "y": 6,
+      "template": "entity_templates/pushable_object",
+      "parameters": {
+        "shape": "circle",
+        "sprite_path": "assets/original/Rolling_Ball.png",
+        "idle_frame": 0
+      },
+      "render_order": 10,
+      "variables": {
+        "phase_a_frames": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "phase_b_frames": [
+          1,
+          2,
+          3,
+          0
+        ]
+      }
+    },
+    {
+      "id": "player",
+      "x": 3,
+      "y": 9,
+      "template": "entity_templates/player",
+      "render_order": 10
+    }
+  ]
+}

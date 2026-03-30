@@ -1,0 +1,38 @@
+{
+  "kind": "npc",
+  "variables": {
+    "blocks_movement": true
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/original/Character1.png",
+      "frame_width": 16,
+      "frame_height": 20,
+      "frames": [
+        1
+      ],
+      "offset_y": -4
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "dialogue_controller",
+          "event_id": "open_dialogue",
+          "dialogue_path": "$dialogue_path",
+          "dialogue_on_start": [],
+          "dialogue_on_end": [],
+          "segment_hooks": [],
+          "allow_cancel": false,
+          "actor_entity_id": "$actor_id",
+          "caller_entity_id": "$self_id"
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

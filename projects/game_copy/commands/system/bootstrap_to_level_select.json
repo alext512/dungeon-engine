@@ -1,0 +1,19 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "load_game",
+      "save_path": "$project.progress.save_path"
+    },
+    {
+      "type": "run_event",
+      "entity_id": "progress_controller",
+      "event_id": "refresh_level_select_entry"
+    },
+    {
+      "type": "change_area",
+      "area_id": "areas/title_screen",
+      "entry_id": "start"
+    }
+  ]
+}

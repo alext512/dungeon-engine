@@ -1,0 +1,25 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "You are back to the entrance!"
+    },
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Restart",
+          "option_id": "restart"
+        },
+        {
+          "text": "Back to level select",
+          "option_id": "level_select"
+        },
+        {
+          "text": "Cancel",
+          "option_id": "cancel"
+        }
+      ]
+    }
+  ]
+}

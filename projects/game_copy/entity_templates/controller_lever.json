@@ -1,0 +1,37 @@
+{
+  "kind": "controller_lever",
+  "variables": {
+    "blocks_movement": true
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/original/controller_lever.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "dialogue_controller",
+          "event_id": "open_dialogue",
+          "dialogue_path": "$dialogue_path",
+          "dialogue_on_start": "$dialogue_on_start",
+          "dialogue_on_end": "$dialogue_on_end",
+          "segment_hooks": "$segment_hooks",
+          "allow_cancel": "$allow_cancel",
+          "actor_entity_id": "$actor_id",
+          "caller_entity_id": "$self_id"
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

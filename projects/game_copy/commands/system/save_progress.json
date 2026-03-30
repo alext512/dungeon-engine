@@ -1,0 +1,14 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "run_event",
+      "entity_id": "progress_controller",
+      "event_id": "refresh_level_select_entry"
+    },
+    {
+      "type": "save_game",
+      "save_path": "$project.progress.save_path"
+    }
+  ]
+}

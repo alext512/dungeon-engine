@@ -1,0 +1,269 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_definition.segments",
+          "index": "$self.dialogue_segment_index",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_hook",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_segment_hooks",
+          "index": "$self.dialogue_segment_index",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_type",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "type",
+          "default": "text"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_pages",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "pages",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_text",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "text",
+          "default": ""
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_options",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "options",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var_length",
+      "name": "dialogue_current_option_count",
+      "entity_id": "$self_id",
+      "value": "$self.dialogue_current_segment_options"
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_on_start_commands",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment_hook",
+          "key": "on_start",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_on_end_commands",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment_hook",
+          "key": "on_end",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_option_commands_by_id",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment_hook",
+          "key": "option_commands_by_id",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_option_commands",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment_hook",
+          "key": "option_commands",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_speaker_marker",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "speaker_id",
+          "default": "__inherit__"
+        }
+      }
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_current_segment_speaker_marker",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": "__inherit__",
+      "then": [],
+      "else": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_current_speaker_id",
+          "value": "$self.dialogue_current_segment_speaker_marker"
+        }
+      ]
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_segment_show_portrait",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "show_portrait",
+          "default": "__unset__"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_advance",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment",
+          "key": "advance",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_advance_mode",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_advance",
+          "key": "mode",
+          "default": "interact"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_advance_seconds",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_advance",
+          "key": "seconds",
+          "default": 0.0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_font_id",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_definition",
+          "key": "font_id",
+          "default": "$self.default_font_id"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_max_lines",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_definition",
+          "key": "max_lines",
+          "default": "$self.default_max_lines"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_text_color",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_definition",
+          "key": "text_color",
+          "default": "$self.default_text_color"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_segment_revision_snapshot",
+      "value": "$self.dialogue_revision"
+    },
+    {
+      "type": "run_sequence",
+      "commands": "$self.dialogue_current_segment_on_start_commands",
+      "actor_entity_id": "$self.dialogue_actor_id",
+      "caller_entity_id": "$self.dialogue_caller_id"
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_revision",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": "$self.dialogue_current_segment_revision_snapshot",
+      "then": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/render_current_segment"
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,30 @@
+{
+  "entity_template_paths": [
+    "entity_templates/"
+  ],
+  "asset_paths": [
+    "assets/"
+  ],
+  "area_paths": [
+    "areas/"
+  ],
+  "command_paths": [
+    "commands/"
+  ],
+  "shared_variables_path": "shared_variables.json",
+  "save_dir": "saves",
+  "global_entities": [
+    {
+      "id": "dialogue_controller",
+      "template": "entity_templates/dialogue_panel",
+      "render_order": 100
+    },
+    {
+      "id": "progress_controller",
+      "template": "entity_templates/progress_controller",
+      "render_order": 0
+    }
+  ],
+  "startup_area": "areas/title_screen",
+  "input_targets": {}
+}

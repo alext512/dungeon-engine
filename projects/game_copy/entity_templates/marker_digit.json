@@ -1,0 +1,18 @@
+{
+  "kind": "marker",
+  "variables": {
+    "blocks_movement": false
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/original/Numbers.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        "$frame"
+      ]
+    }
+  ],
+  "render_order": 10
+}

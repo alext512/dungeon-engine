@@ -1,0 +1,30 @@
+{
+  "params": [
+    "level_number",
+    "next_level_number",
+    "area_id"
+  ],
+  "commands": [
+    {
+      "type": "run_command",
+      "command_id": "commands/system/mark_level_completed",
+      "level_number": "$level_number"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "progress_controller",
+      "name": "last_level_played",
+      "value": "$next_level_number",
+      "persistent": true
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/system/save_progress"
+    },
+    {
+      "type": "change_area",
+      "area_id": "$area_id",
+      "entry_id": "start"
+    }
+  ]
+}

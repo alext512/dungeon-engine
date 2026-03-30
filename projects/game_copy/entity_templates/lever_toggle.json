@@ -1,0 +1,100 @@
+{
+  "kind": "lever",
+  "variables": {
+    "blocks_movement": true,
+    "switch_value": 0,
+    "trigger_only_once": "$trigger_only_once",
+    "target_gate_id": "$target_gate_id",
+    "target_index": "$target_index"
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/original/Lever.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "switch_value",
+          "op": "eq",
+          "value": 0,
+          "then": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "switch_value",
+              "value": 1
+            },
+            {
+              "type": "set_visual_frame",
+              "entity_id": "$self_id",
+              "frame": 3
+            },
+            {
+              "type": "run_event",
+              "entity_id": "$self.target_gate_id",
+              "event_id": "set_input_value",
+              "index": "$self.target_index",
+              "value": 1
+            },
+            {
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
+              "name": "trigger_only_once",
+              "op": "eq",
+              "value": true,
+              "then": [
+                {
+                  "type": "set_entity_field",
+                  "entity_id": "$self_id",
+                  "field_name": "events_enabled",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "else": [
+            {
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
+              "name": "trigger_only_once",
+              "op": "eq",
+              "value": false,
+              "then": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "switch_value",
+                  "value": 0
+                },
+                {
+                  "type": "set_visual_frame",
+                  "entity_id": "$self_id",
+                  "frame": 0
+                },
+                {
+                  "type": "run_event",
+                  "entity_id": "$self.target_gate_id",
+                  "event_id": "set_input_value",
+                  "index": "$self.target_index",
+                  "value": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

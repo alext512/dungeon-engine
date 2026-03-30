@@ -1,0 +1,21 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "Play level 2?"
+    },
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Yes",
+          "option_id": "yes"
+        },
+        {
+          "text": "No",
+          "option_id": "no"
+        }
+      ]
+    }
+  ]
+}

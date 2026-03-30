@@ -1,0 +1,43 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_open",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_phase",
+          "entity_id": "$self_id",
+          "op": "eq",
+          "value": "choice",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/dialogue/confirm_choice"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_entity_var",
+              "name": "dialogue_current_advance_mode",
+              "entity_id": "$self_id",
+              "op": "eq",
+              "value": "timer",
+              "then": [],
+              "else": [
+                {
+                  "type": "run_command",
+                  "command_id": "commands/dialogue/advance_text"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

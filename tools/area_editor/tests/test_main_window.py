@@ -632,7 +632,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.addCleanup(window.close)
             window.open_project(project_file)
 
-            self.assertGreaterEqual(window._area_panel.minimumWidth(), 540)
             self.assertEqual(
                 window.dockWidgetArea(window._entity_instance_panel),
                 Qt.DockWidgetArea.LeftDockWidgetArea,

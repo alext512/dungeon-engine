@@ -1,0 +1,32 @@
+{
+  "name": "Bootstrap",
+  "tile_size": 16,
+  "variables": {},
+  "tilesets": [],
+  "tile_layers": [
+    {
+      "name": "blank",
+      "grid": [
+        [
+          0
+        ]
+      ],
+      "render_order": 0
+    }
+  ],
+  "cell_flags": [
+    [
+      true
+    ]
+  ],
+  "enter_commands": [
+    {
+      "type": "run_command",
+      "command_id": "commands/system/bootstrap_to_level_select"
+    }
+  ],
+  "entry_points": {},
+  "camera": {},
+  "input_targets": {},
+  "entities": []
+}

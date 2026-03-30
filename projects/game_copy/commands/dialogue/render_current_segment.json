@@ -1,0 +1,326 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "add_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_revision",
+      "amount": 1
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_current_segment_type",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": "choice",
+      "then": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_phase",
+          "value": "choice"
+        }
+      ],
+      "else": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_phase",
+          "value": "text"
+        }
+      ]
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_participants",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_definition",
+          "key": "participants",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_current_speaker_id",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": null,
+      "then": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_current_participant",
+          "value": {}
+        }
+      ],
+      "else": [
+        {
+          "type": "set_entity_var",
+          "name": "dialogue_current_participant",
+          "entity_id": "$self_id",
+          "value": {
+            "$collection_item": {
+              "value": "$self.dialogue_current_participants",
+              "key": "$self.dialogue_current_speaker_id",
+              "default": {}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_portrait_path",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_path",
+          "default": ""
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_portrait_frame_width",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_frame_width",
+          "default": "$self.layout.portrait.default_frame_width"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_portrait_frame_height",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_frame_height",
+          "default": "$self.layout.portrait.default_frame_height"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_portrait_frame",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_participant",
+          "key": "portrait_frame",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_show_portrait",
+      "value": false
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_current_speaker_id",
+      "entity_id": "$self_id",
+      "op": "neq",
+      "value": null,
+      "then": [
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_current_portrait_path",
+          "entity_id": "$self_id",
+          "op": "neq",
+          "value": "",
+          "then": [
+            {
+              "type": "check_entity_var",
+              "name": "dialogue_current_segment_show_portrait",
+              "entity_id": "$self_id",
+              "op": "eq",
+              "value": false,
+              "then": [],
+              "else": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "dialogue_show_portrait",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_show_portrait",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "text_box_x",
+          "value": "$self.layout.text.with_portrait.x"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "text_box_y",
+          "value": "$self.layout.text.with_portrait.y"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "text_box_width",
+          "value": "$self.layout.text.with_portrait.width"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "choice_width",
+          "value": "$self.layout.choice.with_portrait.width"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "choice_cursor_x",
+          "value": "$self.layout.choice.with_portrait.x"
+        }
+      ],
+      "else": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "text_box_x",
+          "value": "$self.layout.text.plain.x"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "text_box_y",
+          "value": "$self.layout.text.plain.y"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "text_box_width",
+          "value": "$self.layout.text.plain.width"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "choice_width",
+          "value": "$self.layout.choice.plain.width"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "choice_cursor_x",
+          "value": "$self.layout.choice.plain.x"
+        }
+      ]
+    },
+    {
+      "type": "show_screen_image",
+      "element_id": "$self.panel_element_id",
+      "path": "$self.layout.panel.path",
+      "x": "$self.layout.panel.x",
+      "y": "$self.layout.panel.y",
+      "frame_width": "$self.layout.panel.width",
+      "frame_height": "$self.layout.panel.height",
+      "frame": 0,
+      "layer": "$self.ui_layer",
+      "anchor": "topleft"
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_show_portrait",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "show_screen_image",
+          "element_id": "$self.portrait_element_id",
+          "path": "$self.dialogue_current_portrait_path",
+          "x": "$self.layout.portrait.x",
+          "y": "$self.layout.portrait.y",
+          "frame_width": "$self.dialogue_current_portrait_frame_width",
+          "frame_height": "$self.dialogue_current_portrait_frame_height",
+          "frame": "$self.dialogue_current_portrait_frame",
+          "layer": "$self.text_layer",
+          "anchor": "topleft"
+        }
+      ],
+      "else": [
+        {
+          "type": "remove_screen_element",
+          "element_id": "$self.portrait_element_id"
+        }
+      ]
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_phase",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": "choice",
+      "then": [
+        {
+          "type": "remove_screen_element",
+          "element_id": "$self.text_element_id"
+        },
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/render_choice"
+        }
+      ],
+      "else": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/render_text"
+        },
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_current_advance_mode",
+          "entity_id": "$self_id",
+          "op": "eq",
+          "value": "timer",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/dialogue/schedule_timer",
+              "expected_revision": "$self.dialogue_revision"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_entity_var",
+              "name": "dialogue_current_advance_mode",
+              "entity_id": "$self_id",
+              "op": "eq",
+              "value": "interact_or_timer",
+              "then": [
+                {
+                  "type": "run_command",
+                  "command_id": "commands/dialogue/schedule_timer",
+                  "expected_revision": "$self.dialogue_revision"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

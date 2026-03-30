@@ -1,0 +1,131 @@
+{
+  "kind": "player",
+  "input_map": {
+    "move_up": "move_up",
+    "move_down": "move_down",
+    "move_left": "move_left",
+    "move_right": "move_right",
+    "interact": "interact"
+  },
+  "variables": {
+    "walk_phase": 0,
+    "direction": "down",
+    "blocks_movement": true
+  },
+  "visuals": [
+    {
+      "id": "body",
+      "path": "assets/original/PlayerSpriteSheet.png",
+      "frame_width": 16,
+      "frame_height": 20,
+      "frames": [
+        1
+      ],
+      "offset_y": -4
+    }
+  ],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/interact_one_tile"
+        }
+      ]
+    },
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/attempt_move_one_tile",
+          "direction": "up",
+          "flip_x": false,
+          "push_event_id": "push_from_down",
+          "phase_a_frames": [
+            9,
+            10
+          ],
+          "phase_b_frames": [
+            11,
+            10
+          ],
+          "idle_frame": 10,
+          "frames_per_sprite_change": "$half:project.movement.ticks_per_tile",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/attempt_move_one_tile",
+          "direction": "down",
+          "flip_x": false,
+          "push_event_id": "push_from_up",
+          "phase_a_frames": [
+            0,
+            1
+          ],
+          "phase_b_frames": [
+            2,
+            1
+          ],
+          "idle_frame": 1,
+          "frames_per_sprite_change": "$half:project.movement.ticks_per_tile",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    },
+    "move_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/attempt_move_one_tile",
+          "direction": "left",
+          "flip_x": false,
+          "push_event_id": "push_from_right",
+          "phase_a_frames": [
+            3,
+            4
+          ],
+          "phase_b_frames": [
+            5,
+            4
+          ],
+          "idle_frame": 4,
+          "frames_per_sprite_change": "$half:project.movement.ticks_per_tile",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    },
+    "move_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/movement/attempt_move_one_tile",
+          "direction": "right",
+          "flip_x": false,
+          "push_event_id": "push_from_left",
+          "phase_a_frames": [
+            6,
+            7
+          ],
+          "phase_b_frames": [
+            8,
+            7
+          ],
+          "idle_frame": 7,
+          "frames_per_sprite_change": "$half:project.movement.ticks_per_tile",
+          "frames_needed": "$project.movement.ticks_per_tile"
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

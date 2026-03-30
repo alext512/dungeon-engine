@@ -1,0 +1,21 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "Are you sure that you want to delete the saved process?"
+    },
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Yes",
+          "option_id": "yes"
+        },
+        {
+          "text": "No!",
+          "option_id": "no"
+        }
+      ]
+    }
+  ]
+}

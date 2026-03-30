@@ -205,11 +205,6 @@ class MainWindow(QMainWindow):
             file_extensions=(),  # show all file types
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._asset_panel)
-        self._area_panel.setMinimumWidth(540)
-        self._template_panel.setMinimumWidth(540)
-        self._dialogue_panel.setMinimumWidth(540)
-        self._command_panel.setMinimumWidth(540)
-        self._asset_panel.setMinimumWidth(540)
 
         # Right side: layer panel + tileset browser
         self._layer_panel = LayerListPanel()

@@ -1,0 +1,103 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "run_command",
+      "command_id": "commands/dialogue/clear_choice_elements"
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_selected_visible_choice_index",
+      "entity_id": "$self_id",
+      "value": {
+        "$sum": [
+          "$self.dialogue_choice_index",
+          {
+            "$product": [
+              -1,
+              "$self.dialogue_choice_scroll_offset"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "run_commands_for_collection",
+      "value": {
+        "$slice_collection": {
+          "value": "$self.dialogue_current_segment_options",
+          "start": "$self.dialogue_choice_scroll_offset",
+          "count": "$self.layout.choice.visible_rows"
+        }
+      },
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "name": "dialogue_render_option_element_id",
+          "entity_id": "$self_id",
+          "value": {
+            "$collection_item": {
+              "value": "$self.option_element_ids",
+              "index": "$index",
+              "default": ""
+            }
+          }
+        },
+        {
+          "type": "set_entity_var",
+          "name": "dialogue_render_option_row_y",
+          "entity_id": "$self_id",
+          "value": {
+            "$sum": [
+              "$self.layout.choice.base_y",
+              {
+                "$product": [
+                  "$index",
+                  "$self.layout.choice.row_height"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "set_entity_var",
+          "name": "dialogue_render_option_prefix",
+          "entity_id": "$self_id",
+          "value": " "
+        },
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_selected_visible_choice_index",
+          "entity_id": "$self_id",
+          "op": "eq",
+          "value": "$index",
+          "then": [
+            {
+              "type": "set_entity_var",
+              "name": "dialogue_render_option_prefix",
+              "entity_id": "$self_id",
+              "value": ">"
+            }
+          ]
+        },
+        {
+          "type": "show_screen_text",
+          "element_id": "$self.dialogue_render_option_element_id",
+          "text": {
+            "$join_text": [
+              "$self.dialogue_render_option_prefix",
+              "$item.text"
+            ]
+          },
+          "x": "$self.choice_cursor_x",
+          "y": "$self.dialogue_render_option_row_y",
+          "layer": "$self.text_layer",
+          "anchor": "topleft",
+          "color": "$self.choice_text_color",
+          "font_id": "$self.dialogue_font_id",
+          "max_width": "$self.choice_width"
+        }
+      ]
+    }
+  ]
+}

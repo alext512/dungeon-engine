@@ -1,0 +1,631 @@
+{
+  "name": "Title Screen",
+  "tile_size": 16,
+  "variables": {},
+  "tilesets": [],
+  "tile_layers": [
+    {
+      "name": "background",
+      "grid": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "render_order": 0
+    }
+  ],
+  "cell_flags": [
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  ],
+  "enter_commands": [
+    {
+      "type": "run_event",
+      "entity_id": "dialogue_controller",
+      "event_id": "open_dialogue",
+      "dialogue_path": "dialogues/system/title_level_select.json",
+      "dialogue_on_start": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "value": ""
+        }
+      ],
+      "dialogue_on_end": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "op": "eq",
+          "value": "level_1",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/system/start_level",
+              "level_number": 1,
+              "area_id": "areas/level1"
+            }
+          ]
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "op": "eq",
+          "value": "level_2",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/system/start_level",
+              "level_number": 2,
+              "area_id": "areas/level2"
+            }
+          ]
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "op": "eq",
+          "value": "level_3",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/system/start_level",
+              "level_number": 3,
+              "area_id": "areas/level3"
+            }
+          ]
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "op": "eq",
+          "value": "level_4",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/system/start_level",
+              "level_number": 4,
+              "area_id": "areas/level4"
+            }
+          ]
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "op": "eq",
+          "value": "level_5",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/system/start_level",
+              "level_number": 5,
+              "area_id": "areas/level5"
+            }
+          ]
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "dialogue_controller",
+          "name": "pending_title_level",
+          "value": ""
+        }
+      ],
+      "segment_hooks": [
+        {
+          "option_commands_by_id": {
+            "level_1": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "pending_title_level",
+                "value": "level_1"
+              }
+            ],
+            "level_2": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "pending_title_level",
+                "value": "level_2"
+              }
+            ],
+            "level_3": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "pending_title_level",
+                "value": "level_3"
+              }
+            ],
+            "level_4": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "pending_title_level",
+                "value": "level_4"
+              }
+            ],
+            "level_5": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "pending_title_level",
+                "value": "level_5"
+              }
+            ]
+          }
+        }
+      ],
+      "allow_cancel": false,
+      "actor_entity_id": "dialogue_controller",
+      "caller_entity_id": "dialogue_controller"
+    }
+  ],
+  "entry_points": {
+    "start": {
+      "x": 0,
+      "y": 0
+    }
+  },
+  "camera": {},
+  "input_targets": {
+    "move_up": "dialogue_controller",
+    "move_down": "dialogue_controller",
+    "move_left": "dialogue_controller",
+    "move_right": "dialogue_controller",
+    "interact": "dialogue_controller",
+    "menu": "dialogue_controller"
+  },
+  "entities": [
+    {
+      "id": "title_backdrop",
+      "pixel_x": 0,
+      "pixel_y": 0,
+      "template": "entity_templates/display_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/backdrop.png",
+        "frame_width": 256,
+        "frame_height": 128,
+        "frames": [
+          0
+        ],
+        "animation_fps": 0
+      },
+      "render_order": 0,
+      "space": "screen",
+      "y_sort": false
+    }
+  ]
+}

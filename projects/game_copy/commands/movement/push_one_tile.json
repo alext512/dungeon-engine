@@ -1,0 +1,213 @@
+{
+  "params": [
+    "direction",
+    "frames_needed"
+  ],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_offset",
+      "value": {
+        "$collection_item": {
+          "value": {
+            "up": { "x": 0, "y": -1 },
+            "down": { "x": 0, "y": 1 },
+            "left": { "x": -1, "y": 0 },
+            "right": { "x": 1, "y": 0 }
+          },
+          "key": "$direction",
+          "default": { "x": 0, "y": 0 }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_self_position",
+      "value": {
+        "$entity_ref": {
+          "entity_id": "$self_id",
+          "select": {
+            "fields": ["grid_x", "grid_y"]
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_source_x",
+      "value": "$self.push_self_position.grid_x"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_source_y",
+      "value": "$self.push_self_position.grid_y"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_x",
+      "value": {
+        "$sum": ["$self.push_self_position.grid_x", "$self.push_offset.x"]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_y",
+      "value": {
+        "$sum": ["$self.push_self_position.grid_y", "$self.push_offset.y"]
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_cell_flags",
+      "value": {
+        "$cell_flags_at": {
+          "x": "$self.push_target_x",
+          "y": "$self.push_target_y",
+          "default": {
+            "walkable": false
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_walkable",
+      "value": {
+        "$collection_item": {
+          "value": "$self.push_target_cell_flags",
+          "key": "walkable",
+          "default": false
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_entities",
+      "value": {
+        "$entities_at": {
+          "x": "$self.push_target_x",
+          "y": "$self.push_target_y",
+          "exclude_entity_id": "$self_id",
+          "include_hidden": true,
+          "select": {
+            "fields": ["entity_id", "kind"],
+            "variables": ["blocks_movement", "hole_shape"]
+          }
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_blocking_entity",
+      "value": {
+        "$find_in_collection": {
+          "value": "$self.push_target_entities",
+          "field": "variables.blocks_movement",
+          "op": "eq",
+          "match": true,
+          "default": null
+        }
+      }
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "$self_id",
+      "name": "push_target_walkable",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "push_blocking_entity",
+          "op": "eq",
+          "value": null,
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/movement/walk_one_tile",
+              "offset_x": "$self.push_offset.x",
+              "offset_y": "$self.push_offset.y",
+              "phase_a_frames": "$self.phase_a_frames",
+              "phase_b_frames": "$self.phase_b_frames",
+              "idle_frame": "$self.idle_frame",
+              "frames_per_sprite_change": "$half:project.movement.ticks_per_tile",
+              "frames_needed": "$frames_needed"
+            }
+          ],
+          "else": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "push_blocking_kind",
+              "value": {
+                "$collection_item": {
+                  "value": "$self.push_blocking_entity",
+                  "key": "kind",
+                  "default": ""
+                }
+              }
+            },
+            {
+              "type": "check_entity_var",
+              "entity_id": "$self_id",
+              "name": "push_blocking_kind",
+              "op": "eq",
+              "value": "hole",
+              "then": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "push_blocking_hole_shape",
+                  "value": {
+                    "$collection_item": {
+                      "value": "$self.push_blocking_entity.variables",
+                      "key": "hole_shape",
+                      "default": ""
+                    }
+                  }
+                },
+                {
+                  "type": "check_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "shape",
+                  "op": "eq",
+                  "value": "$self.push_blocking_hole_shape",
+                  "then": [
+                    {
+                      "type": "run_command",
+                      "command_id": "commands/movement/run_tile_triggers",
+                      "x": "$self.push_source_x",
+                      "y": "$self.push_source_y",
+                      "tags_any": ["leave_trigger"],
+                      "event_id": "left_by",
+                      "exclude_entity_id": "$self_id",
+                      "actor_entity_id": "$self_id",
+                      "caller_entity_id": "$self_id"
+                    },
+                    {
+                      "type": "run_event",
+                      "entity_id": "$self.push_blocking_entity.entity_id",
+                      "event_id": "accept_actor",
+                      "actor_entity_id": "$self_id"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

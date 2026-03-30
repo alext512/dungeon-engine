@@ -1,0 +1,177 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_open",
+      "value": true
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_path",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_path",
+          "default": ""
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_definition",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_definition",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_on_end",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_on_end",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_segment_hooks",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_segment_hooks",
+          "default": []
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_allow_cancel",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_allow_cancel",
+          "default": false
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_actor_id",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_actor_id",
+          "default": null
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_caller_id",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_caller_id",
+          "default": null
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_segment_index",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_segment_index",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_source_page_index",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_source_page_index",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_text_line_offset",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_text_line_offset",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_choice_index",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_choice_index",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_choice_scroll_offset",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_choice_scroll_offset",
+          "default": 0
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_speaker_id",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_restored_state",
+          "key": "dialogue_current_speaker_id",
+          "default": null
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_restored_state",
+      "value": {}
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/dialogue/load_and_render_segment"
+    }
+  ]
+}

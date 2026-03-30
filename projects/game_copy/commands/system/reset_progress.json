@@ -1,0 +1,28 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "progress_controller",
+      "name": "levels_completed",
+      "value": 0,
+      "persistent": true
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "progress_controller",
+      "name": "last_level_played",
+      "value": 0,
+      "persistent": true
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/system/save_progress"
+    },
+    {
+      "type": "change_area",
+      "area_id": "areas/title_screen",
+      "entry_id": "start"
+    }
+  ]
+}

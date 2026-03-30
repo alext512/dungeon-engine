@@ -1,0 +1,154 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "visible": false,
+  "input_map": {
+    "interact": "interact",
+    "menu": "menu",
+    "move_up": "move_up",
+    "move_down": "move_down"
+  },
+  "variables": {
+    "panel_element_id": "dialogue_panel",
+    "portrait_element_id": "dialogue_portrait",
+    "text_element_id": "dialogue_text",
+    "option_element_ids": [
+      "dialogue_option_0",
+      "dialogue_option_1",
+      "dialogue_option_2"
+    ],
+    "layout": {
+      "panel": {
+        "path": "assets/project/ui/dialogue_panel.png",
+        "x": 0,
+        "y": 148,
+        "width": 256,
+        "height": 44
+      },
+      "portrait": {
+        "x": 3,
+        "y": 151,
+        "default_frame_width": 38,
+        "default_frame_height": 38
+      },
+      "text": {
+        "plain": {
+          "x": 8,
+          "y": 154,
+          "width": 240
+        },
+        "with_portrait": {
+          "x": 56,
+          "y": 154,
+          "width": 192
+        }
+      },
+      "choice": {
+        "visible_rows": 3,
+        "base_y": 154,
+        "row_height": 10,
+        "plain": {
+          "x": 8,
+          "width": 240
+        },
+        "with_portrait": {
+          "x": 56,
+          "width": 188
+        }
+      }
+    },
+    "ui_layer": 100,
+    "text_layer": 101,
+    "default_font_id": "pixelbet",
+    "default_max_lines": 3,
+    "default_text_color": [
+      245,
+      232,
+      190
+    ],
+    "choice_text_color": [
+      238,
+      242,
+      248
+    ],
+    "dialogue_open": false,
+    "dialogue_state_stack": [],
+    "dialogue_pending_on_end": [],
+    "dialogue_pending_actor_id": null,
+    "dialogue_pending_caller_id": null,
+    "dialogue_restored_state": {},
+    "dialogue_path": "",
+    "dialogue_definition": {},
+    "dialogue_on_end": [],
+    "dialogue_segment_hooks": [],
+    "dialogue_allow_cancel": false,
+    "dialogue_actor_id": null,
+    "dialogue_caller_id": null,
+    "dialogue_segment_index": 0,
+    "dialogue_source_page_index": 0,
+    "dialogue_text_line_offset": 0,
+    "dialogue_choice_index": 0,
+    "dialogue_choice_scroll_offset": 0,
+    "dialogue_current_speaker_id": null,
+    "dialogue_revision": 0
+  },
+  "visuals": [],
+  "events": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/interact"
+        }
+      ]
+    },
+    "menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/cancel"
+        }
+      ]
+    },
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/move_selection",
+          "delta": -1
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/move_selection",
+          "delta": 1
+        }
+      ]
+    },
+    "open_dialogue": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/open",
+          "dialogue_path": "$dialogue_path",
+          "dialogue_on_start": "$dialogue_on_start",
+          "dialogue_on_end": "$dialogue_on_end",
+          "segment_hooks": "$segment_hooks",
+          "allow_cancel": "$allow_cancel",
+          "actor_entity_id": "$actor_entity_id",
+          "caller_entity_id": "$caller_entity_id"
+        }
+      ]
+    }
+  },
+  "render_order": 100,
+  "y_sort": false
+}

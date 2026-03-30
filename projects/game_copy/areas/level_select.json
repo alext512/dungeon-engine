@@ -1,0 +1,695 @@
+{
+  "name": "Level Select",
+  "tile_size": 16,
+  "variables": {},
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/original/Set_A_Hills2.png",
+      "tile_width": 16,
+      "tile_height": 16
+    }
+  ],
+  "tile_layers": [
+    {
+      "name": "ground",
+      "grid": [
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ]
+      ],
+      "render_order": 0
+    }
+  ],
+  "cell_flags": [
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true
+    ]
+  ],
+  "enter_commands": [
+    {
+      "type": "run_event",
+      "entity_id": "progress_controller",
+      "event_id": "refresh_level_select_entry"
+    },
+    {
+      "type": "set_entity_grid_position",
+      "entity_id": "player",
+      "x": 1,
+      "y": 2,
+      "mode": "absolute"
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "progress_controller",
+      "name": "last_level_played",
+      "op": "eq",
+      "value": 2,
+      "then": [
+        {
+          "type": "set_entity_grid_position",
+          "entity_id": "player",
+          "x": 1,
+          "y": 3,
+          "mode": "absolute"
+        }
+      ],
+      "else": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "progress_controller",
+          "name": "last_level_played",
+          "op": "eq",
+          "value": 3,
+          "then": [
+            {
+              "type": "set_entity_grid_position",
+              "entity_id": "player",
+              "x": 1,
+              "y": 4,
+              "mode": "absolute"
+            }
+          ],
+          "else": [
+            {
+              "type": "check_entity_var",
+              "entity_id": "progress_controller",
+              "name": "last_level_played",
+              "op": "eq",
+              "value": 4,
+              "then": [
+                {
+                  "type": "set_entity_grid_position",
+                  "entity_id": "player",
+                  "x": 1,
+                  "y": 5,
+                  "mode": "absolute"
+                }
+              ],
+              "else": [
+                {
+                  "type": "check_entity_var",
+                  "entity_id": "progress_controller",
+                  "name": "last_level_played",
+                  "op": "eq",
+                  "value": 5,
+                  "then": [
+                    {
+                      "type": "set_entity_grid_position",
+                      "entity_id": "player",
+                      "x": 1,
+                      "y": 6,
+                      "mode": "absolute"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "prompt_2",
+      "field_name": "present",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "prompt_3",
+      "field_name": "present",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "prompt_4",
+      "field_name": "present",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "prompt_5",
+      "field_name": "present",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "marker_2",
+      "field_name": "visible",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "marker_3",
+      "field_name": "visible",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "marker_4",
+      "field_name": "visible",
+      "value": false
+    },
+    {
+      "type": "set_entity_field",
+      "entity_id": "marker_5",
+      "field_name": "visible",
+      "value": false
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "progress_controller",
+      "name": "levels_completed",
+      "op": "gte",
+      "value": 1,
+      "then": [
+        {
+          "type": "set_entity_field",
+          "entity_id": "prompt_2",
+          "field_name": "present",
+          "value": true
+        },
+        {
+          "type": "set_entity_field",
+          "entity_id": "marker_2",
+          "field_name": "visible",
+          "value": true
+        }
+      ]
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "progress_controller",
+      "name": "levels_completed",
+      "op": "gte",
+      "value": 2,
+      "then": [
+        {
+          "type": "set_entity_field",
+          "entity_id": "prompt_3",
+          "field_name": "present",
+          "value": true
+        },
+        {
+          "type": "set_entity_field",
+          "entity_id": "marker_3",
+          "field_name": "visible",
+          "value": true
+        }
+      ]
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "progress_controller",
+      "name": "levels_completed",
+      "op": "gte",
+      "value": 3,
+      "then": [
+        {
+          "type": "set_entity_field",
+          "entity_id": "prompt_4",
+          "field_name": "present",
+          "value": true
+        },
+        {
+          "type": "set_entity_field",
+          "entity_id": "marker_4",
+          "field_name": "visible",
+          "value": true
+        }
+      ]
+    },
+    {
+      "type": "check_entity_var",
+      "entity_id": "progress_controller",
+      "name": "levels_completed",
+      "op": "gte",
+      "value": 4,
+      "then": [
+        {
+          "type": "set_entity_field",
+          "entity_id": "prompt_5",
+          "field_name": "present",
+          "value": true
+        },
+        {
+          "type": "set_entity_field",
+          "entity_id": "marker_5",
+          "field_name": "visible",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "entry_points": {},
+  "camera": {
+    "follow": {
+      "mode": "entity",
+      "entity_id": "player"
+    },
+    "bounds": {
+      "x": 0,
+      "y": 0,
+      "width": 4,
+      "height": 8,
+      "space": "world_grid"
+    }
+  },
+  "input_targets": {
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
+  "entities": [
+    {
+      "id": "player",
+      "x": 1,
+      "y": 2,
+      "template": "entity_templates/player",
+      "render_order": 10
+    },
+    {
+      "id": "delete_save",
+      "x": 2,
+      "y": 1,
+      "template": "entity_templates/prompt_object",
+      "parameters": {
+        "sprite_path": "assets/original/delete_process.png",
+        "frame_width": 16,
+        "frame_height": 16,
+        "frame": 0,
+        "offset_y": 0,
+        "blocks_movement": true,
+        "dialogue_path": "dialogues/system/delete_save_prompt.json",
+        "dialogue_on_start": [],
+        "dialogue_on_end": [],
+        "segment_hooks": [
+          {},
+          {
+            "option_commands_by_id": {
+              "yes": [
+                {
+                  "type": "run_event",
+                  "entity_id": "dialogue_controller",
+                  "event_id": "open_dialogue",
+                  "dialogue_path": "dialogues/system/delete_save_confirm.json",
+                  "dialogue_on_start": [],
+                  "dialogue_on_end": [],
+                  "segment_hooks": [
+                    {},
+                    {
+                      "option_commands_by_id": {
+                        "yes": [
+                          {
+                            "type": "run_command",
+                            "command_id": "commands/system/reset_progress"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "allow_cancel": true,
+                  "actor_entity_id": "$actor_id",
+                  "caller_entity_id": "$self_id"
+                }
+              ]
+            }
+          }
+        ],
+        "allow_cancel": true
+      },
+      "render_order": 10
+    },
+    {
+      "id": "marker_1",
+      "x": 2,
+      "y": 2,
+      "template": "entity_templates/marker_digit",
+      "parameters": {
+        "frame": 0
+      },
+      "render_order": 10
+    },
+    {
+      "id": "marker_2",
+      "x": 2,
+      "y": 3,
+      "template": "entity_templates/marker_digit",
+      "parameters": {
+        "frame": 1
+      },
+      "visible": false,
+      "render_order": 10
+    },
+    {
+      "id": "marker_3",
+      "x": 2,
+      "y": 4,
+      "template": "entity_templates/marker_digit",
+      "parameters": {
+        "frame": 2
+      },
+      "visible": false,
+      "render_order": 10
+    },
+    {
+      "id": "marker_4",
+      "x": 2,
+      "y": 5,
+      "template": "entity_templates/marker_digit",
+      "parameters": {
+        "frame": 3
+      },
+      "visible": false,
+      "render_order": 10
+    },
+    {
+      "id": "marker_5",
+      "x": 2,
+      "y": 6,
+      "template": "entity_templates/marker_digit",
+      "parameters": {
+        "frame": 4
+      },
+      "visible": false,
+      "render_order": 10
+    },
+    {
+      "id": "prompt_1",
+      "kind": "prompt",
+      "x": 1,
+      "y": 2,
+      "variables": {
+        "blocks_movement": false
+      },
+      "visuals": [],
+      "events": {
+        "interact": {
+          "enabled": true,
+          "commands": [
+            {
+              "type": "run_event",
+              "entity_id": "dialogue_controller",
+              "event_id": "open_dialogue",
+              "dialogue_path": "dialogues/level_select/level1.json",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [
+                {},
+                {
+                  "option_commands_by_id": {
+                    "yes": [
+                      {
+                        "type": "run_command",
+                        "command_id": "commands/system/start_level",
+                        "level_number": 1,
+                        "area_id": "areas/level1"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "allow_cancel": true,
+              "actor_entity_id": "$actor_id",
+              "caller_entity_id": "$self_id"
+            }
+          ]
+        }
+      },
+      "render_order": 10
+    },
+    {
+      "id": "prompt_2",
+      "kind": "prompt",
+      "x": 1,
+      "y": 3,
+      "present": false,
+      "variables": {
+        "blocks_movement": false
+      },
+      "visuals": [],
+      "events": {
+        "interact": {
+          "enabled": true,
+          "commands": [
+            {
+              "type": "run_event",
+              "entity_id": "dialogue_controller",
+              "event_id": "open_dialogue",
+              "dialogue_path": "dialogues/level_select/level2.json",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [
+                {},
+                {
+                  "option_commands_by_id": {
+                    "yes": [
+                      {
+                        "type": "run_command",
+                        "command_id": "commands/system/start_level",
+                        "level_number": 2,
+                        "area_id": "areas/level2"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "allow_cancel": true,
+              "actor_entity_id": "$actor_id",
+              "caller_entity_id": "$self_id"
+            }
+          ]
+        }
+      },
+      "render_order": 10
+    },
+    {
+      "id": "prompt_3",
+      "kind": "prompt",
+      "x": 1,
+      "y": 4,
+      "present": false,
+      "variables": {
+        "blocks_movement": false
+      },
+      "visuals": [],
+      "events": {
+        "interact": {
+          "enabled": true,
+          "commands": [
+            {
+              "type": "run_event",
+              "entity_id": "dialogue_controller",
+              "event_id": "open_dialogue",
+              "dialogue_path": "dialogues/level_select/level3.json",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [
+                {},
+                {
+                  "option_commands_by_id": {
+                    "yes": [
+                      {
+                        "type": "run_command",
+                        "command_id": "commands/system/start_level",
+                        "level_number": 3,
+                        "area_id": "areas/level3"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "allow_cancel": true,
+              "actor_entity_id": "$actor_id",
+              "caller_entity_id": "$self_id"
+            }
+          ]
+        }
+      },
+      "render_order": 10
+    },
+    {
+      "id": "prompt_4",
+      "kind": "prompt",
+      "x": 1,
+      "y": 5,
+      "present": false,
+      "variables": {
+        "blocks_movement": false
+      },
+      "visuals": [],
+      "events": {
+        "interact": {
+          "enabled": true,
+          "commands": [
+            {
+              "type": "run_event",
+              "entity_id": "dialogue_controller",
+              "event_id": "open_dialogue",
+              "dialogue_path": "dialogues/level_select/level4.json",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [
+                {},
+                {
+                  "option_commands_by_id": {
+                    "yes": [
+                      {
+                        "type": "run_command",
+                        "command_id": "commands/system/start_level",
+                        "level_number": 4,
+                        "area_id": "areas/level4"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "allow_cancel": true,
+              "actor_entity_id": "$actor_id",
+              "caller_entity_id": "$self_id"
+            }
+          ]
+        }
+      },
+      "render_order": 10
+    },
+    {
+      "id": "prompt_5",
+      "kind": "prompt",
+      "x": 1,
+      "y": 6,
+      "present": false,
+      "variables": {
+        "blocks_movement": false
+      },
+      "visuals": [],
+      "events": {
+        "interact": {
+          "enabled": true,
+          "commands": [
+            {
+              "type": "run_event",
+              "entity_id": "dialogue_controller",
+              "event_id": "open_dialogue",
+              "dialogue_path": "dialogues/level_select/level5.json",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [
+                {},
+                {
+                  "option_commands_by_id": {
+                    "yes": [
+                      {
+                        "type": "run_command",
+                        "command_id": "commands/system/start_level",
+                        "level_number": 5,
+                        "area_id": "areas/level5"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "allow_cancel": true,
+              "actor_entity_id": "$actor_id",
+              "caller_entity_id": "$self_id"
+            }
+          ]
+        }
+      },
+      "render_order": 10
+    }
+  ]
+}

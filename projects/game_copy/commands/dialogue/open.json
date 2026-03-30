@@ -1,0 +1,160 @@
+{
+  "params": [
+    "dialogue_path",
+    "dialogue_on_start",
+    "dialogue_on_end",
+    "segment_hooks",
+    "allow_cancel"
+  ],
+  "commands": [
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_open",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "append_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_state_stack",
+          "value": {
+            "dialogue_path": "$self.dialogue_path",
+            "dialogue_definition": "$self.dialogue_definition",
+            "dialogue_on_end": "$self.dialogue_on_end",
+            "dialogue_segment_hooks": "$self.dialogue_segment_hooks",
+            "dialogue_allow_cancel": "$self.dialogue_allow_cancel",
+            "dialogue_actor_id": "$self.dialogue_actor_id",
+            "dialogue_caller_id": "$self.dialogue_caller_id",
+            "dialogue_segment_index": "$self.dialogue_segment_index",
+            "dialogue_source_page_index": "$self.dialogue_source_page_index",
+            "dialogue_text_line_offset": "$self.dialogue_text_line_offset",
+            "dialogue_choice_index": "$self.dialogue_choice_index",
+            "dialogue_choice_scroll_offset": "$self.dialogue_choice_scroll_offset",
+            "dialogue_current_speaker_id": "$self.dialogue_current_speaker_id"
+          }
+        }
+      ],
+      "else": [
+        {
+          "type": "push_input_routes",
+          "actions": [
+            "interact",
+            "menu",
+            "move_up",
+            "move_down",
+            "move_left",
+            "move_right"
+          ]
+        },
+        {
+          "type": "route_inputs_to_entity",
+          "entity_id": "$self_id",
+          "actions": [
+            "interact",
+            "menu",
+            "move_up",
+            "move_down",
+            "move_left",
+            "move_right"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_definition",
+      "value": {
+        "$json_file": "$dialogue_path"
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_open",
+      "value": true
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_path",
+      "value": "$dialogue_path"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_on_end",
+      "value": "$dialogue_on_end"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_segment_hooks",
+      "value": "$segment_hooks"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_allow_cancel",
+      "value": "$allow_cancel"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_actor_id",
+      "value": "$actor_entity_id"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_caller_id",
+      "value": "$caller_entity_id"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_segment_index",
+      "value": 0
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_source_page_index",
+      "value": 0
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_text_line_offset",
+      "value": 0
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_choice_index",
+      "value": 0
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_choice_scroll_offset",
+      "value": 0
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_speaker_id",
+      "value": null
+    },
+    {
+      "type": "run_sequence",
+      "commands": "$dialogue_on_start"
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/dialogue/show_current_segment"
+    }
+  ]
+}
+

@@ -1,0 +1,128 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_selected_option",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_segment_options",
+          "index": "$self.dialogue_choice_index",
+          "default": {}
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "name": "dialogue_current_selected_option_id",
+      "entity_id": "$self_id",
+      "value": {
+        "$collection_item": {
+          "value": "$self.dialogue_current_selected_option",
+          "key": "option_id",
+          "default": ""
+        }
+      }
+    },
+    {
+      "type": "set_entity_var_length",
+      "name": "dialogue_current_option_commands_by_id_count",
+      "entity_id": "$self_id",
+      "value": "$self.dialogue_current_option_commands_by_id"
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_current_selected_option_id",
+      "entity_id": "$self_id",
+      "op": "neq",
+      "value": "",
+      "then": [
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_current_option_commands_by_id_count",
+          "entity_id": "$self_id",
+          "op": "gt",
+          "value": 0,
+          "then": [
+            {
+              "type": "set_entity_var",
+              "name": "dialogue_current_selected_option_commands",
+              "entity_id": "$self_id",
+              "value": {
+                "$collection_item": {
+                  "value": "$self.dialogue_current_option_commands_by_id",
+                  "key": "$self.dialogue_current_selected_option_id",
+                  "default": []
+                }
+              }
+            }
+          ],
+          "else": [
+            {
+              "type": "set_entity_var",
+              "name": "dialogue_current_selected_option_commands",
+              "entity_id": "$self_id",
+              "value": {
+                "$collection_item": {
+                  "value": "$self.dialogue_current_option_commands",
+                  "index": "$self.dialogue_choice_index",
+                  "default": []
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "else": [
+        {
+          "type": "set_entity_var",
+          "name": "dialogue_current_selected_option_commands",
+          "entity_id": "$self_id",
+          "value": {
+            "$collection_item": {
+              "value": "$self.dialogue_current_option_commands",
+              "index": "$self.dialogue_choice_index",
+              "default": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_confirm_revision_snapshot",
+      "value": "$self.dialogue_revision"
+    },
+    {
+      "type": "run_sequence",
+      "commands": "$self.dialogue_current_selected_option_commands",
+      "actor_entity_id": "$self.dialogue_actor_id",
+      "caller_entity_id": "$self.dialogue_caller_id"
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_open",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "check_entity_var",
+          "name": "dialogue_revision",
+          "entity_id": "$self_id",
+          "op": "eq",
+          "value": "$self.dialogue_confirm_revision_snapshot",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/dialogue/finish_segment"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

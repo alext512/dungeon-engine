@@ -1,0 +1,21 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "You found the exit! Go to the next level?"
+    },
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Yes",
+          "option_id": "yes"
+        },
+        {
+          "text": "No, return to level selection",
+          "option_id": "return"
+        }
+      ]
+    }
+  ]
+}

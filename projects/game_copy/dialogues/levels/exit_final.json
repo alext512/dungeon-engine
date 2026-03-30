@@ -1,0 +1,12 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "Congratulations! You managed to escape!"
+    },
+    {
+      "type": "text",
+      "text": "This was the final level... For now!"
+    }
+  ]
+}

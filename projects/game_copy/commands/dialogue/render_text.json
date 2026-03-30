@@ -1,0 +1,98 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "set_entity_var_length",
+      "name": "dialogue_current_source_page_count",
+      "entity_id": "$self_id",
+      "value": "$self.dialogue_current_segment_pages"
+    },
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_current_source_page_count",
+      "entity_id": "$self_id",
+      "op": "gt",
+      "value": 0,
+      "then": [
+        {
+          "type": "set_entity_var",
+          "name": "dialogue_current_source_text",
+          "entity_id": "$self_id",
+          "value": {
+            "$collection_item": {
+              "value": "$self.dialogue_current_segment_pages",
+              "index": "$self.dialogue_source_page_index",
+              "default": ""
+            }
+          }
+        }
+      ],
+      "else": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_current_source_text",
+          "value": "$self.dialogue_current_segment_text"
+        }
+      ]
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_wrapped_lines",
+      "value": {
+        "$wrapped_lines": {
+          "text": "$self.dialogue_current_source_text",
+          "max_width": "$self.text_box_width",
+          "font_id": "$self.dialogue_font_id"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_text_window",
+      "value": {
+        "$text_window": {
+          "lines": "$self.dialogue_current_wrapped_lines",
+          "start": "$self.dialogue_text_line_offset",
+          "max_lines": "$self.dialogue_max_lines"
+        }
+      }
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_visible_text",
+      "value": "$self.dialogue_current_text_window.visible_text"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_has_more_text",
+      "value": "$self.dialogue_current_text_window.has_more"
+    },
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_current_wrapped_line_count",
+      "value": "$self.dialogue_current_text_window.total_lines"
+    },
+    {
+      "type": "show_screen_text",
+      "element_id": "$self.text_element_id",
+      "text": "$self.dialogue_current_visible_text",
+      "x": "$self.text_box_x",
+      "y": "$self.text_box_y",
+      "layer": "$self.text_layer",
+      "anchor": "topleft",
+      "color": "$self.dialogue_text_color",
+      "font_id": "$self.dialogue_font_id",
+      "max_width": "$self.text_box_width"
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/dialogue/clear_choice_elements"
+    }
+  ]
+}

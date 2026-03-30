@@ -1,0 +1,18 @@
+{
+  "params": [],
+  "commands": [
+    {
+      "type": "check_entity_var",
+      "name": "dialogue_allow_cancel",
+      "entity_id": "$self_id",
+      "op": "eq",
+      "value": true,
+      "then": [
+        {
+          "type": "run_command",
+          "command_id": "commands/dialogue/close_current_dialogue"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "version": 6,
+  "next_session_entity_serial": 1,
+  "globals": {
+    "entities": {
+      "progress_controller": {
+        "variables": {
+          "last_level_played": 1
+        }
+      }
+    }
+  },
+  "current_area": "areas/level1",
+  "areas": {},
+  "current_input_targets": {
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
+  "current_camera": {
+    "x": -32.0,
+    "y": 80.0,
+    "follow": {
+      "mode": "entity",
+      "offset_x": 0.0,
+      "offset_y": 0.0,
+      "entity_id": "player"
+    },
+    "bounds": {
+      "x": 0.0,
+      "y": 0.0,
+      "width": 192.0,
+      "height": 272.0
+    }
+  }
+}

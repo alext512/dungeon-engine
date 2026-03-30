@@ -1,0 +1,32 @@
+{
+  "params": [
+    "expected_revision"
+  ],
+  "commands": [
+    {
+      "type": "spawn_flow",
+      "commands": [
+        {
+          "type": "wait_seconds",
+          "seconds": "$self.dialogue_current_advance_seconds"
+        },
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "dialogue_revision",
+          "op": "eq",
+          "value": "$expected_revision",
+          "then": [
+            {
+              "type": "run_command",
+              "command_id": "commands/dialogue/advance_text",
+              "actor_entity_id": "$self.dialogue_actor_id",
+              "caller_entity_id": "$self.dialogue_caller_id"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

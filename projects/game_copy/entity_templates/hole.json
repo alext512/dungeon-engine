@@ -1,0 +1,100 @@
+{
+  "kind": "hole",
+  "variables": {
+    "blocks_movement": true,
+    "filled": false,
+    "hole_shape": "$hole_shape",
+    "target_gate_id": "$target_gate_id",
+    "target_index": "$target_index",
+    "target_amount": "$target_amount"
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "$sprite_path",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "events": {
+    "accept_actor": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "check_entity_var",
+          "entity_id": "$self_id",
+          "name": "filled",
+          "op": "eq",
+          "value": false,
+          "then": [
+            {
+              "type": "check_entity_var",
+              "entity_id": "$actor_id",
+              "name": "shape",
+              "op": "eq",
+              "value": "$self.hole_shape",
+              "then": [
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "filled",
+                  "value": true
+                },
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "blocks_movement",
+                  "value": false
+                },
+                {
+                  "type": "set_entity_field",
+                  "entity_id": "$actor_id",
+                  "field_name": "present",
+                  "value": false
+                },
+                {
+                  "type": "set_entity_field",
+                  "entity_id": "$actor_id",
+                  "field_name": "visible",
+                  "value": false
+                },
+                {
+                  "type": "set_entity_field",
+                  "entity_id": "$actor_id",
+                  "field_name": "events_enabled",
+                  "value": false
+                },
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$actor_id",
+                  "name": "blocks_movement",
+                  "value": false
+                },
+                {
+                  "type": "check_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "target_gate_id",
+                  "op": "neq",
+                  "value": "",
+                  "then": [
+                    {
+                      "type": "run_event",
+                      "entity_id": "$self.target_gate_id",
+                      "event_id": "add_input_value",
+                      "index": "$self.target_index",
+                      "amount": "$self.target_amount"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "render_order": 0
+}

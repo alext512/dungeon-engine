@@ -1,0 +1,16 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "Hmmm, the path ahead is blocked. Try to find a way to open it and"
+    },
+    {
+      "type": "text",
+      "text": "proceed! If you need to restart the level, or return to the level"
+    },
+    {
+      "type": "text",
+      "text": "select menu, return to the entrance (where you started from)."
+    }
+  ]
+}

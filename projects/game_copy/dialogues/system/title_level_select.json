@@ -1,0 +1,29 @@
+{
+  "segments": [
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Level 1",
+          "option_id": "level_1"
+        },
+        {
+          "text": "Level 2",
+          "option_id": "level_2"
+        },
+        {
+          "text": "Level 3",
+          "option_id": "level_3"
+        },
+        {
+          "text": "Level 4",
+          "option_id": "level_4"
+        },
+        {
+          "text": "Level 5",
+          "option_id": "level_5"
+        }
+      ]
+    }
+  ]
+}

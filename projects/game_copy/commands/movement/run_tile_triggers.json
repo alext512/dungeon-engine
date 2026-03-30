@@ -1,0 +1,46 @@
+{
+  "params": [
+    "x",
+    "y",
+    "tags_any",
+    "event_id",
+    "exclude_entity_id"
+  ],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "tile_trigger_entities",
+      "value": {
+        "$entities_at": {
+          "x": "$x",
+          "y": "$y",
+          "exclude_entity_id": "$exclude_entity_id",
+          "include_hidden": true,
+          "include_absent": false,
+          "where": {
+            "tags_any": "$tags_any",
+            "present": true
+          },
+          "select": {
+            "fields": ["entity_id"]
+          }
+        }
+      }
+    },
+    {
+      "type": "run_commands_for_collection",
+      "value": "$self.tile_trigger_entities",
+      "item_param": "trigger_target",
+      "commands": [
+        {
+          "type": "run_event",
+          "entity_id": "$trigger_target.entity_id",
+          "event_id": "$event_id",
+          "actor_entity_id": "$actor_entity_id",
+          "caller_entity_id": "$caller_entity_id"
+        }
+      ]
+    }
+  ]
+}

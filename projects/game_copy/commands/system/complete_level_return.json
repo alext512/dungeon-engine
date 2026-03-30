@@ -1,0 +1,21 @@
+{
+  "params": [
+    "level_number"
+  ],
+  "commands": [
+    {
+      "type": "run_command",
+      "command_id": "commands/system/mark_level_completed",
+      "level_number": "$level_number"
+    },
+    {
+      "type": "run_command",
+      "command_id": "commands/system/save_progress"
+    },
+    {
+      "type": "change_area",
+      "area_id": "areas/title_screen",
+      "entry_id": "start"
+    }
+  ]
+}

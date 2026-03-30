@@ -1,0 +1,33 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "Move the lever?"
+    },
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "Move up",
+          "option_id": "up"
+        },
+        {
+          "text": "Move right",
+          "option_id": "right"
+        },
+        {
+          "text": "Move down",
+          "option_id": "down"
+        },
+        {
+          "text": "Move left",
+          "option_id": "left"
+        },
+        {
+          "text": "Cancel",
+          "option_id": "cancel"
+        }
+      ]
+    }
+  ]
+}
