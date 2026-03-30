@@ -123,3 +123,26 @@ def move_entity_by_id(
     entity.x = new_x
     entity.y = new_y
     return True
+
+
+def move_entity_pixels(
+    area: AreaDocument,
+    entity_id: str,
+    dx: int,
+    dy: int,
+) -> bool:
+    """Move one entity's pixel_x/pixel_y by a delta.
+
+    The caller is responsible for deciding whether pixel movement is the
+    right operation for the selected entity.
+    """
+    entity = entity_by_id(area, entity_id)
+    if entity is None:
+        return False
+    new_px = (entity.pixel_x or 0) + dx
+    new_py = (entity.pixel_y or 0) + dy
+    if new_px == (entity.pixel_x or 0) and new_py == (entity.pixel_y or 0):
+        return False
+    entity.pixel_x = new_px
+    entity.pixel_y = new_py
+    return True

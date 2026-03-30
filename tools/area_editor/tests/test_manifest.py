@@ -5,6 +5,7 @@ These run against the real test_project fixtures — no mocks needed.
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -33,6 +34,10 @@ class TestManifestLoading(unittest.TestCase):
 
     def test_startup_area(self):
         self.assertEqual(self.manifest.startup_area, "areas/title_screen")
+
+    def test_display_dimensions_loaded_from_shared_variables(self):
+        self.assertEqual(self.manifest.display_width, 256)
+        self.assertEqual(self.manifest.display_height, 192)
 
 
 @unittest.skipUnless(_TEST_PROJECT.is_dir(), "test_project fixture not found")
@@ -76,6 +81,20 @@ class TestManifestFallback(unittest.TestCase):
         """load_manifest should accept a directory path too."""
         manifest = load_manifest(_TEST_PROJECT)
         self.assertEqual(manifest.project_root, _TEST_PROJECT.resolve())
+
+    def test_defaults_display_dimensions_when_shared_variables_are_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp) / "project"
+            project_root.mkdir()
+            (project_root / "project.json").write_text(
+                '{\n  "startup_area": "areas/demo"\n}\n',
+                encoding="utf-8",
+            )
+
+            manifest = load_manifest(project_root / "project.json")
+
+            self.assertEqual(manifest.display_width, 320)
+            self.assertEqual(manifest.display_height, 240)
 
 
 if __name__ == "__main__":

@@ -37,6 +37,8 @@ class ProjectManifest:
     asset_paths: list[Path] = field(default_factory=list)
     command_paths: list[Path] = field(default_factory=list)
     dialogue_paths: list[Path] = field(default_factory=list)
+    display_width: int = 320
+    display_height: int = 240
     startup_area: str | None = None
     _raw: dict[str, Any] = field(default_factory=dict)
 
@@ -58,6 +60,43 @@ def _resolve_path_list(
         fallback = project_root / default_name
         return [fallback] if fallback.is_dir() else []
     return [(project_root / p).resolve() for p in entries]
+
+
+def _resolve_optional_path(
+    project_root: Path,
+    raw_value: Any,
+    *,
+    fallback_name: str | None = None,
+) -> Path | None:
+    """Resolve one optional manifest file path with an optional fallback file."""
+    if raw_value not in (None, ""):
+        return (project_root / str(raw_value)).resolve()
+    if fallback_name is None:
+        return None
+    fallback = (project_root / fallback_name).resolve()
+    return fallback if fallback.is_file() else None
+
+
+def _load_shared_variables(variables_path: Path | None) -> dict[str, Any]:
+    """Load project shared variables, or return an empty mapping when absent."""
+    if variables_path is None or not variables_path.is_file():
+        return {}
+    raw = json.loads(variables_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Project variables file '{variables_path}' must contain a JSON object.")
+    return raw
+
+
+def _resolve_project_dimension(shared_variables: dict[str, Any], key: str, default: int) -> int:
+    """Read one display dimension from shared variables with a sane fallback."""
+    display = shared_variables.get("display", {})
+    if not isinstance(display, dict):
+        return int(default)
+    raw_value = display.get(key, default)
+    try:
+        return max(1, int(raw_value))
+    except (TypeError, ValueError):
+        return int(default)
 
 
 def _content_id(file_path: Path, root_dirs: list[Path]) -> str:
@@ -98,6 +137,12 @@ def load_manifest(project_path: Path) -> ProjectManifest:
 
     project_root = project_file.parent.resolve()
     raw: dict[str, Any] = json.loads(project_file.read_text(encoding="utf-8"))
+    shared_variables_path = _resolve_optional_path(
+        project_root,
+        raw.get("shared_variables_path"),
+        fallback_name="shared_variables.json",
+    )
+    shared_variables = _load_shared_variables(shared_variables_path)
 
     return ProjectManifest(
         project_root=project_root,
@@ -112,6 +157,8 @@ def load_manifest(project_path: Path) -> ProjectManifest:
         dialogue_paths=_resolve_path_list(
             project_root, raw, "dialogue_paths", "dialogues"
         ),
+        display_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
+        display_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
         startup_area=raw.get("startup_area"),
         _raw=raw,
     )

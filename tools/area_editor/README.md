@@ -18,27 +18,35 @@ The new direction is:
 
 Phase 1 is implemented.
 Phase 2 is implemented.
-Phase 3 has started with a first editable slice for area saving plus
-cell-flag painting.
+Phase 3 is in active use.
 
 The current editor can:
 
 - open a project manifest
 - browse areas, entity templates, dialogues, commands, and assets
-- load an area into a read-only canvas
-- render tile layers plus entity markers and template sprite previews
+- load an area into an editable canvas
+- render tile layers, world entities, and area-owned screen-space entities
+- show an offset screen pane sized from the project's configured display dimensions
 - toggle layers, entities, and the grid
-- zoom, pan, and show hovered cell coordinates
+- zoom, pan, and show hovered world-cell or screen-pixel coordinates
 - edit `cell_flags` on area tabs through a dedicated edit mode
+- paint tiles on the active layer
+- place and delete world-space entities with the template brush
+- select stacked world entities by cell and select screen-space entities from the screen pane
+- nudge selected world entities by tiles and selected screen-space entities by pixels
+- edit selected entity instances through a structured Fields tab or guarded raw JSON tab
+- edit layer/entity render properties from a shared dock
+- edit dialogue/template/command JSON through guarded viewer tabs
 - save edited area files back to JSON with unknown-field preservation
-- run focused tests around manifest loading, asset resolution, and document round-tripping
+- run focused automated tests around manifest loading, canvas interaction, and document round-tripping
 
-What is not implemented yet:
+What is still not implemented:
 
-- tile painting
-- entity placement, movement, deletion, or reordering
-- inspector editing for instance fields and parameters
-- validation or runtime handoff actions
+- visual placement of new screen-space entities from the canvas
+- drag-to-move entity manipulation
+- project-level `global_entities` editing
+- advanced reference pickers for entity-linked parameters
+- runtime handoff / launch integration
 
 ## Expected Responsibilities
 
@@ -51,6 +59,16 @@ The future tool is expected to help with:
 - editing common per-instance values
 - selecting other entity ids when parameters reference them
 - preserving room JSON without forcing the user to hand-edit common cases
+
+## Screen-Space Notes
+
+The area canvas now includes a separate screen pane to the right of the world grid.
+
+- It is a reference frame for area-owned screen-space entities only.
+- Its size comes from the project's configured shared variables display size, with runtime-matching defaults when that data is absent.
+- Existing screen-space entities can be selected, nudged, and deleted there.
+- Screen-space paint/placement is intentionally deferred for now.
+- `global_entities` from `project.json` are not shown in the area canvas yet.
 
 ## Current Non-Goals
 

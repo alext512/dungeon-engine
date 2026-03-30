@@ -12,6 +12,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 
+from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
 from area_editor.documents.area_document import AreaDocument, EntityDocument, TileLayerDocument
 from area_editor.project_io.asset_resolver import AssetResolver
@@ -204,3 +205,127 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         self.assertTrue(canvas.tile_paint_mode)
         self.assertEqual(canvas.dragMode(), canvas.DragMode.NoDrag)
         self.assertEqual(canvas.viewport().cursor().shape(), Qt.CursorShape.CrossCursor)
+
+    def test_screen_pane_offsets_template_driven_screen_entities(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(
+                id="title_backdrop",
+                template="entity_templates/display_sprite",
+                pixel_x=12,
+                pixel_y=18,
+            )
+        ]
+        templates = TemplateCatalog()
+        templates._templates["entity_templates/display_sprite"] = {
+            "space": "screen",
+        }
+
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, templates, display_size=(256, 192))
+
+        item = canvas._entity_item_by_id["title_backdrop"]
+        screen_x, screen_y = canvas._screen_pane_origin
+        self.assertEqual(item.pos().x(), screen_x + 12)
+        self.assertEqual(item.pos().y(), screen_y + 18)
+        self.assertEqual(canvas._screen_pane_size, (256, 192))
+
+    def test_select_mode_can_pick_screen_entities_with_template_fallback(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(id="npc", x=0, y=0, render_order=10, y_sort=True),
+            EntityDocument(
+                id="overlay",
+                template="entity_templates/display_sprite",
+                pixel_x=10,
+                pixel_y=12,
+                render_order=0,
+                y_sort=False,
+            ),
+        ]
+        templates = TemplateCatalog()
+        templates._templates["entity_templates/display_sprite"] = {
+            "space": "screen",
+        }
+
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, templates, display_size=(256, 192))
+        canvas.set_select_mode(True)
+        canvas.select_entities_at_cell(0, 0)
+        self.assertEqual(canvas.selected_entity_id, "npc")
+
+        screen_x, screen_y = canvas._screen_pane_origin
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(screen_x + 11, screen_y + 13),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        with patch.object(
+            canvas,
+            "mapToScene",
+            return_value=QPointF(screen_x + 11, screen_y + 13),
+        ):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(canvas.selected_entity_id, "overlay")
+        self.assertEqual(canvas._selection_cycle_ids, ())
+        self.assertEqual(canvas._screen_selection_cycle_ids, ("overlay",))
+
+    def test_mouse_move_emits_screen_pixel_hovered_inside_screen_pane(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(256, 192))
+
+        hovered: list[tuple[int, int]] = []
+        canvas.screen_pixel_hovered.connect(lambda px, py: hovered.append((px, py)))
+
+        screen_x, screen_y = canvas._screen_pane_origin
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseMove,
+            QPointF(screen_x + 20, screen_y + 30),
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        with patch.object(
+            canvas,
+            "mapToScene",
+            return_value=QPointF(screen_x + 20, screen_y + 30),
+        ):
+            canvas.mouseMoveEvent(event)
+
+        self.assertEqual(hovered[-1], (20, 30))
+
+    def test_paint_mode_click_in_screen_pane_is_consumed_without_editing_world(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(256, 192))
+        canvas.set_tile_paint_mode(True)
+        canvas.set_selected_gid(9)
+        canvas.set_active_brush_type(BrushType.TILE)
+
+        screen_x, screen_y = canvas._screen_pane_origin
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(screen_x + 8, screen_y + 8),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        with patch.object(
+            canvas,
+            "mapToScene",
+            return_value=QPointF(screen_x + 8, screen_y + 8),
+        ):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(area.tile_layers[0].grid, [[0, 0], [0, 0]])

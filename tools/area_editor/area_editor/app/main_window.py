@@ -49,10 +49,10 @@ from area_editor.operations.tilesets import (
     update_tileset_dimensions,
 )
 from area_editor.operations.entities import (
-    delete_entity_at,
     delete_entity_by_id,
     entity_by_id,
     move_entity_by_id,
+    move_entity_pixels,
     place_entity,
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
@@ -177,6 +177,8 @@ class MainWindow(QMainWindow):
         self._render_target_ref: int | str | None = None
         self._active_instance_entity_id: str | None = None
         self._json_dirty_bound: set[str] = set()
+        self._display_width: int = 320
+        self._display_height: int = 240
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -328,6 +330,8 @@ class MainWindow(QMainWindow):
         self._templates = TemplateCatalog()
         self._templates.load_from_manifest(self._manifest)
         self._entity_instance_panel.set_template_catalog(self._templates)
+        self._display_width = self._manifest.display_width
+        self._display_height = self._manifest.display_height
 
         # Close all existing tabs
         self._tab_widget.close_all()
@@ -452,6 +456,26 @@ class MainWindow(QMainWindow):
         self._nudge_down_action.setShortcut(QKeySequence(Qt.Key.Key_Down))
         self._nudge_down_action.triggered.connect(lambda: self._on_nudge_selected_entity(0, 1))
         self.addAction(self._nudge_down_action)
+
+        self._nudge_left_pixels_action = QAction(self)
+        self._nudge_left_pixels_action.setShortcut(QKeySequence("Shift+Left"))
+        self._nudge_left_pixels_action.triggered.connect(lambda: self._on_nudge_screen_entity(-8, 0))
+        self.addAction(self._nudge_left_pixels_action)
+
+        self._nudge_right_pixels_action = QAction(self)
+        self._nudge_right_pixels_action.setShortcut(QKeySequence("Shift+Right"))
+        self._nudge_right_pixels_action.triggered.connect(lambda: self._on_nudge_screen_entity(8, 0))
+        self.addAction(self._nudge_right_pixels_action)
+
+        self._nudge_up_pixels_action = QAction(self)
+        self._nudge_up_pixels_action.setShortcut(QKeySequence("Shift+Up"))
+        self._nudge_up_pixels_action.triggered.connect(lambda: self._on_nudge_screen_entity(0, -8))
+        self.addAction(self._nudge_up_pixels_action)
+
+        self._nudge_down_pixels_action = QAction(self)
+        self._nudge_down_pixels_action.setShortcut(QKeySequence("Shift+Down"))
+        self._nudge_down_pixels_action.triggered.connect(lambda: self._on_nudge_screen_entity(0, 8))
+        self.addAction(self._nudge_down_pixels_action)
 
         # View menu
         view_menu = self.menuBar().addMenu("&View")
@@ -839,6 +863,15 @@ class MainWindow(QMainWindow):
             self._status_cell.setText(f"Cell: ({col}, {row})")
         else:
             self._status_cell.setText("")
+        self._update_paint_status()
+
+    def _on_screen_pixel_hovered(self, px: int, py: int) -> None:
+        if px < 0 or py < 0:
+            self._status_cell.setText("")
+            self._update_paint_status()
+            return
+        self._status_cell.setText(f"Pixel: ({px}, {py})")
+        self._status_layer.setText("")
 
     def _on_zoom_changed(self, zoom: float) -> None:
         self._status_zoom.setText(f"{zoom:.0%}")
@@ -929,7 +962,7 @@ class MainWindow(QMainWindow):
         if context is None:
             return
         content_id, doc, canvas = context
-        deleted_id = delete_entity_at(doc, col, row)
+        deleted_id = self._delete_world_entity_at(doc, col, row)
         if deleted_id is None:
             return
         if canvas.selected_entity_id == deleted_id:
@@ -970,6 +1003,12 @@ class MainWindow(QMainWindow):
         canvas.clear_selected_entity()
 
     def _on_nudge_selected_entity(self, dx: int, dy: int) -> None:
+        self._nudge_selected_entity_impl(dx, dy, screen_only=False)
+
+    def _on_nudge_screen_entity(self, dx: int, dy: int) -> None:
+        self._nudge_selected_entity_impl(dx, dy, screen_only=True)
+
+    def _nudge_selected_entity_impl(self, dx: int, dy: int, *, screen_only: bool) -> None:
         context = self._active_area_context()
         if context is None or not self._select_action.isChecked():
             return
@@ -977,8 +1016,18 @@ class MainWindow(QMainWindow):
         selected_id = canvas.selected_entity_id
         if not selected_id:
             return
-        if not move_entity_by_id(doc, selected_id, dx, dy):
+        entity = entity_by_id(doc, selected_id)
+        if entity is None:
             return
+        effective_space = self._entity_effective_space(entity)
+        if effective_space == "screen":
+            if not move_entity_pixels(doc, selected_id, dx, dy):
+                return
+        else:
+            if screen_only:
+                return
+            if not move_entity_by_id(doc, selected_id, dx, dy):
+                return
         canvas.set_selected_entity(selected_id, cycle_position=1, cycle_total=1, emit=False)
         self._set_render_target_entity(selected_id)
         canvas.refresh_scene_contents()
@@ -987,10 +1036,13 @@ class MainWindow(QMainWindow):
         entity = entity_by_id(doc, selected_id)
         if entity is None:
             return
-        self.statusBar().showMessage(
-            f"Moved {selected_id} to ({entity.x}, {entity.y}).",
-            2500,
-        )
+        if effective_space == "screen":
+            self.statusBar().showMessage(
+                f"Moved {selected_id} to pixel ({entity.pixel_x or 0}, {entity.pixel_y or 0}).",
+                2500,
+            )
+            return
+        self.statusBar().showMessage(f"Moved {selected_id} to ({entity.x}, {entity.y}).", 2500)
 
     def _on_apply_entity_instance_json(self) -> None:
         context = self._active_area_context()
@@ -1083,7 +1135,12 @@ class MainWindow(QMainWindow):
         self._area_docs[area_id] = doc
 
         canvas = TileCanvas()
-        canvas.set_area(doc, self._catalog, self._templates)
+        canvas.set_area(
+            doc,
+            self._catalog,
+            self._templates,
+            display_size=(self._display_width, self._display_height),
+        )
         canvas.set_grid_visible(self._grid_action.isChecked())
 
         self._tab_widget.open_tab(
@@ -1111,6 +1168,12 @@ class MainWindow(QMainWindow):
                 try:
                     self._connected_canvas.cell_hovered.disconnect(
                         self._on_cell_hovered
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.screen_pixel_hovered.disconnect(
+                        self._on_screen_pixel_hovered
                     )
                 except (RuntimeError, TypeError):
                     pass
@@ -1167,6 +1230,7 @@ class MainWindow(QMainWindow):
 
         self._connected_canvas = canvas
         canvas.cell_hovered.connect(self._on_cell_hovered)
+        canvas.screen_pixel_hovered.connect(self._on_screen_pixel_hovered)
         canvas.zoom_changed.connect(self._on_zoom_changed)
         canvas.cell_flag_edited.connect(self._on_cell_flag_edited)
         canvas.tile_painted.connect(self._on_tile_painted)
@@ -1177,6 +1241,41 @@ class MainWindow(QMainWindow):
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
         self._layer_panel.entities_visibility_changed.connect(
             canvas.set_entities_visible
+        )
+
+    def _entity_effective_space(self, entity: EntityDocument) -> str:
+        """Return one entity's effective space using template fallback."""
+        if entity.space != "world":
+            return entity.space
+        if entity.template and self._templates is not None:
+            template_space = self._templates.get_template_space(entity.template)
+            if template_space is not None:
+                return template_space
+        return entity.space
+
+    def _delete_world_entity_at(self, doc: AreaDocument, col: int, row: int) -> str | None:
+        """Delete the topmost effective world-space entity at one grid cell."""
+        matches = [
+            entity
+            for entity in doc.entities
+            if self._entity_effective_space(entity) != "screen" and entity.x == col and entity.y == row
+        ]
+        if not matches:
+            return None
+        topmost = max(matches, key=self._world_entity_sort_key)
+        return delete_entity_by_id(doc, topmost.id)
+
+    @staticmethod
+    def _world_entity_sort_key(entity: EntityDocument) -> tuple:
+        sort_bucket = 1 if entity.y_sort else 0
+        sort_y = float(entity.y + 1 + entity.sort_y_offset) if entity.y_sort else 0.0
+        return (
+            entity.render_order,
+            sort_bucket,
+            sort_y,
+            entity.stack_order,
+            entity.x,
+            entity.id,
         )
 
     def _populate_asset_context_menu(

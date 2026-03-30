@@ -14,16 +14,28 @@ The current tool already supports:
 
 - opening a `project.json` manifest
 - browsing areas, entity templates, dialogues, commands, and assets
-- loading an area into a read-only tile canvas
+- loading an area into an editable tile canvas
 - showing layer/entity visibility toggles plus a grid toggle
-- zooming, panning, and hovered-cell status feedback
+- zooming, panning, and hovered world-cell or screen-pixel status feedback
 - showing entity markers and first-visual sprite previews when available
+- rendering area-owned screen-space entities in a dedicated screen pane
 - editing area `cell_flags` from the canvas in a dedicated edit mode
+- painting tiles on the active layer
+- placing/deleting world-space entities with the template brush
+- selecting world entities by cell and area-owned screen-space entities from the screen pane
+- nudging world entities by tiles and screen-space entities by pixels
+- editing selected entity instances through structured fields or guarded raw JSON
+- editing layer/entity render properties from a shared dock
+- editing dialogue/template/command JSON in guarded tabs
 - saving edited area files while preserving unknown JSON fields
 - running focused automated tests for manifest loading, asset resolution, and area-document round-tripping
 
-Tile painting, entity placement, inspector editing, validation, and
-runtime handoff are still later-phase work.
+Still deferred:
+
+- visual placement of new screen-space entities
+- editing project-level `global_entities`
+- rich reference pickers for entity-link parameters
+- runtime handoff
 
 ## What This Folder Is
 

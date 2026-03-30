@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -26,14 +26,14 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsSimpleTextItem,
     QGraphicsView,
 )
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
-from area_editor.documents.area_document import AreaDocument
+from area_editor.documents.area_document import AreaDocument, EntityDocument
 from area_editor.operations.cell_flags import cell_is_walkable, set_cell_walkable
-from area_editor.operations.entities import entities_at_cell
 from area_editor.operations.tiles import eyedrop_tile, paint_tile
 
 # ---------------------------------------------------------------------------
@@ -52,6 +52,9 @@ _ENTITY_SCREEN_BORDER = QColor(220, 140, 0, 200)
 _ENTITY_GHOST_FILL = QColor(0, 200, 220, 100)
 _ENTITY_GHOST_BORDER = QColor(0, 200, 220, 180)
 _ENTITY_SELECT_BORDER = QColor(255, 220, 40, 230)
+_SCREEN_PANE_FILL = QColor(80, 60, 90, 40)
+_SCREEN_PANE_BORDER = QColor(230, 120, 220, 210)
+_SCREEN_PANE_LABEL = QColor(240, 220, 240)
 
 # Grid overlay
 _GRID_COLOR = QColor(255, 255, 255, 40)
@@ -80,6 +83,7 @@ class TileCanvas(QGraphicsView):
 
     # Signals for status-bar updates
     cell_hovered = Signal(int, int)       # (col, row) in tile coords
+    screen_pixel_hovered = Signal(int, int)  # (px, py) in screen-space coords
     zoom_changed = Signal(float)          # current zoom factor
     cell_flag_edited = Signal(int, int, bool)
     tile_painted = Signal(int, int, int, int)  # (layer_idx, col, row, gid)
@@ -109,6 +113,8 @@ class TileCanvas(QGraphicsView):
         # State
         self._zoom: float = 1.0
         self._tile_size: int = 16
+        self._display_width: int = 320
+        self._display_height: int = 240
         self._area: AreaDocument | None = None
         self._catalog: TilesetCatalog | None = None
         self._templates: TemplateCatalog | None = None
@@ -118,6 +124,7 @@ class TileCanvas(QGraphicsView):
         self._entities_visible: bool = True
         self._cell_flag_group: QGraphicsItemGroup | None = None
         self._grid_group: QGraphicsItemGroup | None = None
+        self._screen_pane_group: QGraphicsItemGroup | None = None
         self._ghost_item: QGraphicsPixmapItem | None = None
         self._grid_visible: bool = True
         self._cell_flags_edit_mode: bool = False
@@ -136,6 +143,7 @@ class TileCanvas(QGraphicsView):
         self._selected_entity_cycle_total: int = 0
         self._selection_cycle_cell: tuple[int, int] | None = None
         self._selection_cycle_ids: tuple[str, ...] = ()
+        self._screen_selection_cycle_ids: tuple[str, ...] = ()
         self._last_painted: tuple[int, int, bool] | None = None
         self._last_tile_painted: tuple[int, int, int] | None = None
         self._last_entity_painted: tuple[str, int, int] | None = None
@@ -143,6 +151,8 @@ class TileCanvas(QGraphicsView):
         self._entity_item_by_id: dict[str, QGraphicsItem] = {}
         self._selection_item: QGraphicsRectItem | None = None
         self._middle_pan_pos = None
+        self._screen_pane_origin: tuple[int, int] = (16, 0)
+        self._screen_pane_size: tuple[int, int] = (self._display_width, self._display_height)
 
     # ------------------------------------------------------------------
     # Public API
@@ -153,6 +163,8 @@ class TileCanvas(QGraphicsView):
         area: AreaDocument,
         catalog: TilesetCatalog,
         templates: TemplateCatalog | None = None,
+        *,
+        display_size: tuple[int, int] | None = None,
     ) -> None:
         """Populate the scene from an area document."""
         previous_layer_visibility = list(self._layer_visibility)
@@ -178,10 +190,19 @@ class TileCanvas(QGraphicsView):
         self._last_entity_painted = None
         self._last_entity_deleted = None
         self._tile_size = area.tile_size or 16
+        if display_size is not None:
+            self._display_width = max(1, int(display_size[0]))
+            self._display_height = max(1, int(display_size[1]))
 
         width_px = area.width * self._tile_size
         height_px = area.height * self._tile_size
-        self._scene.setSceneRect(QRectF(0, 0, max(width_px, 1), max(height_px, 1)))
+        gap = self._tile_size
+        screen_x = max(width_px, 0) + gap
+        self._screen_pane_origin = (screen_x, 0)
+        self._screen_pane_size = (self._display_width, self._display_height)
+        scene_w = max(screen_x + self._display_width, 1)
+        scene_h = max(height_px, self._display_height, 1)
+        self._scene.setSceneRect(QRectF(0, 0, scene_w, scene_h))
         self._rebuild_scene_contents()
         self._update_drag_mode()
 
@@ -198,8 +219,10 @@ class TileCanvas(QGraphicsView):
         self._entities_visible = True
         self._cell_flag_group = None
         self._grid_group = None
+        self._screen_pane_group = None
         self._ghost_item = None
         self._selection_item = None
+        self._screen_selection_cycle_ids = ()
 
     def refresh_scene_contents(self) -> None:
         """Redraw the current area without reinitialising editor state."""
@@ -376,12 +399,13 @@ class TileCanvas(QGraphicsView):
     def clear_selected_entity(self, *, emit: bool = True) -> None:
         self._selection_cycle_cell = None
         self._selection_cycle_ids = ()
+        self._screen_selection_cycle_ids = ()
         self.set_selected_entity(None, emit=emit)
 
     def select_entities_at_cell(self, col: int, row: int) -> bool:
         if self._area is None:
             return False
-        matches = entities_at_cell(self._area, col, row)
+        matches = self._world_entities_at_cell(col, row)
         ids = tuple(entity.id for entity in matches)
         if not ids:
             self.clear_selected_entity()
@@ -399,12 +423,26 @@ class TileCanvas(QGraphicsView):
 
         self._selection_cycle_cell = (col, row)
         self._selection_cycle_ids = ids
+        self._screen_selection_cycle_ids = ()
         self.set_selected_entity(
             ids[next_index],
             cycle_position=next_index + 1,
             cycle_total=len(ids),
         )
         return True
+
+    def set_display_size(self, width: int, height: int) -> None:
+        """Update the screen-pane reference size used for screen-space entities."""
+        self._display_width = max(1, int(width))
+        self._display_height = max(1, int(height))
+        self._screen_pane_size = (self._display_width, self._display_height)
+        if self._area is not None:
+            self.set_area(
+                self._area,
+                self._catalog,
+                self._templates,
+                display_size=(self._display_width, self._display_height),
+            )
 
     def apply_cell_flag_brush(self, col: int, row: int, walkable: bool) -> bool:
         """Apply the cell-flag brush directly to one cell."""
@@ -457,11 +495,16 @@ class TileCanvas(QGraphicsView):
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         scene_pos = self.mapToScene(event.position().toPoint())
-        col = -1
-        row = -1
-        if self._tile_size > 0:
-            col = int(scene_pos.x() / self._tile_size)
-            row = int(scene_pos.y() / self._tile_size)
+        local_screen = self._screen_pixel_from_scene_pos(scene_pos.x(), scene_pos.y())
+        if local_screen is not None:
+            self.screen_pixel_hovered.emit(*local_screen)
+        else:
+            self.screen_pixel_hovered.emit(-1, -1)
+            col = -1
+            row = -1
+            if self._tile_size > 0:
+                col = int(scene_pos.x() / self._tile_size)
+                row = int(scene_pos.y() / self._tile_size)
             self.cell_hovered.emit(col, row)
 
         if self._middle_pan_pos is not None:
@@ -478,6 +521,8 @@ class TileCanvas(QGraphicsView):
 
         # Update ghost preview position
         if self._tile_paint_mode and self._area is not None:
+            col = int(scene_pos.x() / self._tile_size) if self._tile_size > 0 else -1
+            row = int(scene_pos.y() / self._tile_size) if self._tile_size > 0 else -1
             if 0 <= col < self._area.width and 0 <= row < self._area.height:
                 self._show_ghost(col, row)
             else:
@@ -500,6 +545,8 @@ class TileCanvas(QGraphicsView):
 
     def leaveEvent(self, event) -> None:  # noqa: N802
         self._hide_ghost()
+        self.cell_hovered.emit(-1, -1)
+        self.screen_pixel_hovered.emit(-1, -1)
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -564,9 +611,9 @@ class TileCanvas(QGraphicsView):
         ts = self._tile_size
 
         for entity in area.entities:
-            if entity.is_screen_space:
-                px = entity.pixel_x or 0
-                py = entity.pixel_y or 0
+            if self._effective_space(entity) == "screen":
+                px = self._screen_pane_origin[0] + (entity.pixel_x or 0)
+                py = self._screen_pane_origin[1] + (entity.pixel_y or 0)
                 fill = _ENTITY_SCREEN_FILL
                 border = _ENTITY_SCREEN_BORDER
             else:
@@ -626,6 +673,23 @@ class TileCanvas(QGraphicsView):
                 )
 
         return items
+
+    def _build_screen_pane_group(self) -> QGraphicsItemGroup:
+        group = QGraphicsItemGroup()
+        screen_x, screen_y = self._screen_pane_origin
+        screen_w, screen_h = self._screen_pane_size
+        rect = QGraphicsRectItem(0, 0, screen_w, screen_h)
+        border = QPen(_SCREEN_PANE_BORDER, 1, Qt.PenStyle.DashLine)
+        rect.setPos(screen_x, screen_y)
+        rect.setBrush(_SCREEN_PANE_FILL)
+        rect.setPen(border)
+        rect.setParentItem(group)
+
+        label = QGraphicsSimpleTextItem(f"Screen ({screen_w}x{screen_h})")
+        label.setBrush(_SCREEN_PANE_LABEL)
+        label.setPos(screen_x + 6, screen_y + 4)
+        label.setParentItem(group)
+        return group
 
     def _build_cell_flag_group(self, area: AreaDocument) -> QGraphicsItemGroup:
         group = QGraphicsItemGroup()
@@ -693,6 +757,7 @@ class TileCanvas(QGraphicsView):
         self._entity_item_by_id = {}
         self._cell_flag_group = None
         self._grid_group = None
+        self._screen_pane_group = None
         self._ghost_item = None
         self._selection_item = None
 
@@ -752,6 +817,10 @@ class TileCanvas(QGraphicsView):
         for item in self._entity_items:
             item.setVisible(self._entities_visible)
 
+        self._screen_pane_group = self._build_screen_pane_group()
+        self._screen_pane_group.setZValue(-100.0)
+        self._scene.addItem(self._screen_pane_group)
+
         overlay_base = float(len(render_entries) + 100)
         self._cell_flag_group = self._build_cell_flag_group(self._area)
         self._cell_flag_group.setZValue(overlay_base)
@@ -776,6 +845,7 @@ class TileCanvas(QGraphicsView):
         for overlay in (
             self._cell_flag_group,
             self._grid_group,
+            self._screen_pane_group,
             self._ghost_item,
             self._selection_item,
         ):
@@ -822,10 +892,14 @@ class TileCanvas(QGraphicsView):
             if button != Qt.MouseButton.LeftButton:
                 return False
             scene_pos = self.mapToScene(event.position().toPoint())
+            screen_matches = self._screen_entities_at_scene_pos(scene_pos.x(), scene_pos.y())
+            if screen_matches:
+                return self._select_screen_entity_cycle(screen_matches)
             col = int(scene_pos.x() / self._tile_size)
             row = int(scene_pos.y() / self._tile_size)
             if not (0 <= col < self._area.width and 0 <= row < self._area.height):
-                return False
+                self.clear_selected_entity()
+                return True
             return self.select_entities_at_cell(col, row)
 
         # --- Unified paint tool ---
@@ -834,6 +908,8 @@ class TileCanvas(QGraphicsView):
             col = int(scene_pos.x() / self._tile_size)
             row = int(scene_pos.y() / self._tile_size)
             if not (0 <= col < self._area.width and 0 <= row < self._area.height):
+                if self._screen_pixel_from_scene_pos(scene_pos.x(), scene_pos.y()) is not None:
+                    return True
                 return False
 
             if self._active_brush_type == BrushType.ENTITY:
@@ -923,6 +999,79 @@ class TileCanvas(QGraphicsView):
         highlight.setZValue(float(len(self._scene.items()) + 300))
         self._selection_item = highlight
         self._scene.addItem(highlight)
+
+    def _effective_space(self, entity: EntityDocument) -> str:
+        """Resolve one entity's effective space with template fallback."""
+        if entity.space != "world":
+            return entity.space
+        if entity.template and self._templates is not None:
+            template_space = self._templates.get_template_space(entity.template)
+            if template_space is not None:
+                return template_space
+        return entity.space
+
+    def _world_entities_at_cell(self, col: int, row: int) -> list[EntityDocument]:
+        """Return world-space entities at one cell, ordered topmost-first."""
+        if self._area is None:
+            return []
+        matches = [
+            entity
+            for entity in self._area.entities
+            if self._effective_space(entity) != "screen" and entity.x == col and entity.y == row
+        ]
+        return sorted(
+            matches,
+            key=lambda entity: float(
+                self._entity_item_by_id[entity.id].zValue()
+            ) if entity.id in self._entity_item_by_id else -1.0,
+            reverse=True,
+        )
+
+    def _screen_pixel_from_scene_pos(self, sx: float, sy: float) -> tuple[int, int] | None:
+        """Return screen-pane-local pixel coordinates for one scene position."""
+        pane_x, pane_y = self._screen_pane_origin
+        pane_w, pane_h = self._screen_pane_size
+        if pane_x <= sx < pane_x + pane_w and pane_y <= sy < pane_y + pane_h:
+            return int(sx - pane_x), int(sy - pane_y)
+        return None
+
+    def _screen_entities_at_scene_pos(self, sx: float, sy: float) -> list[str]:
+        """Return screen-space entity ids whose rendered items contain one scene point."""
+        if self._area is None:
+            return []
+        point = QPointF(sx, sy)
+        hits: list[tuple[float, str]] = []
+        for entity in self._area.entities:
+            if self._effective_space(entity) != "screen":
+                continue
+            item = self._entity_item_by_id.get(entity.id)
+            if item is None:
+                continue
+            if item.sceneBoundingRect().contains(point):
+                hits.append((float(item.zValue()), entity.id))
+        hits.sort(reverse=True)
+        return [entity_id for _z_value, entity_id in hits]
+
+    def _select_screen_entity_cycle(self, matches: list[str]) -> bool:
+        """Cycle through screen-space entities under the current click point."""
+        ids = tuple(matches)
+        self._selection_cycle_cell = None
+        self._selection_cycle_ids = ()
+        if (
+            self._screen_selection_cycle_ids == ids
+            and self._selected_entity_id in ids
+        ):
+            current_index = ids.index(self._selected_entity_id)
+            next_index = (current_index + 1) % len(ids)
+        else:
+            next_index = 0
+        self._screen_selection_cycle_ids = ids
+        self.set_selected_entity(
+            ids[next_index],
+            cycle_position=next_index + 1,
+            cycle_total=len(ids),
+        )
+        return True
 
     # -- Tile layer rebuild after painting --------------------------------
 

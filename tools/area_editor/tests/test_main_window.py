@@ -354,7 +354,19 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             (
                 '{\n'
                 '  "startup_area": "areas/demo",\n'
-                '  "entity_template_paths": ["entity_templates/"]\n'
+                '  "entity_template_paths": ["entity_templates/"],\n'
+                '  "shared_variables_path": "shared_variables.json"\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (project / "shared_variables.json").write_text(
+            (
+                '{\n'
+                '  "display": {\n'
+                '    "internal_width": 256,\n'
+                '    "internal_height": 192\n'
+                '  }\n'
                 '}\n'
             ),
             encoding="utf-8",
@@ -760,6 +772,56 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(fields._y_spin.isHidden())
             self.assertFalse(fields._pixel_x_row.isHidden())
             self.assertFalse(fields._pixel_y_row.isHidden())
+
+    def test_open_project_passes_display_size_into_screen_pane(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            self.assertEqual(window._display_width, 256)
+            self.assertEqual(window._display_height, 192)
+            self.assertEqual(canvas._screen_pane_size, (256, 192))
+
+    def test_screen_entity_selection_and_pixel_nudge_use_screen_space_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._select_action.setChecked(True)
+            canvas.set_selected_entity("title_backdrop", cycle_position=1, cycle_total=1)
+            QApplication.processEvents()
+
+            self.assertEqual(window._entity_instance_panel.entity_id, "title_backdrop")
+
+            window._on_nudge_selected_entity(1, 0)
+            doc = window._area_docs["areas/demo"]
+            entity = next(entity for entity in doc.entities if entity.id == "title_backdrop")
+            self.assertEqual((entity.pixel_x, entity.pixel_y), (13, 18))
+            self.assertIn("pixel (13, 18)", window.statusBar().currentMessage())
+
+            window._on_nudge_screen_entity(8, 0)
+            entity = next(entity for entity in doc.entities if entity.id == "title_backdrop")
+            self.assertEqual((entity.pixel_x, entity.pixel_y), (21, 18))
+
+            canvas.select_entities_at_cell(0, 0)
+            QApplication.processEvents()
+            door = next(entity for entity in doc.entities if entity.id == "house_door")
+            before = (door.x, door.y)
+            window._on_nudge_screen_entity(8, 0)
+            self.assertEqual((door.x, door.y), before)
+            window._tab_widget.set_dirty("areas/demo", False)
 
     def test_template_json_tab_is_guarded_and_saveable(self):
         with tempfile.TemporaryDirectory() as tmp:
