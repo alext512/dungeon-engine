@@ -1,55 +1,97 @@
 # Dungeon Engine
 
-A command-driven 2D puzzle/RPG engine in Python with JSON-authored gameplay, reusable entity templates, and entity-owned dialogue/menu flow.
+A 2D top-down puzzle/RPG engine in Python where most gameplay is authored in
+JSON files instead of hardcoded Python scripts.
 
-## What It Is
+## In Plain English
 
-This project is a focused top-down puzzle/RPG engine built with `pygame-ce`.
+This project is for building Zelda-like puzzle/adventure gameplay with:
 
-Core ideas:
+- rooms made from tiles
+- characters and objects placed in those rooms
+- reusable entity templates
+- switches, doors, blocks, signs, and other interactables
+- dialogue and menus
+- command chains that describe what happens when something is used or triggered
 
-- gameplay is authored through JSON command chains instead of one-off Python scripts
-- entities own named events such as `move_up`, `interact`, and custom behaviors
-- projects live outside the engine package and are loaded through `project.json`
-- JSON area/entity data is the contract for the runtime and future external tooling
+The main idea is:
 
-The repo includes a working sample project under [projects/test_project](./projects/test_project/).
+- the Python code provides the engine
+- the project files provide the game behavior
 
-## Current Features
+So instead of writing a custom Python script for every lever, gate, NPC, or
+menu, you describe most of that behavior in JSON.
 
-- standalone game launcher
-- project manifests with configurable search paths for areas, entity templates, project commands, assets, shared variables, and project-level `global_entities`
-- path-derived typed IDs for areas, entity templates, and project commands, for example `areas/village_square`
-- layered tilemaps with separate walkability data
+If you are not a programmer, it may help to think of JSON here as:
+
+- plain text files that describe game content and logic in a structured way
+
+## What This Project Is Trying To Do
+
+This engine is trying to keep game behavior in project data instead of hiding it
+inside engine code.
+
+That means the project files decide things like:
+
+- what happens when the player presses interact
+- what a lever does
+- how a gate opens or closes
+- what a dialogue menu shows
+- where a door sends the player
+- which entity currently receives certain inputs
+- how a controller entity manages a menu or dialogue flow
+
+The engine itself handles lower-level jobs such as:
+
+- rendering
+- input polling
+- movement
+- collision
+- animation playback
+- command execution
+- save/load
+
+For the design spirit behind those choices, see [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md).
+
+## What You Can Do Today
+
+The current engine already supports:
+
+- standalone play mode
+- project manifests through `project.json`
+- tile-based rooms with separate walkability data
 - reusable entity templates with per-instance parameters
-- entities with `visuals`, `space`, `scope`, `input_map`, events, and variables
+- entities with visuals, variables, input mappings, and named behaviors
 - command-driven movement, interaction, pushing, animation, and persistence
-- controller-driven dialogue and menu flow using entity-owned state, ordinary project JSON data, generic text helpers, and stack-based input restore
-- per-action input routing through project/area `input_targets` plus runtime `set_input_target`, `route_inputs_to_entity`, `push_input_routes`, and `pop_input_routes`
-- transfer-aware `change_area` and `new_game` flow using authored area `entry_points`
-- traveler persistence so transferred entities exist in one area at a time and do not duplicate on re-entry
-- explicit camera runtime state with structured `follow` / `bounds` / `deadzone` state, camera-state stack support, and save/load restore
-- save-slot persistence layered on top of authored room data
+- dialogue and menu flow handled by controller entities
+- area changes through authored entry points
+- camera follow, bounds, deadzones, and saved camera state
+- save slots layered on top of authored room data
 
-The previous built-in editor implementation now lives under [archived_editor](./archived_editor/) for reference only and is not part of the active runtime surface.
+There is also a new external area editor under [tools/area_editor](./tools/area_editor/).
+Right now it is still Phase 1 and read-only.
 
-A new external editor now lives under [tools/area_editor](./tools/area_editor/). Its current Phase 1 implementation is a read-only project browser and area viewer built around the same JSON contract as the runtime.
+The older built-in editor is archived under [archived_editor](./archived_editor/)
+for reference only.
 
-## Sample Project
+## What The Sample Project Demonstrates
 
-The included sample project currently demonstrates:
+The repo includes a working sample project in
+[projects/test_project](./projects/test_project/).
 
-- a `title_screen` area that auto-opens a choice dialogue through an area `enter_commands` hook
-- connected showcase areas: `village_square` and `village_house`
-- project-level global `dialogue_controller`, `pause_controller`, and `debug_controller` entities defined in `project.json`
-- player movement with authored walk animation timing
-- pushable blocks that respect room walkability and blockers
-- lever/gate interaction with persistent puzzle state
-- authored area `entry_points` and door-driven actor transfer between showcase areas
-- explicit per-area structured camera defaults that follow the transferred gameplay entity
-- signs, save prompts, pause menus, and title menus routed through controller entities with stack-based input restore
+That sample currently shows:
 
-Useful files to inspect:
+- a title screen with a menu
+- connected rooms you can walk between
+- player movement with authored animation timing
+- pushable blocks
+- lever-and-gate puzzle state that can persist
+- signs and prompts
+- save/load prompts
+- pause menu flow
+- controller entities that manage dialogue and UI behavior
+
+Good files to inspect first:
 
 - [projects/test_project/project.json](./projects/test_project/project.json)
 - [projects/test_project/shared_variables.json](./projects/test_project/shared_variables.json)
@@ -57,17 +99,50 @@ Useful files to inspect:
 - [projects/test_project/areas/village_square.json](./projects/test_project/areas/village_square.json)
 - [projects/test_project/areas/village_house.json](./projects/test_project/areas/village_house.json)
 - [projects/test_project/entity_templates/player.json](./projects/test_project/entity_templates/player.json)
-- [projects/test_project/entity_templates/dialogue_panel.json](./projects/test_project/entity_templates/dialogue_panel.json)
-- [projects/test_project/entity_templates/pause_controller.json](./projects/test_project/entity_templates/pause_controller.json)
 - [projects/test_project/entity_templates/lever_toggle.json](./projects/test_project/entity_templates/lever_toggle.json)
 - [projects/test_project/dialogues/system/title_menu.json](./projects/test_project/dialogues/system/title_menu.json)
 - [projects/test_project/dialogues/system/pause_menu.json](./projects/test_project/dialogues/system/pause_menu.json)
+
+## How To Think About Authoring
+
+At a high level, a project usually consists of:
+
+- `project.json`
+  - tells the engine where to find your project content
+- `areas/`
+  - rooms, tiles, entries, and placed entities
+- `entity_templates/`
+  - reusable definitions for players, doors, switches, controllers, and so on
+- `commands/`
+  - reusable project-level command chains
+- `dialogues/`
+  - ordinary JSON data used by dialogue/menu controllers
+- `shared_variables.json`
+  - project-wide shared data
+- `assets/`
+  - images, fonts, and related project assets
+
+Typical layout:
+
+```text
+my_project/
+    project.json
+    shared_variables.json
+    areas/
+    entity_templates/
+    commands/
+    dialogues/
+    assets/
+```
+
+The stable authoring contract is the JSON data, not hidden engine-side behavior.
 
 ## Quick Start
 
 ### Requirements
 
 - Python 3.11+
+- `pygame-ce`
 - Windows is the current primary development environment
 
 Install dependencies:
@@ -82,14 +157,14 @@ Or directly:
 pip install pygame-ce
 ```
 
-### Run The Game
+### Run The Sample Project
 
 ```bash
 python run_game.py --project projects/test_project
 python run_game.py --project projects/test_project areas/village_square
 ```
 
-On Windows, you can also use:
+On Windows, you can also double-click:
 
 - `Run_Game.cmd`
 
@@ -98,79 +173,85 @@ On Windows, you can also use:
 ### Game
 
 - `WASD` or arrow keys: move
-- `Space` or `Enter`: interact, advance dialogue, confirm choice
+- `Space` or `Enter`: interact, advance dialogue, confirm a choice
 - `Escape`: open the pause menu in playable areas
 
 If debug inspection is enabled in the active project's `project.json`:
 
-- `F6`: pause/resume simulation
+- `F6`: pause or resume simulation
 - `F7`: step one simulation tick
-- `[` / `]`: zoom out/in
+- `[` / `]`: zoom out or in
+
+## What To Expect When You Run It
+
+When you launch the sample project:
+
+- the title screen opens an authored menu
+- choosing `New Game` moves you into the sample rooms
+- in `village_square`, you can explore, read signs, save, and enter the house
+- in `village_house`, you can toggle the lever and see the gate react
+- the pause menu is handled by controller logic rather than a hardcoded engine UI
+
+Useful things to try:
+
+- walk with `WASD` or the arrow keys
+- press `Space` or `Enter` to interact
+- stand by the house door and enter `village_house`
+- toggle the lever in the house
+- leave and return to confirm the lever/gate state persisted
+- push the house block, leave the house, and return to confirm the block reset
+- press `Escape` in a playable area to open the pause menu
 
 ## Project Structure
 
 ```text
 python_puzzle_engine/
     dungeon_engine/             # Active runtime code
-    tools/area_editor/          # External area editor (Phase 1 read-only browser/viewer)
-    archived_editor/            # Archived built-in editor kept for reference
+    tools/area_editor/          # External area editor
+    archived_editor/            # Old built-in editor kept only for reference
     projects/
         test_project/           # Example project content
     run_game.py
     README.md
 ```
 
-Typical project content layout:
-
-```text
-my_project/
-    project.json
-    shared_variables.json
-    areas/
-    entity_templates/
-    commands/
-    dialogues/                  # Optional ordinary JSON data used by your commands/controllers
-    assets/
-```
-
 ## Documentation
 
-Primary docs for authoring JSON content:
+If you want the practical authoring docs, start here:
 
-- [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md): how to author content in JSON without reading Python code
-- [ENGINE_JSON_INTERFACE.md](./ENGINE_JSON_INTERFACE.md): exact current JSON surface and builtin command/value-source signatures
+- [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
+  - explains how to author content in JSON without needing to read much Python
+- [ENGINE_JSON_INTERFACE.md](./ENGINE_JSON_INTERFACE.md)
+  - the exact current JSON surface, commands, tokens, and value sources
 
-Supporting docs:
+Other useful docs:
 
-- [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md): project intent and design compass
-- [AGENTS.md](./AGENTS.md): AI agent onboarding and reading order
-- [architecture.md](./architecture.md): medium-term direction and tradeoffs
-- [CONTRIBUTING.md](./CONTRIBUTING.md): working rules
-- [CHANGELOG.md](./CHANGELOG.md): reverse-chronological change history
-- [roadmap.md](./roadmap.md): phased development plan
-
-## Expected Behavior
-
-When you run the sample project:
-
-- move with arrows or `WASD`
-- interact and advance dialogue with `Space` or `Enter`
-- from the title screen, choose `New Game`, `Load Game`, or `Exit`
-- in `village_square`, face the save point and press `Space` to open an authored save prompt
-- face the house door and press `Space` to enter `village_house`
-- in `village_house`, face the lever and press `Space` to toggle the gate open or closed
-- leave and return to confirm the lever/gate state persisted
-- push the house block, leave the house, and return to confirm the block reset to its authored position
-- press `Escape` in a playable area to open the controller-driven pause menu with `Continue`, `Load`, and `Exit`
+- [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md)
+  - the design compass for what this project is trying to be
+- [architecture.md](./architecture.md)
+  - medium-term technical direction and tradeoffs
+- [roadmap.md](./roadmap.md)
+  - phased development plan
+- [CHANGELOG.md](./CHANGELOG.md)
+  - reverse-chronological history of changes
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+  - working rules for contributing
+- [AGENTS.md](./AGENTS.md)
+  - AI agent onboarding and doc reading order
 
 ## Important Design Notes
 
-- Movement is command-driven. Input requests events; it does not mutate positions directly.
-- Interaction is also command-driven. The player triggers a top-level interact command, which resolves a target and runs that target's command chain.
-- Dialogue is not a special engine-owned runtime session. The supported flow is: send an event to a controller entity, let controller-owned commands load ordinary JSON dialogue data, mutate controller variables, and redraw the UI.
-- Modal controllers should borrow and restore routes through `push_input_routes` / `pop_input_routes` instead of returning input through `actor`.
-- Save data stores the current area, the current logical input-target routing, the current camera state, traveler session state, persistent diffs for visited areas, and the full current diff of the active area at save time.
-- The transient input-route stack is runtime-only and is intentionally not written into save files.
+- Movement is command-driven. Input asks the engine to run authored behavior; it
+  does not directly change positions.
+- Interaction is command-driven too. An entity can trigger another entity's
+  behavior through authored command chains.
+- Dialogue is not a hidden engine subsystem with special privileged state.
+  Instead, controller entities own the dialogue/menu state and render the UI
+  through normal commands plus ordinary JSON data.
+- Projects can route different logical inputs to different entities at runtime.
+- Save data stores the current area, current routed input targets, camera state,
+  traveler state, visited-area persistent diffs, and the current diff of the
+  active area.
 
 ## Verification
 
@@ -185,17 +266,18 @@ Useful commands during development:
 
 ## Current Limits
 
-- save/load UX is functional but still basic
-- external PNG import flow is not finished
-- the external area editor is still read-only; editing/saving workflows are not finished yet
-- movement/render feel should still be checked periodically on real hardware as the project grows
+- save/load UX works, but is still basic
+- external PNG import workflow is not finished
+- the external area editor is still read-only
+- movement/render feel should still be checked periodically on real hardware as
+  the project grows
 
 ## Suggested Next Steps
 
-- expand dialogue authoring with stronger data-validation and authoring support
-- build more real JSON content and let authoring pressure reveal the next engine changes
-- continue expanding the external area editor into a full authoring workflow around the current JSON contract
-- revisit movement/render feel and finish the pixel-perfect quality pass
+- build more real project content and let that pressure guide engine changes
+- expand dialogue/menu authoring support
+- continue turning the external editor into a full authoring tool
+- keep improving movement/render quality
 
 ## License
 
