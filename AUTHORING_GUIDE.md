@@ -302,7 +302,34 @@ Recommended defaults:
 - actors and front walls that should interleave: `render_order: 10`, `y_sort: true`
 - roofs / canopy overlays: `render_order: 20`, `y_sort: false`
 
-`cell_flags` uses the same `[row][col]` layout. `true` means walkable, `false` means blocked:
+`cell_flags` uses the same `[row][col]` layout.
+
+The preferred current authored form is an object with `blocked`:
+
+```json
+"cell_flags": [
+  [
+    {"blocked": true},
+    {"blocked": true},
+    {"blocked": true},
+    {"blocked": true}
+  ],
+  [
+    {"blocked": true},
+    {"blocked": false},
+    {"blocked": false},
+    {"blocked": true}
+  ],
+  [
+    {"blocked": true},
+    {"blocked": true},
+    {"blocked": true},
+    {"blocked": true}
+  ]
+]
+```
+
+Boolean cells are still accepted in authored area data as a concise older style:
 
 ```json
 "cell_flags": [
@@ -339,6 +366,8 @@ Example:
 ```json
 {
   "kind": "sign",
+  "solid": true,
+  "interactable": true,
   "variables": {
     "dialogue_path": "dialogues/showcase/village_square_note.json"
   },
@@ -391,6 +420,14 @@ Example:
 - `variables`
 - `input_map`
 - `entity_commands`
+- `facing`
+- `solid`
+- `pushable`
+- `weight`
+- `push_strength`
+- `collision_push_strength`
+- `interactable`
+- `interaction_priority`
 
 Entity rendering follows the same model as tile layers:
 
@@ -403,7 +440,31 @@ Entity rendering follows the same model as tile layers:
 - `stack_order`
   Local tie-breaker after `render_order` and y-sort position.
 
-Gameplay flags such as `blocks_movement`, `pushable`, `toggled`, and project-specific state like `dialogue_path` should live under `variables`. Top-level `facing`, `solid`, and `pushable` fields are removed.
+Project-specific state like `toggled`, `dialogue_path`, and custom puzzle data
+should live under `variables`.
+
+The engine now also recognizes several top-level gameplay fields directly:
+
+- `facing`
+- `solid`
+- `pushable`
+- `weight`
+- `push_strength`
+- `collision_push_strength`
+- `interactable`
+- `interaction_priority`
+
+That means:
+
+- use top-level `solid` for standard blocking behavior
+- use top-level `pushable` and `weight` for standard push behavior
+- use top-level `facing` for standard facing-based movement / interaction
+- use top-level `interactable` and optional `interaction_priority` for standard
+  facing interaction lookup
+
+You can still keep arbitrary project-defined state in `variables`. The important
+boundary is that engine-owned runtime semantics should use the documented
+top-level fields instead of hiding inside ordinary variables.
 
 ### `visuals`
 
@@ -959,8 +1020,7 @@ Current entity-query helpers all require a `select` block. Example:
     "y": "$self.target_y",
     "index": 0,
     "select": {
-      "fields": ["entity_id", "kind"],
-      "variables": ["pushable", "blocks_movement"]
+      "fields": ["entity_id", "kind", "solid", "pushable"]
     },
     "default": null
   }
@@ -973,10 +1033,8 @@ That returns plain selected data such as:
 {
   "entity_id": "box_1",
   "kind": "block",
-  "variables": {
-    "pushable": true,
-    "blocks_movement": true
-  }
+  "solid": true,
+  "pushable": true
 }
 ```
 
@@ -1043,42 +1101,92 @@ Use `where` on `$entity_at` or `$entities_at` when you want one tile query to ta
 
 These patterns are worth copying when building new JSON behavior.
 
-### Movement And Collision Are JSON-Authored
+### Standard Movement And Collision
 
-The engine does **not** automatically block movement against entities. It only provides tile walkability through `cell_flags`. Everything else — checking whether another entity blocks the target tile, pushing blocks, playing bump sounds — is authored in your project's command files.
+The engine now provides a standard grid-physics contract so projects do not
+have to rebuild common movement and push logic in JSON by default.
 
-A typical movement flow:
+The standard contract uses:
 
-1. The player entity's `input_map` maps `move_up` to a `move_up` event.
-2. That entity command calls a project command like `commands/attempt_move_one_tile` with the direction offset.
-3. The project command:
-   - computes the target tile using `$sum` with the current position and the offset
-   - checks `$cell_flags_at` for walkability
-   - checks `$entities_at` for entities with `blocks_movement: true`
-   - if the tile is clear, calls `set_entity_grid_position` (instant grid update) and `move_entity_world_position` (smooth pixel animation)
-   - if blocked, optionally plays a bump animation or pushes a pushable entity
+- cell `blocked`
+- entity `solid`
+- entity `pushable`
+- entity `weight`
+- entity `push_strength`
+- entity `facing`
 
-If your movement flow allows pushing, the push command should repeat the same destination validation for the pushed entity's own target tile before moving it. Otherwise, the bug is in authored JSON rather than the engine primitives: low-level move commands intentionally reposition without doing gameplay collision policy on their own.
+A typical simple player flow is now:
+
+1. The player entity's `input_map` maps `move_up` to `move_up`.
+2. That entity command calls `move_in_direction`.
+3. The engine:
+   - resolves the actor's facing
+   - checks the target cell's `blocked`
+   - checks for `solid` blockers
+   - optionally attempts one standard push if the actor has enough `push_strength`
+   - starts the movement interpolation if the step succeeds
 
 Minimal player `move_up` entity command:
 
 ```json
 "move_up": {
+  "enabled": true,
   "commands": [
     {
-      "type": "run_project_command",
-      "command_id": "commands/attempt_move_one_tile",
+      "type": "move_in_direction",
+      "entity_id": "$self_id",
       "direction": "up",
-      "offset_x": 0,
-      "offset_y": -1
+      "frames_needed": "$project.movement.ticks_per_tile",
+      "wait": false
     }
   ]
 }
 ```
 
-Gate-style blocking works the same way: a gate entity has `variables.blocks_movement: true`. The movement project command queries `$entities_at` at the target tile and finds the gate. When the lever toggles the gate, it sets `blocks_movement: false` and hides the gate visual, both with `persistent: true`.
+If you want a bump reaction, author `on_blocked` on the mover:
 
-This approach keeps all movement logic visible in your project's JSON instead of hidden inside the engine.
+```json
+"on_blocked": {
+  "enabled": true,
+  "commands": [
+    {
+      "type": "play_audio",
+      "path": "assets/project/sfx/bump.wav"
+    }
+  ]
+}
+```
+
+Lower-level authored movement flows are still valid. You can still build custom
+movement manually with `$cell_flags_at`, `$entities_at`, `set_entity_grid_position`,
+`move_entity_world_position`, and your own puzzle-specific rules. The standard
+engine helpers are just the recommended default for ordinary grid movement.
+
+### Standard Facing Interaction
+
+The engine also now provides `interact_facing`.
+
+That command:
+
+- uses the actor's top-level `facing`
+- checks the adjacent tile
+- filters to world-space entities with `interactable: true`
+- chooses the target by `interaction_priority`
+- dispatches that target's normal authored `interact` command
+
+Minimal example:
+
+```json
+"interact": {
+  "enabled": true,
+  "commands": [
+    {
+      "type": "interact_facing",
+      "entity_id": "$self_id"
+    }
+  ]
+}
+```
 
 ### Query Current Position Explicitly
 
@@ -1118,8 +1226,7 @@ Use `"$entities_at"` / `"$entity_at"` for one tile, and `"$entities_query"` / `"
       "y": "$self.move_target_y",
       "exclude_entity_id": "$self_id",
       "select": {
-        "fields": ["entity_id"],
-        "variables": ["blocks_movement", "pushable"]
+        "fields": ["entity_id", "solid", "pushable"]
       }
     }
   }

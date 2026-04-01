@@ -61,8 +61,9 @@ The current engine already supports:
 - project manifests through `project.json`
 - tile-based rooms with separate walkability data
 - reusable entity templates with per-instance parameters
-- entities with visuals, variables, input mappings, and named behaviors
+- entities with visuals, variables, input mappings, named behaviors, and engine-known runtime fields
 - command-driven movement, interaction, pushing, animation, and persistence
+- standard engine-owned grid movement, pushing, and facing interaction helpers
 - dialogue and menu flow handled by controller entities
 - area changes through authored entry points
 - camera follow, bounds, deadzones, and saved camera state
@@ -93,6 +94,22 @@ That sample currently shows:
 - save/load prompts
 - pause menu flow
 - controller entities that manage dialogue and UI behavior
+
+The repo also includes a focused contract demo project in
+[projects/physics_contract_demo](./projects/physics_contract_demo/).
+
+That smaller demo exists specifically to show the newer canonical movement /
+interaction contract:
+
+- top-level `facing`, `solid`, `pushable`, `weight`, `push_strength`
+- cell `blocked`
+- `move_in_direction`
+- `push_facing`
+- `interact_facing`
+
+The older sample projects remain useful examples of lower-level authored JSON
+flows. They still work on the current engine, but they are not the canonical
+reference for the newer built-in movement/interaction contract.
 
 Good files to inspect first:
 
@@ -205,6 +222,12 @@ Useful things to try:
 - push the house block, leave the house, and return to confirm the block reset
 - press `Escape` in a playable area to open the pause menu
 
+If you want to inspect the cleaner movement/interaction contract directly, run:
+
+```bash
+python run_game.py --project projects/physics_contract_demo
+```
+
 ## Project Structure
 
 ```text
@@ -244,10 +267,12 @@ Other useful docs:
 
 ## Important Design Notes
 
-- Movement is command-driven. Input asks the engine to run authored behavior; it
-  does not directly change positions.
-- Interaction is command-driven too. An entity can trigger another entity's
-  behavior through authored command chains.
+- Movement is still command-driven, but the engine now also exposes standard
+  built-ins such as `move_in_direction` and `push_facing` so projects do not
+  have to rebuild the common grid-physics contract by default.
+- Interaction is command-driven too. The engine now also exposes
+  `interact_facing` as the standard facing-target lookup, while target behavior
+  remains authored on the target's normal `interact` command.
 - Dialogue is not a hidden engine subsystem with special privileged state.
   Instead, controller entities own the dialogue/menu state and render the UI
   through normal commands plus ordinary JSON data.

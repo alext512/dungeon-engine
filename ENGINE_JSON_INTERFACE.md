@@ -130,7 +130,7 @@ Current area file fields:
 
 Current engine behavior:
 - `tile_layers` is required.
-- `cell_flags` falls back to all-walkable cells if omitted.
+- `cell_flags` falls back to all-unblocked cells if omitted.
 - `input_targets` is merged on top of project-level `input_targets`.
 - `enter_commands` runs when the area is entered.
 - `camera` is stored as area camera defaults.
@@ -170,11 +170,16 @@ Current authored meaning:
 
 Each cell can currently be:
 - `true` / `false`
-- an object like `{ "walkable": false, "terrain": "water" }`
+- an object like `{ "blocked": true, "terrain": "water" }`
 - `null`
 
 The engine currently gives built-in meaning to:
-- `walkable`
+- `blocked`
+
+Boolean cell values are still accepted as a concise older authored style:
+
+- `true` = unblocked
+- `false` = blocked
 
 Other keys are stored as ordinary cell metadata.
 
@@ -190,7 +195,7 @@ Each entry point object currently uses:
 
 Notes:
 - `facing` on an area entry point remains supported.
-- On arrival, the runtime maps that value into the traveler's `variables.direction`.
+- On arrival, the runtime maps that value into the traveler's top-level `facing`.
 
 ### `camera`
 
@@ -274,9 +279,17 @@ Current engine-known entity fields:
 - `pixel_y`
 - `space`
 - `scope`
+- `facing`
 - `present`
 - `visible`
 - `entity_commands_enabled`
+- `solid`
+- `pushable`
+- `weight`
+- `push_strength`
+- `collision_push_strength`
+- `interactable`
+- `interaction_priority`
 - `render_order`
 - `y_sort`
 - `sort_y_offset`
@@ -714,8 +727,7 @@ Shape:
       "present": true
     },
     "select": {
-      "fields": ["entity_id"],
-      "variables": ["blocks_movement", "pushable"]
+      "fields": ["entity_id", "solid", "pushable"]
     }
   }
 }
@@ -812,8 +824,8 @@ Current shape:
 ```json
 {
   "select": {
-    "fields": ["entity_id", "grid_x", "grid_y"],
-    "variables": ["pushable", "blocks_movement"],
+    "fields": ["entity_id", "grid_x", "grid_y", "solid", "pushable"],
+    "variables": ["custom_state"],
     "visuals": [
       {
         "id": "main",
@@ -836,6 +848,14 @@ Allowed `select.fields` values:
 - `pixel_y`
 - `present`
 - `visible`
+- `facing`
+- `solid`
+- `pushable`
+- `weight`
+- `push_strength`
+- `collision_push_strength`
+- `interactable`
+- `interaction_priority`
 - `entity_commands_enabled`
 - `render_order`
 - `y_sort`
@@ -876,9 +896,10 @@ Example selected result:
   "entity_id": "box_1",
   "grid_x": 6,
   "grid_y": 4,
+  "solid": true,
+  "pushable": true,
   "variables": {
-    "pushable": true,
-    "blocks_movement": true
+    "custom_state": "ready"
   },
   "visuals": {
     "main": {
@@ -1110,7 +1131,7 @@ Shape:
   "$cell_flags_at": {
     "x": 5,
     "y": 7,
-    "default": { "walkable": false }
+    "default": { "blocked": true }
   }
 }
 ```
@@ -1125,7 +1146,7 @@ Shape:
 {
   "$find_in_collection": {
     "value": "$self.targets_here",
-    "field": "variables.blocks_movement",
+    "field": "solid",
     "op": "eq",
     "match": true,
     "default": null
@@ -1143,7 +1164,7 @@ Shape:
 {
   "$any_in_collection": {
     "value": "$self.targets_here",
-    "field": "variables.pushable",
+    "field": "pushable",
     "op": "eq",
     "match": true
   }
@@ -1193,9 +1214,15 @@ Current builtin commands, grouped by role.
 - `set_entity_grid_position(entity_id, x, y, mode?)`
 - `set_entity_world_position(entity_id, x, y, mode?)`
 - `set_entity_screen_position(entity_id, x, y, mode?)`
+- `move_in_direction(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?)`
+- `push_facing(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?)`
 - `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
 - `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
 - `wait_for_move(entity_id)`
+
+### Interaction
+
+- `interact_facing(entity_id, direction?)`
 
 Movement timing precedence for interpolated move commands is:
 - `frames_needed`
@@ -1494,7 +1521,8 @@ These fields are currently engine-known and actively interpreted, not just store
 ### Grid Notes
 
 Current grid blocking comes from:
-- `cell_flags.walkable`
+- `cell_flags.blocked`
+- solid world-space entities in the destination tile
 
 Tile art itself does not define collision.
 
