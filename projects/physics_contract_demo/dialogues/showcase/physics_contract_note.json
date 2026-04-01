@@ -21,6 +21,11 @@
     },
     {
       "type": "text",
+      "speaker_id": "guide",
+      "text": "The floor switch by the top wall uses on_occupant_enter and on_occupant_leave to toggle the nearby indicator without hand-written controller JSON."
+    },
+    {
+      "type": "text",
       "speaker_id": null,
       "text": "The older sample projects stay authored the old way on purpose. This room is just the clean-contract reference."
     }

@@ -1157,6 +1157,47 @@ If you want a bump reaction, author `on_blocked` on the mover:
 }
 ```
 
+If you want the stationary entity to react when something enters or leaves its
+tile, author `on_occupant_enter` / `on_occupant_leave` on that entity:
+
+```json
+"on_occupant_enter": {
+  "enabled": true,
+  "commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "indicator_light",
+      "field_name": "visible",
+      "value": true
+    }
+  ]
+},
+"on_occupant_leave": {
+  "enabled": true,
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "remaining_occupants",
+      "value": {
+        "$entities_at": {
+          "x": "$from_x",
+          "y": "$from_y",
+          "exclude_entity_id": "$self_id",
+          "select": {
+            "fields": ["entity_id"]
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+These occupancy hooks run on the stationary entity, receive the moving entity as
+`$ref_ids.instigator`, and expose transition coordinates through runtime params
+such as `$from_x`, `$from_y`, `$to_x`, and `$to_y`.
+
 Lower-level authored movement flows are still valid. You can still build custom
 movement manually with `$cell_flags_at`, `$entities_at`, `set_entity_grid_position`,
 `move_entity_world_position`, and your own puzzle-specific rules. The standard

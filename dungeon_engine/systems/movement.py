@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import Callable
 
 from dungeon_engine import config
 from dungeon_engine.world.area import Area
@@ -17,6 +18,9 @@ class MovementSystem:
         self.area = area
         self.world = world
         self.collision_system = collision_system
+        self.occupancy_transition_callback: (
+            Callable[[Entity, tuple[int, int] | None, tuple[int, int] | None], None] | None
+        ) = None
 
     def request_step(
         self,
@@ -243,8 +247,17 @@ class MovementSystem:
         if entity is None:
             raise KeyError(f"Cannot set grid position for missing entity '{entity_id}'.")
         entity.movement_state.active = False
+        previous_grid_x = entity.grid_x
+        previous_grid_y = entity.grid_y
         entity.grid_x = int(target_grid_x)
         entity.grid_y = int(target_grid_y)
+        self._notify_occupancy_transition(
+            entity,
+            previous_grid_x=previous_grid_x,
+            previous_grid_y=previous_grid_y,
+            target_grid_x=entity.grid_x,
+            target_grid_y=entity.grid_y,
+        )
 
     def set_pixel_position(
         self,
@@ -277,12 +290,22 @@ class MovementSystem:
             return
 
         entity.movement_state.active = False
+        previous_grid_x = entity.grid_x
+        previous_grid_y = entity.grid_y
         entity.pixel_x = float(target_pixel_x)
         entity.pixel_y = float(target_pixel_y)
         if target_grid_x is not None:
             entity.grid_x = int(target_grid_x)
         if target_grid_y is not None:
             entity.grid_y = int(target_grid_y)
+        if target_grid_x is not None and target_grid_y is not None:
+            self._notify_occupancy_transition(
+                entity,
+                previous_grid_x=previous_grid_x,
+                previous_grid_y=previous_grid_y,
+                target_grid_x=entity.grid_x,
+                target_grid_y=entity.grid_y,
+            )
 
     def teleport_to_grid_position(
         self,
@@ -394,11 +417,49 @@ class MovementSystem:
             return
 
         if grid_sync == "immediate" and when == "start":
+            previous_grid_x = entity.grid_x
+            previous_grid_y = entity.grid_y
             entity.grid_x = target_grid_x
             entity.grid_y = target_grid_y
+            self._notify_occupancy_transition(
+                entity,
+                previous_grid_x=previous_grid_x,
+                previous_grid_y=previous_grid_y,
+                target_grid_x=entity.grid_x,
+                target_grid_y=entity.grid_y,
+            )
         elif grid_sync == "on_complete" and when == "complete":
+            previous_grid_x = entity.grid_x
+            previous_grid_y = entity.grid_y
             entity.grid_x = target_grid_x
             entity.grid_y = target_grid_y
+            self._notify_occupancy_transition(
+                entity,
+                previous_grid_x=previous_grid_x,
+                previous_grid_y=previous_grid_y,
+                target_grid_x=entity.grid_x,
+                target_grid_y=entity.grid_y,
+            )
+
+    def _notify_occupancy_transition(
+        self,
+        entity: Entity,
+        *,
+        previous_grid_x: int,
+        previous_grid_y: int,
+        target_grid_x: int,
+        target_grid_y: int,
+    ) -> None:
+        """Notify the runtime when a present world-space entity changes occupied tiles."""
+        if self.occupancy_transition_callback is None:
+            return
+        if not entity.present or entity.space != "world":
+            return
+        previous_cell = (int(previous_grid_x), int(previous_grid_y))
+        next_cell = (int(target_grid_x), int(target_grid_y))
+        if previous_cell == next_cell:
+            return
+        self.occupancy_transition_callback(entity, previous_cell, next_cell)
 
     def _resolve_total_ticks(
         self,

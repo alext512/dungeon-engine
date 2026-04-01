@@ -106,6 +106,7 @@ interaction contract:
 - `move_in_direction`
 - `push_facing`
 - `interact_facing`
+- `on_blocked`, `on_occupant_enter`, and `on_occupant_leave`
 
 The older sample projects remain useful examples of lower-level authored JSON
 flows. They still work on the current engine, but they are not the canonical
@@ -270,6 +271,9 @@ Other useful docs:
 - Movement is still command-driven, but the engine now also exposes standard
   built-ins such as `move_in_direction` and `push_facing` so projects do not
   have to rebuild the common grid-physics contract by default.
+- Occupancy-triggered puzzle reactions can now live on the stationary entity
+  through ordinary `entity_commands` such as `on_occupant_enter` and
+  `on_occupant_leave`, instead of requiring a separate controller flow.
 - Interaction is command-driven too. The engine now also exposes
   `interact_facing` as the standard facing-target lookup, while target behavior
   remains authored on the target's normal `interact` command.

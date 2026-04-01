@@ -1,0 +1,17 @@
+{
+  "kind": "indicator",
+  "solid": false,
+  "visible": false,
+  "render_order": 6,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/object_sheet.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from dungeon_engine import config
 from dungeon_engine.commands.library import (
@@ -134,6 +134,51 @@ class WaitSecondsHandle(CommandHandle):
         self.seconds_remaining -= float(dt)
         if self.seconds_remaining <= 0.0:
             self.complete = True
+
+
+class CompositeCommandHandle(CommandHandle):
+    """Wait until every child handle finishes."""
+
+    def __init__(self, handles: list[CommandHandle]) -> None:
+        super().__init__()
+        self.handles = [handle for handle in handles if not handle.complete]
+        if not self.handles:
+            self.complete = True
+
+    def update(self, dt: float) -> None:
+        """Advance all child handles until every one completes."""
+        if self.complete:
+            return
+        remaining_handles: list[CommandHandle] = []
+        for handle in self.handles:
+            handle.update(dt)
+            if not handle.complete:
+                remaining_handles.append(handle)
+        self.handles = remaining_handles
+        if not self.handles:
+            self.complete = True
+
+
+class PostActionCommandHandle(CommandHandle):
+    """Run one callback exactly once after an inner handle finishes."""
+
+    def __init__(self, inner_handle: CommandHandle, on_complete: Callable[[], None]) -> None:
+        super().__init__()
+        self.inner_handle = inner_handle
+        self.on_complete = on_complete
+        self._action_ran = False
+        self.update(0.0)
+
+    def update(self, dt: float) -> None:
+        """Advance the inner handle, then run the completion callback once."""
+        if self.complete:
+            return
+        self.inner_handle.update(dt)
+        if not self.inner_handle.complete or self._action_ran:
+            return
+        self.on_complete()
+        self._action_ran = True
+        self.complete = True
 
 
 class ForEachCommandHandle(CommandHandle):
@@ -1091,6 +1136,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     def _set_exact_entity_field_handle(
         *,
+        context: CommandContext | None,
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -1101,6 +1147,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Apply one generic entity field mutation through the shared helper."""
         entity = _require_exact_entity(world, entity_id)
+        previous_cell = _occupancy_cell_for(entity)
         persisted_field_name, persisted_value = _apply_entity_field_value(
             entity,
             str(field_name),
@@ -1115,10 +1162,18 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 value=persisted_value,
                 entity=entity,
             )
-        return ImmediateHandle()
+        if context is None or persisted_field_name != "present":
+            return ImmediateHandle()
+        return _build_occupancy_transition_handle(
+            context=context,
+            instigator=entity,
+            previous_cell=previous_cell,
+            next_cell=_occupancy_cell_for(entity),
+        )
 
     def _set_exact_entity_fields_handle(
         *,
+        context: CommandContext | None,
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -1128,6 +1183,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Apply one validated batch of entity field, variable, and visual mutations."""
         entity = _require_exact_entity(world, entity_id)
+        previous_cell = _occupancy_cell_for(entity)
         if not isinstance(set_payload, dict):
             raise ValueError("set_entity_fields requires 'set' to be a JSON object.")
 
@@ -1215,7 +1271,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 value=_serialize_entity_visuals(entity),
                 entity=entity,
             )
-        return ImmediateHandle()
+        if context is None:
+            return ImmediateHandle()
+        return _build_occupancy_transition_handle(
+            context=context,
+            instigator=entity,
+            previous_cell=previous_cell,
+            next_cell=_occupancy_cell_for(entity),
+        )
 
     def _step_entity(
         *,
@@ -1302,6 +1365,94 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             entity_refs={"instigator": actor.entity_id},
             refs_mode="merge",
         )
+
+    def _occupancy_cell_for(entity: Any) -> tuple[int, int] | None:
+        """Return the occupied cell for one present world-space entity."""
+        if entity.space != "world" or not entity.present:
+            return None
+        return (int(entity.grid_x), int(entity.grid_y))
+
+    def _build_occupancy_runtime_params(
+        previous_cell: tuple[int, int] | None,
+        next_cell: tuple[int, int] | None,
+    ) -> dict[str, Any]:
+        """Return the shared runtime parameters for occupancy hooks."""
+        runtime_params: dict[str, Any] = {}
+        if previous_cell is not None:
+            runtime_params["from_x"] = int(previous_cell[0])
+            runtime_params["from_y"] = int(previous_cell[1])
+        if next_cell is not None:
+            runtime_params["to_x"] = int(next_cell[0])
+            runtime_params["to_y"] = int(next_cell[1])
+        return runtime_params
+
+    def _build_occupancy_transition_handle(
+        *,
+        context: CommandContext,
+        instigator: Any,
+        previous_cell: tuple[int, int] | None,
+        next_cell: tuple[int, int] | None,
+    ) -> CommandHandle:
+        """Dispatch stationary-entity occupancy hooks for one logical tile transition."""
+        if previous_cell == next_cell:
+            return ImmediateHandle()
+
+        runtime_params = _build_occupancy_runtime_params(previous_cell, next_cell)
+        handles: list[CommandHandle] = []
+
+        if previous_cell is not None:
+            for receiver in context.world.get_entities_at(
+                previous_cell[0],
+                previous_cell[1],
+                exclude_entity_id=instigator.entity_id,
+                include_hidden=True,
+            ):
+                handle = _dispatch_named_entity_command(
+                    context=context,
+                    entity_id=receiver.entity_id,
+                    command_id="on_occupant_leave",
+                    runtime_params=runtime_params,
+                    entity_refs={"instigator": instigator.entity_id},
+                    refs_mode="merge",
+                )
+                if not handle.complete:
+                    handles.append(handle)
+
+        if next_cell is not None:
+            for receiver in context.world.get_entities_at(
+                next_cell[0],
+                next_cell[1],
+                exclude_entity_id=instigator.entity_id,
+                include_hidden=True,
+            ):
+                handle = _dispatch_named_entity_command(
+                    context=context,
+                    entity_id=receiver.entity_id,
+                    command_id="on_occupant_enter",
+                    runtime_params=runtime_params,
+                    entity_refs={"instigator": instigator.entity_id},
+                    refs_mode="merge",
+                )
+                if not handle.complete:
+                    handles.append(handle)
+
+        if not handles:
+            return ImmediateHandle()
+        if len(handles) == 1:
+            return handles[0]
+        return CompositeCommandHandle(handles)
+
+    def _launch_side_effect_handle(
+        context: CommandContext,
+        handle: CommandHandle,
+    ) -> CommandHandle:
+        """Run a side-effect handle in the background when a runner exists."""
+        if handle.complete:
+            return ImmediateHandle()
+        if context.command_runner is None:
+            return handle
+        context.command_runner.spawn_root_handle(handle)
+        return ImmediateHandle()
 
     def _attempt_standard_push(
         *,
@@ -2644,6 +2795,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Enable or disable all named entity commands on an entity at once."""
         return _set_exact_entity_field_handle(
+            context=None,
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
@@ -2667,6 +2819,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("set_entity_field")
     def set_entity_field(
+        context: CommandContext,
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -2678,6 +2831,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Change one supported runtime field on an entity."""
         return _set_exact_entity_field_handle(
+            context=context,
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
@@ -2689,6 +2843,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("set_entity_fields")
     def set_entity_fields(
+        context: CommandContext,
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -2699,6 +2854,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Change several supported runtime fields, variables, and visuals on one entity at once."""
         return _set_exact_entity_fields_handle(
+            context=context,
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
@@ -3244,6 +3400,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Change whether an entity is rendered and targetable."""
         return _set_exact_entity_field_handle(
+            context=None,
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
@@ -3255,6 +3412,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("set_present")
     def set_present(
+        context: CommandContext,
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -3265,6 +3423,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Change whether an entity participates in the current scene."""
         return _set_exact_entity_field_handle(
+            context=context,
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
@@ -3286,6 +3445,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Change an entity's debug-render color."""
         return _set_exact_entity_field_handle(
+            context=None,
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
@@ -3297,6 +3457,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register("destroy_entity")
     def destroy_entity(
+        context: CommandContext,
         world: Any,
         persistence_runtime: Any | None,
         *,
@@ -3305,10 +3466,30 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     ) -> CommandHandle:
         """Destroy an entity instance completely."""
         entity = _require_exact_entity(world, entity_id)
-        world.remove_entity(entity.entity_id)
-        if persistent and persistence_runtime is not None:
-            persistence_runtime.remove_entity(entity.entity_id, entity=entity)
-        return ImmediateHandle()
+        previous_cell = _occupancy_cell_for(entity)
+        if previous_cell is None:
+            world.remove_entity(entity.entity_id)
+            if persistent and persistence_runtime is not None:
+                persistence_runtime.remove_entity(entity.entity_id, entity=entity)
+            return ImmediateHandle()
+
+        entity.set_present(False)
+        leave_handle = _build_occupancy_transition_handle(
+            context=context,
+            instigator=entity,
+            previous_cell=previous_cell,
+            next_cell=None,
+        )
+
+        def _finalize_destroy() -> None:
+            world.remove_entity(entity.entity_id)
+            if persistent and persistence_runtime is not None:
+                persistence_runtime.remove_entity(entity.entity_id, entity=entity)
+
+        if leave_handle.complete:
+            _finalize_destroy()
+            return ImmediateHandle()
+        return PostActionCommandHandle(leave_handle, _finalize_destroy)
 
     @registry.register("spawn_entity")
     def spawn_entity(

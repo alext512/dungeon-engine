@@ -95,6 +95,21 @@
       "template": "entity_templates/player_contract"
     },
     {
+      "id": "occupancy_button",
+      "x": 2,
+      "y": 1,
+      "template": "entity_templates/button_contract",
+      "parameters": {
+        "indicator_id": "occupancy_indicator"
+      }
+    },
+    {
+      "id": "occupancy_indicator",
+      "x": 3,
+      "y": 1,
+      "template": "entity_templates/indicator_contract"
+    },
+    {
       "id": "house_block",
       "x": 3,
       "y": 3,

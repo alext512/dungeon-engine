@@ -1,0 +1,81 @@
+{
+  "kind": "button",
+  "solid": false,
+  "render_order": 5,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/sign.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "entity_commands": {
+    "on_occupant_enter": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_field",
+          "entity_id": "$indicator_id",
+          "field_name": "visible",
+          "value": true
+        }
+      ]
+    },
+    "on_occupant_leave": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "remaining_occupants",
+          "value": {
+            "$entities_at": {
+              "x": "$from_x",
+              "y": "$from_y",
+              "exclude_entity_id": "$self_id",
+              "select": {
+                "fields": [
+                  "entity_id"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "set_entity_var_length",
+          "entity_id": "$self_id",
+          "name": "remaining_occupant_count",
+          "value": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "remaining_occupants"
+            }
+          }
+        },
+        {
+          "type": "if",
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "remaining_occupant_count"
+            }
+          },
+          "op": "eq",
+          "right": 0,
+          "then": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$indicator_id",
+              "field_name": "visible",
+              "value": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

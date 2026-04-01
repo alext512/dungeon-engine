@@ -363,6 +363,8 @@ Notes:
 - `entity_commands.<name>` always uses the long form object with `enabled` and `commands`.
 - The command body in `commands` runs sequentially by default.
 - Another command chain can invoke one named entity command with `run_entity_command`.
+- Standard engine-dispatched hook names currently include `interact`, `on_blocked`,
+  `on_occupant_enter`, and `on_occupant_leave`.
 
 ### Input Map
 
@@ -1224,6 +1226,15 @@ Current builtin commands, grouped by role.
 
 - `interact_facing(entity_id, direction?)`
 
+Occupancy hooks are ordinary named entity commands on the stationary entity, not
+standalone builtin commands:
+- `on_occupant_enter`
+- `on_occupant_leave`
+
+Those hooks receive:
+- `entity_refs.instigator`
+- runtime params `from_x`, `from_y`, `to_x`, `to_y` when the relevant endpoints exist
+
 Movement timing precedence for interpolated move commands is:
 - `frames_needed`
 - `duration`
@@ -1387,7 +1398,7 @@ Notes:
 
 ### Entity State
 
-- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `entity_commands_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
+- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `facing`, `solid`, `pushable`, `weight`, `push_strength`, `collision_push_strength`, `interactable`, `interaction_priority`, `entity_commands_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
 - `set_visible(entity_id, visible, persistent?)`
 - `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
 - `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes

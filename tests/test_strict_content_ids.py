@@ -56,6 +56,7 @@ from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.engine.text import TextRenderer
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
+from dungeon_engine.systems.movement import MovementSystem
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -670,6 +671,68 @@ class StrictContentIdTests(unittest.TestCase):
         )
         return registry, context
 
+    def _make_occupancy_runtime(
+        self,
+        *,
+        area: Area,
+        world: World,
+    ) -> tuple[CommandRegistry, CommandContext, MovementSystem]:
+        registry, context = self._make_command_context(area=area, world=world)
+        collision = CollisionSystem(area, world)
+        movement = MovementSystem(area, world, collision)
+        context.collision_system = collision
+        context.interaction_system = InteractionSystem(world)
+        context.movement_system = movement
+
+        def _dispatch_occupancy_hooks(
+            instigator: Entity,
+            previous_cell: tuple[int, int] | None,
+            next_cell: tuple[int, int] | None,
+        ) -> None:
+            runtime_params: dict[str, int] = {}
+            if previous_cell is not None:
+                runtime_params["from_x"] = int(previous_cell[0])
+                runtime_params["from_y"] = int(previous_cell[1])
+            if next_cell is not None:
+                runtime_params["to_x"] = int(next_cell[0])
+                runtime_params["to_y"] = int(next_cell[1])
+
+            def _run_hook(receiver: Entity, command_id: str) -> None:
+                handle = execute_registered_command(
+                    registry,
+                    context,
+                    "run_entity_command",
+                    {
+                        "entity_id": receiver.entity_id,
+                        "command_id": command_id,
+                        "entity_refs": {"instigator": instigator.entity_id},
+                        "refs_mode": "merge",
+                        **runtime_params,
+                    },
+                )
+                handle.update(0.0)
+
+            if previous_cell is not None:
+                for receiver in world.get_entities_at(
+                    previous_cell[0],
+                    previous_cell[1],
+                    exclude_entity_id=instigator.entity_id,
+                    include_hidden=True,
+                ):
+                    _run_hook(receiver, "on_occupant_leave")
+
+            if next_cell is not None:
+                for receiver in world.get_entities_at(
+                    next_cell[0],
+                    next_cell[1],
+                    exclude_entity_id=instigator.entity_id,
+                    include_hidden=True,
+                ):
+                    _run_hook(receiver, "on_occupant_enter")
+
+        movement.occupancy_transition_callback = _dispatch_occupancy_hooks
+        return registry, context, movement
+
     def test_area_validation_rejects_authored_area_id(self) -> None:
         _, project = self._make_project(
             startup_area="areas/test_room",
@@ -1252,6 +1315,232 @@ class StrictContentIdTests(unittest.TestCase):
         handle.update(0.0)
 
         self.assertTrue(actor.variables["interacted"])  # type: ignore[index]
+
+    def test_move_in_direction_runs_occupant_enter_and_leave_hooks(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        actor.sync_pixel_position(area.tile_size)
+        world.add_entity(actor)
+        button = _make_runtime_entity(
+            "button",
+            kind="button",
+            entity_commands={
+                "on_occupant_enter": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "entered_by",
+                            "value": "$ref_ids.instigator",
+                        }
+                    ]
+                ),
+                "on_occupant_leave": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "left_by",
+                            "value": "$ref_ids.instigator",
+                        }
+                    ]
+                ),
+            },
+        )
+        button.grid_x = 1
+        button.grid_y = 0
+        button.sync_pixel_position(area.tile_size)
+        world.add_entity(button)
+        registry, context, movement_system = self._make_occupancy_runtime(area=area, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {
+                "entity_id": "player",
+                "direction": "right",
+                "frames_needed": 0,
+                "wait": False,
+            },
+        )
+        handle.update(0.0)
+        movement_system.update_tick()
+
+        self.assertEqual(button.variables["entered_by"], "player")
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {
+                "entity_id": "player",
+                "direction": "right",
+                "frames_needed": 0,
+                "wait": False,
+            },
+        )
+        handle.update(0.0)
+        movement_system.update_tick()
+
+        self.assertEqual(button.variables["left_by"], "player")
+
+    def test_set_present_false_runs_occupant_leave_hook(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0)],
+            cell_flags=[[{"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        world.add_entity(actor)
+        button = _make_runtime_entity(
+            "button",
+            kind="button",
+            entity_commands={
+                "on_occupant_leave": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "released_by",
+                            "value": "$ref_ids.instigator",
+                        }
+                    ]
+                )
+            },
+        )
+        button.grid_x = 0
+        button.grid_y = 0
+        world.add_entity(button)
+        registry, context = self._make_command_context(area=area, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "set_present",
+            {
+                "entity_id": "player",
+                "present": False,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertFalse(actor.present)
+        self.assertEqual(button.variables["released_by"], "player")
+
+    def test_set_present_true_runs_occupant_enter_hook(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0)],
+            cell_flags=[[{"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        actor.set_present(False)
+        world.add_entity(actor)
+        button = _make_runtime_entity(
+            "button",
+            kind="button",
+            entity_commands={
+                "on_occupant_enter": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "entered_by",
+                            "value": "$ref_ids.instigator",
+                        }
+                    ]
+                )
+            },
+        )
+        button.grid_x = 0
+        button.grid_y = 0
+        world.add_entity(button)
+        registry, context = self._make_command_context(area=area, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "set_present",
+            {
+                "entity_id": "player",
+                "present": True,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertTrue(actor.present)
+        self.assertEqual(button.variables["entered_by"], "player")
+
+    def test_destroy_entity_runs_occupant_leave_hook_before_removal(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0)],
+            cell_flags=[[{"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        world.add_entity(actor)
+        button = _make_runtime_entity(
+            "button",
+            kind="button",
+            entity_commands={
+                "on_occupant_leave": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "released_by",
+                            "value": "$ref_ids.instigator",
+                        }
+                    ]
+                )
+            },
+        )
+        button.grid_x = 0
+        button.grid_y = 0
+        world.add_entity(button)
+        registry, context = self._make_command_context(area=area, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "destroy_entity",
+            {
+                "entity_id": "player",
+            },
+        )
+        handle.update(0.0)
+
+        self.assertIsNone(world.get_entity("player"))
+        self.assertEqual(button.variables["released_by"], "player")
 
     def test_renderer_collect_world_render_items_interleaves_tiles_and_entities(self) -> None:
         import pygame

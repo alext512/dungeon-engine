@@ -12,7 +12,12 @@ from dungeon_engine import config
 from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import build_project_command_database
 from dungeon_engine.commands.registry import CommandRegistry
-from dungeon_engine.commands.runner import AreaTransitionRequest, CommandContext, CommandRunner
+from dungeon_engine.commands.runner import (
+    AreaTransitionRequest,
+    CommandContext,
+    CommandRunner,
+    execute_registered_command,
+)
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.camera import Camera
@@ -230,6 +235,7 @@ class Game:
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
         self.input_handler = InputHandler(self.command_runner, self.world)
+        self.movement_system.occupancy_transition_callback = self._queue_occupancy_transition_hooks
 
     def request_area_change(self, request: AreaTransitionRequest) -> None:
         """Queue a transition into another authored area by area id."""
@@ -453,6 +459,57 @@ class Game:
             "run_commands",
             commands=copy.deepcopy(self.area.enter_commands),
         )
+
+    def _queue_occupancy_transition_hooks(
+        self,
+        instigator,
+        previous_cell: tuple[int, int] | None,
+        next_cell: tuple[int, int] | None,
+    ) -> None:
+        """Queue stationary-entity occupancy hooks for one logical tile transition."""
+        if self.command_runner is None or previous_cell == next_cell:
+            return
+
+        runtime_params: dict[str, int] = {}
+        if previous_cell is not None:
+            runtime_params["from_x"] = int(previous_cell[0])
+            runtime_params["from_y"] = int(previous_cell[1])
+        if next_cell is not None:
+            runtime_params["to_x"] = int(next_cell[0])
+            runtime_params["to_y"] = int(next_cell[1])
+
+        def _spawn_hook(receiver, command_id: str) -> None:
+            handle = execute_registered_command(
+                self.command_registry,
+                self.command_runner.context,
+                "run_entity_command",
+                {
+                    "entity_id": receiver.entity_id,
+                    "command_id": command_id,
+                    "entity_refs": {"instigator": instigator.entity_id},
+                    "refs_mode": "merge",
+                    **runtime_params,
+                },
+            )
+            self.command_runner.spawn_root_handle(handle)
+
+        if previous_cell is not None:
+            for receiver in self.world.get_entities_at(
+                previous_cell[0],
+                previous_cell[1],
+                exclude_entity_id=instigator.entity_id,
+                include_hidden=True,
+            ):
+                _spawn_hook(receiver, "on_occupant_leave")
+
+        if next_cell is not None:
+            for receiver in self.world.get_entities_at(
+                next_cell[0],
+                next_cell[1],
+                exclude_entity_id=instigator.entity_id,
+                include_hidden=True,
+            ):
+                _spawn_hook(receiver, "on_occupant_enter")
 
     def _project_save_dir(self) -> Path:
         """Return the active project's save-root directory, creating it when needed."""
