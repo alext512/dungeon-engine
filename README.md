@@ -110,6 +110,7 @@ interaction contract and the newer engine-owned dialogue session path:
 - `on_blocked`, `on_occupant_enter`, and `on_occupant_leave`
 - `open_dialogue_session` and `close_dialogue_session`
 - nested engine-owned dialogue sessions that suspend and resume cleanly
+- preset-driven inline or separate-panel choice layouts, including marquee overflow
 
 The older sample projects remain useful examples of lower-level authored JSON
 flows. They still work on the current engine, but they are not the canonical

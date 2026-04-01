@@ -137,7 +137,18 @@
       "y": 4,
       "template": "entity_templates/dialogue_terminal_contract",
       "parameters": {
-        "target_indicator_id": "occupancy_indicator"
+        "target_indicator_id": "occupancy_indicator",
+        "dialogue_path": "dialogues/showcase/dialogue_runtime_menu.json"
+      }
+    },
+    {
+      "id": "dialogue_terminal_panel",
+      "x": 2,
+      "y": 4,
+      "template": "entity_templates/dialogue_terminal_contract",
+      "parameters": {
+        "target_indicator_id": "occupancy_indicator",
+        "dialogue_path": "dialogues/showcase/dialogue_runtime_menu_panel.json"
       }
     }
   ]

@@ -4,7 +4,8 @@
   "interactable": true,
   "interaction_priority": 10,
   "variables": {
-    "target_indicator_id": "$target_indicator_id"
+    "target_indicator_id": "$target_indicator_id",
+    "dialogue_path": "$dialogue_path"
   },
   "visuals": [
     {
@@ -23,7 +24,7 @@
       "commands": [
         {
           "type": "open_dialogue_session",
-          "dialogue_path": "dialogues/showcase/dialogue_runtime_menu.json",
+          "dialogue_path": "$self.dialogue_path",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
           "segment_hooks": [],

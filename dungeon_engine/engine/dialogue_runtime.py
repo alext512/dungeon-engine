@@ -69,6 +69,7 @@ class DialogueSession:
     current_options: list[dict[str, Any]] = field(default_factory=list)
     choice_index: int = 0
     choice_scroll_offset: int = 0
+    choice_marquee_elapsed: float = 0.0
     advance_mode: str = "interact"
     advance_seconds: float = 0.0
     timer_remaining: float | None = None
@@ -81,8 +82,12 @@ class DialogueRuntime:
     """Own the active dialogue session, UI rendering, and modal input behavior."""
 
     PANEL_ELEMENT_ID = "engine_dialogue_panel"
+    CHOICES_PANEL_ELEMENT_ID = "engine_dialogue_choices_panel"
     PORTRAIT_ELEMENT_ID = "engine_dialogue_portrait"
     TEXT_ELEMENT_ID = "engine_dialogue_text"
+    MARQUEE_DELAY_SECONDS = 0.5
+    MARQUEE_STEP_SECONDS = 0.18
+    MARQUEE_GAP = "   "
 
     def __init__(
         self,
@@ -172,16 +177,20 @@ class DialogueRuntime:
                     callback(session)
             return
 
-        if session.timer_remaining is None or dt <= 0:
-            return
+        if session.timer_remaining is not None and dt > 0:
+            session.timer_remaining = max(0.0, float(session.timer_remaining) - float(dt))
+            if session.timer_remaining > 0.0:
+                self._update_choice_marquee(session, dt)
+                return
 
-        session.timer_remaining = max(0.0, float(session.timer_remaining) - float(dt))
-        if session.timer_remaining > 0.0:
-            return
+            session.timer_remaining = None
+            if self._current_segment_type(session) != "choice":
+                self._advance_text_or_finish(session)
+                return
 
-        session.timer_remaining = None
-        if self._current_segment_type(session) != "choice":
-            self._advance_text_or_finish(session)
+        if dt > 0:
+            self._update_choice_marquee(session, dt)
+            return
 
     def open_session(
         self,
@@ -310,9 +319,11 @@ class DialogueRuntime:
                     },
                 },
                 "choices": {
+                    "mode": "inline",
                     "visible_rows": visible_rows,
                     "base_y": base_y,
                     "row_height": row_height,
+                    "overflow": "marquee",
                     "plain": {
                         "x": int(dict(legacy_dialogue.get("plain_choice_box", {})).get("x", 8)),
                         "width": int(dict(legacy_dialogue.get("plain_choice_box", {})).get("width", 240)),
@@ -347,9 +358,11 @@ class DialogueRuntime:
                 "with_portrait": {"x": 56, "y": 154, "width": 192, "max_lines": 3},
             },
             "choices": {
+                "mode": "inline",
                 "visible_rows": 3,
                 "base_y": 154,
                 "row_height": 10,
+                "overflow": "marquee",
                 "plain": {"x": 8, "width": 240},
                 "with_portrait": {"x": 56, "width": 188},
             },
@@ -381,6 +394,7 @@ class DialogueRuntime:
         session.page_index = 0
         session.choice_index = 0
         session.choice_scroll_offset = 0
+        session.choice_marquee_elapsed = 0.0
         session.timer_remaining = None
         session.closing = False
 
@@ -465,14 +479,28 @@ class DialogueRuntime:
 
     def _render_choices(self, session: DialogueSession, *, has_portrait: bool, layer: int) -> None:
         """Render the current choice window."""
-        choices = dict(session.ui_preset.get("choices", {}))
-        choice_box = dict(choices.get("with_portrait" if has_portrait else "plain", {}))
-        visible_rows = max(1, int(choices.get("visible_rows", 3)))
-        base_y = float(choices.get("base_y", 154))
-        row_height = float(choices.get("row_height", 10))
+        layout = self._resolve_choice_layout(session, has_portrait=has_portrait)
+        if layout["mode"] == "separate_panel":
+            panel = dict(layout.get("panel", {}))
+            panel_path = str(panel.get("path", "")).strip()
+            if panel_path:
+                self.screen_manager.show_image(
+                    element_id=self.CHOICES_PANEL_ELEMENT_ID,
+                    asset_path=panel_path,
+                    x=float(panel.get("x", 0)),
+                    y=float(panel.get("y", 0)),
+                    layer=int(panel.get("layer", session.ui_preset.get("ui_layer", 100))),
+                )
+        else:
+            self.screen_manager.remove(self.CHOICES_PANEL_ELEMENT_ID)
+
+        visible_rows = int(layout["visible_rows"])
+        base_y = float(layout["y"])
+        row_height = float(layout["row_height"])
         choice_color = tuple(int(channel) for channel in session.ui_preset.get("choice_text_color", [238, 242, 248]))
         font_id = str(session.ui_preset.get("font_id", "pixelbet"))
-        max_width = int(choice_box.get("width", 188))
+        max_width = int(layout["width"])
+        overflow = str(layout["overflow"])
 
         for element_id in self.option_element_ids:
             self.screen_manager.remove(element_id)
@@ -482,17 +510,24 @@ class DialogueRuntime:
         ]
         for row_index, option in enumerate(window):
             absolute_index = session.choice_scroll_offset + row_index
-            prefix = ">" if absolute_index == session.choice_index else " "
-            option_text = f"{prefix}{str(option.get('text', ''))}"
+            is_selected = absolute_index == session.choice_index
+            option_text, option_max_width = self._format_choice_text(
+                session,
+                option_text=str(option.get("text", "")),
+                selected=is_selected,
+                overflow=overflow,
+                max_width=max_width,
+                font_id=font_id,
+            )
             self.screen_manager.show_text(
                 element_id=self.option_element_ids[row_index],
                 text=option_text,
-                x=float(choice_box.get("x", 56)),
+                x=float(layout["x"]),
                 y=base_y + (row_index * row_height),
                 layer=layer,
                 color=choice_color,
                 font_id=font_id,
-                max_width=max_width,
+                max_width=option_max_width,
             )
 
     def _current_segment_type(self, session: DialogueSession) -> str:
@@ -578,6 +613,7 @@ class DialogueRuntime:
         if next_index == session.choice_index:
             return
         session.choice_index = next_index
+        session.choice_marquee_elapsed = 0.0
         visible_rows = max(1, int(dict(session.ui_preset.get("choices", {})).get("visible_rows", 3)))
         if session.choice_index < session.choice_scroll_offset:
             session.choice_scroll_offset = session.choice_index
@@ -724,7 +760,126 @@ class DialogueRuntime:
     def _clear_ui(self) -> None:
         """Remove all engine-owned dialogue UI elements."""
         self.screen_manager.remove(self.PANEL_ELEMENT_ID)
+        self.screen_manager.remove(self.CHOICES_PANEL_ELEMENT_ID)
         self.screen_manager.remove(self.PORTRAIT_ELEMENT_ID)
         self.screen_manager.remove(self.TEXT_ELEMENT_ID)
         for element_id in self.option_element_ids:
             self.screen_manager.remove(element_id)
+
+    def _resolve_choice_layout(self, session: DialogueSession, *, has_portrait: bool) -> dict[str, Any]:
+        """Return the active choice-layout configuration for the current preset."""
+        choices = dict(session.ui_preset.get("choices", {}))
+        mode = str(choices.get("mode", "inline")).strip() or "inline"
+        overflow = str(choices.get("overflow", "clip")).strip() or "clip"
+        visible_rows = max(1, int(choices.get("visible_rows", 3)))
+        row_height = max(1.0, float(choices.get("row_height", 10)))
+
+        if mode == "separate_panel":
+            panel = dict(choices.get("panel", {}))
+            return {
+                "mode": "separate_panel",
+                "overflow": overflow,
+                "visible_rows": visible_rows,
+                "row_height": row_height,
+                "x": float(choices.get("x", panel.get("x", 8))),
+                "y": float(choices.get("y", choices.get("base_y", panel.get("y", 154)))),
+                "width": max(1, int(choices.get("width", panel.get("width", 240)))),
+                "panel": panel,
+            }
+
+        choice_box = dict(choices.get("with_portrait" if has_portrait else "plain", {}))
+        return {
+            "mode": "inline",
+            "overflow": overflow,
+            "visible_rows": visible_rows,
+            "row_height": row_height,
+            "x": float(choice_box.get("x", choices.get("x", 56 if has_portrait else 8))),
+            "y": float(choices.get("y", choices.get("base_y", 154))),
+            "width": max(1, int(choice_box.get("width", choices.get("width", 188 if has_portrait else 240)))),
+            "panel": {},
+        }
+
+    def _format_choice_text(
+        self,
+        session: DialogueSession,
+        *,
+        option_text: str,
+        selected: bool,
+        overflow: str,
+        max_width: int,
+        font_id: str,
+    ) -> tuple[str, int | None]:
+        """Return one rendered choice row text plus the screen-element max_width policy."""
+        prefix = ">" if selected else " "
+        if overflow == "wrap":
+            return f"{prefix}{option_text}", max_width
+        if selected and overflow == "marquee" and self._text_overflows(prefix, option_text, max_width, font_id):
+            return self._marquee_text(prefix, option_text, max_width, font_id, session.choice_marquee_elapsed), None
+        return self._clip_text(prefix, option_text, max_width, font_id), None
+
+    def _update_choice_marquee(self, session: DialogueSession, dt: float) -> None:
+        """Advance the selected-option marquee when the preset requests it."""
+        if dt <= 0 or self._current_segment_type(session) != "choice" or not session.current_options:
+            return
+        layout = self._resolve_choice_layout(
+            session,
+            has_portrait=self._resolve_current_portrait(session) is not None,
+        )
+        if str(layout.get("overflow")) != "marquee":
+            return
+        option = dict(session.current_options[session.choice_index])
+        if not self._text_overflows(">", str(option.get("text", "")), int(layout["width"]), str(session.ui_preset.get("font_id", "pixelbet"))):
+            return
+        previous_step = self._marquee_step(session.choice_marquee_elapsed)
+        session.choice_marquee_elapsed += float(dt)
+        if self._marquee_step(session.choice_marquee_elapsed) == previous_step:
+            return
+        self._render_choices(
+            session,
+            has_portrait=self._resolve_current_portrait(session) is not None,
+            layer=int(session.ui_preset.get("text_layer", 101)),
+        )
+
+    def _marquee_step(self, elapsed_seconds: float) -> int:
+        """Return the current integer marquee offset step for one elapsed duration."""
+        if elapsed_seconds < self.MARQUEE_DELAY_SECONDS:
+            return 0
+        return max(0, int((elapsed_seconds - self.MARQUEE_DELAY_SECONDS) / self.MARQUEE_STEP_SECONDS) + 1)
+
+    def _text_overflows(self, prefix: str, text: str, max_width: int, font_id: str) -> bool:
+        """Return whether one prefixed option text would overflow the available width."""
+        measured_width, _ = self.text_renderer.measure_text(f"{prefix}{text}", font_id=font_id)
+        return measured_width > max(0, int(max_width))
+
+    def _clip_text(self, prefix: str, text: str, max_width: int, font_id: str) -> str:
+        """Return the longest prefix+text slice that fits inside the width budget."""
+        max_width = max(0, int(max_width))
+        clipped = ""
+        if self.text_renderer.measure_text(prefix, font_id=font_id)[0] > max_width:
+            return prefix
+        for character in str(text):
+            candidate = clipped + character
+            if self.text_renderer.measure_text(f"{prefix}{candidate}", font_id=font_id)[0] > max_width:
+                break
+            clipped = candidate
+        return f"{prefix}{clipped}"
+
+    def _marquee_text(
+        self,
+        prefix: str,
+        text: str,
+        max_width: int,
+        font_id: str,
+        elapsed_seconds: float,
+    ) -> str:
+        """Return one clipped marquee slice for the selected option."""
+        max_width = max(0, int(max_width))
+        if elapsed_seconds < self.MARQUEE_DELAY_SECONDS:
+            return self._clip_text(prefix, text, max_width, font_id)
+        scroll_source = f"{text}{self.MARQUEE_GAP}"
+        if not scroll_source.strip():
+            return prefix
+        step = self._marquee_step(elapsed_seconds)
+        start = step % len(scroll_source)
+        rotated = f"{scroll_source[start:]}{scroll_source[:start]}"
+        return self._clip_text(prefix, rotated, max_width, font_id)

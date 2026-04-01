@@ -55,6 +55,52 @@
         "choice_text_color": [238, 242, 248],
         "ui_layer": 100,
         "text_layer": 101
+      },
+      "separate_choices": {
+        "panel": {
+          "path": "assets/project/ui/dialogue_panel.png",
+          "x": 0,
+          "y": 148
+        },
+        "portrait_slot": {
+          "x": 3,
+          "y": 151,
+          "width": 38,
+          "height": 38
+        },
+        "text": {
+          "plain": {
+            "x": 8,
+            "y": 154,
+            "width": 240,
+            "max_lines": 3
+          },
+          "with_portrait": {
+            "x": 56,
+            "y": 154,
+            "width": 192,
+            "max_lines": 3
+          }
+        },
+        "choices": {
+          "mode": "separate_panel",
+          "visible_rows": 3,
+          "x": 24,
+          "y": 96,
+          "width": 120,
+          "row_height": 10,
+          "overflow": "marquee",
+          "panel": {
+            "path": "assets/project/ui/dialogue_panel.png",
+            "x": 16,
+            "y": 88
+          }
+        },
+        "font_id": "pixelbet",
+        "text_color": [245, 232, 190],
+        "choice_text_color": [238, 242, 248],
+        "ui_layer": 100,
+        "text_layer": 101
       }
     }
   }

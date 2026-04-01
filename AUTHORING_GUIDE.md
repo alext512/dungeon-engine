@@ -866,6 +866,8 @@ The engine-owned runtime currently expects:
 - named dialogue UI presets under `shared_variables.dialogue_ui`
 - ordinary dialogue JSON files, usually under `dialogues/`
 - one common `segments` array in each dialogue file
+- choice layout rules inside the chosen preset, including `choices.mode`
+  (`inline` or `separate_panel`) and `choices.overflow` such as `marquee`
 
 Older controller-owned pattern:
 

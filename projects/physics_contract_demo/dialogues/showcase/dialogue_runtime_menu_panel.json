@@ -1,0 +1,71 @@
+{
+  "ui_preset": "separate_choices",
+  "segments": [
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "portrait": {
+        "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+        "frame_width": 38,
+        "frame_height": 38,
+        "frame": 0
+      },
+      "text": "This menu uses a separate choice panel. The selected long option should marquee instead of wrapping into taller rows.",
+      "advance": {
+        "mode": "interact"
+      }
+    },
+    {
+      "type": "choice",
+      "speaker_id": "guide",
+      "portrait": {
+        "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+        "frame_width": 38,
+        "frame_height": 38,
+        "frame": 0
+      },
+      "text": "Try the long options below.",
+      "options": [
+        {
+          "text": "Turn the nearby indicator on and leave it glowing",
+          "option_id": "indicator_on_long",
+          "commands": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": true
+            }
+          ]
+        },
+        {
+          "text": "Flash the nearby indicator briefly and then hide it again",
+          "option_id": "indicator_flash_long",
+          "commands": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": true
+            },
+            {
+              "type": "wait_frames",
+              "frames": 12
+            },
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": false
+            }
+          ]
+        },
+        {
+          "text": "Leave everything exactly as it already is",
+          "option_id": "indicator_keep_long",
+          "commands": []
+        }
+      ]
+    }
+  ]
+}

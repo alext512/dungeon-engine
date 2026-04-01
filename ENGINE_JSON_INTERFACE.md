@@ -122,7 +122,15 @@ Special current use:
 These influence the runtime internal display size if present.
 
 For the newer engine-owned dialogue runtime, `dialogue_ui.presets` is the
-current shared-variable convention for named dialogue UI layouts.
+current shared-variable convention for named dialogue UI layouts. Current
+choice-layout presets may define:
+
+- `choices.mode`: `inline` or `separate_panel`
+- `choices.overflow`: `clip`, `wrap`, or `marquee`
+- `choices.visible_rows`
+- `choices.row_height`
+- `choices.panel` plus `choices.x` / `choices.y` / `choices.width` for
+  separate-panel choice menus
 
 ## Area Files
 
@@ -1257,6 +1265,8 @@ Current engine-owned dialogue runtime behavior:
 - reads named UI presets from `shared_variables.dialogue_ui`
 - owns current segment, page, choice index, choice scroll, timer advance, and
   modal input behavior
+- honors preset-driven choice layouts, including inline menus, separate choice
+  panels, and marquee overflow for long selected options
 - supports caller hooks through `dialogue_on_start`, `dialogue_on_end`, and
   `segment_hooks`
 - currently also supports inline segment `on_start` / `on_end` and inline

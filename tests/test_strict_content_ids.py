@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import tempfile
@@ -129,9 +130,11 @@ def _dialogue_shared_variables() -> dict[str, object]:
                         },
                     },
                     "choices": {
+                        "mode": "inline",
                         "visible_rows": 3,
                         "base_y": 154,
                         "row_height": 10,
+                        "overflow": "marquee",
                         "plain": {
                             "x": 8,
                             "width": 240,
@@ -139,6 +142,52 @@ def _dialogue_shared_variables() -> dict[str, object]:
                         "with_portrait": {
                             "x": 56,
                             "width": 188,
+                        },
+                    },
+                    "font_id": "pixelbet",
+                    "text_color": [245, 232, 190],
+                    "choice_text_color": [238, 242, 248],
+                    "ui_layer": 100,
+                    "text_layer": 101,
+                },
+                "separate_choices": {
+                    "panel": {
+                        "path": "assets/project/ui/dialogue_panel.png",
+                        "x": 0,
+                        "y": 148,
+                    },
+                    "portrait_slot": {
+                        "x": 3,
+                        "y": 151,
+                        "width": 38,
+                        "height": 38,
+                    },
+                    "text": {
+                        "plain": {
+                            "x": 8,
+                            "y": 154,
+                            "width": 240,
+                            "max_lines": 3,
+                        },
+                        "with_portrait": {
+                            "x": 56,
+                            "y": 154,
+                            "width": 192,
+                            "max_lines": 3,
+                        },
+                    },
+                    "choices": {
+                        "mode": "separate_panel",
+                        "visible_rows": 3,
+                        "x": 24,
+                        "y": 96,
+                        "width": 120,
+                        "row_height": 10,
+                        "overflow": "marquee",
+                        "panel": {
+                            "path": "assets/project/ui/dialogue_panel.png",
+                            "x": 16,
+                            "y": 88,
                         },
                     },
                     "font_id": "pixelbet",
@@ -476,6 +525,12 @@ class _RecordingCamera:
 
 
 class _StubTextRenderer:
+    def measure_text(self, text: str, *, font_id: str = "") -> tuple[int, int]:
+        _ = font_id
+        lines = str(text).split("\n")
+        longest = max((len(line) for line in lines), default=0)
+        return (longest * 6, max(1, len(lines)) * 8)
+
     def wrap_lines(self, text: str, max_width: int, *, font_id: str = "") -> list[str]:
         _ = max_width
         _ = font_id
@@ -2142,6 +2197,109 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(option_0.text, " Two")
         self.assertEqual(option_1.text, " Three")
         self.assertEqual(option_2.text, ">Four")
+
+    def test_dialogue_runtime_can_render_choices_in_a_separate_panel(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_separate_panel.json": {
+                    "ui_preset": "separate_choices",
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Pick one",
+                            "options": [
+                                {"text": "One", "option_id": "one"},
+                                {"text": "Two", "option_id": "two"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_separate_panel.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        self.assertTrue(dialogue_runtime.is_active())
+        choices_panel = context.screen_manager.get_element(DialogueRuntime.CHOICES_PANEL_ELEMENT_ID)
+        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        assert choices_panel is not None
+        assert option_0 is not None
+        self.assertEqual(choices_panel.kind, "image")
+        self.assertEqual((choices_panel.x, choices_panel.y), (16.0, 88.0))
+        self.assertEqual((option_0.x, option_0.y), (24.0, 96.0))
+        self.assertEqual(option_0.text, ">One")
+
+    def test_dialogue_runtime_marquees_the_selected_long_option(self) -> None:
+        shared_variables = copy.deepcopy(_dialogue_shared_variables())
+        choices = shared_variables["dialogue_ui"]["presets"]["standard"]["choices"]["plain"]
+        choices["width"] = 36
+        _, project = self._make_project(
+            shared_variables=shared_variables,
+            dialogues={
+                "system/runtime_marquee.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Pick one",
+                            "options": [
+                                {"text": "Long option text", "option_id": "long"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_marquee.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        option_before = context.screen_manager.get_element("engine_dialogue_option_0")
+        assert option_before is not None
+        before_text = option_before.text
+        self.assertTrue(before_text.startswith(">"))
+
+        dialogue_runtime.update(0.7)
+
+        option_after = context.screen_manager.get_element("engine_dialogue_option_0")
+        assert option_after is not None
+        self.assertTrue(option_after.text.startswith(">"))
+        self.assertNotEqual(option_after.text, before_text)
 
     def test_dialogue_runtime_segment_hooks_override_inline_option_commands(self) -> None:
         _, project = self._make_project(

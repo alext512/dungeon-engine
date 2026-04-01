@@ -39,7 +39,17 @@
         "frame_height": 38,
         "frame": 0
       },
-      "text": "The terminal near the bottom wall uses the new engine-owned dialogue runtime directly, including an inline choice menu that reads caller data through refs."
+      "text": "The right terminal uses the new engine-owned dialogue runtime directly, including an inline choice menu that reads caller data through refs."
+    },
+    {
+      "type": "text",
+      "portrait": {
+        "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+        "frame_width": 38,
+        "frame_height": 38,
+        "frame": 0
+      },
+      "text": "The left terminal uses a separate choice-panel preset with marquee overflow, so you can see the preset-driven layout rules working without changing the dialogue logic."
     },
     {
       "type": "text",
