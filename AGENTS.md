@@ -15,7 +15,7 @@ Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
 Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/test_project/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
-The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and currently has a Phase 1 read-only browser/viewer implementation.
+The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and now supports active area editing workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, and guarded JSON editing. Some workflows are still deferred, especially screen-space placement, `global_entities` editing, richer reference pickers, and runtime handoff.
 
 ## How to Run
 
@@ -23,6 +23,8 @@ The previous built-in editor implementation has been archived under `archived_ed
 cd python_puzzle_engine
 .venv/Scripts/python run_game.py
 .venv/Scripts/python -m unittest discover -s tests -v
+cd tools/area_editor
+..\..\.venv/Scripts/python -m unittest discover -s tests -v
 ```
 
 Or double-click `Run_Game.cmd`.
@@ -50,7 +52,7 @@ Optional reference/planning docs:
 ```text
 run_game.py                      # Preferred standalone game entry point
 Run_Game.cmd                     # Windows launcher for the game
-tools/area_editor/               # External area editor (current Phase 1 browser/viewer)
+tools/area_editor/               # External area editor with active area-editing support
 archived_editor/                 # Archived editor code and notes kept for reference
 tests/                           # Focused unittest coverage for engine behavior regressions
 dungeon_engine/
@@ -101,7 +103,7 @@ dungeon_engine/
 
 **Changing project asset/content lookup**: Project search-path behavior lives in `project.py` plus `world/loader.py` and `engine/asset_manager.py`.
 
-**Running focused verification**: Use `.venv/Scripts/python -m unittest discover -s tests -v` for the current built-in regression suite.
+**Running focused verification**: Use `.venv/Scripts/python -m unittest discover -s tests -v` for the runtime suite. If you touch `tools/area_editor/`, run `..\..\.venv/Scripts/python -m unittest discover -s tests -v` from `tools/area_editor/` for the editor suite.
 
 ## Validation Checklist
 
@@ -124,6 +126,8 @@ do **all** of the following before declaring the change safe:
 3. Prefer validating them through the same startup-style project-command path the app uses, not only through lower-level engine tests.
 4. If you changed project-command ids or command references, explicitly re-run project-command validation for each affected example project.
 5. If feasible, do a brief manual smoke start of the affected sample project after automated validation passes.
+
+If you change `tools/area_editor/`, also run the editor's own unittest suite from inside that folder so package-relative imports and tool-local assumptions match the intended workflow.
 
 Recommended direct validation snippet:
 

@@ -22,7 +22,7 @@ Read these files in this order:
 - Keep the boundary clear: engine code belongs under `dungeon_engine/`, while project content belongs in a project folder selected through `project.json`, even if that project is versioned inside this repo under `projects/`.
 - Keep room/entity/command data portable so future runtimes and external tooling can reuse the same content pipeline.
 - Update the docs when implementation changes the plan.
-- Add or update focused regression tests when engine behavior changes. The current built-in suite runs with `.venv/Scripts/python -m unittest discover -s tests -v`.
+- Add or update focused regression tests when engine behavior changes. The runtime suite runs with `.venv/Scripts/python -m unittest discover -s tests -v`. If you touch `tools/area_editor/`, run `..\..\.venv/Scripts/python -m unittest discover -s tests -v` from inside `tools/area_editor/`.
 
 ## Replatforming stance
 

@@ -69,7 +69,10 @@ The current engine already supports:
 - save slots layered on top of authored room data
 
 There is also a new external area editor under [tools/area_editor](./tools/area_editor/).
-Right now it is still Phase 1 and read-only.
+It now supports active area-editing workflows such as tile painting, cell-flag editing,
+entity placement and nudging, render-property editing, and guarded JSON editing.
+Some editor workflows are still deferred, especially screen-space placement,
+`global_entities` editing, richer reference pickers, and runtime handoff.
 
 The older built-in editor is archived under [archived_editor](./archived_editor/)
 for reference only.
@@ -262,13 +265,15 @@ Useful commands during development:
 .venv/Scripts/python run_game.py --project projects/test_project areas/title_screen --headless --max-frames 2
 .venv/Scripts/python run_game.py --project projects/test_project areas/village_square --headless --max-frames 2
 .venv/Scripts/python run_game.py --project projects/test_project areas/village_house --headless --max-frames 2
+cd tools/area_editor
+..\..\.venv/Scripts/python -m unittest discover -s tests -v
 ```
 
 ## Current Limits
 
 - save/load UX works, but is still basic
 - external PNG import workflow is not finished
-- the external area editor is still read-only
+- the external area editor still has some deferred workflows, especially screen-space placement, `global_entities` editing, richer reference pickers, and runtime handoff
 - movement/render feel should still be checked periodically on real hardware as
   the project grows
 
