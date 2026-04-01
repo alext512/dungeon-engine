@@ -1,0 +1,420 @@
+{
+  "kind": "player",
+  "facing": "down",
+  "solid": true,
+  "push_strength": 1,
+  "input_map": {
+    "move_up": "move_up",
+    "move_down": "move_down",
+    "move_left": "move_left",
+    "move_right": "move_right",
+    "interact": "interact"
+  },
+  "variables": {
+    "walk_phase": 0
+  },
+  "visuals": [
+    {
+      "id": "body",
+      "path": "assets/original/PlayerSpriteSheet.png",
+      "frame_width": 16,
+      "frame_height": 20,
+      "frames": [
+        1
+      ],
+      "offset_y": -4
+    }
+  ],
+  "entity_commands": {
+    "on_blocked": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "play_audio",
+          "path": "assets/project/sfx/bump.wav"
+        },
+        {
+          "type": "set_entity_command_enabled",
+          "entity_id": "$self_id",
+          "command_id": "on_blocked",
+          "enabled": false
+        },
+        {
+          "type": "wait_frames",
+          "frames": 16
+        },
+        {
+          "type": "set_entity_command_enabled",
+          "entity_id": "$self_id",
+          "command_id": "on_blocked",
+          "enabled": true
+        }
+      ]
+    },
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "interact_facing",
+          "entity_id": "$self_id"
+        }
+      ]
+    },
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "move",
+          "direction": "up",
+          "flip_x": false,
+          "phase_a_frames": [
+            9,
+            10
+          ],
+          "phase_b_frames": [
+            11,
+            10
+          ],
+          "idle_frame": 10
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "move",
+          "direction": "down",
+          "flip_x": false,
+          "phase_a_frames": [
+            0,
+            1
+          ],
+          "phase_b_frames": [
+            2,
+            1
+          ],
+          "idle_frame": 1
+        }
+      ]
+    },
+    "move_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "move",
+          "direction": "left",
+          "flip_x": false,
+          "phase_a_frames": [
+            3,
+            4
+          ],
+          "phase_b_frames": [
+            5,
+            4
+          ],
+          "idle_frame": 4
+        }
+      ]
+    },
+    "move_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "move",
+          "direction": "right",
+          "flip_x": true,
+          "phase_a_frames": [
+            6,
+            7
+          ],
+          "phase_b_frames": [
+            8,
+            7
+          ],
+          "idle_frame": 7
+        }
+      ]
+    },
+    "move": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "move_self_position",
+          "value": {
+            "$entity_ref": {
+              "entity_id": "$self_id",
+              "select": {
+                "fields": [
+                  "grid_x",
+                  "grid_y",
+                  "pixel_x",
+                  "pixel_y"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "move_current_pixel_x",
+          "value": "$self.move_self_position.pixel_x"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "move_current_pixel_y",
+          "value": "$self.move_self_position.pixel_y"
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "move_expected_pixel_x",
+          "value": {
+            "$product": [
+              "$self.move_self_position.grid_x",
+              "$area.tile_size"
+            ]
+          }
+        },
+        {
+          "type": "set_entity_var",
+          "entity_id": "$self_id",
+          "name": "move_expected_pixel_y",
+          "value": {
+            "$product": [
+              "$self.move_self_position.grid_y",
+              "$area.tile_size"
+            ]
+          }
+        },
+        {
+          "type": "if",
+          "op": "eq",
+          "then": [
+            {
+              "type": "if",
+              "op": "eq",
+              "then": [
+                {
+                  "type": "set_visual_flip_x",
+                  "entity_id": "$self_id",
+                  "flip_x": "$flip_x"
+                },
+                {
+                  "type": "move_in_direction",
+                  "entity_id": "$self_id",
+                  "direction": "$direction",
+                  "frames_needed": "$project.movement.ticks_per_tile",
+                  "wait": false
+                },
+                {
+                  "type": "set_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "move_after_position",
+                  "value": {
+                    "$entity_ref": {
+                      "entity_id": "$self_id",
+                      "select": {
+                        "fields": [
+                          "grid_x",
+                          "grid_y"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "if",
+                  "op": "eq",
+                  "then": [
+                    {
+                      "type": "if",
+                      "op": "eq",
+                      "then": [],
+                      "else": [
+                        {
+                          "type": "run_entity_command",
+                          "entity_id": "$self_id",
+                          "command_id": "start_walk_success",
+                          "phase_a_frames": "$phase_a_frames",
+                          "phase_b_frames": "$phase_b_frames",
+                          "idle_frame": "$idle_frame",
+                          "frames_per_sprite_change": "$half:project.movement.ticks_per_tile"
+                        }
+                      ],
+                      "left": "$self.move_after_position.grid_y",
+                      "right": "$self.move_self_position.grid_y"
+                    }
+                  ],
+                  "else": [
+                    {
+                      "type": "run_entity_command",
+                      "entity_id": "$self_id",
+                      "command_id": "start_walk_success",
+                      "phase_a_frames": "$phase_a_frames",
+                      "phase_b_frames": "$phase_b_frames",
+                      "idle_frame": "$idle_frame",
+                      "frames_per_sprite_change": "$half:project.movement.ticks_per_tile"
+                    }
+                  ],
+                  "left": "$self.move_after_position.grid_x",
+                  "right": "$self.move_self_position.grid_x"
+                }
+              ],
+              "left": "$self.move_current_pixel_y",
+              "right": "$self.move_expected_pixel_y"
+            }
+          ],
+          "left": "$self.move_current_pixel_x",
+          "right": "$self.move_expected_pixel_x"
+        }
+      ]
+    },
+    "start_walk_success": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "op": "eq",
+          "then": [
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "frame_sequence": "$phase_b_frames",
+              "frames_per_sprite_change": "$frames_per_sprite_change",
+              "wait": false
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_phase",
+              "value": 0
+            }
+          ],
+          "else": [
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "frame_sequence": "$phase_a_frames",
+              "frames_per_sprite_change": "$frames_per_sprite_change",
+              "wait": false
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_phase",
+              "value": 1
+            }
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "walk_phase"
+            }
+          },
+          "right": 1
+        },
+        {
+          "type": "spawn_flow",
+          "commands": [
+            {
+              "type": "wait_for_move",
+              "entity_id": "$self_id"
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_cleanup_position",
+              "value": {
+                "$entity_ref": {
+                  "entity_id": "$self_id",
+                  "select": {
+                    "fields": [
+                      "grid_x",
+                      "grid_y",
+                      "pixel_x",
+                      "pixel_y"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_cleanup_current_pixel_x",
+              "value": "$self.walk_cleanup_position.pixel_x"
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_cleanup_current_pixel_y",
+              "value": "$self.walk_cleanup_position.pixel_y"
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_cleanup_expected_pixel_x",
+              "value": {
+                "$product": [
+                  "$self.walk_cleanup_position.grid_x",
+                  "$area.tile_size"
+                ]
+              }
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "walk_cleanup_expected_pixel_y",
+              "value": {
+                "$product": [
+                  "$self.walk_cleanup_position.grid_y",
+                  "$area.tile_size"
+                ]
+              }
+            },
+            {
+              "type": "if",
+              "op": "eq",
+              "then": [
+                {
+                  "type": "if",
+                  "op": "eq",
+                  "then": [
+                    {
+                      "type": "stop_animation",
+                      "entity_id": "$self_id",
+                      "reset_to_default": false
+                    },
+                    {
+                      "type": "set_visual_frame",
+                      "entity_id": "$self_id",
+                      "frame": "$idle_frame"
+                    }
+                  ],
+                  "left": "$self.walk_cleanup_current_pixel_y",
+                  "right": "$self.walk_cleanup_expected_pixel_y"
+                }
+              ],
+              "left": "$self.walk_cleanup_current_pixel_x",
+              "right": "$self.walk_cleanup_expected_pixel_x"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

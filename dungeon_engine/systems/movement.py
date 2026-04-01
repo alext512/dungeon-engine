@@ -53,7 +53,7 @@ class MovementSystem:
         if not entity.present:
             return []
 
-        if entity.movement.active:
+        if entity.movement_state.active:
             return []
 
         delta_x, delta_y = DIRECTION_VECTORS[direction]
@@ -98,7 +98,7 @@ class MovementSystem:
         if not entity.present:
             return []
 
-        if entity.movement.active:
+        if entity.movement_state.active:
             return []
 
         if grid_sync != "none" and (target_grid_x is None or target_grid_y is None):
@@ -242,7 +242,7 @@ class MovementSystem:
         entity = self.world.get_entity(entity_id)
         if entity is None:
             raise KeyError(f"Cannot set grid position for missing entity '{entity_id}'.")
-        entity.movement.active = False
+        entity.movement_state.active = False
         entity.grid_x = int(target_grid_x)
         entity.grid_y = int(target_grid_y)
 
@@ -256,7 +256,7 @@ class MovementSystem:
         entity = self.world.get_entity(entity_id)
         if entity is None:
             raise KeyError(f"Cannot set world position for missing entity '{entity_id}'.")
-        entity.movement.active = False
+        entity.movement_state.active = False
         entity.pixel_x = float(target_pixel_x)
         entity.pixel_y = float(target_pixel_y)
 
@@ -276,7 +276,7 @@ class MovementSystem:
         if not entity.present:
             return
 
-        entity.movement.active = False
+        entity.movement_state.active = False
         entity.pixel_x = float(target_pixel_x)
         entity.pixel_y = float(target_pixel_y)
         if target_grid_x is not None:
@@ -307,7 +307,7 @@ class MovementSystem:
     def update_tick(self) -> None:
         """Advance all active movement interpolations by one simulation tick."""
         for entity in self.world.iter_entities():
-            movement = entity.movement
+            movement = entity.movement_state
             if not movement.active:
                 continue
 
@@ -341,7 +341,7 @@ class MovementSystem:
         entity = self.world.get_entity(entity_id)
         if entity is None:
             return False
-        return entity.movement.active
+        return entity.movement_state.active
 
     def _start_move(
         self,
@@ -358,7 +358,7 @@ class MovementSystem:
         previous_grid_x = entity.grid_x
         previous_grid_y = entity.grid_y
 
-        movement = entity.movement
+        movement = entity.movement_state
         movement.active = True
         movement.start_grid_x = previous_grid_x
         movement.start_grid_y = previous_grid_y

@@ -53,9 +53,9 @@ class MovementCommandHandle(CommandHandle):
     def _movement_signature(self, entity_id: str) -> tuple[float, float, float, float, int] | None:
         """Return one stable snapshot for the entity's currently active move."""
         entity = self.movement_system.world.get_entity(entity_id)
-        if entity is None or not entity.movement.active:
+        if entity is None or not entity.movement_state.active:
             return None
-        movement = entity.movement
+        movement = entity.movement_state
         return (
             float(movement.start_pixel_x),
             float(movement.start_pixel_y),
@@ -834,6 +834,58 @@ def _normalize_entity_field_mutation(
             raise ValueError("visible does not support nested field paths.")
         return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
+    if root == "facing":
+        if len(path) != 1:
+            raise ValueError("facing does not support nested field paths.")
+        normalized_value = str(value).strip().lower()
+        if normalized_value not in DIRECTION_VECTORS:
+            raise ValueError("facing must be 'up', 'down', 'left', or 'right'.")
+        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
+
+    if root == "solid":
+        if len(path) != 1:
+            raise ValueError("solid does not support nested field paths.")
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
+
+    if root == "pushable":
+        if len(path) != 1:
+            raise ValueError("pushable does not support nested field paths.")
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
+
+    if root == "weight":
+        if len(path) != 1:
+            raise ValueError("weight does not support nested field paths.")
+        normalized_value = int(value)
+        if normalized_value <= 0:
+            raise ValueError("weight must be positive.")
+        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
+
+    if root == "push_strength":
+        if len(path) != 1:
+            raise ValueError("push_strength does not support nested field paths.")
+        normalized_value = int(value)
+        if normalized_value < 0:
+            raise ValueError("push_strength must be zero or positive.")
+        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
+
+    if root == "collision_push_strength":
+        if len(path) != 1:
+            raise ValueError("collision_push_strength does not support nested field paths.")
+        normalized_value = int(value)
+        if normalized_value < 0:
+            raise ValueError("collision_push_strength must be zero or positive.")
+        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
+
+    if root == "interactable":
+        if len(path) != 1:
+            raise ValueError("interactable does not support nested field paths.")
+        return _EntityFieldMutation(path=path, normalized_value=bool(value))
+
+    if root == "interaction_priority":
+        if len(path) != 1:
+            raise ValueError("interaction_priority does not support nested field paths.")
+        return _EntityFieldMutation(path=path, normalized_value=int(value))
+
     if root == "entity_commands_enabled":
         if len(path) != 1:
             raise ValueError("entity_commands_enabled does not support nested field paths.")
@@ -923,6 +975,38 @@ def _apply_normalized_entity_field_mutation(
     if root == "visible":
         entity.visible = bool(value)
         return "visible", entity.visible
+
+    if root == "facing":
+        entity.set_facing_value(str(value))  # type: ignore[arg-type]
+        return "facing", entity.facing
+
+    if root == "solid":
+        entity.set_solid_value(bool(value))
+        return "solid", entity.solid
+
+    if root == "pushable":
+        entity.set_pushable_value(bool(value))
+        return "pushable", entity.pushable
+
+    if root == "weight":
+        entity.weight = int(value)
+        return "weight", entity.weight
+
+    if root == "push_strength":
+        entity.push_strength = int(value)
+        return "push_strength", entity.push_strength
+
+    if root == "collision_push_strength":
+        entity.collision_push_strength = int(value)
+        return "collision_push_strength", entity.collision_push_strength
+
+    if root == "interactable":
+        entity.interactable = bool(value)
+        return "interactable", entity.interactable
+
+    if root == "interaction_priority":
+        entity.interaction_priority = int(value)
+        return "interaction_priority", entity.interaction_priority
 
     if root == "entity_commands_enabled":
         entity.set_entity_commands_enabled(bool(value))
@@ -1160,6 +1244,119 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if not wait:
             return ImmediateHandle()
         return MovementCommandHandle(movement_system, moved_entity_ids)
+
+    def _dispatch_named_entity_command(
+        *,
+        context: CommandContext,
+        entity_id: str,
+        command_id: str,
+        runtime_params: dict[str, Any] | None = None,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
+    ) -> CommandHandle:
+        """Execute one named entity command through the normal runtime pipeline."""
+        entity = context.world.get_entity(str(entity_id).strip())
+        if entity is None or not entity.present:
+            return ImmediateHandle()
+        entity_command = entity.get_entity_command(command_id)
+        if (
+            not entity.has_enabled_entity_command(command_id)
+            or entity_command is None
+            or not entity_command.commands
+        ):
+            return ImmediateHandle()
+        base_params = _build_child_runtime_params(
+            runtime_params or {},
+            source_entity_id=entity.entity_id,
+            entity_refs=entity_refs,
+            refs_mode=refs_mode,
+        )
+        return SequenceCommandHandle(
+            registry,
+            context,
+            entity_command.commands,
+            base_params=base_params,
+        )
+
+    def _resolve_standard_direction(entity: Any, direction: str | None) -> str:
+        """Resolve one standard movement/interact direction."""
+        if direction is None:
+            return entity.get_effective_facing()
+        resolved_direction = str(direction).strip().lower()
+        if resolved_direction not in DIRECTION_VECTORS:
+            raise ValueError("direction must be 'up', 'down', 'left', or 'right'.")
+        return resolved_direction
+
+    def _run_on_blocked_if_present(
+        *,
+        context: CommandContext,
+        actor: Any,
+        runtime_params: dict[str, Any] | None = None,
+    ) -> CommandHandle:
+        """Dispatch the actor's generic on_blocked hook when it exists."""
+        return _dispatch_named_entity_command(
+            context=context,
+            entity_id=actor.entity_id,
+            command_id="on_blocked",
+            runtime_params=runtime_params,
+            entity_refs={"instigator": actor.entity_id},
+            refs_mode="merge",
+        )
+
+    def _attempt_standard_push(
+        *,
+        actor: Any,
+        direction: str,
+        area: Any,
+        collision_system: Any,
+        movement_system: Any,
+        push_strength: int,
+        duration: float | None,
+        frames_needed: int | None,
+        speed_px_per_second: float | None,
+        wait: bool,
+    ) -> tuple[bool, list[str]]:
+        """Try to push one blocking entity one cell in the requested direction."""
+        delta_x, delta_y = DIRECTION_VECTORS[direction]  # type: ignore[index]
+        blocker_x = actor.grid_x + delta_x
+        blocker_y = actor.grid_y + delta_y
+        blockers = collision_system.get_blocking_entities(
+            blocker_x,
+            blocker_y,
+            ignore_entity_id=actor.entity_id,
+        )
+        if len(blockers) != 1:
+            return False, []
+        blocker = blockers[0]
+        if not blocker.is_effectively_pushable():
+            return False, []
+        if int(push_strength) < int(blocker.weight):
+            return False, []
+
+        target_x = blocker.grid_x + delta_x
+        target_y = blocker.grid_y + delta_y
+        if area.is_blocked(target_x, target_y):
+            return False, []
+        if collision_system.get_blocking_entities(
+            target_x,
+            target_y,
+            ignore_entity_id=blocker.entity_id,
+        ):
+            return False, []
+
+        moved_entity_ids = movement_system.request_grid_step(
+            blocker.entity_id,
+            direction,  # type: ignore[arg-type]
+            duration=duration,
+            frames_needed=frames_needed,
+            speed_px_per_second=speed_px_per_second,
+            grid_sync="immediate",
+        )
+        if not moved_entity_ids:
+            return False, []
+        if not wait:
+            return True, moved_entity_ids
+        return True, moved_entity_ids
 
     def _move_entity_to_position(
         *,
@@ -1587,6 +1784,242 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             wait=wait,
+        )
+
+    @registry.register("move_in_direction")
+    def move_in_direction(
+        context: CommandContext,
+        area: Any,
+        movement_system: Any,
+        collision_system: Any,
+        *,
+        entity_id: str,
+        direction: str | None = None,
+        push_strength: int | None = None,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        wait: bool = True,
+        source_entity_id: str | None = None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Resolve one standard grid step using blocked cells and solid/pushable entities."""
+        if movement_system is None:
+            raise ValueError("move_in_direction requires an active movement system.")
+        if collision_system is None:
+            raise ValueError("move_in_direction requires an active collision system.")
+
+        resolved_id = _resolve_entity_id(entity_id, source_entity_id=source_entity_id)
+        if not resolved_id:
+            logger.warning("move_in_direction: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        actor = context.world.get_entity(resolved_id)
+        if actor is None:
+            raise KeyError(f"Cannot move missing entity '{resolved_id}'.")
+        if not actor.present:
+            return ImmediateHandle()
+        if actor.space != "world":
+            raise ValueError("move_in_direction only supports world-space entities.")
+        if actor.movement_state.active:
+            return ImmediateHandle()
+
+        resolved_direction = _resolve_standard_direction(actor, direction)
+        actor.set_facing_value(resolved_direction)
+        delta_x, delta_y = DIRECTION_VECTORS[resolved_direction]  # type: ignore[index]
+        target_x = actor.grid_x + delta_x
+        target_y = actor.grid_y + delta_y
+
+        if collision_system.can_move_to(
+            target_x,
+            target_y,
+            ignore_entity_id=actor.entity_id,
+        ):
+            moved_entity_ids = movement_system.request_grid_step(
+                actor.entity_id,
+                resolved_direction,  # type: ignore[arg-type]
+                duration=duration,
+                frames_needed=frames_needed,
+                speed_px_per_second=speed_px_per_second,
+                grid_sync="immediate",
+            )
+            if not moved_entity_ids or not wait:
+                return ImmediateHandle()
+            return MovementCommandHandle(movement_system, moved_entity_ids)
+
+        resolved_push_strength = int(actor.push_strength if push_strength is None else push_strength)
+        if resolved_push_strength < 0:
+            raise ValueError("move_in_direction push_strength must be zero or positive.")
+
+        if resolved_push_strength > 0 and not area.is_blocked(target_x, target_y):
+            pushed, pushed_entity_ids = _attempt_standard_push(
+                actor=actor,
+                direction=resolved_direction,
+                area=area,
+                collision_system=collision_system,
+                movement_system=movement_system,
+                push_strength=resolved_push_strength,
+                duration=duration,
+                frames_needed=frames_needed,
+                speed_px_per_second=speed_px_per_second,
+                wait=wait,
+            )
+            if pushed:
+                moved_entity_ids = movement_system.request_grid_step(
+                    actor.entity_id,
+                    resolved_direction,  # type: ignore[arg-type]
+                    duration=duration,
+                    frames_needed=frames_needed,
+                    speed_px_per_second=speed_px_per_second,
+                    grid_sync="immediate",
+                )
+                combined_entity_ids = list(dict.fromkeys([*pushed_entity_ids, *moved_entity_ids]))
+                if not combined_entity_ids or not wait:
+                    return ImmediateHandle()
+                return MovementCommandHandle(movement_system, combined_entity_ids)
+
+        blocked_runtime_params = dict(runtime_params)
+        blocked_runtime_params.update(
+            {
+                "direction": resolved_direction,
+                "from_x": int(actor.grid_x),
+                "from_y": int(actor.grid_y),
+                "target_x": int(target_x),
+                "target_y": int(target_y),
+            }
+        )
+        blockers = collision_system.get_blocking_entities(
+            target_x,
+            target_y,
+            ignore_entity_id=actor.entity_id,
+        )
+        if len(blockers) == 1:
+            blocked_runtime_params["blocking_entity_id"] = blockers[0].entity_id
+        return _run_on_blocked_if_present(
+            context=context,
+            actor=actor,
+            runtime_params=blocked_runtime_params,
+        )
+
+    @registry.register("push_facing")
+    def push_facing(
+        context: CommandContext,
+        area: Any,
+        movement_system: Any,
+        collision_system: Any,
+        *,
+        entity_id: str,
+        direction: str | None = None,
+        push_strength: int | None = None,
+        duration: float | None = None,
+        frames_needed: int | None = None,
+        speed_px_per_second: float | None = None,
+        wait: bool = True,
+        source_entity_id: str | None = None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Try to push exactly one blocker in the actor's facing direction without moving the actor."""
+        if movement_system is None:
+            raise ValueError("push_facing requires an active movement system.")
+        if collision_system is None:
+            raise ValueError("push_facing requires an active collision system.")
+
+        resolved_id = _resolve_entity_id(entity_id, source_entity_id=source_entity_id)
+        if not resolved_id:
+            logger.warning("push_facing: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        actor = context.world.get_entity(resolved_id)
+        if actor is None:
+            raise KeyError(f"Cannot push with missing entity '{resolved_id}'.")
+        if not actor.present:
+            return ImmediateHandle()
+        if actor.space != "world":
+            raise ValueError("push_facing only supports world-space entities.")
+
+        resolved_direction = _resolve_standard_direction(actor, direction)
+        actor.set_facing_value(resolved_direction)
+        resolved_push_strength = int(actor.push_strength if push_strength is None else push_strength)
+        if resolved_push_strength < 0:
+            raise ValueError("push_facing push_strength must be zero or positive.")
+
+        pushed, moved_entity_ids = _attempt_standard_push(
+            actor=actor,
+            direction=resolved_direction,
+            area=area,
+            collision_system=collision_system,
+            movement_system=movement_system,
+            push_strength=resolved_push_strength,
+            duration=duration,
+            frames_needed=frames_needed,
+            speed_px_per_second=speed_px_per_second,
+            wait=wait,
+        )
+        if pushed:
+            if not moved_entity_ids or not wait:
+                return ImmediateHandle()
+            return MovementCommandHandle(movement_system, moved_entity_ids)
+
+        delta_x, delta_y = DIRECTION_VECTORS[resolved_direction]  # type: ignore[index]
+        blocked_runtime_params = dict(runtime_params)
+        blocked_runtime_params.update(
+            {
+                "direction": resolved_direction,
+                "from_x": int(actor.grid_x),
+                "from_y": int(actor.grid_y),
+                "target_x": int(actor.grid_x + delta_x),
+                "target_y": int(actor.grid_y + delta_y),
+            }
+        )
+        blockers = collision_system.get_blocking_entities(
+            actor.grid_x + delta_x,
+            actor.grid_y + delta_y,
+            ignore_entity_id=actor.entity_id,
+        )
+        if len(blockers) == 1:
+            blocked_runtime_params["blocking_entity_id"] = blockers[0].entity_id
+        return _run_on_blocked_if_present(
+            context=context,
+            actor=actor,
+            runtime_params=blocked_runtime_params,
+        )
+
+    @registry.register("interact_facing")
+    def interact_facing(
+        context: CommandContext,
+        interaction_system: Any,
+        *,
+        entity_id: str,
+        direction: str | None = None,
+        source_entity_id: str | None = None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Resolve the standard facing target and dispatch its normal interact command."""
+        if interaction_system is None:
+            raise ValueError("interact_facing requires an active interaction system.")
+
+        resolved_id = _resolve_entity_id(entity_id, source_entity_id=source_entity_id)
+        if not resolved_id:
+            logger.warning("interact_facing: skipping because entity_id resolved to blank.")
+            return ImmediateHandle()
+        actor = context.world.get_entity(resolved_id)
+        if actor is None:
+            raise KeyError(f"Cannot interact with missing entity '{resolved_id}'.")
+        if not actor.present:
+            return ImmediateHandle()
+        if actor.space != "world":
+            raise ValueError("interact_facing only supports world-space entities.")
+
+        resolved_direction = _resolve_standard_direction(actor, direction)
+        actor.set_facing_value(resolved_direction)
+        target = interaction_system.get_facing_target(actor.entity_id)
+        if target is None:
+            return ImmediateHandle()
+        return _dispatch_named_entity_command(
+            context=context,
+            entity_id=target.entity_id,
+            command_id="interact",
+            runtime_params=runtime_params,
+            entity_refs={"instigator": actor.entity_id},
+            refs_mode="merge",
         )
 
     @registry.register("wait_for_move")

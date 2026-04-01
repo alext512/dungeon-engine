@@ -92,7 +92,7 @@ class AnimationSystem:
                 if not visual.frames:
                     visual.current_frame = 0
                     continue
-                if visual.animate_when_moving and not entity.movement.active:
+                if visual.animate_when_moving and not entity.movement_state.active:
                     visual.animation_elapsed = 0.0
                     visual.current_frame = visual.frames[0]
                     continue

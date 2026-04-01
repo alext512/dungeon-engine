@@ -265,6 +265,50 @@ class World:
                 return entity
         return None
 
+    def get_solid_entities_at(
+        self,
+        grid_x: int,
+        grid_y: int,
+        *,
+        exclude_entity_id: str | None = None,
+        include_hidden: bool = False,
+        include_absent: bool = False,
+    ) -> list[Entity]:
+        """Return world-space solid entities that occupy the requested tile."""
+        return [
+            entity
+            for entity in self.get_entities_at(
+                grid_x,
+                grid_y,
+                exclude_entity_id=exclude_entity_id,
+                include_hidden=include_hidden,
+                include_absent=include_absent,
+            )
+            if entity.is_effectively_solid()
+        ]
+
+    def get_interactable_entities_at(
+        self,
+        grid_x: int,
+        grid_y: int,
+        *,
+        exclude_entity_id: str | None = None,
+        include_hidden: bool = False,
+        include_absent: bool = False,
+    ) -> list[Entity]:
+        """Return world-space interactable entities that occupy the requested tile."""
+        return [
+            entity
+            for entity in self.get_entities_at(
+                grid_x,
+                grid_y,
+                exclude_entity_id=exclude_entity_id,
+                include_hidden=include_hidden,
+                include_absent=include_absent,
+            )
+            if entity.is_effectively_interactable()
+        ]
+
     def generate_entity_id(self, base_name: str) -> str:
         """Return a stable unique entity id for new authored instances."""
         candidate = base_name

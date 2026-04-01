@@ -745,7 +745,7 @@ class Game:
                     f"Cannot transfer entity '{entity_id}' because only area-scoped entities can change areas."
                 )
             transferred_entity = copy.deepcopy(entity)
-            transferred_entity.movement.active = False
+            transferred_entity.movement_state.active = False
             for visual in transferred_entity.visuals:
                 visual.animation_playback.active = False
             transferred_entities.append(transferred_entity)
@@ -798,7 +798,7 @@ class Game:
         entity.grid_x = int(entry_point.grid_x)
         entity.grid_y = int(entry_point.grid_y)
         if entry_point.facing is not None:
-            entity.variables["direction"] = str(entry_point.facing)
+            entity.set_facing_value(str(entry_point.facing))
         entity.pixel_x = (
             float(entry_point.pixel_x)
             if entry_point.pixel_x is not None

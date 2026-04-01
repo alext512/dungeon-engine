@@ -222,12 +222,6 @@ def instantiate_entity(
             f"'{entity_id}' ({reserved_names})."
         )
     kind = _require_non_empty_string(entity_data, "kind", source_name=source_name)
-    for removed_field in ("facing", "solid", "pushable"):
-        if removed_field in entity_data:
-            raise ValueError(
-                f"{source_name} must not declare '{removed_field}'; store that data under "
-                "'variables' instead."
-            )
     space = _parse_entity_space(entity_data, source_name=source_name)
     scope = _parse_entity_scope(entity_data, source_name=source_name)
     if space == "world":
@@ -245,7 +239,19 @@ def instantiate_entity(
         default_pixel_x = 0.0
         default_pixel_y = 0.0
 
+    variables = _parse_entity_variables(entity_data, source_name=source_name)
     visuals = _parse_entity_visuals(entity_data, tile_size=tile_size, source_name=source_name)
+    entity_commands = _parse_entity_commands(entity_data)
+    facing = _parse_entity_facing(entity_data, source_name=source_name)
+    solid = _parse_entity_solid(entity_data)
+    pushable = _parse_entity_pushable(entity_data)
+    weight = _parse_entity_weight(entity_data, source_name=source_name)
+    push_strength = _parse_entity_push_strength(entity_data, source_name=source_name)
+    collision_push_strength = _parse_entity_collision_push_strength(
+        entity_data,
+        source_name=source_name,
+    )
+    interactable = _parse_entity_interactable(entity_data)
     entity = Entity(
         entity_id=entity_id,
         kind=kind,
@@ -257,6 +263,14 @@ def instantiate_entity(
         scope=scope,
         present=bool(entity_data.get("present", True)),
         visible=bool(entity_data.get("visible", True)),
+        facing=facing,
+        solid=solid,
+        pushable=pushable,
+        weight=weight,
+        push_strength=push_strength,
+        collision_push_strength=collision_push_strength,
+        interactable=interactable,
+        interaction_priority=int(entity_data.get("interaction_priority", 0)),
         entity_commands_enabled=bool(entity_data.get("entity_commands_enabled", True)),
         render_order=_parse_entity_render_order(entity_data, space=space),
         y_sort=_parse_entity_y_sort(entity_data, space=space),
@@ -267,11 +281,95 @@ def instantiate_entity(
         template_parameters=copy.deepcopy(entity_instance.get("parameters", {})),
         tags=_coerce_string_list(entity_data.get("tags", []), field_name="tags", source_name=source_name),
         visuals=visuals,
-        entity_commands=_parse_entity_commands(entity_data),
-        variables=copy.deepcopy(entity_data.get("variables", {})),
+        entity_commands=entity_commands,
+        variables=variables,
         input_map=_parse_input_map(entity_data.get("input_map")),
     )
     return entity
+
+
+def _parse_entity_variables(entity_data: dict[str, Any], *, source_name: str) -> dict[str, Any]:
+    """Parse one entity's variables object."""
+    raw_variables = entity_data.get("variables", {})
+    if raw_variables is None:
+        return {}
+    if not isinstance(raw_variables, dict):
+        raise ValueError(f"{source_name} field 'variables' must be a JSON object.")
+    return copy.deepcopy(raw_variables)
+
+
+def _parse_entity_facing(
+    entity_data: dict[str, Any],
+    *,
+    source_name: str,
+) -> str:
+    """Parse one entity's top-level facing field."""
+    raw_facing = entity_data.get("facing", "down")
+    facing = str(raw_facing).strip().lower()
+    if facing not in {"up", "down", "left", "right"}:
+        raise ValueError(
+            f"{source_name} field 'facing' must be 'up', 'down', 'left', or 'right'."
+        )
+    return facing
+
+
+def _parse_entity_solid(
+    entity_data: dict[str, Any],
+) -> bool:
+    """Parse one entity's top-level solid flag."""
+    return bool(entity_data.get("solid", False))
+
+
+def _parse_entity_pushable(
+    entity_data: dict[str, Any],
+) -> bool:
+    """Parse one entity's top-level pushable flag."""
+    return bool(entity_data.get("pushable", False))
+
+
+def _parse_entity_weight(
+    entity_data: dict[str, Any],
+    *,
+    source_name: str,
+) -> int:
+    """Parse one entity's authored weight."""
+    weight = int(entity_data.get("weight", 1))
+    if weight <= 0:
+        raise ValueError(f"{source_name} field 'weight' must be positive.")
+    return weight
+
+
+def _parse_entity_push_strength(
+    entity_data: dict[str, Any],
+    *,
+    source_name: str,
+) -> int:
+    """Parse one entity's authored push strength."""
+    push_strength = int(entity_data.get("push_strength", 0))
+    if push_strength < 0:
+        raise ValueError(f"{source_name} field 'push_strength' must be zero or positive.")
+    return push_strength
+
+
+def _parse_entity_collision_push_strength(
+    entity_data: dict[str, Any],
+    *,
+    source_name: str,
+) -> int:
+    """Parse one entity's authored collision push strength."""
+    collision_push_strength = int(entity_data.get("collision_push_strength", 0))
+    if collision_push_strength < 0:
+        raise ValueError(
+            f"{source_name} field 'collision_push_strength' must be zero or positive."
+        )
+    return collision_push_strength
+
+
+def _parse_entity_interactable(
+    entity_data: dict[str, Any],
+) -> bool:
+    """Parse one entity's top-level interactable flag."""
+    return bool(entity_data.get("interactable", False))
 
 
 def _parse_entity_space(entity_data: dict[str, Any], *, source_name: str) -> str:
@@ -496,7 +594,7 @@ def _parse_cell_flags(
     width: int,
     height: int,
 ) -> list[list[dict[str, Any]]]:
-    """Parse explicit cell flags or fall back to all-walkable cells."""
+    """Parse explicit cell flags or fall back to all-unblocked cells."""
     raw_flags = raw_data.get("cell_flags")
     if raw_flags is not None:
         if len(raw_flags) != height or any(len(row) != width for row in raw_flags):
@@ -506,18 +604,39 @@ def _parse_cell_flags(
             parsed_row: list[dict[str, Any]] = []
             for cell in row:
                 if isinstance(cell, dict):
-                    parsed_row.append(dict(cell))
+                    parsed_row.append(_normalize_cell_flags_dict(cell))
                 elif isinstance(cell, bool):
-                    parsed_row.append({"walkable": cell})
+                    parsed_row.append({
+                        "blocked": not cell,
+                        "walkable": cell,
+                    })
                 elif cell is None:
-                    parsed_row.append({})
+                    parsed_row.append({
+                        "blocked": False,
+                        "walkable": True,
+                    })
                 else:
                     raise ValueError("cell_flags values must be booleans, objects, or null.")
             parsed_flags.append(parsed_row)
         return parsed_flags
 
-    # Fallback: all walkable
-    return [[{"walkable": True} for _ in range(width)] for _ in range(height)]
+    # Fallback: all walkable/unblocked
+    return [[{"blocked": False, "walkable": True} for _ in range(width)] for _ in range(height)]
+
+
+def _normalize_cell_flags_dict(raw_cell: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one authored cell-flags object to expose both blocked and walkable."""
+    normalized = dict(raw_cell)
+    has_blocked = "blocked" in normalized
+    has_walkable = "walkable" in normalized
+    if has_blocked and not has_walkable:
+        normalized["walkable"] = not bool(normalized.get("blocked", False))
+    elif has_walkable and not has_blocked:
+        normalized["blocked"] = not bool(normalized.get("walkable", True))
+    elif not has_blocked and not has_walkable:
+        normalized["blocked"] = False
+        normalized["walkable"] = True
+    return normalized
 
 
 def _parse_command_list(

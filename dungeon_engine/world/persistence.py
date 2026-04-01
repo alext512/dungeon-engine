@@ -1123,6 +1123,22 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.present = bool(value)
         elif key == "visible":
             entity.visible = bool(value)
+        elif key == "facing":
+            entity.set_facing_value(str(value))  # type: ignore[arg-type]
+        elif key == "solid":
+            entity.set_solid_value(bool(value))
+        elif key == "pushable":
+            entity.set_pushable_value(bool(value))
+        elif key == "weight":
+            entity.weight = int(value)
+        elif key == "push_strength":
+            entity.push_strength = int(value)
+        elif key == "collision_push_strength":
+            entity.collision_push_strength = int(value)
+        elif key == "interactable":
+            entity.interactable = bool(value)
+        elif key == "interaction_priority":
+            entity.interaction_priority = int(value)
         elif key == "entity_commands_enabled":
             entity.entity_commands_enabled = bool(value)
         elif key == "render_order":
@@ -1234,6 +1250,22 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["present"] = current_entity.present
     if current_entity.visible != authored_entity.visible:
         overrides["visible"] = current_entity.visible
+    if current_entity.get_effective_facing() != authored_entity.get_effective_facing():
+        overrides["facing"] = current_entity.get_effective_facing()
+    if current_entity.is_effectively_solid() != authored_entity.is_effectively_solid():
+        overrides["solid"] = current_entity.is_effectively_solid()
+    if current_entity.is_effectively_pushable() != authored_entity.is_effectively_pushable():
+        overrides["pushable"] = current_entity.is_effectively_pushable()
+    if int(current_entity.weight) != int(authored_entity.weight):
+        overrides["weight"] = int(current_entity.weight)
+    if int(current_entity.push_strength) != int(authored_entity.push_strength):
+        overrides["push_strength"] = int(current_entity.push_strength)
+    if int(current_entity.collision_push_strength) != int(authored_entity.collision_push_strength):
+        overrides["collision_push_strength"] = int(current_entity.collision_push_strength)
+    if current_entity.is_effectively_interactable() != authored_entity.is_effectively_interactable():
+        overrides["interactable"] = current_entity.is_effectively_interactable()
+    if int(current_entity.interaction_priority) != int(authored_entity.interaction_priority):
+        overrides["interaction_priority"] = int(current_entity.interaction_priority)
     if current_entity.entity_commands_enabled != authored_entity.entity_commands_enabled:
         overrides["entity_commands_enabled"] = current_entity.entity_commands_enabled
     if current_entity.render_order != authored_entity.render_order:

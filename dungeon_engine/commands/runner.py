@@ -37,6 +37,14 @@ _PLAIN_ENTITY_REF_FIELDS = (
     "pixel_y",
     "present",
     "visible",
+    "facing",
+    "solid",
+    "pushable",
+    "weight",
+    "push_strength",
+    "collision_push_strength",
+    "interactable",
+    "interaction_priority",
     "entity_commands_enabled",
     "render_order",
     "y_sort",
@@ -61,7 +69,14 @@ _PLAIN_ENTITY_VISUAL_FIELDS = (
     "offset_y",
     "draw_order",
 )
-_ENTITY_QUERY_WHERE_BOOLEAN_FIELDS = ("present", "visible", "entity_commands_enabled")
+_ENTITY_QUERY_WHERE_BOOLEAN_FIELDS = (
+    "present",
+    "visible",
+    "solid",
+    "pushable",
+    "interactable",
+    "entity_commands_enabled",
+)
 _ENTITY_QUERY_WHERE_STRING_FIELDS = ("kind", "space", "scope")
 _ENTITY_QUERY_WHERE_LIST_FIELDS = ("kinds", "tags_any", "tags_all")
 _ENTITY_QUERY_ALLOWED_SPACES = ("world", "screen")
@@ -480,7 +495,9 @@ def _resolve_entity_where_spec(raw_where: Any, *, source_name: str) -> dict[str,
         raise ValueError(
             f"{source_name} where does not support key(s) {formatted}. "
             "Allowed keys: 'kind', 'kinds', 'tags_any', 'tags_all', 'space', "
-            "'scope', 'present', 'visible', 'entity_commands_enabled'."
+            "'scope', 'present', 'visible', 'solid', 'pushable', "
+            "'interactable', 'entity_commands_enabled', 'push_strength', "
+            "'collision_push_strength'."
         )
     if "kind" in raw_where and "kinds" in raw_where:
         raise ValueError(f"{source_name} where does not allow both 'kind' and 'kinds'.")
@@ -566,6 +583,12 @@ def _entity_matches_where(entity: Any, where: dict[str, Any]) -> bool:
     if "present" in where and entity.present is not where["present"]:
         return False
     if "visible" in where and entity.visible is not where["visible"]:
+        return False
+    if "solid" in where and entity.is_effectively_solid() is not where["solid"]:
+        return False
+    if "pushable" in where and entity.is_effectively_pushable() is not where["pushable"]:
+        return False
+    if "interactable" in where and entity.is_effectively_interactable() is not where["interactable"]:
         return False
     if (
         "entity_commands_enabled" in where

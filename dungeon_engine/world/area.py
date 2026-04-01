@@ -130,11 +130,27 @@ class Area:
         """Return the per-cell flags for the requested tile coordinate."""
         return self.cell_flags[grid_y][grid_x]
 
+    def is_blocked(self, grid_x: int, grid_y: int) -> bool:
+        """Use cell flags, not tile art, to determine blocking."""
+        if not self.in_bounds(grid_x, grid_y):
+            return True
+        cell_flags = self.cell_flags_at(grid_x, grid_y)
+        if "blocked" in cell_flags:
+            return bool(cell_flags.get("blocked", False))
+        return not bool(cell_flags.get("walkable", True))
+
     def is_walkable(self, grid_x: int, grid_y: int) -> bool:
         """Use cell flags, not tile art, to determine walkability."""
+        return not self.is_blocked(grid_x, grid_y)
+
+    def cell_tags_at(self, grid_x: int, grid_y: int) -> list[str]:
+        """Return the cell tags for the requested tile coordinate."""
         if not self.in_bounds(grid_x, grid_y):
-            return False
-        return bool(self.cell_flags_at(grid_x, grid_y).get("walkable", True))
+            return []
+        raw_tags = self.cell_flags_at(grid_x, grid_y).get("tags", [])
+        if not isinstance(raw_tags, list):
+            return []
+        return [str(tag) for tag in raw_tags]
 
     def resolve_gid(self, gid: int) -> tuple[str, int, int, int] | None:
         """Resolve a GID to (tileset_path, tile_width, tile_height, local_frame).

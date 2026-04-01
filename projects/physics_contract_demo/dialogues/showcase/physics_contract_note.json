@@ -1,0 +1,28 @@
+{
+  "participants": {
+    "guide": {
+      "name": "Guide",
+      "portrait_path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+      "portrait_frame_width": 38,
+      "portrait_frame_height": 38,
+      "portrait_frame": 0
+    }
+  },
+  "segments": [
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "text": "This room uses the new engine-owned movement, pushing, and facing interaction commands."
+    },
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "text": "The light crate has weight 1, so the player can push it. The heavy crate is weight 2, so it should just trigger the bump hook for now."
+    },
+    {
+      "type": "text",
+      "speaker_id": null,
+      "text": "The older sample projects stay authored the old way on purpose. This room is just the clean-contract reference."
+    }
+  ]
+}

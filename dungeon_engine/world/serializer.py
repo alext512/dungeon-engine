@@ -111,10 +111,16 @@ def _serialize_entry_point(entry_point: Any) -> dict[str, Any]:
 
 
 def _serialize_cell_flags(cell_flags: dict[str, Any]) -> bool | dict[str, Any]:
-    """Keep simple walkability cells concise while preserving richer future metadata."""
-    if set(cell_flags.keys()) <= {"walkable"}:
-        return bool(cell_flags.get("walkable", True))
-    return dict(cell_flags)
+    """Keep simple cells concise while preferring the new blocked terminology."""
+    if set(cell_flags.keys()) <= {"blocked", "walkable"}:
+        return {
+            "blocked": bool(cell_flags.get("blocked", not bool(cell_flags.get("walkable", True))))
+        }
+    serialized = dict(cell_flags)
+    if "blocked" in serialized and "walkable" in serialized:
+        if bool(serialized["walkable"]) == (not bool(serialized["blocked"])):
+            serialized.pop("walkable", None)
+    return serialized
 
 
 def serialize_entity_instance(
@@ -206,6 +212,14 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "scope": entity.scope,
         "present": entity.present,
         "visible": entity.visible,
+        "facing": entity.get_effective_facing(),
+        "solid": entity.is_effectively_solid(),
+        "pushable": entity.is_effectively_pushable(),
+        "weight": int(entity.weight),
+        "push_strength": int(entity.push_strength),
+        "collision_push_strength": int(entity.collision_push_strength),
+        "interactable": entity.is_effectively_interactable(),
+        "interaction_priority": int(entity.interaction_priority),
         "entity_commands_enabled": entity.entity_commands_enabled,
         "render_order": entity.render_order,
         "y_sort": entity.y_sort,
@@ -231,6 +245,14 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "scope": entity.scope,
         "present": entity.present,
         "visible": entity.visible,
+        "facing": entity.get_effective_facing(),
+        "solid": entity.is_effectively_solid(),
+        "pushable": entity.is_effectively_pushable(),
+        "weight": int(entity.weight),
+        "push_strength": int(entity.push_strength),
+        "collision_push_strength": int(entity.collision_push_strength),
+        "interactable": entity.is_effectively_interactable(),
+        "interaction_priority": int(entity.interaction_priority),
         "entity_commands_enabled": entity.entity_commands_enabled,
         "render_order": entity.render_order,
         "y_sort": entity.y_sort,

@@ -1,0 +1,120 @@
+{
+  "name": "Physics Contract Demo",
+  "tile_size": 16,
+  "input_targets": {
+    "move_up": "player",
+    "move_down": "player",
+    "move_left": "player",
+    "move_right": "player",
+    "interact": "player"
+  },
+  "variables": {},
+  "tilesets": [],
+  "tile_layers": [
+    {
+      "name": "background",
+      "render_order": 0,
+      "grid": [
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0]
+      ]
+    }
+  ],
+  "cell_flags": [
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]}
+    ]
+  ],
+  "entry_points": {
+    "startup": {
+      "x": 1,
+      "y": 2,
+      "facing": "right"
+    }
+  },
+  "entities": [
+    {
+      "id": "player",
+      "x": 1,
+      "y": 2,
+      "template": "entity_templates/player_contract"
+    },
+    {
+      "id": "house_block",
+      "x": 3,
+      "y": 3,
+      "template": "entity_templates/block_contract"
+    },
+    {
+      "id": "heavy_block",
+      "x": 4,
+      "y": 3,
+      "template": "entity_templates/block_contract",
+      "weight": 2
+    },
+    {
+      "id": "contract_sign",
+      "x": 5,
+      "y": 2,
+      "template": "entity_templates/sign_contract",
+      "parameters": {
+        "dialogue_path": "dialogues/showcase/physics_contract_note.json"
+      }
+    }
+  ]
+}

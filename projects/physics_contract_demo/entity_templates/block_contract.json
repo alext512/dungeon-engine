@@ -1,0 +1,76 @@
+{
+  "kind": "block",
+  "solid": true,
+  "pushable": true,
+  "weight": 1,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/object_sheet.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "entity_commands": {
+    "push_from_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "push",
+          "direction": "right"
+        }
+      ]
+    },
+    "push_from_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "push",
+          "direction": "left"
+        }
+      ]
+    },
+    "push_from_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "push",
+          "direction": "down"
+        }
+      ]
+    },
+    "push_from_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "run_entity_command",
+          "entity_id": "self",
+          "command_id": "push",
+          "direction": "up"
+        }
+      ]
+    },
+    "push": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "move_in_direction",
+          "entity_id": "$self_id",
+          "direction": "$direction",
+          "frames_needed": "$project.movement.ticks_per_tile",
+          "wait": false
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

@@ -54,6 +54,8 @@ from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.engine.text import TextRenderer
+from dungeon_engine.systems.collision import CollisionSystem
+from dungeon_engine.systems.interaction import InteractionSystem
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -820,6 +822,437 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(entity_data["stack_order"], 9)
         self.assertNotIn("layer", entity_data)
 
+    def test_area_loader_normalizes_blocked_and_walkable_cell_flags(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["cell_flags"] = [
+            [False, {"blocked": True, "tags": ["wall"]}],
+        ]
+        raw_area["tile_layers"] = [
+            {
+                "name": "ground",
+                "render_order": 0,
+                "grid": [[1, 1]],
+            }
+        ]
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+        self.assertTrue(area.is_blocked(1, 0))
+        self.assertFalse(area.is_walkable(1, 0))
+        self.assertEqual(area.cell_flags_at(0, 0), {"blocked": True, "walkable": False})
+        self.assertEqual(
+            area.cell_flags_at(1, 0),
+            {"blocked": True, "tags": ["wall"], "walkable": False},
+        )
+
+        serialized = serialize_area(area, world, project=project)
+        self.assertEqual(
+            serialized["cell_flags"],
+            [[{"blocked": True}, {"blocked": True, "tags": ["wall"]}]],
+        )
+
+    def test_loader_supports_new_top_level_physics_and_interaction_fields(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "crate",
+                "kind": "block",
+                "x": 0,
+                "y": 0,
+                "facing": "left",
+                "solid": True,
+                "pushable": True,
+                "weight": 3,
+                "push_strength": 2,
+                "collision_push_strength": 4,
+                "interactable": True,
+                "interaction_priority": 7,
+                "entity_commands": {
+                    "interact": {
+                        "enabled": True,
+                        "commands": [],
+                    }
+                },
+            }
+        ]
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        crate = world.get_entity("crate")
+        self.assertIsNotNone(crate)
+        assert crate is not None
+        self.assertEqual(crate.get_effective_facing(), "left")
+        self.assertTrue(crate.is_effectively_solid())
+        self.assertTrue(crate.is_effectively_pushable())
+        self.assertEqual(crate.weight, 3)
+        self.assertEqual(crate.push_strength, 2)
+        self.assertEqual(crate.collision_push_strength, 4)
+        self.assertTrue(crate.is_effectively_interactable())
+        self.assertEqual(crate.interaction_priority, 7)
+
+        serialized = serialize_area(area, world, project=project)
+        serialized_entity = serialized["entities"][0]
+        self.assertEqual(serialized_entity["facing"], "left")
+        self.assertTrue(serialized_entity["solid"])
+        self.assertTrue(serialized_entity["pushable"])
+        self.assertEqual(serialized_entity["weight"], 3)
+        self.assertEqual(serialized_entity["push_strength"], 2)
+        self.assertEqual(serialized_entity["collision_push_strength"], 4)
+        self.assertTrue(serialized_entity["interactable"])
+        self.assertEqual(serialized_entity["interaction_priority"], 7)
+
+    def test_engine_physics_fields_ignore_same_named_variables_and_interact_commands(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "explicit_block",
+                "kind": "block",
+                "x": 0,
+                "y": 0,
+                "facing": "left",
+                "solid": False,
+                "pushable": False,
+                "interactable": False,
+                "variables": {
+                    "direction": "right",
+                    "blocks_movement": True,
+                    "pushable": True,
+                },
+                "entity_commands": {
+                    "interact": {
+                        "enabled": True,
+                        "commands": [],
+                    }
+                },
+            }
+        ]
+
+        _, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        explicit_block = world.get_entity("explicit_block")
+        self.assertIsNotNone(explicit_block)
+        assert explicit_block is not None
+        self.assertEqual(explicit_block.get_effective_facing(), "left")
+        self.assertFalse(explicit_block.is_effectively_solid())
+        self.assertFalse(explicit_block.is_effectively_pushable())
+        self.assertFalse(explicit_block.is_effectively_interactable())
+
+        explicit_block.variables["direction"] = "up"
+        explicit_block.variables["blocks_movement"] = False
+        explicit_block.variables["pushable"] = False
+
+        self.assertEqual(explicit_block.get_effective_facing(), "left")
+        self.assertFalse(explicit_block.is_effectively_solid())
+        self.assertFalse(explicit_block.is_effectively_pushable())
+        self.assertFalse(explicit_block.is_effectively_interactable())
+
+    def test_collision_system_uses_blocked_cells_and_solid_entities(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": True}]],
+        )
+        world = World()
+        blocker = _make_runtime_entity("blocker", kind="block")
+        blocker.grid_x = 0
+        blocker.grid_y = 0
+        blocker.solid = True
+        world.add_entity(blocker)
+
+        collision = CollisionSystem(area, world)
+
+        self.assertFalse(collision.can_move_to(1, 0))
+        self.assertFalse(collision.can_move_to(0, 0))
+        self.assertEqual(collision.get_blocking_entity(0, 0), blocker)
+
+    def test_interaction_system_prefers_explicit_priority_and_facing(self) -> None:
+        world = World()
+        actor = _make_runtime_entity("actor", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        actor.facing = "right"
+        world.add_entity(actor)
+
+        low = _make_runtime_entity(
+            "low",
+            kind="npc",
+            entity_commands={"interact": EntityCommandDefinition(enabled=True, commands=[])},
+        )
+        low.grid_x = 1
+        low.grid_y = 0
+        low.interactable = True
+        low.interaction_priority = 1
+        world.add_entity(low)
+
+        high = _make_runtime_entity(
+            "high",
+            kind="npc",
+            entity_commands={"interact": EntityCommandDefinition(enabled=True, commands=[])},
+        )
+        high.grid_x = 1
+        high.grid_y = 0
+        high.interactable = True
+        high.interaction_priority = 10
+        world.add_entity(high)
+
+        interaction = InteractionSystem(world)
+        self.assertEqual(interaction.get_facing_target("actor"), high)
+
+    def test_move_in_direction_steps_actor_and_updates_facing(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        world.add_entity(actor)
+        registry, context = self._make_command_context(area=area, world=world)
+        movement_system = _RecordingMovementSystem()
+        context.movement_system = movement_system
+        context.collision_system = CollisionSystem(area, world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {
+                "entity_id": "player",
+                "direction": "right",
+                "frames_needed": 6,
+                "wait": False,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertEqual(actor.get_effective_facing(), "right")
+        self.assertEqual(
+            movement_system.grid_steps,
+            [("player", "right", None, 6, None, "immediate")],
+        )
+
+    def test_move_in_direction_runs_on_blocked_hook_with_context(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity(
+            "player",
+            kind="player",
+            entity_commands={
+                "on_blocked": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "blocked",
+                            "value": True,
+                        },
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "blocked_direction",
+                            "value": "$direction",
+                        },
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$self_id",
+                            "name": "blocked_entity",
+                            "value": "$blocking_entity_id",
+                        },
+                    ]
+                )
+            },
+        )
+        actor.grid_x = 0
+        actor.grid_y = 0
+        world.add_entity(actor)
+        blocker = _make_runtime_entity("crate", kind="block")
+        blocker.grid_x = 1
+        blocker.grid_y = 0
+        blocker.solid = True
+        world.add_entity(blocker)
+        registry, context = self._make_command_context(area=area, world=world)
+        movement_system = _RecordingMovementSystem()
+        context.movement_system = movement_system
+        context.collision_system = CollisionSystem(area, world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {
+                "entity_id": "player",
+                "direction": "right",
+                "wait": False,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertTrue(actor.variables["blocked"])  # type: ignore[index]
+        self.assertEqual(actor.variables["blocked_direction"], "right")
+        self.assertEqual(actor.variables["blocked_entity"], "crate")
+        self.assertEqual(movement_system.grid_steps, [])
+
+    def test_move_in_direction_pushes_one_blocker_using_entity_push_strength(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        actor.push_strength = 1
+        world.add_entity(actor)
+        blocker = _make_runtime_entity("crate", kind="block")
+        blocker.grid_x = 1
+        blocker.grid_y = 0
+        blocker.solid = True
+        blocker.pushable = True
+        blocker.weight = 1
+        world.add_entity(blocker)
+        registry, context = self._make_command_context(area=area, world=world)
+        movement_system = _RecordingMovementSystem()
+        context.movement_system = movement_system
+        context.collision_system = CollisionSystem(area, world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {
+                "entity_id": "player",
+                "direction": "right",
+                "frames_needed": 8,
+                "wait": False,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertEqual(actor.get_effective_facing(), "right")
+        self.assertEqual(
+            movement_system.grid_steps,
+            [
+                ("crate", "right", None, 8, None, "immediate"),
+                ("player", "right", None, 8, None, "immediate"),
+            ],
+        )
+
+    def test_push_facing_moves_only_the_blocker(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        actor.facing = "right"
+        actor.push_strength = 1
+        world.add_entity(actor)
+        blocker = _make_runtime_entity("crate", kind="block")
+        blocker.grid_x = 1
+        blocker.grid_y = 0
+        blocker.solid = True
+        blocker.pushable = True
+        blocker.weight = 1
+        world.add_entity(blocker)
+        registry, context = self._make_command_context(area=area, world=world)
+        movement_system = _RecordingMovementSystem()
+        context.movement_system = movement_system
+        context.collision_system = CollisionSystem(area, world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "push_facing",
+            {
+                "entity_id": "player",
+                "frames_needed": 5,
+                "wait": False,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertEqual((actor.grid_x, actor.grid_y), (0, 0))
+        self.assertEqual(
+            movement_system.grid_steps,
+            [("crate", "right", None, 5, None, "immediate")],
+        )
+
+    def test_interact_facing_dispatches_target_interact_with_instigator(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.grid_x = 0
+        actor.grid_y = 0
+        actor.facing = "right"
+        world.add_entity(actor)
+        target = _make_runtime_entity(
+            "sign",
+            kind="sign",
+            entity_commands={
+                "interact": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$ref_ids.instigator",
+                            "name": "interacted",
+                            "value": True,
+                        }
+                    ]
+                )
+            },
+        )
+        target.grid_x = 1
+        target.grid_y = 0
+        target.interactable = True
+        world.add_entity(target)
+        registry, context = self._make_command_context(area=area, world=world)
+        context.interaction_system = InteractionSystem(world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "interact_facing",
+            {
+                "entity_id": "player",
+            },
+        )
+        handle.update(0.0)
+
+        self.assertTrue(actor.variables["interacted"])  # type: ignore[index]
+
     def test_renderer_collect_world_render_items_interleaves_tiles_and_entities(self) -> None:
         import pygame
 
@@ -1152,7 +1585,6 @@ class StrictContentIdTests(unittest.TestCase):
             "set_var_from_text_window",
             "query_facing_state",
             "run_facing_event",
-            "interact_facing",
         ):
             with self.assertRaises(CommandExecutionError) as raised:
                 params = {}
@@ -1162,8 +1594,6 @@ class StrictContentIdTests(unittest.TestCase):
                     params = {"entity_id": "self", "store_state_var": "move_attempt_state"}
                 elif command_name == "run_facing_event":
                     params = {"entity_id": "self", "command_id": "interact"}
-                elif command_name == "interact_facing":
-                    params = {"entity_id": "self"}
                 execute_registered_command(registry, context, command_name, params)
             self.assertIsNotNone(raised.exception.__cause__)
             self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
@@ -1393,9 +1823,9 @@ class StrictContentIdTests(unittest.TestCase):
             tilesets=[],
             tile_layers=[],
             cell_flags=[
-                [{"walkable": True}, {"walkable": True}, {"walkable": True}],
-                [{"walkable": True}, {"walkable": True}, {"walkable": False}],
-                [{"walkable": True}, {"walkable": True}, {"walkable": True}],
+                [{"blocked": False}, {"blocked": False}, {"blocked": False}],
+                [{"blocked": False}, {"blocked": False}, {"blocked": True}],
+                [{"blocked": False}, {"blocked": False}, {"blocked": False}],
             ],
         )
         world = World()
@@ -1405,8 +1835,8 @@ class StrictContentIdTests(unittest.TestCase):
         blocking_entity = _make_runtime_entity("crate", kind="crate")
         blocking_entity.grid_x = 2
         blocking_entity.grid_y = 1
-        blocking_entity.variables["blocks_movement"] = True
-        blocking_entity.variables["pushable"] = True
+        blocking_entity.solid = True
+        blocking_entity.pushable = True
         world.add_entity(actor)
         world.add_entity(blocking_entity)
         registry, context = self._make_command_context(area=area, world=world)
@@ -1440,8 +1870,7 @@ class StrictContentIdTests(unittest.TestCase):
                         "x": 2,
                         "y": 1,
                         "select": {
-                            "fields": ["entity_id"],
-                            "variables": ["blocks_movement", "pushable"],
+                            "fields": ["entity_id", "solid", "pushable"],
                         },
                     }
                 },
@@ -1459,7 +1888,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": {
                     "$find_in_collection": {
                         "value": "$self.target_entities",
-                        "field": "variables.blocks_movement",
+                        "field": "solid",
                         "op": "eq",
                         "match": True,
                         "default": None,
@@ -1480,7 +1909,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": {
                     "$any_in_collection": {
                         "value": "$self.target_entities",
-                        "field": "variables.pushable",
+                        "field": "pushable",
                         "op": "eq",
                         "match": True,
                     }
@@ -1492,7 +1921,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         player = world.get_entity("player")
         assert player is not None
-        self.assertEqual(player.variables["target_cell"]["walkable"], False)
+        self.assertEqual(player.variables["target_cell"]["blocked"], True)
         self.assertEqual(player.variables["blocking_entity"]["entity_id"], "crate")
         self.assertTrue(player.variables["has_pushable_blocker"])
 
@@ -1508,8 +1937,9 @@ class StrictContentIdTests(unittest.TestCase):
         high.grid_y = 3
         high.render_order = 2
         high.stack_order = 5
-        high.variables["blocks_movement"] = True
-        high.variables["pushable"] = True
+        high.solid = True
+        high.pushable = True
+        high.variables["custom_marker"] = "blocking"
         high.visuals.append(
             EntityVisual(
                 visual_id="main",
@@ -1607,8 +2037,8 @@ class StrictContentIdTests(unittest.TestCase):
                     "$entity_ref": {
                         "entity_id": "high",
                         "select": {
-                            "fields": ["entity_id", "grid_x"],
-                            "variables": ["blocks_movement", "pushable"],
+                            "fields": ["entity_id", "grid_x", "solid", "pushable"],
+                            "variables": ["custom_marker"],
                         },
                     }
                 },
@@ -1617,9 +2047,11 @@ class StrictContentIdTests(unittest.TestCase):
         ref_handle.update(0.0)
         self.assertEqual(controller.variables["self_ref"]["entity_id"], "high")
         self.assertEqual(controller.variables["self_ref"]["grid_x"], 2)
+        self.assertTrue(controller.variables["self_ref"]["solid"])
+        self.assertTrue(controller.variables["self_ref"]["pushable"])
         self.assertEqual(
             controller.variables["self_ref"]["variables"],
-            {"blocks_movement": True, "pushable": True},
+            {"custom_marker": "blocking"},
         )
 
         selected_ref_handle = execute_command_spec(
@@ -1633,8 +2065,8 @@ class StrictContentIdTests(unittest.TestCase):
                     "$entity_ref": {
                         "entity_id": "high",
                         "select": {
-                            "fields": ["grid_x", "pixel_y", "present"],
-                            "variables": ["pushable"],
+                            "fields": ["grid_x", "pixel_y", "present", "pushable"],
+                            "variables": ["custom_marker"],
                             "visuals": [
                                 {
                                     "id": "main",
@@ -1653,7 +2085,8 @@ class StrictContentIdTests(unittest.TestCase):
                 "grid_x": 2,
                 "pixel_y": 0.0,
                 "present": True,
-                "variables": {"pushable": True},
+                "pushable": True,
+                "variables": {"custom_marker": "blocking"},
                 "visuals": {
                     "main": {
                         "visible": False,
@@ -1677,8 +2110,8 @@ class StrictContentIdTests(unittest.TestCase):
                         "y": 3,
                         "index": -1,
                         "select": {
-                            "fields": ["entity_id"],
-                            "variables": ["pushable"],
+                            "fields": ["entity_id", "pushable"],
+                            "variables": ["custom_marker"],
                         },
                         "default": None,
                     }
@@ -1688,7 +2121,11 @@ class StrictContentIdTests(unittest.TestCase):
         selected_target_handle.update(0.0)
         self.assertEqual(
             controller.variables["selected_target"],
-            {"entity_id": "high", "variables": {"pushable": True}},
+            {
+                "entity_id": "high",
+                "pushable": True,
+                "variables": {"custom_marker": "blocking"},
+            },
         )
 
         selected_targets_handle = execute_command_spec(
@@ -1703,8 +2140,8 @@ class StrictContentIdTests(unittest.TestCase):
                         "x": 2,
                         "y": 3,
                         "select": {
-                            "fields": ["entity_id"],
-                            "variables": ["blocks_movement", "pushable"],
+                            "fields": ["entity_id", "solid", "pushable"],
+                            "variables": ["custom_marker"],
                         },
                     }
                 },
@@ -1714,10 +2151,17 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(
             controller.variables["selected_targets"],
             [
-                {"entity_id": "low", "variables": {}},
+                {
+                    "entity_id": "low",
+                    "solid": False,
+                    "pushable": False,
+                    "variables": {},
+                },
                 {
                     "entity_id": "high",
-                    "variables": {"blocks_movement": True, "pushable": True},
+                    "solid": True,
+                    "pushable": True,
+                    "variables": {"custom_marker": "blocking"},
                 },
             ],
         )
@@ -3614,9 +4058,14 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("areas/village_square")
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3644,9 +4093,14 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("areas/village_square")
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3663,9 +4117,9 @@ class StrictContentIdTests(unittest.TestCase):
         for _ in range(20):
             game._advance_simulation_tick(1 / 60)
 
-        self.assertTrue(player.movement.active)
+        self.assertTrue(player.movement_state.active)
         self.assertTrue(visual.animation_playback.active)
-        self.assertIn(visual.current_frame, {1, 4, 7})
+        self.assertIn(visual.current_frame, {6, 7, 8})
         self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_sample_player_position_snapshots_stay_lightweight(self) -> None:
@@ -3673,9 +4127,14 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("areas/village_square")
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3696,7 +4155,7 @@ class StrictContentIdTests(unittest.TestCase):
             {"grid_x", "grid_y", "pixel_x", "pixel_y"},
         )
 
-        while player.movement.active:
+        while player.movement_state.active:
             game._advance_simulation_tick(1 / 60)
 
         walk_cleanup_position = player.variables["walk_cleanup_position"]
@@ -3711,9 +4170,14 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("areas/village_square")
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3737,12 +4201,7 @@ class StrictContentIdTests(unittest.TestCase):
             if not game.area.in_bounds(target_x, target_y):
                 continue
             cell_flags = game.area.cell_flags_at(target_x, target_y)
-            walkable = (
-                bool(cell_flags.get("walkable"))
-                if isinstance(cell_flags, dict)
-                else bool(cell_flags)
-            )
-            if not walkable:
+            if game.area.is_blocked(target_x, target_y):
                 continue
             blocking_entities = [
                 entity
@@ -3752,7 +4211,7 @@ class StrictContentIdTests(unittest.TestCase):
                     exclude_entity_id="player",
                     include_hidden=True,
                 )
-                if bool(entity.variables.get("blocks_movement"))
+                if entity.is_effectively_solid()
             ]
             if blocking_entities:
                 continue
@@ -3767,7 +4226,7 @@ class StrictContentIdTests(unittest.TestCase):
             command_id=selected_event_id,
         )
         game._advance_simulation_tick(1 / 60)
-        self.assertTrue(player.movement.active)
+        self.assertTrue(player.movement_state.active)
 
         for _ in range(4):
             game.command_runner.enqueue(
@@ -3787,9 +4246,14 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("areas/village_square")
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3809,7 +4273,7 @@ class StrictContentIdTests(unittest.TestCase):
         game._advance_simulation_tick(1 / 60)
 
         visual = player.require_visual("body")
-        self.assertTrue(player.movement.active)
+        self.assertTrue(player.movement_state.active)
         self.assertTrue(visual.flip_x)
 
         game.command_runner.enqueue(
@@ -3819,19 +4283,24 @@ class StrictContentIdTests(unittest.TestCase):
         )
         game._advance_simulation_tick(1 / 60)
 
-        self.assertTrue(player.movement.active)
+        self.assertTrue(player.movement_state.active)
         self.assertTrue(visual.flip_x)
-        self.assertEqual(player.variables["direction"], "right")
+        self.assertEqual(player.get_effective_facing(), "right")
         self.assertIsNone(game.command_runner.last_error_notice)
 
-    def test_sample_push_block_does_not_move_into_non_walkable_cells(self) -> None:
+    def test_sample_push_block_does_not_move_into_blocked_cells(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
         project = load_project(project_path)
-        area_path = project.resolve_area_reference("areas/village_house")
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
         game = Game(area_path=area_path, project=project)
@@ -3843,11 +4312,11 @@ class StrictContentIdTests(unittest.TestCase):
         block = game.world.get_entity("house_block")
         assert block is not None
 
-        game.movement_system.set_grid_position("house_block", 10, 8)
+        game.movement_system.set_grid_position("house_block", 5, 2)
         game.movement_system.set_pixel_position(
             "house_block",
-            10 * game.area.tile_size,
-            8 * game.area.tile_size,
+            5 * game.area.tile_size,
+            2 * game.area.tile_size,
         )
 
         game.command_runner.enqueue(
@@ -3857,12 +4326,12 @@ class StrictContentIdTests(unittest.TestCase):
         )
         game._advance_simulation_tick(1 / 60)
 
-        self.assertEqual((block.grid_x, block.grid_y), (10, 8))
+        self.assertEqual((block.grid_x, block.grid_y), (5, 2))
         self.assertEqual(
             (block.pixel_x, block.pixel_y),
-            (10 * game.area.tile_size, 8 * game.area.tile_size),
+            (5 * game.area.tile_size, 2 * game.area.tile_size),
         )
-        self.assertFalse(block.movement.active)
+        self.assertFalse(block.movement_state.active)
         self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_dialogue_choice_window_scrolls_after_three_visible_rows(self) -> None:
@@ -4036,7 +4505,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertFalse(controller.variables["dialogue_open"])
         self.assertTrue(lever.variables["toggled"])
         self.assertFalse(gate.visible)
-        self.assertFalse(gate.variables["blocks_movement"])
+        self.assertFalse(gate.is_effectively_solid())
         self.assertEqual(lever.require_visual("main").tint, (150, 150, 150))
         self.assertIsNone(game.command_runner.last_error_notice)
 
@@ -4375,7 +4844,7 @@ class StrictContentIdTests(unittest.TestCase):
         assert current_player is not None
         current_visual = current_player.get_primary_visual()
         assert current_visual is not None
-        current_player.variables["direction"] = "right"
+        current_player.set_facing_value("right")
         current_visual.current_frame = 2
 
         current_area_state = capture_current_area_state(
@@ -4397,7 +4866,7 @@ class StrictContentIdTests(unittest.TestCase):
         assert restored_player is not None
         restored_visual = restored_player.get_primary_visual()
         assert restored_visual is not None
-        self.assertEqual(restored_player.variables["direction"], "right")
+        self.assertEqual(restored_player.get_effective_facing(), "right")
         self.assertEqual(restored_visual.current_frame, 2)
 
     def test_runtime_token_lookup_rejects_removed_source_alias(self) -> None:

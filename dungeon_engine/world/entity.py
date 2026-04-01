@@ -123,6 +123,14 @@ class Entity:
     scope: EntityScope = "area"
     present: bool = True
     visible: bool = True
+    facing: Direction = "down"
+    solid: bool = False
+    pushable: bool = False
+    weight: int = 1
+    push_strength: int = 0
+    collision_push_strength: int = 0
+    interactable: bool = False
+    interaction_priority: int = 0
     entity_commands_enabled: bool = True
     render_order: int = 10
     y_sort: bool = True
@@ -136,7 +144,7 @@ class Entity:
     entity_commands: dict[str, EntityCommandDefinition] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
     input_map: dict[str, str] = field(default_factory=dict)
-    movement: MovementState = field(default_factory=MovementState)
+    movement_state: MovementState = field(default_factory=MovementState)
     animation_playback: AnimationPlaybackState = field(default_factory=AnimationPlaybackState)
     session_entity_id: str | None = None
     origin_area_id: str | None = None
@@ -173,7 +181,7 @@ class Entity:
         """Update whether the entity participates in the current scene."""
         self.present = bool(present)
         if not self.present:
-            self.movement.active = False
+            self.movement_state.active = False
             for visual in self.visuals:
                 visual.animation_playback.active = False
 
@@ -204,3 +212,37 @@ class Entity:
         if not self.visuals:
             return None
         return self.visuals[0]
+
+    def get_effective_facing(self) -> Direction:
+        """Return the normalized engine-owned facing value."""
+        resolved_facing = str(self.facing).strip().lower()
+        if resolved_facing in DIRECTION_VECTORS:
+            return resolved_facing  # type: ignore[return-value]
+        return "down"
+
+    def set_facing_value(self, facing: Direction) -> None:
+        """Set the engine-owned facing field."""
+        resolved_facing = str(facing).strip().lower()
+        if resolved_facing not in DIRECTION_VECTORS:
+            raise ValueError("Facing must be 'up', 'down', 'left', or 'right'.")
+        self.facing = resolved_facing  # type: ignore[assignment]
+
+    def is_effectively_solid(self) -> bool:
+        """Return whether the entity currently blocks standard movement."""
+        return bool(self.solid)
+
+    def set_solid_value(self, solid: bool) -> None:
+        """Set the engine-owned solid field."""
+        self.solid = bool(solid)
+
+    def is_effectively_pushable(self) -> bool:
+        """Return whether the entity currently participates in push resolution."""
+        return bool(self.pushable)
+
+    def set_pushable_value(self, pushable: bool) -> None:
+        """Set the engine-owned pushable field."""
+        self.pushable = bool(pushable)
+
+    def is_effectively_interactable(self) -> bool:
+        """Return whether the entity should be considered by standard interaction lookup."""
+        return bool(self.interactable) and self.has_enabled_entity_command("interact")
