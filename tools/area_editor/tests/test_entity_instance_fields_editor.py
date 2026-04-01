@@ -25,8 +25,9 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         self.panel.set_area_bounds(12, 9)
         self.catalog = TemplateCatalog()
         self.catalog._templates["entity_templates/area_door"] = {
-            "events": {
+            "entity_commands": {
                 "interact": {
+                    "enabled": True,
                     "commands": [
                         {
                             "type": "change_area",

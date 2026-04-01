@@ -51,8 +51,8 @@ class AnimationPlaybackState:
 
 
 @dataclass(slots=True)
-class EntityEvent:
-    """A command group owned by an entity event."""
+class EntityCommandDefinition:
+    """A named command chain owned by one entity."""
 
     enabled: bool = True
     commands: list[dict[str, Any]] = field(default_factory=list)
@@ -123,7 +123,7 @@ class Entity:
     scope: EntityScope = "area"
     present: bool = True
     visible: bool = True
-    events_enabled: bool = True
+    entity_commands_enabled: bool = True
     render_order: int = 10
     y_sort: bool = True
     sort_y_offset: float = 0.0
@@ -133,7 +133,7 @@ class Entity:
     template_parameters: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
     visuals: list[EntityVisual] = field(default_factory=list)
-    events: dict[str, EntityEvent] = field(default_factory=dict)
+    entity_commands: dict[str, EntityCommandDefinition] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
     input_map: dict[str, str] = field(default_factory=dict)
     movement: MovementState = field(default_factory=MovementState)
@@ -147,27 +147,27 @@ class Entity:
         self.pixel_x = self.grid_x * tile_size
         self.pixel_y = self.grid_y * tile_size
 
-    def get_event(self, event_id: str) -> EntityEvent | None:
-        """Return a named event definition when it exists."""
-        return self.events.get(event_id)
+    def get_entity_command(self, command_id: str) -> EntityCommandDefinition | None:
+        """Return one named entity command definition when it exists."""
+        return self.entity_commands.get(command_id)
 
-    def has_enabled_event(self, event_id: str) -> bool:
-        """Return True when the named event exists and is enabled."""
-        if not self.events_enabled:
+    def has_enabled_entity_command(self, command_id: str) -> bool:
+        """Return True when the named entity command exists and is enabled."""
+        if not self.entity_commands_enabled:
             return False
-        event = self.get_event(event_id)
-        return event is not None and event.enabled
+        entity_command = self.get_entity_command(command_id)
+        return entity_command is not None and entity_command.enabled
 
-    def set_event_enabled(self, event_id: str, enabled: bool) -> None:
-        """Update the enabled state for one named event."""
-        event = self.get_event(event_id)
-        if event is None:
-            raise KeyError(f"Entity '{self.entity_id}' has no event '{event_id}'.")
-        event.enabled = enabled
+    def set_entity_command_enabled(self, command_id: str, enabled: bool) -> None:
+        """Update the enabled state for one named entity command."""
+        entity_command = self.get_entity_command(command_id)
+        if entity_command is None:
+            raise KeyError(f"Entity '{self.entity_id}' has no entity command '{command_id}'.")
+        entity_command.enabled = enabled
 
-    def set_events_enabled(self, enabled: bool) -> None:
-        """Update the global enabled state for all events on this entity."""
-        self.events_enabled = enabled
+    def set_entity_commands_enabled(self, enabled: bool) -> None:
+        """Update the global enabled state for all named entity commands on this entity."""
+        self.entity_commands_enabled = enabled
 
     def set_present(self, present: bool) -> None:
         """Update whether the entity participates in the current scene."""

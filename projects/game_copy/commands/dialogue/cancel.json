@@ -2,17 +2,21 @@
   "params": [],
   "commands": [
     {
-      "type": "check_entity_var",
-      "name": "dialogue_allow_cancel",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/close_current_dialogue"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_allow_cancel"
+        }
+      },
+      "right": true
     }
   ]
 }

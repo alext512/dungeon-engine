@@ -4,11 +4,8 @@
   ],
   "commands": [
     {
-      "type": "check_entity_var",
-      "entity_id": "progress_controller",
-      "name": "levels_completed",
+      "type": "if",
       "op": "lt",
-      "value": "$level_number",
       "then": [
         {
           "type": "set_entity_var",
@@ -17,7 +14,14 @@
           "value": "$level_number",
           "persistent": true
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "progress_controller",
+          "name": "levels_completed"
+        }
+      },
+      "right": "$level_number"
     }
   ]
 }

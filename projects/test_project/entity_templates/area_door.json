@@ -14,7 +14,7 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "interact": {
       "enabled": true,
       "commands": [
@@ -23,11 +23,11 @@
           "area_id": "$target_area",
           "entry_id": "$target_entry",
           "transfer_entity_ids": [
-            "actor"
+            "$ref_ids.instigator"
           ],
           "camera_follow": {
             "mode": "entity",
-            "entity_id": "actor"
+            "entity_id": "$ref_ids.instigator"
           }
         }
       ]

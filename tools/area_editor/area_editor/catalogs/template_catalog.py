@@ -19,7 +19,16 @@ log = logging.getLogger(__name__)
 
 _EXACT_TOKEN_RE = re.compile(r"^\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))$")
 _EMBEDDED_TOKEN_RE = re.compile(r"\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))")
-_BUILTIN_VARIABLES = frozenset({"self_id", "actor_id", "caller_id"})
+_BUILTIN_VARIABLES = frozenset({
+    "self",
+    "self_id",
+    "refs",
+    "ref_ids",
+    "project",
+    "current_area",
+    "area",
+    "camera",
+})
 
 
 @dataclass

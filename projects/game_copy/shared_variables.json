@@ -28,7 +28,11 @@
       "x": 12,
       "width": 232
     },
-    "choice_rows_y": [132, 142, 152]
+    "choice_rows_y": [
+      132,
+      142,
+      152
+    ]
   },
   "movement": {
     "ticks_per_tile": 16

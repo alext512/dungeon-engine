@@ -8,23 +8,27 @@
       "value": "$self.dialogue_definition.segments"
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_segment_index",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "gte",
-      "value": "$self.dialogue_segment_count",
       "then": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/close_current_dialogue"
         }
       ],
       "else": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/load_and_render_segment"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_segment_index"
+        }
+      },
+      "right": "$self.dialogue_segment_count"
     }
   ]
 }

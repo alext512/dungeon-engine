@@ -24,12 +24,12 @@
       "offset_y": -4
     }
   ],
-  "events": {
+  "entity_commands": {
     "interact": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/movement/interact_one_tile"
         }
       ]
@@ -38,7 +38,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/movement/attempt_move_one_tile",
           "direction": "up",
           "flip_x": false,
@@ -61,7 +61,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/movement/attempt_move_one_tile",
           "direction": "down",
           "flip_x": false,
@@ -84,7 +84,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/movement/attempt_move_one_tile",
           "direction": "left",
           "flip_x": false,
@@ -107,7 +107,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/movement/attempt_move_one_tile",
           "direction": "right",
           "flip_x": false,

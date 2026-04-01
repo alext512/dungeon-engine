@@ -18,7 +18,12 @@
         "$entity_ref": {
           "entity_id": "$self_id",
           "select": {
-            "fields": ["grid_x", "grid_y", "pixel_x", "pixel_y"]
+            "fields": [
+              "grid_x",
+              "grid_y",
+              "pixel_x",
+              "pixel_y"
+            ]
           }
         }
       }
@@ -40,7 +45,10 @@
       "entity_id": "$self_id",
       "name": "move_expected_pixel_x",
       "value": {
-        "$product": ["$self.move_self_position.grid_x", "$area.tile_size"]
+        "$product": [
+          "$self.move_self_position.grid_x",
+          "$area.tile_size"
+        ]
       }
     },
     {
@@ -48,7 +56,10 @@
       "entity_id": "$self_id",
       "name": "move_expected_pixel_y",
       "value": {
-        "$product": ["$self.move_self_position.grid_y", "$area.tile_size"]
+        "$product": [
+          "$self.move_self_position.grid_y",
+          "$area.tile_size"
+        ]
       }
     },
     {
@@ -58,13 +69,28 @@
       "value": {
         "$collection_item": {
           "value": {
-            "up": { "x": 0, "y": -1 },
-            "down": { "x": 0, "y": 1 },
-            "left": { "x": -1, "y": 0 },
-            "right": { "x": 1, "y": 0 }
+            "up": {
+              "x": 0,
+              "y": -1
+            },
+            "down": {
+              "x": 0,
+              "y": 1
+            },
+            "left": {
+              "x": -1,
+              "y": 0
+            },
+            "right": {
+              "x": 1,
+              "y": 0
+            }
           },
           "key": "$direction",
-          "default": { "x": 0, "y": 0 }
+          "default": {
+            "x": 0,
+            "y": 0
+          }
         }
       }
     },
@@ -73,7 +99,10 @@
       "entity_id": "$self_id",
       "name": "move_target_x",
       "value": {
-        "$sum": ["$self.move_self_position.grid_x", "$self.move_offset.x"]
+        "$sum": [
+          "$self.move_self_position.grid_x",
+          "$self.move_offset.x"
+        ]
       }
     },
     {
@@ -81,7 +110,10 @@
       "entity_id": "$self_id",
       "name": "move_target_y",
       "value": {
-        "$sum": ["$self.move_self_position.grid_y", "$self.move_offset.y"]
+        "$sum": [
+          "$self.move_self_position.grid_y",
+          "$self.move_offset.y"
+        ]
       }
     },
     {
@@ -121,8 +153,13 @@
           "exclude_entity_id": "$self_id",
           "include_hidden": true,
           "select": {
-            "fields": ["entity_id"],
-            "variables": ["blocks_movement", "pushable"]
+            "fields": [
+              "entity_id"
+            ],
+            "variables": [
+              "blocks_movement",
+              "pushable"
+            ]
           }
         }
       }
@@ -142,18 +179,12 @@
       }
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "move_current_pixel_x",
+      "type": "if",
       "op": "eq",
-      "value": "$self.move_expected_pixel_x",
       "then": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "move_current_pixel_y",
+          "type": "if",
           "op": "eq",
-          "value": "$self.move_expected_pixel_y",
           "then": [
             {
               "type": "set_visual_flip_x",
@@ -185,11 +216,8 @@
               "value": "$idle_frame"
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "move_target_walkable",
+              "type": "if",
               "op": "eq",
-              "value": false,
               "then": [
                 {
                   "type": "set_visual_frame",
@@ -199,14 +227,11 @@
               ],
               "else": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "move_blocking_entity",
+                  "type": "if",
                   "op": "eq",
-                  "value": null,
                   "then": [
                     {
-                      "type": "run_command",
+                      "type": "run_project_command",
                       "command_id": "commands/movement/walk_one_tile",
                       "offset_x": "$self.move_offset.x",
                       "offset_y": "$self.move_offset.y",
@@ -231,17 +256,16 @@
                       }
                     },
                     {
-                      "type": "check_entity_var",
-                      "entity_id": "$self_id",
-                      "name": "move_blocking_entity_pushable",
+                      "type": "if",
                       "op": "eq",
-                      "value": true,
                       "then": [
                         {
-                          "type": "run_event",
+                          "type": "run_entity_command",
                           "entity_id": "$self.move_blocking_entity.entity_id",
-                          "event_id": "$push_event_id",
-                          "actor_entity_id": "$self_id"
+                          "command_id": "$push_event_id",
+                          "entity_refs": {
+                            "instigator": "$self_id"
+                          }
                         },
                         {
                           "type": "set_entity_var",
@@ -254,8 +278,13 @@
                               "exclude_entity_id": "$self_id",
                               "include_hidden": true,
                               "select": {
-                                "fields": ["entity_id"],
-                                "variables": ["blocks_movement", "pushable"]
+                                "fields": [
+                                  "entity_id"
+                                ],
+                                "variables": [
+                                  "blocks_movement",
+                                  "pushable"
+                                ]
                               }
                             }
                           }
@@ -275,14 +304,11 @@
                           }
                         },
                         {
-                          "type": "check_entity_var",
-                          "entity_id": "$self_id",
-                          "name": "move_blocking_entity",
+                          "type": "if",
                           "op": "eq",
-                          "value": null,
                           "then": [
                             {
-                              "type": "run_command",
+                              "type": "run_project_command",
                               "command_id": "commands/movement/walk_one_tile",
                               "offset_x": "$self.move_offset.x",
                               "offset_y": "$self.move_offset.y",
@@ -299,7 +325,14 @@
                               "entity_id": "$self_id",
                               "frame": "$idle_frame"
                             }
-                          ]
+                          ],
+                          "left": {
+                            "$entity_var": {
+                              "entity_id": "$self_id",
+                              "name": "move_blocking_entity"
+                            }
+                          },
+                          "right": null
                         }
                       ],
                       "else": [
@@ -308,15 +341,50 @@
                           "entity_id": "$self_id",
                           "frame": "$idle_frame"
                         }
-                      ]
+                      ],
+                      "left": {
+                        "$entity_var": {
+                          "entity_id": "$self_id",
+                          "name": "move_blocking_entity_pushable"
+                        }
+                      },
+                      "right": true
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "move_blocking_entity"
+                    }
+                  },
+                  "right": null
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "move_target_walkable"
+                }
+              },
+              "right": false
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "move_current_pixel_y"
+            }
+          },
+          "right": "$self.move_expected_pixel_y"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "move_current_pixel_x"
+        }
+      },
+      "right": "$self.move_expected_pixel_x"
     }
   ]
 }

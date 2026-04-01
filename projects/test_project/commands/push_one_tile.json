@@ -11,13 +11,28 @@
       "value": {
         "$collection_item": {
           "value": {
-            "up": { "x": 0, "y": -1 },
-            "down": { "x": 0, "y": 1 },
-            "left": { "x": -1, "y": 0 },
-            "right": { "x": 1, "y": 0 }
+            "up": {
+              "x": 0,
+              "y": -1
+            },
+            "down": {
+              "x": 0,
+              "y": 1
+            },
+            "left": {
+              "x": -1,
+              "y": 0
+            },
+            "right": {
+              "x": 1,
+              "y": 0
+            }
           },
           "key": "$direction",
-          "default": { "x": 0, "y": 0 }
+          "default": {
+            "x": 0,
+            "y": 0
+          }
         }
       }
     },
@@ -121,18 +136,12 @@
       }
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "push_target_walkable",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "push_blocking_entity",
+          "type": "if",
           "op": "eq",
-          "value": null,
           "then": [
             {
               "type": "set_entity_grid_position",
@@ -164,9 +173,23 @@
               "frames_needed": "$frames_needed",
               "wait": false
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "push_blocking_entity"
+            }
+          },
+          "right": null
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "push_target_walkable"
+        }
+      },
+      "right": true
     }
   ]
 }

@@ -4,18 +4,12 @@
   ],
   "commands": [
     {
-      "type": "check_entity_var",
-      "name": "dialogue_phase",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": "choice",
       "then": [
         {
-          "type": "check_entity_var",
-          "name": "dialogue_current_option_count",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "gt",
-          "value": 0,
           "then": [
             {
               "type": "set_entity_var",
@@ -35,11 +29,8 @@
               }
             },
             {
-              "type": "check_entity_var",
-              "name": "dialogue_choice_index",
-              "entity_id": "$self_id",
+              "type": "if",
               "op": "lt",
-              "value": "$self.dialogue_choice_scroll_offset",
               "then": [
                 {
                   "type": "set_entity_var",
@@ -50,16 +41,8 @@
               ],
               "else": [
                 {
-                  "type": "check_entity_var",
-                  "name": "dialogue_choice_index",
-                  "entity_id": "$self_id",
+                  "type": "if",
                   "op": "gte",
-                  "value": {
-                    "$sum": [
-                      "$self.dialogue_choice_scroll_offset",
-                      "$self.layout.choice.visible_rows"
-                    ]
-                  },
                   "then": [
                     {
                       "type": "set_entity_var",
@@ -78,17 +61,50 @@
                         ]
                       }
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "dialogue_choice_index"
+                    }
+                  },
+                  "right": {
+                    "$sum": [
+                      "$self.dialogue_choice_scroll_offset",
+                      "$self.layout.choice.visible_rows"
+                    ]
+                  }
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "dialogue_choice_index"
+                }
+              },
+              "right": "$self.dialogue_choice_scroll_offset"
             },
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/dialogue/render_choice"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_current_option_count"
+            }
+          },
+          "right": 0
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_phase"
+        }
+      },
+      "right": "choice"
     }
   ]
 }

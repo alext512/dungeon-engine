@@ -5,12 +5,13 @@
     "entities": {
       "progress_controller": {
         "variables": {
-          "last_level_played": 1
+          "last_level_played": 2,
+          "levels_completed": 1
         }
       }
     }
   },
-  "current_area": "areas/level1",
+  "current_area": "areas/level2",
   "areas": {},
   "current_input_targets": {
     "move_up": "player",
@@ -20,8 +21,8 @@
     "interact": "player"
   },
   "current_camera": {
-    "x": -32.0,
-    "y": 80.0,
+    "x": -56.0,
+    "y": -8.0,
     "follow": {
       "mode": "entity",
       "offset_x": 0.0,
@@ -31,8 +32,8 @@
     "bounds": {
       "x": 0.0,
       "y": 0.0,
-      "width": 192.0,
-      "height": 272.0
+      "width": 144.0,
+      "height": 176.0
     }
   }
 }

@@ -118,9 +118,9 @@
   ],
   "enter_commands": [
     {
-      "type": "run_event",
+      "type": "run_entity_command",
       "entity_id": "progress_controller",
-      "event_id": "refresh_level_select_entry"
+      "command_id": "refresh_level_select_entry"
     },
     {
       "type": "set_entity_grid_position",
@@ -130,11 +130,8 @@
       "mode": "absolute"
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "progress_controller",
-      "name": "last_level_played",
+      "type": "if",
       "op": "eq",
-      "value": 2,
       "then": [
         {
           "type": "set_entity_grid_position",
@@ -146,11 +143,8 @@
       ],
       "else": [
         {
-          "type": "check_entity_var",
-          "entity_id": "progress_controller",
-          "name": "last_level_played",
+          "type": "if",
           "op": "eq",
-          "value": 3,
           "then": [
             {
               "type": "set_entity_grid_position",
@@ -162,11 +156,8 @@
           ],
           "else": [
             {
-              "type": "check_entity_var",
-              "entity_id": "progress_controller",
-              "name": "last_level_played",
+              "type": "if",
               "op": "eq",
-              "value": 4,
               "then": [
                 {
                   "type": "set_entity_grid_position",
@@ -178,11 +169,8 @@
               ],
               "else": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "progress_controller",
-                  "name": "last_level_played",
+                  "type": "if",
                   "op": "eq",
-                  "value": 5,
                   "then": [
                     {
                       "type": "set_entity_grid_position",
@@ -191,13 +179,41 @@
                       "y": 6,
                       "mode": "absolute"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "progress_controller",
+                      "name": "last_level_played"
+                    }
+                  },
+                  "right": 5
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "progress_controller",
+                  "name": "last_level_played"
+                }
+              },
+              "right": 4
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "progress_controller",
+              "name": "last_level_played"
+            }
+          },
+          "right": 3
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "progress_controller",
+          "name": "last_level_played"
+        }
+      },
+      "right": 2
     },
     {
       "type": "set_entity_field",
@@ -248,11 +264,8 @@
       "value": false
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "progress_controller",
-      "name": "levels_completed",
+      "type": "if",
       "op": "gte",
-      "value": 1,
       "then": [
         {
           "type": "set_entity_field",
@@ -266,14 +279,18 @@
           "field_name": "visible",
           "value": true
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "progress_controller",
+          "name": "levels_completed"
+        }
+      },
+      "right": 1
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "progress_controller",
-      "name": "levels_completed",
+      "type": "if",
       "op": "gte",
-      "value": 2,
       "then": [
         {
           "type": "set_entity_field",
@@ -287,14 +304,18 @@
           "field_name": "visible",
           "value": true
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "progress_controller",
+          "name": "levels_completed"
+        }
+      },
+      "right": 2
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "progress_controller",
-      "name": "levels_completed",
+      "type": "if",
       "op": "gte",
-      "value": 3,
       "then": [
         {
           "type": "set_entity_field",
@@ -308,14 +329,18 @@
           "field_name": "visible",
           "value": true
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "progress_controller",
+          "name": "levels_completed"
+        }
+      },
+      "right": 3
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "progress_controller",
-      "name": "levels_completed",
+      "type": "if",
       "op": "gte",
-      "value": 4,
       "then": [
         {
           "type": "set_entity_field",
@@ -329,7 +354,14 @@
           "field_name": "visible",
           "value": true
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "progress_controller",
+          "name": "levels_completed"
+        }
+      },
+      "right": 4
     }
   ],
   "entry_points": {},
@@ -382,9 +414,9 @@
             "option_commands_by_id": {
               "yes": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "dialogue_controller",
-                  "event_id": "open_dialogue",
+                  "command_id": "open_dialogue",
                   "dialogue_path": "dialogues/system/delete_save_confirm.json",
                   "dialogue_on_start": [],
                   "dialogue_on_end": [],
@@ -394,7 +426,7 @@
                       "option_commands_by_id": {
                         "yes": [
                           {
-                            "type": "run_command",
+                            "type": "run_project_command",
                             "command_id": "commands/system/reset_progress"
                           }
                         ]
@@ -402,8 +434,10 @@
                     }
                   ],
                   "allow_cancel": true,
-                  "actor_entity_id": "$actor_id",
-                  "caller_entity_id": "$self_id"
+                  "entity_refs": {
+                    "instigator": "$ref_ids.instigator",
+                    "caller": "$self_id"
+                  }
                 }
               ]
             }
@@ -476,14 +510,14 @@
         "blocks_movement": false
       },
       "visuals": [],
-      "events": {
+      "entity_commands": {
         "interact": {
           "enabled": true,
           "commands": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "dialogue_controller",
-              "event_id": "open_dialogue",
+              "command_id": "open_dialogue",
               "dialogue_path": "dialogues/level_select/level1.json",
               "dialogue_on_start": [],
               "dialogue_on_end": [],
@@ -493,7 +527,7 @@
                   "option_commands_by_id": {
                     "yes": [
                       {
-                        "type": "run_command",
+                        "type": "run_project_command",
                         "command_id": "commands/system/start_level",
                         "level_number": 1,
                         "area_id": "areas/level1"
@@ -503,8 +537,10 @@
                 }
               ],
               "allow_cancel": true,
-              "actor_entity_id": "$actor_id",
-              "caller_entity_id": "$self_id"
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
             }
           ]
         }
@@ -521,14 +557,14 @@
         "blocks_movement": false
       },
       "visuals": [],
-      "events": {
+      "entity_commands": {
         "interact": {
           "enabled": true,
           "commands": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "dialogue_controller",
-              "event_id": "open_dialogue",
+              "command_id": "open_dialogue",
               "dialogue_path": "dialogues/level_select/level2.json",
               "dialogue_on_start": [],
               "dialogue_on_end": [],
@@ -538,7 +574,7 @@
                   "option_commands_by_id": {
                     "yes": [
                       {
-                        "type": "run_command",
+                        "type": "run_project_command",
                         "command_id": "commands/system/start_level",
                         "level_number": 2,
                         "area_id": "areas/level2"
@@ -548,8 +584,10 @@
                 }
               ],
               "allow_cancel": true,
-              "actor_entity_id": "$actor_id",
-              "caller_entity_id": "$self_id"
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
             }
           ]
         }
@@ -566,14 +604,14 @@
         "blocks_movement": false
       },
       "visuals": [],
-      "events": {
+      "entity_commands": {
         "interact": {
           "enabled": true,
           "commands": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "dialogue_controller",
-              "event_id": "open_dialogue",
+              "command_id": "open_dialogue",
               "dialogue_path": "dialogues/level_select/level3.json",
               "dialogue_on_start": [],
               "dialogue_on_end": [],
@@ -583,7 +621,7 @@
                   "option_commands_by_id": {
                     "yes": [
                       {
-                        "type": "run_command",
+                        "type": "run_project_command",
                         "command_id": "commands/system/start_level",
                         "level_number": 3,
                         "area_id": "areas/level3"
@@ -593,8 +631,10 @@
                 }
               ],
               "allow_cancel": true,
-              "actor_entity_id": "$actor_id",
-              "caller_entity_id": "$self_id"
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
             }
           ]
         }
@@ -611,14 +651,14 @@
         "blocks_movement": false
       },
       "visuals": [],
-      "events": {
+      "entity_commands": {
         "interact": {
           "enabled": true,
           "commands": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "dialogue_controller",
-              "event_id": "open_dialogue",
+              "command_id": "open_dialogue",
               "dialogue_path": "dialogues/level_select/level4.json",
               "dialogue_on_start": [],
               "dialogue_on_end": [],
@@ -628,7 +668,7 @@
                   "option_commands_by_id": {
                     "yes": [
                       {
-                        "type": "run_command",
+                        "type": "run_project_command",
                         "command_id": "commands/system/start_level",
                         "level_number": 4,
                         "area_id": "areas/level4"
@@ -638,8 +678,10 @@
                 }
               ],
               "allow_cancel": true,
-              "actor_entity_id": "$actor_id",
-              "caller_entity_id": "$self_id"
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
             }
           ]
         }
@@ -656,14 +698,14 @@
         "blocks_movement": false
       },
       "visuals": [],
-      "events": {
+      "entity_commands": {
         "interact": {
           "enabled": true,
           "commands": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "dialogue_controller",
-              "event_id": "open_dialogue",
+              "command_id": "open_dialogue",
               "dialogue_path": "dialogues/level_select/level5.json",
               "dialogue_on_start": [],
               "dialogue_on_end": [],
@@ -673,7 +715,7 @@
                   "option_commands_by_id": {
                     "yes": [
                       {
-                        "type": "run_command",
+                        "type": "run_project_command",
                         "command_id": "commands/system/start_level",
                         "level_number": 5,
                         "area_id": "areas/level5"
@@ -683,8 +725,10 @@
                 }
               ],
               "allow_cancel": true,
-              "actor_entity_id": "$actor_id",
-              "caller_entity_id": "$self_id"
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
             }
           ]
         }

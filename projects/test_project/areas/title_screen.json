@@ -455,9 +455,9 @@
   ],
   "enter_commands": [
     {
-      "type": "run_event",
+      "type": "run_entity_command",
       "entity_id": "dialogue_controller",
-      "event_id": "open_dialogue",
+      "command_id": "open_dialogue",
       "dialogue_path": "dialogues/system/title_menu.json",
       "dialogue_on_start": [
         {
@@ -469,46 +469,58 @@
       ],
       "dialogue_on_end": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "pending_title_menu_action",
+          "type": "if",
           "op": "eq",
-          "value": "new_game",
           "then": [
-              {
-                "type": "new_game",
-                "area_id": "areas/village_square",
-                "entry_id": "startup",
-                "camera_follow": {
-                  "mode": "entity",
+            {
+              "type": "new_game",
+              "area_id": "areas/village_square",
+              "entry_id": "startup",
+              "camera_follow": {
+                "mode": "entity",
                 "entity_id": "player"
               }
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "pending_title_menu_action"
+            }
+          },
+          "right": "new_game"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "pending_title_menu_action",
+          "type": "if",
           "op": "eq",
-          "value": "load_game",
           "then": [
             {
               "type": "load_game"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "pending_title_menu_action"
+            }
+          },
+          "right": "load_game"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "pending_title_menu_action",
+          "type": "if",
           "op": "eq",
-          "value": "exit",
           "then": [
             {
               "type": "quit_game"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "pending_title_menu_action"
+            }
+          },
+          "right": "exit"
         },
         {
           "type": "set_entity_var",
@@ -548,8 +560,10 @@
         }
       ],
       "allow_cancel": false,
-      "actor_entity_id": "dialogue_controller",
-      "caller_entity_id": "dialogue_controller"
+      "entity_refs": {
+        "instigator": "dialogue_controller",
+        "caller": "dialogue_controller"
+      }
     }
   ],
   "entities": [

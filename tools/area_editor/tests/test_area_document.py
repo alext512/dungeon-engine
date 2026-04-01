@@ -92,13 +92,16 @@ class TestUnknownFieldPreservation(unittest.TestCase):
             "render_order": 10,
             "kind": "lever",
             "visuals": [{"id": "main"}],
-            "events": {"interact": []},
+            "entity_commands": {"interact": {"enabled": True, "commands": []}},
         }
         ent = EntityDocument.from_dict(raw)
         out = ent.to_dict()
         self.assertEqual(out["kind"], "lever")
         self.assertEqual(out["visuals"], [{"id": "main"}])
-        self.assertEqual(out["events"], {"interact": []})
+        self.assertEqual(
+            out["entity_commands"],
+            {"interact": {"enabled": True, "commands": []}},
+        )
 
 
 class TestEntityPositioning(unittest.TestCase):

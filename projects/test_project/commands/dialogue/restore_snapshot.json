@@ -170,7 +170,7 @@
       "value": {}
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/dialogue/load_and_render_segment"
     }
   ]

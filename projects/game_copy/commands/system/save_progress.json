@@ -2,9 +2,9 @@
   "params": [],
   "commands": [
     {
-      "type": "run_event",
+      "type": "run_entity_command",
       "entity_id": "progress_controller",
-      "event_id": "refresh_level_select_entry"
+      "command_id": "refresh_level_select_entry"
     },
     {
       "type": "save_game",

@@ -120,7 +120,7 @@ They should not feel like mini scripting languages that also resolve every possi
 The project still needs reusable composition tools.
 
 In particular:
-- entity events are useful
+- entity-owned named command chains are useful
 - named reusable command chains are useful
 
 These are not the problem.

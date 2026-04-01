@@ -17,17 +17,17 @@
         "$entity_ref": {
           "entity_id": "$self_id",
           "select": {
-            "fields": ["grid_x", "grid_y"]
+            "fields": [
+              "grid_x",
+              "grid_y"
+            ]
           }
         }
       }
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "walk_phase",
+      "type": "if",
       "op": "eq",
-      "value": 1,
       "then": [
         {
           "type": "play_animation",
@@ -57,7 +57,14 @@
           "name": "walk_phase",
           "value": 1
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "walk_phase"
+        }
+      },
+      "right": 1
     },
     {
       "type": "set_entity_grid_position",
@@ -67,30 +74,40 @@
       "mode": "relative"
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/movement/run_tile_triggers",
       "x": "$self.walk_origin.grid_x",
       "y": "$self.walk_origin.grid_y",
-      "tags_any": ["leave_trigger"],
-      "event_id": "left_by",
+      "tags_any": [
+        "leave_trigger"
+      ],
+      "trigger_command_id": "left_by",
       "exclude_entity_id": "$self_id",
-      "actor_entity_id": "$self_id",
-      "caller_entity_id": "$self_id"
+      "entity_refs": {
+        "instigator": "$self_id",
+        "caller": "$self_id"
+      }
     },
     {
       "type": "spawn_flow",
       "commands": [
         {
-          "type": "run_sequence",
+          "type": "run_commands",
           "commands": [
             {
               "type": "move_entity_world_position",
               "entity_id": "$self_id",
               "x": {
-                "$product": ["$offset_x", "$area.tile_size"]
+                "$product": [
+                  "$offset_x",
+                  "$area.tile_size"
+                ]
               },
               "y": {
-                "$product": ["$offset_y", "$area.tile_size"]
+                "$product": [
+                  "$offset_y",
+                  "$area.tile_size"
+                ]
               },
               "mode": "relative",
               "frames_needed": "$frames_needed"
@@ -103,21 +120,30 @@
                 "$entity_ref": {
                   "entity_id": "$self_id",
                   "select": {
-                    "fields": ["grid_x", "grid_y", "pixel_x", "pixel_y"]
+                    "fields": [
+                      "grid_x",
+                      "grid_y",
+                      "pixel_x",
+                      "pixel_y"
+                    ]
                   }
                 }
               }
             },
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/movement/run_tile_triggers",
               "x": "$self.walk_destination.grid_x",
               "y": "$self.walk_destination.grid_y",
-              "tags_any": ["enter_trigger"],
-              "event_id": "entered_by",
+              "tags_any": [
+                "enter_trigger"
+              ],
+              "trigger_command_id": "entered_by",
               "exclude_entity_id": "$self_id",
-              "actor_entity_id": "$self_id",
-              "caller_entity_id": "$self_id"
+              "entity_refs": {
+                "instigator": "$self_id",
+                "caller": "$self_id"
+              }
             },
             {
               "type": "set_entity_var",
@@ -136,7 +162,10 @@
               "entity_id": "$self_id",
               "name": "walk_cleanup_expected_pixel_x",
               "value": {
-                "$product": ["$self.walk_destination.grid_x", "$area.tile_size"]
+                "$product": [
+                  "$self.walk_destination.grid_x",
+                  "$area.tile_size"
+                ]
               }
             },
             {
@@ -144,22 +173,19 @@
               "entity_id": "$self_id",
               "name": "walk_cleanup_expected_pixel_y",
               "value": {
-                "$product": ["$self.walk_destination.grid_y", "$area.tile_size"]
+                "$product": [
+                  "$self.walk_destination.grid_y",
+                  "$area.tile_size"
+                ]
               }
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "walk_cleanup_current_pixel_x",
+              "type": "if",
               "op": "eq",
-              "value": "$self.walk_cleanup_expected_pixel_x",
               "then": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "walk_cleanup_current_pixel_y",
+                  "type": "if",
                   "op": "eq",
-                  "value": "$self.walk_cleanup_expected_pixel_y",
                   "then": [
                     {
                       "type": "stop_animation",
@@ -171,9 +197,23 @@
                       "entity_id": "$self_id",
                       "frame": "$idle_frame"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "walk_cleanup_current_pixel_y"
+                    }
+                  },
+                  "right": "$self.walk_cleanup_expected_pixel_y"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "walk_cleanup_current_pixel_x"
+                }
+              },
+              "right": "$self.walk_cleanup_expected_pixel_x"
             }
           ]
         }

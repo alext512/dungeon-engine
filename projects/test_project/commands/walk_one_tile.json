@@ -10,11 +10,8 @@
   ],
   "commands": [
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "walk_phase",
+      "type": "if",
       "op": "eq",
-      "value": 1,
       "then": [
         {
           "type": "play_animation",
@@ -44,7 +41,14 @@
           "name": "walk_phase",
           "value": 1
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "walk_phase"
+        }
+      },
+      "right": 1
     },
     {
       "type": "set_entity_grid_position",
@@ -57,7 +61,7 @@
       "type": "spawn_flow",
       "commands": [
         {
-          "type": "run_sequence",
+          "type": "run_commands",
           "commands": [
             {
               "type": "move_entity_world_position",
@@ -130,18 +134,12 @@
               }
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "walk_cleanup_current_pixel_x",
+              "type": "if",
               "op": "eq",
-              "value": "$self.walk_cleanup_expected_pixel_x",
               "then": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "walk_cleanup_current_pixel_y",
+                  "type": "if",
                   "op": "eq",
-                  "value": "$self.walk_cleanup_expected_pixel_y",
                   "then": [
                     {
                       "type": "stop_animation",
@@ -153,9 +151,23 @@
                       "entity_id": "$self_id",
                       "frame": "$idle_frame"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "walk_cleanup_current_pixel_y"
+                    }
+                  },
+                  "right": "$self.walk_cleanup_expected_pixel_y"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "walk_cleanup_current_pixel_x"
+                }
+              },
+              "right": "$self.walk_cleanup_expected_pixel_x"
             }
           ]
         }

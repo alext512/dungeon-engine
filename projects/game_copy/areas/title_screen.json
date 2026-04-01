@@ -447,9 +447,9 @@
   ],
   "enter_commands": [
     {
-      "type": "run_event",
+      "type": "run_entity_command",
       "entity_id": "dialogue_controller",
-      "event_id": "open_dialogue",
+      "command_id": "open_dialogue",
       "dialogue_path": "dialogues/system/title_level_select.json",
       "dialogue_on_start": [
         {
@@ -461,79 +461,99 @@
       ],
       "dialogue_on_end": [
         {
-          "type": "check_entity_var",
-          "entity_id": "dialogue_controller",
-          "name": "pending_title_level",
+          "type": "if",
           "op": "eq",
-          "value": "level_1",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/system/start_level",
               "level_number": 1,
               "area_id": "areas/level1"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "dialogue_controller",
+              "name": "pending_title_level"
+            }
+          },
+          "right": "level_1"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "dialogue_controller",
-          "name": "pending_title_level",
+          "type": "if",
           "op": "eq",
-          "value": "level_2",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/system/start_level",
               "level_number": 2,
               "area_id": "areas/level2"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "dialogue_controller",
+              "name": "pending_title_level"
+            }
+          },
+          "right": "level_2"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "dialogue_controller",
-          "name": "pending_title_level",
+          "type": "if",
           "op": "eq",
-          "value": "level_3",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/system/start_level",
               "level_number": 3,
               "area_id": "areas/level3"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "dialogue_controller",
+              "name": "pending_title_level"
+            }
+          },
+          "right": "level_3"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "dialogue_controller",
-          "name": "pending_title_level",
+          "type": "if",
           "op": "eq",
-          "value": "level_4",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/system/start_level",
               "level_number": 4,
               "area_id": "areas/level4"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "dialogue_controller",
+              "name": "pending_title_level"
+            }
+          },
+          "right": "level_4"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "dialogue_controller",
-          "name": "pending_title_level",
+          "type": "if",
           "op": "eq",
-          "value": "level_5",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/system/start_level",
               "level_number": 5,
               "area_id": "areas/level5"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "dialogue_controller",
+              "name": "pending_title_level"
+            }
+          },
+          "right": "level_5"
         },
         {
           "type": "set_entity_var",
@@ -589,8 +609,10 @@
         }
       ],
       "allow_cancel": false,
-      "actor_entity_id": "dialogue_controller",
-      "caller_entity_id": "dialogue_controller"
+      "entity_refs": {
+        "instigator": "dialogue_controller",
+        "caller": "dialogue_controller"
+      }
     }
   ],
   "entry_points": {

@@ -428,8 +428,9 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (templates / "area_door.json").write_text(
             (
                 '{\n'
-                '  "events": {\n'
+                '  "entity_commands": {\n'
                 '    "interact": {\n'
+                '      "enabled": true,\n'
                 '      "commands": [\n'
                 '        {\n'
                 '          "type": "change_area",\n'

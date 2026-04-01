@@ -25,7 +25,7 @@
       "animate_when_moving": false
     }
   ],
-  "events": {
+  "entity_commands": {
     "play_bump_sound": {
       "enabled": true,
       "commands": [
@@ -34,9 +34,9 @@
           "path": "assets/project/sfx/bump.wav"
         },
         {
-          "type": "set_event_enabled",
+          "type": "set_entity_command_enabled",
           "entity_id": "$self_id",
-          "event_id": "play_bump_sound",
+          "command_id": "play_bump_sound",
           "enabled": false
         },
         {
@@ -44,9 +44,9 @@
           "frames": 16
         },
         {
-          "type": "set_event_enabled",
+          "type": "set_entity_command_enabled",
           "entity_id": "$self_id",
-          "event_id": "play_bump_sound",
+          "command_id": "play_bump_sound",
           "enabled": true
         }
       ]
@@ -55,7 +55,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/interact_one_tile"
         }
       ]
@@ -64,9 +64,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "move",
+          "command_id": "move",
           "direction": "up",
           "flip_x": false,
           "push_event_id": "push_from_down",
@@ -86,9 +86,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "move",
+          "command_id": "move",
           "direction": "down",
           "flip_x": false,
           "push_event_id": "push_from_up",
@@ -108,9 +108,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "move",
+          "command_id": "move",
           "direction": "left",
           "flip_x": false,
           "push_event_id": "push_from_right",
@@ -130,9 +130,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "move",
+          "command_id": "move",
           "direction": "right",
           "flip_x": true,
           "push_event_id": "push_from_left",
@@ -152,7 +152,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/attempt_move_one_tile",
           "direction": "$direction",
           "flip_x": "$flip_x",

@@ -2,11 +2,8 @@
   "params": [],
   "commands": [
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_has_more_text",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
           "type": "add_entity_var",
@@ -15,7 +12,7 @@
           "amount": "$self.dialogue_max_lines"
         },
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/load_and_render_segment"
         }
       ],
@@ -33,11 +30,8 @@
           "amount": 1
         },
         {
-          "type": "check_entity_var",
-          "name": "dialogue_next_source_page_index",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "lt",
-          "value": "$self.dialogue_current_source_page_count",
           "then": [
             {
               "type": "set_entity_var",
@@ -52,18 +46,32 @@
               "value": 0
             },
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/dialogue/load_and_render_segment"
             }
           ],
           "else": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/dialogue/finish_segment"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_next_source_page_index"
+            }
+          },
+          "right": "$self.dialogue_current_source_page_count"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_has_more_text"
+        }
+      },
+      "right": true
     }
   ]
 }

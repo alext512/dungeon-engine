@@ -14,21 +14,23 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "interact": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "dialogue_controller",
-          "event_id": "open_dialogue",
+          "command_id": "open_dialogue",
           "dialogue_path": "$dialogue_path",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
           "segment_hooks": [],
           "allow_cancel": false,
-          "actor_entity_id": "$actor_id",
-          "caller_entity_id": "$self_id"
+          "entity_refs": {
+            "instigator": "$ref_ids.instigator",
+            "caller": "$self_id"
+          }
         }
       ]
     }

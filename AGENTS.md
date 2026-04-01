@@ -103,6 +103,52 @@ dungeon_engine/
 
 **Running focused verification**: Use `.venv/Scripts/python -m unittest discover -s tests -v` for the current built-in regression suite.
 
+## Validation Checklist
+
+Engine/unit tests are necessary, but they are **not sufficient** after command-surface or content-authoring refactors.
+
+When you change any of the following:
+
+- command names or command invocation shape
+- command-library loading/validation
+- entity command naming or lookup
+- JSON authoring conventions
+- project content under `projects/`
+
+do **all** of the following before declaring the change safe:
+
+1. Run the automated test suite that covers the affected area.
+2. Directly validate the example projects, especially:
+   - `projects/test_project/`
+   - `projects/game_copy/`
+3. Prefer validating them through the same startup-style project-command path the app uses, not only through lower-level engine tests.
+4. If you changed project-command ids or command references, explicitly re-run project-command validation for each affected example project.
+5. If feasible, do a brief manual smoke start of the affected sample project after automated validation passes.
+
+Recommended direct validation snippet:
+
+```text
+@'
+from pathlib import Path
+from dungeon_engine.project import load_project
+from dungeon_engine.commands.library import validate_project_commands
+
+for project_json in [
+    Path(r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"),
+    Path(r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\game_copy\project.json"),
+]:
+    project = load_project(project_json)
+    validate_project_commands(project)
+    print(f"{project.project_root.name}: project command validation OK")
+'@ | .venv/Scripts/python -
+```
+
+Why this matters:
+
+- A general engine test pass does not guarantee that every example project's startup validation path is clean.
+- Literal `run_project_command` references inside project JSON can still fail at startup even when broader tests are green.
+- If you touched project content or command ids, validate the actual projects directly.
+
 ## Gotchas
 
 - The project uses `pygame-ce` (Community Edition), not vanilla `pygame`.

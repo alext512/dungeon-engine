@@ -8,11 +8,8 @@
       "value": "$self.dialogue_current_segment_pages"
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_source_page_count",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "gt",
-      "value": 0,
       "then": [
         {
           "type": "set_entity_var",
@@ -34,7 +31,14 @@
           "name": "dialogue_current_source_text",
           "value": "$self.dialogue_current_segment_text"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_source_page_count"
+        }
+      },
+      "right": 0
     },
     {
       "type": "set_entity_var",
@@ -91,7 +95,7 @@
       "max_width": "$self.text_box_width"
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/dialogue/clear_choice_elements"
     }
   ]

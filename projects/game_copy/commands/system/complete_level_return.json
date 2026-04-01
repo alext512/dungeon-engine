@@ -4,12 +4,12 @@
   ],
   "commands": [
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/system/mark_level_completed",
       "level_number": "$level_number"
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/system/save_progress"
     },
     {

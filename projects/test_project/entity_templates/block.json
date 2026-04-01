@@ -15,14 +15,14 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "push_from_left": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "push",
+          "command_id": "push",
           "direction": "right"
         }
       ]
@@ -31,9 +31,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "push",
+          "command_id": "push",
           "direction": "left"
         }
       ]
@@ -42,9 +42,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "push",
+          "command_id": "push",
           "direction": "down"
         }
       ]
@@ -53,9 +53,9 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "self",
-          "event_id": "push",
+          "command_id": "push",
           "direction": "up"
         }
       ]
@@ -64,7 +64,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/push_one_tile",
           "direction": "$direction",
           "frames_needed": "$project.movement.ticks_per_tile"

@@ -19,7 +19,7 @@ from typing import Any
 from dungeon_engine import config
 from dungeon_engine.logging_utils import get_logger
 from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
-from dungeon_engine.world.entity import Entity, EntityEvent, EntityVisual
+from dungeon_engine.world.entity import Entity, EntityCommandDefinition, EntityVisual
 from dungeon_engine.world.persistence import PersistentAreaState, apply_persistent_area_state
 from dungeon_engine.world.world import World
 
@@ -29,7 +29,7 @@ from dungeon_engine.project import ProjectContext
 logger = get_logger(__name__)
 
 _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
-_RESERVED_ENTITY_IDS = {"self", "actor", "caller"}
+_RESERVED_ENTITY_IDS = {"self"}
 _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_var",
     "add_entity_var",
@@ -37,9 +37,8 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_var_length",
     "append_entity_var",
     "pop_entity_var",
-    "check_entity_var",
-    "set_event_enabled",
-    "set_events_enabled",
+    "set_entity_command_enabled",
+    "set_entity_commands_enabled",
     "set_input_target",
     "set_entity_field",
     "set_entity_fields",
@@ -258,7 +257,7 @@ def instantiate_entity(
         scope=scope,
         present=bool(entity_data.get("present", True)),
         visible=bool(entity_data.get("visible", True)),
-        events_enabled=bool(entity_data.get("events_enabled", True)),
+        entity_commands_enabled=bool(entity_data.get("entity_commands_enabled", True)),
         render_order=_parse_entity_render_order(entity_data, space=space),
         y_sort=_parse_entity_y_sort(entity_data, space=space),
         sort_y_offset=float(entity_data.get("sort_y_offset", 0.0)),
@@ -268,7 +267,7 @@ def instantiate_entity(
         template_parameters=copy.deepcopy(entity_instance.get("parameters", {})),
         tags=_coerce_string_list(entity_data.get("tags", []), field_name="tags", source_name=source_name),
         visuals=visuals,
-        events=_parse_entity_events(entity_data),
+        entity_commands=_parse_entity_commands(entity_data),
         variables=copy.deepcopy(entity_data.get("variables", {})),
         input_map=_parse_input_map(entity_data.get("input_map")),
     )
@@ -759,53 +758,49 @@ def _parse_color(
     return (int(raw_color[0]), int(raw_color[1]), int(raw_color[2]))
 
 
-def _parse_entity_events(entity_data: dict[str, Any]) -> dict[str, EntityEvent]:
-    """Parse named entity events from the authored ``events`` object."""
-    parsed_events: dict[str, EntityEvent] = {}
+def _parse_entity_commands(entity_data: dict[str, Any]) -> dict[str, EntityCommandDefinition]:
+    """Parse named entity commands from the authored ``entity_commands`` object."""
+    parsed_commands: dict[str, EntityCommandDefinition] = {}
 
     if "interact_commands" in entity_data:
         raise ValueError(
-            "Entity data must not use 'interact_commands'; define an 'events.interact' entry instead."
+            "Entity data must not use 'interact_commands'; define an 'entity_commands.interact' entry instead."
+        )
+    if "events" in entity_data:
+        raise ValueError(
+            "Entity data must not use 'events'; define named commands under 'entity_commands' instead."
         )
 
-    raw_events = entity_data.get("events", {})
-    if isinstance(raw_events, dict):
-        for event_id, raw_event in raw_events.items():
-            if isinstance(raw_event, list):
-                _validate_command_tree(
-                    raw_event,
-                    source_name="Entity events",
-                    location=f"events.{event_id}",
+    raw_commands = entity_data.get("entity_commands", {})
+    if isinstance(raw_commands, dict):
+        for command_id, raw_command in raw_commands.items():
+            if not isinstance(raw_command, dict):
+                raise ValueError("Entity commands must be objects with 'enabled' and 'commands'.")
+            if "enabled" not in raw_command or "commands" not in raw_command:
+                raise ValueError(
+                    f"Entity command '{command_id}' must define both 'enabled' and 'commands'."
                 )
-                parsed_events[str(event_id)] = EntityEvent(
-                    enabled=True,
-                    commands=copy.deepcopy(raw_event),
-                )
-                continue
-
-            if not isinstance(raw_event, dict):
-                raise ValueError("Entity events must be objects or command lists.")
 
             _validate_command_tree(
-                raw_event.get("commands", []),
-                source_name="Entity events",
-                location=f"events.{event_id}.commands",
+                raw_command.get("commands", []),
+                source_name="Entity commands",
+                location=f"entity_commands.{command_id}.commands",
             )
-            parsed_events[str(event_id)] = EntityEvent(
-                enabled=bool(raw_event.get("enabled", True)),
-                commands=copy.deepcopy(raw_event.get("commands", [])),
+            parsed_commands[str(command_id)] = EntityCommandDefinition(
+                enabled=bool(raw_command.get("enabled", True)),
+                commands=copy.deepcopy(raw_command.get("commands", [])),
             )
 
-    return parsed_events
+    return parsed_commands
 
 
 def _parse_input_map(raw_input_map: Any) -> dict[str, str]:
-    """Parse an optional entity-owned logical-input map."""
+    """Parse an optional entity-owned logical-input to entity-command map."""
     if not isinstance(raw_input_map, dict):
         return {}
     return {
-        str(action): str(event_name)
-        for action, event_name in raw_input_map.items()
+        str(action): str(command_name)
+        for action, command_name in raw_input_map.items()
     }
 
 
@@ -990,32 +985,37 @@ def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: 
         )
     if "interact_commands" in raw_template:
         raise ValueError(
-            f"{source_name} must not use 'interact_commands'; define an 'events.interact' entry instead."
+            f"{source_name} must not use 'interact_commands'; define an 'entity_commands.interact' entry instead."
+        )
+    if "events" in raw_template:
+        raise ValueError(
+            f"{source_name} must not use 'events'; define named commands under 'entity_commands' instead."
         )
 
-    raw_events = raw_template.get("events", {})
-    if raw_events is None:
+    raw_entity_commands = raw_template.get("entity_commands", {})
+    if raw_entity_commands is None:
         return
-    if not isinstance(raw_events, dict):
-        raise ValueError(f"{source_name} field 'events' must be a JSON object.")
+    if not isinstance(raw_entity_commands, dict):
+        raise ValueError(f"{source_name} field 'entity_commands' must be a JSON object.")
 
-    for event_id, raw_event in raw_events.items():
-        if isinstance(raw_event, list):
-            _validate_command_tree(
-                raw_event,
-                source_name=source_name,
-                location=f"events.{event_id}",
+    for command_id, raw_command in raw_entity_commands.items():
+        if not isinstance(raw_command, dict):
+            raise ValueError(
+                f"{source_name} entity command '{command_id}' must be an object."
             )
-            continue
-        if not isinstance(raw_event, dict):
-            raise ValueError(f"{source_name} event '{event_id}' must be an object or command list.")
-        raw_commands = raw_event.get("commands", [])
+        if "enabled" not in raw_command or "commands" not in raw_command:
+            raise ValueError(
+                f"{source_name} entity command '{command_id}' must define both 'enabled' and 'commands'."
+            )
+        raw_commands = raw_command.get("commands", [])
         if not isinstance(raw_commands, list):
-            raise ValueError(f"{source_name} event '{event_id}' field 'commands' must be a JSON array.")
+            raise ValueError(
+                f"{source_name} entity command '{command_id}' field 'commands' must be a JSON array."
+            )
         _validate_command_tree(
             raw_commands,
             source_name=source_name,
-            location=f"events.{event_id}.commands",
+            location=f"entity_commands.{command_id}.commands",
         )
 
 

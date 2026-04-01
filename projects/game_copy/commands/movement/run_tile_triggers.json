@@ -3,7 +3,7 @@
     "x",
     "y",
     "tags_any",
-    "event_id",
+    "trigger_command_id",
     "exclude_entity_id"
   ],
   "commands": [
@@ -23,7 +23,9 @@
             "present": true
           },
           "select": {
-            "fields": ["entity_id"]
+            "fields": [
+              "entity_id"
+            ]
           }
         }
       }
@@ -34,11 +36,13 @@
       "item_param": "trigger_target",
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "$trigger_target.entity_id",
-          "event_id": "$event_id",
-          "actor_entity_id": "$actor_entity_id",
-          "caller_entity_id": "$caller_entity_id"
+          "command_id": "$trigger_command_id",
+          "entity_refs": {
+            "instigator": "$ref_ids.instigator",
+            "caller": "$ref_ids.caller"
+          }
         }
       ]
     }

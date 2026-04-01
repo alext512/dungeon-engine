@@ -32,18 +32,12 @@
       "value": "$self.dialogue_current_option_commands_by_id"
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_selected_option_id",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "neq",
-      "value": "",
       "then": [
         {
-          "type": "check_entity_var",
-          "name": "dialogue_current_option_commands_by_id_count",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "gt",
-          "value": 0,
           "then": [
             {
               "type": "set_entity_var",
@@ -71,7 +65,14 @@
                 }
               }
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_current_option_commands_by_id_count"
+            }
+          },
+          "right": 0
         }
       ],
       "else": [
@@ -87,7 +88,14 @@
             }
           }
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_selected_option_id"
+        }
+      },
+      "right": ""
     },
     {
       "type": "set_entity_var",
@@ -96,33 +104,42 @@
       "value": "$self.dialogue_revision"
     },
     {
-      "type": "run_sequence",
+      "type": "run_commands",
       "commands": "$self.dialogue_current_selected_option_commands",
-      "actor_entity_id": "$self.dialogue_actor_id",
-      "caller_entity_id": "$self.dialogue_caller_id"
+      "entity_refs": {
+        "instigator": "$self.dialogue_actor_id",
+        "caller": "$self.dialogue_caller_id"
+      }
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_open",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
-          "type": "check_entity_var",
-          "name": "dialogue_revision",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "eq",
-          "value": "$self.dialogue_confirm_revision_snapshot",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/dialogue/finish_segment"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_revision"
+            }
+          },
+          "right": "$self.dialogue_confirm_revision_snapshot"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_open"
+        }
+      },
+      "right": true
     }
   ]
 }
-

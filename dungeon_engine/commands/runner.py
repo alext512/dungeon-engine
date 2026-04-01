@@ -37,7 +37,7 @@ _PLAIN_ENTITY_REF_FIELDS = (
     "pixel_y",
     "present",
     "visible",
-    "events_enabled",
+    "entity_commands_enabled",
     "render_order",
     "y_sort",
     "sort_y_offset",
@@ -61,7 +61,7 @@ _PLAIN_ENTITY_VISUAL_FIELDS = (
     "offset_y",
     "draw_order",
 )
-_ENTITY_QUERY_WHERE_BOOLEAN_FIELDS = ("present", "visible", "events_enabled")
+_ENTITY_QUERY_WHERE_BOOLEAN_FIELDS = ("present", "visible", "entity_commands_enabled")
 _ENTITY_QUERY_WHERE_STRING_FIELDS = ("kind", "space", "scope")
 _ENTITY_QUERY_WHERE_LIST_FIELDS = ("kinds", "tags_any", "tags_all")
 _ENTITY_QUERY_ALLOWED_SPACES = ("world", "screen")
@@ -480,7 +480,7 @@ def _resolve_entity_where_spec(raw_where: Any, *, source_name: str) -> dict[str,
         raise ValueError(
             f"{source_name} where does not support key(s) {formatted}. "
             "Allowed keys: 'kind', 'kinds', 'tags_any', 'tags_all', 'space', "
-            "'scope', 'present', 'visible', 'events_enabled'."
+            "'scope', 'present', 'visible', 'entity_commands_enabled'."
         )
     if "kind" in raw_where and "kinds" in raw_where:
         raise ValueError(f"{source_name} where does not allow both 'kind' and 'kinds'.")
@@ -567,7 +567,10 @@ def _entity_matches_where(entity: Any, where: dict[str, Any]) -> bool:
         return False
     if "visible" in where and entity.visible is not where["visible"]:
         return False
-    if "events_enabled" in where and entity.events_enabled is not where["events_enabled"]:
+    if (
+        "entity_commands_enabled" in where
+        and entity.entity_commands_enabled is not where["entity_commands_enabled"]
+    ):
         return False
     entity_tags = set(entity.tags)
     if "tags_any" in where and not entity_tags.intersection(where["tags_any"]):
@@ -699,6 +702,36 @@ def _resolve_area_entity_ref_value(
     if entity is None:
         return default
     return _serialize_selected_entity(entity, select=select)
+
+
+def _resolve_entity_var_value(context: CommandContext, resolved_source: Any) -> Any:
+    """Return one variable value from an explicitly chosen live entity."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$entity_var value source requires a JSON object.")
+    entity_id = str(resolved_source.get("entity_id", "")).strip()
+    if not entity_id:
+        raise ValueError("$entity_var value source requires a non-empty entity_id.")
+    name = str(resolved_source.get("name", "")).strip()
+    if not name:
+        raise ValueError("$entity_var value source requires a non-empty name.")
+    entity = context.world.get_entity(entity_id)
+    if entity is None:
+        return copy.deepcopy(resolved_source.get("default"))
+    if "default" in resolved_source:
+        return copy.deepcopy(entity.variables.get(name, resolved_source.get("default")))
+    return copy.deepcopy(entity.variables.get(name))
+
+
+def _resolve_current_area_var_value(context: CommandContext, resolved_source: Any) -> Any:
+    """Return one current-area variable value with optional defaulting."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$current_area_var value source requires a JSON object.")
+    name = str(resolved_source.get("name", "")).strip()
+    if not name:
+        raise ValueError("$current_area_var value source requires a non-empty name.")
+    if "default" in resolved_source:
+        return copy.deepcopy(context.world.variables.get(name, resolved_source.get("default")))
+    return copy.deepcopy(context.world.variables.get(name))
 
 
 def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) -> list[dict[str, Any]]:
@@ -1049,6 +1082,12 @@ def _resolve_runtime_value_source(
     if source_name == "$area_entity_ref":
         return _resolve_area_entity_ref_value(context, resolved_source)
 
+    if source_name == "$entity_var":
+        return _resolve_entity_var_value(context, resolved_source)
+
+    if source_name == "$current_area_var":
+        return _resolve_current_area_var_value(context, resolved_source)
+
     if source_name == "$sum":
         return _resolve_sum_value(resolved_source)
 
@@ -1118,7 +1157,7 @@ def _resolve_runtime_token(
     context: CommandContext,
     runtime_params: dict[str, Any],
 ) -> Any:
-    """Resolve a $token against event params, project values, or runtime variables."""
+    """Resolve a $token against runtime params, engine state, or entity variables."""
     if token.startswith("half:"):
         base_value = _resolve_runtime_token(token[5:], context, runtime_params)
         if not isinstance(base_value, (int, float)):
@@ -1134,18 +1173,6 @@ def _resolve_runtime_token(
         entity_id = runtime_params.get("source_entity_id")
         if not entity_id:
             raise KeyError("Token '$self_id' requires a source entity context.")
-        return str(entity_id)
-
-    if token == "actor_id":
-        entity_id = runtime_params.get("actor_entity_id")
-        if not entity_id:
-            raise KeyError("Token '$actor_id' requires an actor entity context.")
-        return str(entity_id)
-
-    if token == "caller_id":
-        entity_id = runtime_params.get("caller_entity_id")
-        if not entity_id:
-            raise KeyError("Token '$caller_id' requires a caller entity context.")
         return str(entity_id)
 
     parts = [part for part in token.split(".") if part]
@@ -1203,15 +1230,6 @@ def _resolve_runtime_token(
     if head == "current_area":
         return copy.deepcopy(_lookup_nested_value(context.world.variables, tail))
 
-    if head == "entity":
-        if len(parts) < 3:
-            raise KeyError(f"Token '${token}' requires an entity id and variable path.")
-        entity_id = parts[1]
-        entity = context.world.get_entity(str(entity_id))
-        if entity is None:
-            raise KeyError(f"Token '${token}' references missing entity '{entity_id}'.")
-        return copy.deepcopy(_lookup_nested_value(entity.variables, parts[2:]))
-
     if head == "self":
         entity_id = runtime_params.get("source_entity_id")
         if not entity_id:
@@ -1221,23 +1239,32 @@ def _resolve_runtime_token(
             raise KeyError(f"Token '${token}' references missing source entity '{entity_id}'.")
         return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
 
-    if head == "actor":
-        entity_id = runtime_params.get("actor_entity_id")
+    if head == "ref_ids":
+        if len(parts) != 2:
+            raise KeyError(f"Token '${token}' only supports the form '$ref_ids.<name>'.")
+        entity_refs = runtime_params.get("entity_refs")
+        if not isinstance(entity_refs, dict):
+            raise KeyError(f"Token '${token}' requires an entity_refs context.")
+        ref_name = parts[1]
+        entity_id = entity_refs.get(ref_name)
         if not entity_id:
-            raise KeyError(f"Token '${token}' requires an actor entity context.")
-        entity = context.world.get_entity(str(entity_id))
-        if entity is None:
-            raise KeyError(f"Token '${token}' references missing actor entity '{entity_id}'.")
-        return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
+            raise KeyError(f"Token '${token}' references missing entity ref '{ref_name}'.")
+        return str(entity_id)
 
-    if head == "caller":
-        entity_id = runtime_params.get("caller_entity_id")
+    if head == "refs":
+        if len(parts) < 2:
+            raise KeyError(f"Token '${token}' requires a ref name after '$refs'.")
+        entity_refs = runtime_params.get("entity_refs")
+        if not isinstance(entity_refs, dict):
+            raise KeyError(f"Token '${token}' requires an entity_refs context.")
+        ref_name = parts[1]
+        entity_id = entity_refs.get(ref_name)
         if not entity_id:
-            raise KeyError(f"Token '${token}' requires a caller entity context.")
+            raise KeyError(f"Token '${token}' references missing entity ref '{ref_name}'.")
         entity = context.world.get_entity(str(entity_id))
         if entity is None:
-            raise KeyError(f"Token '${token}' references missing caller entity '{entity_id}'.")
-        return copy.deepcopy(_lookup_nested_value(entity.variables, tail))
+            raise KeyError(f"Token '${token}' references missing entity '{entity_id}'.")
+        return copy.deepcopy(_lookup_nested_value(entity.variables, parts[2:]))
 
     raise KeyError(f"Unknown runtime token '${token}'.")
 
@@ -1257,6 +1284,8 @@ def _resolve_runtime_values(
                 "$text_window",
                 "$entity_ref",
                 "$area_entity_ref",
+                "$entity_var",
+                "$current_area_var",
                 "$cell_flags_at",
                 "$entities_at",
                 "$entity_at",
@@ -1322,6 +1351,49 @@ def _resolve_deferred_runtime_value(
     return copy.deepcopy(value)
 
 
+def _resolve_run_project_command_spec(
+    raw_spec: dict[str, Any],
+    context: CommandContext,
+    inherited_params: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve one run_project_command spec while honoring project-level deferred params."""
+    resolved_command_id = _resolve_runtime_values(raw_spec.get("command_id"), context, inherited_params)
+    deferred_keys: set[str] = set()
+    if context.project is not None and isinstance(resolved_command_id, str) and resolved_command_id.strip():
+        try:
+            from dungeon_engine.commands.library import load_project_command_definition
+
+            definition = load_project_command_definition(context.project, resolved_command_id)
+            deferred_keys = set(definition.deferred_params)
+        except Exception:
+            deferred_keys = set()
+
+    resolved_spec: dict[str, Any] = {}
+    for key, value in raw_spec.items():
+        if key == "command_id":
+            resolved_spec[key] = resolved_command_id
+        elif key in deferred_keys:
+            resolved_spec[key] = _resolve_deferred_runtime_value(value, context, inherited_params)
+        else:
+            resolved_spec[key] = _resolve_runtime_values(value, context, inherited_params)
+    return resolved_spec
+
+
+def _dynamic_deferred_keys_for_spec(command_name: str, raw_spec: dict[str, Any]) -> set[str]:
+    """Return spec-local deferred params for commands that opt into raw payload storage."""
+    value_mode = str(raw_spec.get("value_mode", "")).strip().lower()
+    if value_mode != "raw":
+        return set()
+    if command_name in {
+        "set_entity_var",
+        "append_entity_var",
+        "set_current_area_var",
+        "append_current_area_var",
+    }:
+        return {"value"}
+    return set()
+
+
 def execute_registered_command(
     registry: Any,
     context: CommandContext,
@@ -1336,13 +1408,13 @@ def execute_registered_command(
         if forbidden == ["on_complete"]:
             message = (
                 f"Command '{name}' must not use 'on_complete'; "
-                "use explicit sequencing with 'run_sequence' instead."
+                "use explicit sequencing with 'run_commands' instead."
             )
         else:
             formatted = ", ".join(f"'{key}'" for key in forbidden)
             message = (
                 f"Command '{name}' must not use lifecycle wrapper field(s) {formatted}; "
-                "use explicit sequencing with 'run_sequence', grouped overlap with "
+                "use explicit sequencing with 'run_commands', grouped overlap with "
                 "'run_parallel', or fire-and-forget overlap with 'spawn_flow' instead."
             )
         raise ValueError(message)
@@ -1377,18 +1449,22 @@ def execute_command_spec(
     inherited_params = dict(base_params or {})
     raw_spec = dict(command_spec)
     command_name = str(raw_spec.get("type", ""))
-    deferred_keys = set()
-    if hasattr(registry, "get_deferred_params"):
-        deferred_keys = registry.get_deferred_params(command_name)
-    if deferred_keys:
-        spec = {
-            key: _resolve_deferred_runtime_value(value, context, inherited_params)
-            if key in deferred_keys
-            else _resolve_runtime_values(value, context, inherited_params)
-            for key, value in raw_spec.items()
-        }
+    if command_name == "run_project_command":
+        spec = _resolve_run_project_command_spec(raw_spec, context, inherited_params)
     else:
-        spec = _resolve_runtime_values(raw_spec, context, inherited_params)
+        deferred_keys = set()
+        if hasattr(registry, "get_deferred_params"):
+            deferred_keys = registry.get_deferred_params(command_name)
+        deferred_keys |= _dynamic_deferred_keys_for_spec(command_name, raw_spec)
+        if deferred_keys:
+            spec = {
+                key: _resolve_deferred_runtime_value(value, context, inherited_params)
+                if key in deferred_keys
+                else _resolve_runtime_values(value, context, inherited_params)
+                for key, value in raw_spec.items()
+            }
+        else:
+            spec = _resolve_runtime_values(raw_spec, context, inherited_params)
     command_name = str(spec.pop("type"))
     params = dict(inherited_params)
     params.update(spec)
@@ -1465,22 +1541,17 @@ class CommandRunner:
         """Add a command request to the end of the queue."""
         self.pending.append(QueuedCommand(name=name, params=params))
 
-    def dispatch_input_event(
+    def dispatch_input_entity_command(
         self,
         entity_id: str,
-        event_id: str,
-        *,
-        actor_entity_id: str | None = None,
+        command_id: str,
     ) -> bool:
-        """Queue one routed input event as an ordinary root flow."""
+        """Queue one routed input command as an ordinary root flow."""
         params: dict[str, Any] = {
             "entity_id": entity_id,
-            "event_id": event_id,
+            "command_id": command_id,
         }
-        if actor_entity_id is not None:
-            params["actor_entity_id"] = actor_entity_id
-
-        self.enqueue("run_event", **params)
+        self.enqueue("run_entity_command", **params)
         return True
 
     def has_pending_work(self) -> bool:

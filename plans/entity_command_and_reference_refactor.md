@@ -19,6 +19,36 @@ compression, or phased implementation.
 The detailed future dot-notation proposal now lives in
 `plans/dot_notation_future_spec.md`.
 
+## Important Later Decision
+
+Implementation work surfaced one important adjustment to the earlier design
+discussion:
+
+- plain `commands: [...]` bodies remain the normal default sequential form
+- but the engine still needs one explicit command whose job is "execute this
+  stored command-list value now"
+
+That capability is necessary for real authored content such as dialogue
+`dialogue_on_start`, `dialogue_on_end`, segment hooks, and choice-command
+payloads that are stored first and executed later.
+
+So the final direction is:
+
+- do not keep `run_sequence`
+- do keep the explicit dynamic execution capability under the clearer name
+  `run_commands`
+- keep `commands: [...]` as the normal sequential body shape everywhere else
+
+This means the refined composition model is:
+
+- any `commands: [...]` body runs in order by default
+- `run_commands` executes one stored command-list value explicitly
+- `run_parallel` starts child chains together
+- `spawn_flow` starts child work independently
+
+This note supersedes any earlier wording in this document that suggested
+removing the explicit command-list execution capability altogether.
+
 ## Why This Refactor Exists
 
 The current engine works, but several concepts are harder to reason about than
@@ -142,27 +172,20 @@ The proposal is:
 - stop calling them `events`
 - treat them as named entity commands or behaviors
 
-### Naming options
+### Naming decision
 
-Reasonable names include:
+Reasonable alternatives such as `behaviors`, `actions`, and `routines` were
+considered.
 
-- `entity_commands`
-- `behaviors`
-- `actions`
-- `routines`
+Agreed decision:
 
-Current recommendation:
+- use `entity_commands`
 
-- favor `entity_commands` if the priority is conceptual consistency with
-  "everything should be a command"
-- favor `behaviors` if the priority is readability and avoiding confusion with
-  project-level command files
+Rationale:
 
-At the moment, `entity_commands` is the most faithful to the intended
-direction, but it creates naming pressure because the engine already has
-project-level command files under `commands/`.
-
-For that reason, the practical naming decision is still open.
+- it is the most consistent with the project's command-driven philosophy
+- it keeps the mental model "everything meaningful is a command chain"
+- it avoids softening the model into a vaguer behavior/event vocabulary
 
 ### Recommended framing
 
@@ -174,27 +197,51 @@ Regardless of the final field name, the concept should be explained as:
 
 This is much easier to explain than "an event that contains commands."
 
+### JSON schema decision
+
+Agreed decision:
+
+- `entity_commands.<name>` should always use the long-form object shape
+
+Recommended shape:
+
+```json
+{
+  "entity_commands": {
+    "open": {
+      "enabled": true,
+      "commands": [
+        { "type": "set_entity_var", "entity_id": "$self_id", "name": "opened", "value": true }
+      ]
+    }
+  }
+}
+```
+
+The short list-only form is intentionally not part of the target design.
+
+Rationale:
+
+- one stable schema is easier to document and validate
+- the long form already supports `enabled`
+- allowing both short and long forms would create unnecessary dual-shape
+  complexity for a foundational system
+
 ## Recommended Invocation Model
 
 The current `run_event(entity_id, event_id, ...)` concept should evolve into a
 clearer invocation command.
 
-Possible names:
+Possible alternatives such as `invoke_entity_command` and `run_behavior` were
+considered.
 
-- `run_entity_command`
-- `invoke_entity_command`
-- `run_behavior`
+Agreed decision:
 
-Current recommendation:
+- use `run_entity_command`
 
-- `run_entity_command` if consistency and explicitness are more important
-- `run_behavior` if readability is more important
+The engine should also keep project-level reusable commands through:
 
-The engine should also keep project-level reusable commands, likely through a
-separate command such as:
-
-- `run_command`
-- or a renamed explicit form like `run_project_command`
+- `run_project_command`
 
 That keeps two distinct concepts:
 
@@ -437,13 +484,13 @@ The recommended ref behavior is:
   - inherit current refs unchanged
 - if `entity_refs` is provided and no mode is specified:
   - merge the provided refs into the inherited refs
-- `replace` and `clear` should always be explicit
+- `replace` should always be explicit
 
 This gives the most intuitive default model:
 
 - saying nothing means "keep context"
 - adding refs means "add or override these refs"
-- destructive behaviors are never hidden
+- destructive ref replacement is never hidden
 
 ## Proposed `refs_mode`
 
@@ -460,9 +507,6 @@ Recommended modes:
   - recommended default when `entity_refs` is present
 - `replace`
   - discard inherited refs and use only the provided refs
-- `clear`
-  - remove inherited refs before continuing
-  - optionally combined with an empty or absent `entity_refs`
 
 ### Why these modes
 
@@ -482,13 +526,6 @@ This set covers the important use cases without making the model too clever.
 
 - important for hard call boundaries
 - should be explicit because it is easy to misuse
-
-`clear`:
-
-- useful for deliberately isolated subflows
-- should also be explicit because it is destructive
-- best treated as "start with an empty ref map"
-- if a caller wants a brand new non-empty ref map, `replace` is the clearer mode
 
 ## Recommended defaults
 
@@ -520,7 +557,6 @@ This is the best balance between ergonomics and predictability.
 These should always be explicit:
 
 - `replace`
-- `clear`
 
 That avoids surprising ref loss.
 
@@ -580,26 +616,7 @@ Meaning:
 - discard inherited refs
 - provide only `switch`
 
-### Example 4: explicit clearing
-
-```json
-{
-  "type": "spawn_flow",
-  "refs_mode": "clear",
-  "commands": [
-    {
-      "type": "run_project_command",
-      "command_id": "commands/reset_ui"
-    }
-  ]
-}
-```
-
-Meaning:
-
-- start a new flow with no inherited refs
-
-### Example 5: replacing former `caller`
+### Example 4: replacing former `caller`
 
 Current conceptual pattern:
 
@@ -627,7 +644,7 @@ Proposed replacement:
 
 This is more explicit and more meaningful.
 
-### Example 6: replacing former `actor`
+### Example 5: replacing former `actor`
 
 Current conceptual pattern:
 
@@ -767,8 +784,6 @@ This change is large enough that it should be staged.
 
 Decide:
 
-- final naming for entity-owned command chains
-- final invocation command names
 - final `entity_refs` and `refs_mode` schema
 - validate the detailed dot-notation proposal against implementation needs
 
@@ -780,22 +795,7 @@ Add:
 - new invocation command behavior
 - new docs and validation rules
 
-Keep compatibility temporarily where useful.
-
-### Phase 3: compatibility bridge
-
-Add a transitional layer that can still interpret old `events`, `run_event`,
-`actor`, and `caller` while warning about deprecation.
-
-Potential transitional behavior:
-
-- old `events` load into the new entity-owned command-chain model
-- `caller_entity_id` maps into `entity_refs` with a compatibility name
-- `actor_entity_id` maps into `entity_refs` with a compatibility name
-
-This phase exists only to reduce migration pain. It should not become permanent.
-
-### Phase 4: authored content migration
+### Phase 3: authored content migration
 
 Migrate:
 
@@ -804,7 +804,24 @@ Migrate:
 - internal docs
 - authoring guide examples
 
-### Phase 5: remove old concepts
+There is an explicit decision to avoid any compatibility bridge.
+
+Rationale:
+
+- the current authored content footprint is still small enough to migrate
+  directly
+- keeping both old and new models alive would add conceptual noise
+- compatibility would slow down simplification and risk preserving legacy ideas
+  longer than necessary
+
+So the migration should be direct:
+
+- update authored content
+- update docs
+- update tests
+- remove old concepts
+
+### Phase 4: remove old concepts
 
 Remove:
 
@@ -817,24 +834,6 @@ Keep:
 
 - `self`
 - explicit named references
-
-## Compatibility Naming Options
-
-If a compatibility bridge is used, the temporary compatibility ref names could
-be:
-
-- `caller`
-- `actor`
-
-or more explicit compatibility-only names such as:
-
-- `_legacy_caller`
-- `_legacy_actor`
-
-The safer option is probably the explicit compatibility names, to avoid letting
-old semantics silently become new "official" semantics.
-
-This needs a deliberate choice later.
 
 ## Risks And Tradeoffs
 
@@ -877,15 +876,6 @@ Mitigation:
 - choose naming carefully
 - document the distinction aggressively
 
-### Risk: partial migration confusion
-
-If old and new systems coexist for too long, the model becomes harder to teach.
-
-Mitigation:
-
-- keep the compatibility window intentionally temporary
-- clearly label legacy syntax
-
 ## Recommendation Summary
 
 The current strongest recommendation is:
@@ -893,27 +883,261 @@ The current strongest recommendation is:
 - keep `self`
 - remove `actor`
 - remove `caller`
+- use `entity_commands`
+- use `run_entity_command`
+- use `run_project_command`
 - replace special role passing with explicit named `entity_refs`
 - use a named map, not an array
 - inherit refs by default
 - merge when `entity_refs` is provided without a mode
-- require explicit `replace` and `clear`
+- require explicit `replace`
+- do not keep `clear` as a separate first-class mode
 - replace `events` terminology with a clearer entity-owned command-chain model
+- use one structured generic `if` as the main branch primitive
+- keep `run_parallel`
+- remove `run_sequence`
+- do not keep any compatibility layer; migrate directly
 
 This keeps the best part of the current ergonomics while making the system more
 general and less magical.
+
+## Command-Chain Structure Conclusions
+
+The recent design discussion clarified that the engine should be thought of in
+terms of command chains first, rather than in terms of many unrelated special
+command wrappers.
+
+The important unifying idea is:
+
+- a command chain is just an ordered list of commands
+- different constructs decide when and how that child chain runs
+
+This means the following authored shapes are all variations on "child command
+chain":
+
+- the body of an entity-owned named command
+- the body of a project command
+- the `then` child chain of a branching command
+- the `else` child chain of a branching command
+- the child chains inside `run_parallel`
+- any child chain started by a spawned flow
+
+The key distinctions are:
+
+- where the chain is stored
+- who owns it
+- when it runs
+- whether it runs sequentially or in parallel
+- whether it changes `self`
+- whether it changes `entity_refs`
+
+This framing is more useful than trying to treat every one of those cases as a
+different kind of "thing."
+
+## `run_sequence` Re-Evaluation
+
+The discussion strongly suggests that `run_sequence` is the most redundant
+composition primitive in the current conceptual model.
+
+Why:
+
+- plain `commands: [...]` already means sequential execution in many places
+- named entity-command bodies are sequential by default
+- named project-command bodies are sequential by default
+- `then` / `else` child chains are sequential by default
+- most authored child-chain contexts already have an obvious natural sequential
+  default
+
+By contrast, `run_parallel` is not redundant in the same way because it changes
+execution semantics in a genuinely important way.
+
+Agreed decision:
+
+- remove `run_sequence` from the target architecture
+- keep `run_parallel`
+- keep sequential command lists as the natural default everywhere
+
+## Branching Compromise
+
+The conversation also revisited whether the engine should use:
+
+- many specialized `check_*` commands
+- or one generic `if`
+
+Neither extreme is ideal by itself.
+
+### Why a fully specialized `check_*` family is weak
+
+It starts readable, but it risks growing sideways into many similar commands,
+for example:
+
+- `check_entity_var`
+- `check_current_area_var`
+- `check_ref_var`
+- `check_kind`
+- `check_has_tag`
+- `check_entity_at`
+- and so on
+
+That leads to API sprawl and makes the branching model less uniform.
+
+### Why a huge free-form `if` language is also weak
+
+A generic `if` becomes hard to read if it drifts toward:
+
+- a mini scripting language
+- deeply nested free-form condition objects
+- expression syntax that feels more like code AST than authored gameplay data
+
+That would hurt readability.
+
+### Agreed compromise
+
+Use one generic `if` command as the main branching mechanism, but keep the
+condition model structured and intentionally limited.
+
+Recommended shape:
+
+```json
+{
+  "type": "if",
+  "left": ...,
+  "op": "eq",
+  "right": ...,
+  "then": [...],
+  "else": [...]
+}
+```
+
+Recommended allowed value forms for `left` / `right`:
+
+- literals
+- runtime tokens such as `$self.locked`
+- named-ref reads such as `$refs.switch.active`
+- structured value sources such as `$entity_at`
+- boolean helpers such as `$and`, `$or`, `$not`
+
+This keeps the architecture cleaner than a large `check_*` family while still
+avoiding a giant code-like expression language.
+
+### Practical readability note
+
+The discussion also showed that generic `if` conditions can become too bulky
+for common gameplay checks if authors are forced to stage every query into
+temporary variables first.
+
+So the intended readability rule should be:
+
+- simple checks may use query helpers directly inside `if`
+- multi-step or reused query results may be staged into variables first
+- the design should prefer explicitness, but not at the cost of making common
+  gameplay checks absurdly verbose
+
+Agreed decision:
+
+- generic `if` is the main branching primitive
+- the target architecture should not keep or grow a large family of specialized
+  `check_*` commands
+- a very small number of ergonomic branch helpers may still be considered later
+  only if real authored content shows clear pain points
+
+## Example Minimal Future Architecture
+
+If implementation cost were ignored and the architecture were optimized for
+clarity first, the agreed target architecture is:
+
+- entity-owned named command chains
+- project-level reusable command chains
+- one explicit command for invoking an entity-owned named command
+- one explicit command for invoking a project command
+- one generic `if`
+- `run_parallel`
+- `spawn_flow`
+- no `actor`
+- no `caller`
+- no positional reference arrays
+- sequential command lists as the default
+- no `run_sequence`
+
+In short form, the future conceptual surface would look like:
+
+- `entity_commands`
+- `run_entity_command`
+- `run_project_command`
+- `if`
+- `run_parallel`
+- `spawn_flow`
+- `self`
+- `entity_refs`
+
+This is not implementation truth yet, but it is the clearest current design
+target.
+
+## Why `then` / `else` Still Matter
+
+The discussion highlighted an important conceptual distinction:
+
+- sequence answers "in what order do these commands run?"
+- branching answers "under what condition does this child chain run?"
+
+That is why `then` / `else` are not redundant in the same way as
+`run_sequence`.
+
+`then` / `else` are not special sequence commands. They are control-flow slots
+owned by a branching command.
+
+Example conceptual roles:
+
+- plain `commands: [...]`
+  - run this body in order
+- `then: [...]`
+  - run this child chain only if the branch condition passes
+- `else: [...]`
+  - run this child chain only if the branch condition fails
+- `run_parallel.commands`
+  - start these child chains together
+
+This distinction should stay clear in future docs and implementation planning.
+
+## Architectural Health Assessment
+
+The recent discussion also asked whether the project is "getting out of hand."
+
+Current honest assessment:
+
+- the project is still healthy
+- the core command-driven direction is still good
+- the codebase does not appear architecturally collapsed
+- but the project has clearly reached the stage where conceptual discipline now
+  matters a lot
+
+This means:
+
+- the project is no longer small enough to tolerate fuzzy concepts forever
+- naming mismatches like `events` now have real long-term cost
+- magical context roles like `actor` and `caller` will become more expensive if
+  left in place
+- redundant orchestration concepts like `run_sequence` deserve re-evaluation
+
+This is not a sign that the project has already gone bad.
+It is a sign that the right time for architectural simplification is now rather
+than later.
+
+One concise summary from the discussion:
+
+- the project is not out of hand
+- but it is entering the phase where unclear concepts will fossilize if they
+  are not corrected
 
 ## Open Questions
 
 The following points are still open:
 
-- final name for entity-owned named command chains
-- final name for the invocation command
-- whether project-level `run_command` should be renamed too
-- whether compatibility ref names should be preserved during transition
 - exactly which composition commands should be allowed to alter refs
 - whether ref-map debugging or inspection tooling should be added alongside the
   runtime refactor
+- whether the implementation should keep a very small number of ergonomic
+  branch helper commands in addition to generic `if`
 
 ## Dot Notation Decisions
 

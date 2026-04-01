@@ -108,16 +108,20 @@
       "variables": {
         "dialogue_pending_on_end": [
           {
-            "type": "check_entity_var",
-            "entity_id": "dialogue_controller",
-            "name": "pending_save_prompt_action",
+            "type": "if",
             "op": "eq",
-            "value": "save",
             "then": [
               {
                 "type": "save_game"
               }
-            ]
+            ],
+            "left": {
+              "$entity_var": {
+                "entity_id": "dialogue_controller",
+                "name": "pending_save_prompt_action"
+              }
+            },
+            "right": "save"
           },
           {
             "type": "set_entity_var",

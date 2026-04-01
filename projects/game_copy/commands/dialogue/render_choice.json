@@ -2,7 +2,7 @@
   "params": [],
   "commands": [
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/dialogue/clear_choice_elements"
     },
     {
@@ -66,11 +66,8 @@
           "value": " "
         },
         {
-          "type": "check_entity_var",
-          "name": "dialogue_selected_visible_choice_index",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "eq",
-          "value": "$index",
           "then": [
             {
               "type": "set_entity_var",
@@ -78,7 +75,14 @@
               "entity_id": "$self_id",
               "value": ">"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_selected_visible_choice_index"
+            }
+          },
+          "right": "$index"
         },
         {
           "type": "show_screen_text",
@@ -98,6 +102,87 @@
           "max_width": "$self.choice_width"
         }
       ]
+    },
+    {
+      "type": "if",
+      "op": "gt",
+      "then": [
+        {
+          "type": "if",
+          "op": "gt",
+          "then": [
+            {
+              "type": "show_screen_text",
+              "element_id": "$self.scroll_hint_element_id",
+              "text": "^\n \nv",
+              "x": "$self.layout.scroll_hint.more_up.x",
+              "y": "$self.layout.scroll_hint.more_up.y",
+              "layer": "$self.text_layer",
+              "anchor": "topleft",
+              "color": "$self.choice_text_color",
+              "font_id": "$self.dialogue_font_id"
+            }
+          ],
+          "else": [
+            {
+              "type": "show_screen_text",
+              "element_id": "$self.scroll_hint_element_id",
+              "text": "^",
+              "x": "$self.layout.scroll_hint.more_up.x",
+              "y": "$self.layout.scroll_hint.more_up.y",
+              "layer": "$self.text_layer",
+              "anchor": "topleft",
+              "color": "$self.choice_text_color",
+              "font_id": "$self.dialogue_font_id"
+            }
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_current_option_count"
+            }
+          },
+          "right": {
+            "$sum": [
+              "$self.dialogue_choice_scroll_offset",
+              "$self.layout.choice.visible_rows"
+            ]
+          }
+        }
+      ],
+      "else": [
+        {
+          "type": "if",
+          "op": "gt",
+          "then": [
+            {
+              "type": "show_screen_text",
+              "element_id": "$self.scroll_hint_element_id",
+              "text": "v",
+              "x": "$self.layout.scroll_hint.more_down.x",
+              "y": "$self.layout.scroll_hint.more_down.y",
+              "layer": "$self.text_layer",
+              "anchor": "topleft",
+              "color": "$self.choice_text_color",
+              "font_id": "$self.dialogue_font_id"
+            }
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_current_option_count"
+            }
+          },
+          "right": "$self.layout.choice.visible_rows"
+        }
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_choice_scroll_offset"
+        }
+      },
+      "right": 0
     }
   ]
 }

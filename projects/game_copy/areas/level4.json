@@ -1823,7 +1823,7 @@
       "persistent": true
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/system/save_progress"
     }
   ],
@@ -1880,7 +1880,7 @@
             "option_commands_by_id": {
               "yes": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/system/complete_level_next",
                   "level_number": 4,
                   "next_level_number": 5,
@@ -1889,7 +1889,7 @@
               ],
               "return": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/system/complete_level_return",
                   "level_number": 4
                 }
@@ -2032,7 +2032,7 @@
           ]
         }
       ],
-      "events": {
+      "entity_commands": {
         "add_input_value": {
           "enabled": true,
           "commands": [
@@ -2043,11 +2043,8 @@
               "value": "$index"
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pending_index",
+              "type": "if",
               "op": "eq",
-              "value": 0,
               "then": [
                 {
                   "type": "add_entity_var",
@@ -2058,11 +2055,8 @@
               ],
               "else": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "pending_index",
+                  "type": "if",
                   "op": "eq",
-                  "value": 1,
                   "then": [
                     {
                       "type": "add_entity_var",
@@ -2078,9 +2072,23 @@
                       "name": "input_value_2",
                       "amount": "$amount"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "pending_index"
+                    }
+                  },
+                  "right": 1
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_index"
+                }
+              },
+              "right": 0
             }
           ]
         },
@@ -2088,25 +2096,16 @@
           "enabled": true,
           "commands": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "input_value_0",
+              "type": "if",
               "op": "eq",
-              "value": "$self.correct_value_0",
               "then": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "input_value_1",
+                  "type": "if",
                   "op": "eq",
-                  "value": "$self.correct_value_1",
                   "then": [
                     {
-                      "type": "check_entity_var",
-                      "entity_id": "$self_id",
-                      "name": "input_value_2",
+                      "type": "if",
                       "op": "eq",
-                      "value": "$self.correct_value_2",
                       "then": [
                         {
                           "type": "set_entity_var",
@@ -2129,50 +2128,77 @@
                       ],
                       "else": [
                         {
-                          "type": "run_event",
+                          "type": "run_entity_command",
                           "entity_id": "dialogue_controller",
-                          "event_id": "open_dialogue",
+                          "command_id": "open_dialogue",
                           "dialogue_path": "dialogues/levels/level4_gate_fail.json",
                           "dialogue_on_start": [],
                           "dialogue_on_end": [],
                           "segment_hooks": [],
                           "allow_cancel": false,
-                          "actor_entity_id": "$actor_id",
-                          "caller_entity_id": "$self_id"
+                          "entity_refs": {
+                            "instigator": "$ref_ids.instigator",
+                            "caller": "$self_id"
+                          }
                         }
-                      ]
+                      ],
+                      "left": {
+                        "$entity_var": {
+                          "entity_id": "$self_id",
+                          "name": "input_value_2"
+                        }
+                      },
+                      "right": "$self.correct_value_2"
                     }
                   ],
                   "else": [
                     {
-                      "type": "run_event",
+                      "type": "run_entity_command",
                       "entity_id": "dialogue_controller",
-                      "event_id": "open_dialogue",
+                      "command_id": "open_dialogue",
                       "dialogue_path": "dialogues/levels/level4_gate_fail.json",
                       "dialogue_on_start": [],
                       "dialogue_on_end": [],
                       "segment_hooks": [],
                       "allow_cancel": false,
-                      "actor_entity_id": "$actor_id",
-                      "caller_entity_id": "$self_id"
+                      "entity_refs": {
+                        "instigator": "$ref_ids.instigator",
+                        "caller": "$self_id"
+                      }
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "input_value_1"
+                    }
+                  },
+                  "right": "$self.correct_value_1"
                 }
               ],
               "else": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "dialogue_controller",
-                  "event_id": "open_dialogue",
+                  "command_id": "open_dialogue",
                   "dialogue_path": "dialogues/levels/level4_gate_fail.json",
                   "dialogue_on_start": [],
                   "dialogue_on_end": [],
                   "segment_hooks": [],
                   "allow_cancel": false,
-                  "actor_entity_id": "$actor_id",
-                  "caller_entity_id": "$self_id"
+                  "entity_refs": {
+                    "instigator": "$ref_ids.instigator",
+                    "caller": "$self_id"
+                  }
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "input_value_0"
+                }
+              },
+              "right": "$self.correct_value_0"
             }
           ]
         }
@@ -2198,15 +2224,17 @@
           ]
         }
       ],
-      "events": {
+      "entity_commands": {
         "interact": {
           "enabled": true,
           "commands": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "gate",
-              "event_id": "attempt_open",
-              "actor_entity_id": "$actor_id"
+              "command_id": "attempt_open",
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator"
+              }
             }
           ]
         }
@@ -2242,7 +2270,7 @@
               ],
               "level_select": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/system/complete_level_return",
                   "level_number": 4
                 }

@@ -363,8 +363,6 @@ def _resolve_entity_id(
     entity_id: str,
     *,
     source_entity_id: str | None,
-    actor_entity_id: str | None,
-    caller_entity_id: str | None = None,
 ) -> str:
     """Resolve special entity references used inside command specs.
 
@@ -377,14 +375,6 @@ def _resolve_entity_id(
         if source_entity_id is None:
             raise ValueError("Command used 'self' without a source entity context.")
         return source_entity_id
-    if entity_id == "actor":
-        if actor_entity_id is None:
-            raise ValueError("Command used 'actor' without an actor entity context.")
-        return actor_entity_id
-    if entity_id == "caller":
-        if caller_entity_id is None:
-            raise ValueError("Command used 'caller' without a caller entity context.")
-        return caller_entity_id
     return entity_id
 
 
@@ -420,10 +410,10 @@ def _require_exact_entity(world: Any, entity_id: str) -> Any:
     resolved_id = str(entity_id).strip()
     if not resolved_id:
         raise ValueError("Entity-targeted primitive commands require a non-blank entity_id.")
-    if resolved_id in {"self", "actor", "caller"}:
+    if resolved_id == "self":
         raise ValueError(
             "Entity-targeted primitive commands require an explicit entity_id; "
-            "use '$self_id', '$actor_id', or '$caller_id' in a higher-level command first."
+            "use '$self_id' or '$ref_ids.<name>' in a higher-level command first."
         )
     entity = world.get_entity(resolved_id)
     if entity is None:
@@ -542,21 +532,21 @@ def _persist_entity_field(
     )
 
 
-def _persist_entity_event_enabled(
+def _persist_entity_command_enabled(
     *,
     area: Any,
     persistence_runtime: Any | None,
     entity_id: str,
-    event_id: str,
+    command_id: str,
     enabled: bool,
     entity: Any,
 ) -> None:
-    """Persist an event enabled-state change when runtime persistence is available."""
+    """Persist an entity-command enabled-state change when runtime persistence is available."""
     if persistence_runtime is None:
         return
-    persistence_runtime.set_entity_event_enabled(
+    persistence_runtime.set_entity_command_enabled(
         entity_id,
-        event_id,
+        command_id,
         enabled,
         entity=entity,
         tile_size=area.tile_size,
@@ -569,8 +559,6 @@ def _normalize_camera_follow_spec(
     command_name: str,
     world: Any | None = None,
     source_entity_id: str | None = None,
-    actor_entity_id: str | None = None,
-    caller_entity_id: str | None = None,
     require_exact_entity: bool,
 ) -> dict[str, Any]:
     """Validate one public camera follow spec and return normalized runtime data."""
@@ -620,8 +608,6 @@ def _normalize_camera_follow_spec(
         normalized["entity_id"] = _resolve_entity_id(
             raw_entity_id,
             source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
         if not normalized["entity_id"]:
             raise ValueError(f"{command_name} resolved a blank entity_id for follow.mode 'entity'.")
@@ -705,6 +691,78 @@ def _branch_with_runtime_context(
     }
     return SequenceCommandHandle(registry, context, branch, base_params=inherited_params)
 
+
+def _normalize_entity_refs(entity_refs: Any) -> dict[str, str] | None:
+    """Validate one authored entity-ref mapping and normalize it to string ids."""
+    if entity_refs is None:
+        return None
+    if not isinstance(entity_refs, dict):
+        raise TypeError("entity_refs must be a JSON object when provided.")
+    normalized: dict[str, str] = {}
+    for raw_name, raw_entity_id in entity_refs.items():
+        ref_name = str(raw_name).strip()
+        if not ref_name:
+            raise ValueError("entity_refs cannot use blank names.")
+        entity_id = str(raw_entity_id).strip()
+        if not entity_id:
+            raise ValueError(f"entity_refs.{ref_name} must resolve to a non-empty entity id.")
+        normalized[ref_name] = entity_id
+    return normalized
+
+
+def _build_child_runtime_params(
+    runtime_params: dict[str, Any] | None,
+    *,
+    source_entity_id: str | None = None,
+    entity_refs: Any = None,
+    refs_mode: str | None = None,
+    excluded_param_names: set[str] | None = None,
+) -> dict[str, Any]:
+    """Return inherited runtime params with optional ref and source overrides applied."""
+    inherited_params = {
+        key: copy.deepcopy(value)
+        for key, value in dict(runtime_params or {}).items()
+        if key not in (excluded_param_names or set())
+    }
+    if source_entity_id is not None:
+        inherited_params["source_entity_id"] = source_entity_id
+
+    normalized_refs = _normalize_entity_refs(entity_refs)
+    resolved_refs_mode = refs_mode
+    if resolved_refs_mode is None:
+        resolved_refs_mode = "merge" if normalized_refs is not None else "inherit"
+    resolved_refs_mode = str(resolved_refs_mode).strip().lower()
+    if resolved_refs_mode not in {"inherit", "merge", "replace"}:
+        raise ValueError("refs_mode must be 'inherit', 'merge', or 'replace'.")
+    if resolved_refs_mode == "inherit" and normalized_refs is not None:
+        raise ValueError("refs_mode 'inherit' cannot be combined with explicit entity_refs.")
+
+    existing_refs = inherited_params.get("entity_refs", {})
+    if existing_refs is None:
+        inherited_ref_map: dict[str, str] = {}
+    elif isinstance(existing_refs, dict):
+        inherited_ref_map = {
+            str(name): str(entity_id)
+            for name, entity_id in existing_refs.items()
+        }
+    else:
+        raise TypeError("Inherited entity_refs must be a JSON object.")
+
+    if resolved_refs_mode == "inherit":
+        next_refs = inherited_ref_map
+    elif resolved_refs_mode == "merge":
+        next_refs = dict(inherited_ref_map)
+        next_refs.update(normalized_refs or {})
+    else:
+        next_refs = dict(normalized_refs or {})
+
+    if next_refs:
+        inherited_params["entity_refs"] = next_refs
+    else:
+        inherited_params.pop("entity_refs", None)
+
+    return inherited_params
+
 def _normalize_input_map(value: Any) -> dict[str, str]:
     """Convert JSON-like input-map data into a stable string-to-string mapping."""
     if not isinstance(value, dict):
@@ -776,9 +834,9 @@ def _normalize_entity_field_mutation(
             raise ValueError("visible does not support nested field paths.")
         return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
-    if root == "events_enabled":
+    if root == "entity_commands_enabled":
         if len(path) != 1:
-            raise ValueError("events_enabled does not support nested field paths.")
+            raise ValueError("entity_commands_enabled does not support nested field paths.")
         return _EntityFieldMutation(path=path, normalized_value=bool(value))
 
     if root == "render_order":
@@ -845,7 +903,7 @@ def _normalize_entity_field_mutation(
 
     raise ValueError(
         f"Unsupported entity field '{field_name}'. "
-        "Use set_current_area_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
+        "Use set_current_area_var/set_entity_var for variables and dedicated commands for entity commands/template rebuilds."
     )
 
 
@@ -866,9 +924,9 @@ def _apply_normalized_entity_field_mutation(
         entity.visible = bool(value)
         return "visible", entity.visible
 
-    if root == "events_enabled":
-        entity.set_events_enabled(bool(value))
-        return "events_enabled", entity.events_enabled
+    if root == "entity_commands_enabled":
+        entity.set_entity_commands_enabled(bool(value))
+        return "entity_commands_enabled", entity.entity_commands_enabled
 
     if root == "render_order":
         entity.render_order = int(value)
@@ -920,7 +978,7 @@ def _apply_normalized_entity_field_mutation(
 
     raise ValueError(
         f"Unsupported entity field path '{'.'.join(path)}'. "
-        "Use set_current_area_var/set_entity_var for variables and dedicated commands for events/template rebuilds."
+        "Use set_current_area_var/set_entity_var for variables and dedicated commands for entity commands/template rebuilds."
     )
 
 
@@ -1906,9 +1964,9 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         commands: list[dict[str, Any]] | dict[str, Any] | None = None,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
+        **runtime_params: Any,
     ) -> CommandHandle:
         """Start one independent flow and return immediately."""
         if context.command_runner is None:
@@ -1920,26 +1978,27 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             registry,
             context,
             normalized_commands,
-            base_params={
-                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
-                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
+            base_params=_build_child_runtime_params(
+                runtime_params,
+                source_entity_id=source_entity_id,
+                entity_refs=entity_refs,
+                refs_mode=refs_mode,
+            ),
         )
         context.command_runner.spawn_root_handle(handle)
         return ImmediateHandle()
 
-    @registry.register("run_sequence", deferred_params={"commands"})
-    def run_sequence(
+    @registry.register("run_commands", deferred_params={"commands"})
+    def run_commands(
         context: CommandContext,
         *,
         commands: list[dict[str, Any]] | dict[str, Any] | None = None,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
+        **runtime_params: Any,
     ) -> CommandHandle:
-        """Run an inline command list in order, waiting for each child as needed."""
+        """Execute one explicit command-list value in order, waiting for each child."""
         normalized_commands = _normalize_command_specs(commands)
         if not normalized_commands:
             return ImmediateHandle()
@@ -1947,11 +2006,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             registry,
             context,
             normalized_commands,
-            base_params={
-                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
-                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
+            base_params=_build_child_runtime_params(
+                runtime_params,
+                source_entity_id=source_entity_id,
+                entity_refs=entity_refs,
+                refs_mode=refs_mode,
+            ),
         )
 
     @registry.register("run_parallel", deferred_params={"commands"})
@@ -1961,9 +2021,9 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         commands: list[dict[str, Any]] | dict[str, Any] | None = None,
         completion: dict[str, Any] | None = None,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
+        **runtime_params: Any,
     ) -> CommandHandle:
         """Start several child commands together with explicit completion semantics."""
         normalized_commands = _normalize_command_specs(commands)
@@ -1974,11 +2034,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             context,
             command_specs=normalized_commands,
             completion=copy.deepcopy(completion),
-            base_params={
-                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
-                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
+            base_params=_build_child_runtime_params(
+                runtime_params,
+                source_entity_id=source_entity_id,
+                entity_refs=entity_refs,
+                refs_mode=refs_mode,
+            ),
         )
 
     @registry.register("run_commands_for_collection", deferred_params={"commands"})
@@ -1990,9 +2051,9 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         item_param: str = "item",
         index_param: str = "index",
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **_: Any,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
+        **runtime_params: Any,
     ) -> CommandHandle:
         """Run the same inline command list once per item in a list/tuple value."""
         if value is None:
@@ -2011,67 +2072,70 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             commands=normalized_commands,
             item_param=str(item_param),
             index_param=str(index_param),
-            base_params={
-                **({"source_entity_id": source_entity_id} if source_entity_id is not None else {}),
-                **({"actor_entity_id": actor_entity_id} if actor_entity_id is not None else {}),
-                **({"caller_entity_id": caller_entity_id} if caller_entity_id is not None else {}),
-            },
+            base_params=_build_child_runtime_params(
+                runtime_params,
+                source_entity_id=source_entity_id,
+                entity_refs=entity_refs,
+                refs_mode=refs_mode,
+            ),
         )
 
     @registry.register(
-        "run_event",
+        "run_entity_command",
         deferred_params={"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
     )
-    def run_event(
+    def run_entity_command(
         context: CommandContext,
         *,
         entity_id: str,
-        event_id: str,
+        command_id: str,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
-        **event_parameters: Any,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
+        **runtime_params: Any,
     ) -> CommandHandle:
-        """Execute a named event on a target entity when it is enabled."""
+        """Execute a named entity command on a target entity when it is enabled."""
         resolved_id = _resolve_entity_id(
             entity_id,
             source_entity_id=source_entity_id,
-            actor_entity_id=actor_entity_id,
-            caller_entity_id=caller_entity_id,
         )
         if not resolved_id:
-            logger.warning("run_event: skipping because entity_id resolved to blank.")
+            logger.warning("run_entity_command: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
         entity = context.world.get_entity(resolved_id)
         if entity is None:
-            raise KeyError(f"Cannot run event on missing entity '{resolved_id}'.")
+            raise KeyError(f"Cannot run entity command on missing entity '{resolved_id}'.")
         if not entity.present:
             return ImmediateHandle()
-        event = entity.get_event(event_id)
-        if not entity.has_enabled_event(event_id) or event is None or not event.commands:
+        entity_command = entity.get_entity_command(command_id)
+        if (
+            not entity.has_enabled_entity_command(command_id)
+            or entity_command is None
+            or not entity_command.commands
+        ):
             return ImmediateHandle()
 
-        base_params: dict[str, Any] = dict(event_parameters)
-        base_params["source_entity_id"] = resolved_id
-        if actor_entity_id is not None:
-            base_params["actor_entity_id"] = actor_entity_id
-        if caller_entity_id is not None:
-            base_params["caller_entity_id"] = caller_entity_id
+        base_params = _build_child_runtime_params(
+            runtime_params,
+            source_entity_id=resolved_id,
+            entity_refs=entity_refs,
+            refs_mode=refs_mode,
+        )
         return SequenceCommandHandle(
             registry,
             context,
-            event.commands,
+            entity_command.commands,
             base_params=base_params,
         )
 
-    @registry.register("run_command")
-    def run_command(
+    @registry.register("run_project_command")
+    def run_project_command(
         context: CommandContext,
         *,
         command_id: str,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
+        refs_mode: str | None = None,
         **command_parameters: Any,
     ) -> CommandHandle:
         """Execute a reusable project-level command definition from the command library."""
@@ -2080,7 +2144,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
         resolved_command_id = str(command_id).strip()
         if not resolved_command_id:
-            logger.warning("run_command: skipping because command_id resolved to blank.")
+            logger.warning("run_project_command: skipping because command_id resolved to blank.")
             return ImmediateHandle()
 
         if resolved_command_id in context.project_command_stack:
@@ -2092,13 +2156,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if not instantiated_commands:
             return ImmediateHandle()
 
-        base_params: dict[str, Any] = {}
-        if source_entity_id is not None:
-            base_params["source_entity_id"] = source_entity_id
-        if actor_entity_id is not None:
-            base_params["actor_entity_id"] = actor_entity_id
-        if caller_entity_id is not None:
-            base_params["caller_entity_id"] = caller_entity_id
+        base_params = _build_child_runtime_params(
+            command_parameters,
+            source_entity_id=source_entity_id,
+            entity_refs=entity_refs,
+            refs_mode=refs_mode,
+        )
 
         sequence_handle = SequenceCommandHandle(
             registry,
@@ -2111,33 +2174,33 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             return ImmediateHandle()
         return ProjectCommandHandle(context, resolved_command_id, sequence_handle)
 
-    @registry.register("set_event_enabled")
-    def set_event_enabled(
+    @registry.register("set_entity_command_enabled")
+    def set_entity_command_enabled(
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
         *,
         entity_id: str,
-        event_id: str,
+        command_id: str,
         enabled: bool,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Enable or disable a named event on an entity."""
+        """Enable or disable a named entity command on an entity."""
         entity = _require_exact_entity(world, entity_id)
-        entity.set_event_enabled(event_id, enabled)
+        entity.set_entity_command_enabled(command_id, enabled)
         if persistent:
-            _persist_entity_event_enabled(
+            _persist_entity_command_enabled(
                 area=area,
                 persistence_runtime=persistence_runtime,
                 entity_id=entity.entity_id,
-                event_id=event_id,
+                command_id=command_id,
                 enabled=enabled,
                 entity=entity,
             )
         return ImmediateHandle()
 
-    @registry.register("set_events_enabled")
-    def set_events_enabled(
+    @registry.register("set_entity_commands_enabled")
+    def set_entity_commands_enabled(
         world: Any,
         area: Any,
         persistence_runtime: Any | None,
@@ -2146,13 +2209,13 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         enabled: bool,
         persistent: bool = False,
     ) -> CommandHandle:
-        """Enable or disable all named events on an entity at once."""
+        """Enable or disable all named entity commands on an entity at once."""
         return _set_exact_entity_field_handle(
             world=world,
             area=area,
             persistence_runtime=persistence_runtime,
             entity_id=entity_id,
-            field_name="events_enabled",
+            field_name="entity_commands_enabled",
             value=enabled,
             persistent=persistent,
         )
@@ -2258,8 +2321,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         transfer_entity_ids: list[str] | None = None,
         camera_follow: dict[str, Any] | None = None,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Queue a transition into another authored area once the command lane is idle."""
@@ -2279,8 +2340,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             resolved_entity_id = _resolve_entity_id(
                 raw_entity_id,
                 source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
             )
             if not resolved_entity_id:
                 logger.warning(
@@ -2297,8 +2356,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 camera_follow,
                 command_name="change_area",
                 source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
                 require_exact_entity=False,
             )
             camera_follow_request = CameraFollowRequest(
@@ -2335,8 +2392,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entry_id: str | None = None,
         camera_follow: dict[str, Any] | None = None,
         source_entity_id: str | None = None,
-        actor_entity_id: str | None = None,
-        caller_entity_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Queue a fresh game session and transition into the requested area."""
@@ -2353,8 +2408,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 camera_follow,
                 command_name="new_game",
                 source_entity_id=source_entity_id,
-                actor_entity_id=actor_entity_id,
-                caller_entity_id=caller_entity_id,
                 require_exact_entity=False,
             )
             camera_follow_request = CameraFollowRequest(
@@ -2530,8 +2583,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             "bounds",
             "deadzone",
             "source_entity_id",
-            "actor_entity_id",
-            "caller_entity_id",
         }
         unknown_keys = set(runtime_params) - allowed_keys
         if unknown_keys:
@@ -3218,30 +3269,28 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 )
         return ImmediateHandle()
 
-    @registry.register("check_current_area_var", deferred_params={"then", "else"})
-    def check_current_area_var(
+    @registry.register("if", deferred_params={"then", "else"})
+    def if_command(
         context: CommandContext,
-        world: Any,
         *,
-        name: str,
+        left: Any = None,
         op: str = "eq",
-        value: Any = None,
+        right: Any = None,
         then: list[dict[str, Any]] | None = None,
         **runtime_params: Any,
     ) -> CommandHandle:
-        """Branch based on one explicit current-area variable condition."""
+        """Branch using one small structured comparison between two resolved values."""
         comparator = _COMPARE_OPS.get(op)
         if comparator is None:
             raise ValueError(f"Unknown comparison operator '{op}'.")
-        current_value = world.variables.get(name)
         return _branch_with_runtime_context(
             registry,
             context,
-            condition_met=comparator(current_value, value),
+            condition_met=comparator(left, right),
             then=then,
             else_branch=runtime_params.get("else"),
             runtime_params=runtime_params,
-            excluded_param_names={"name", "op", "value", "then", "else"},
+            excluded_param_names={"left", "op", "right", "then", "else"},
         )
 
     @registry.register("set_area_var")
@@ -3372,34 +3421,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             persisted_value,
         )
         return ImmediateHandle()
-
-    @registry.register("check_entity_var", deferred_params={"then", "else"})
-    def check_entity_var(
-        context: CommandContext,
-        world: Any,
-        *,
-        entity_id: str,
-        name: str,
-        op: str = "eq",
-        value: Any = None,
-        then: list[dict[str, Any]] | None = None,
-        **runtime_params: Any,
-    ) -> CommandHandle:
-        """Branch based on one explicit entity-variable condition."""
-        comparator = _COMPARE_OPS.get(op)
-        if comparator is None:
-            raise ValueError(f"Unknown comparison operator '{op}'.")
-        variables = _require_exact_entity_variables(world, entity_id)
-        current_value = variables.get(name)
-        return _branch_with_runtime_context(
-            registry,
-            context,
-            condition_met=comparator(current_value, value),
-            then=then,
-            else_branch=runtime_params.get("else"),
-            runtime_params=runtime_params,
-            excluded_param_names={"entity_id", "name", "op", "value", "then", "else"},
-        )
 
     @registry.register("reset_transient_state")
     def reset_transient_state(

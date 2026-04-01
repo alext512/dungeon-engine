@@ -140,11 +140,8 @@
       }
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_segment_speaker_marker",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": "__inherit__",
       "then": [],
       "else": [
         {
@@ -153,7 +150,14 @@
           "name": "dialogue_current_speaker_id",
           "value": "$self.dialogue_current_segment_speaker_marker"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_segment_speaker_marker"
+        }
+      },
+      "right": "__inherit__"
     },
     {
       "type": "set_entity_var",
@@ -246,24 +250,29 @@
       "value": "$self.dialogue_revision"
     },
     {
-      "type": "run_sequence",
+      "type": "run_commands",
       "commands": "$self.dialogue_current_segment_on_start_commands",
-      "actor_entity_id": "$self.dialogue_actor_id",
-      "caller_entity_id": "$self.dialogue_caller_id"
+      "entity_refs": {
+        "instigator": "$self.dialogue_actor_id",
+        "caller": "$self.dialogue_caller_id"
+      }
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_revision",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": "$self.dialogue_current_segment_revision_snapshot",
       "then": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/render_current_segment"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_revision"
+        }
+      },
+      "right": "$self.dialogue_current_segment_revision_snapshot"
     }
   ]
 }
-

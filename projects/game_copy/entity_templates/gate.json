@@ -24,7 +24,7 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "set_input_value": {
       "enabled": true,
       "commands": [
@@ -41,11 +41,8 @@
           "value": "$value"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "pending_index",
+          "type": "if",
           "op": "eq",
-          "value": 0,
           "then": [
             {
               "type": "set_entity_var",
@@ -56,11 +53,8 @@
           ],
           "else": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pending_index",
+              "type": "if",
               "op": "eq",
-              "value": 1,
               "then": [
                 {
                   "type": "set_entity_var",
@@ -76,14 +70,28 @@
                   "name": "input_value_2",
                   "value": "$self.pending_value"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_index"
+                }
+              },
+              "right": 1
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "pending_index"
+            }
+          },
+          "right": 0
         },
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "$self_id",
-          "event_id": "recalc"
+          "command_id": "recalc"
         }
       ]
     },
@@ -103,11 +111,8 @@
           "value": "$amount"
         },
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "pending_index",
+          "type": "if",
           "op": "eq",
-          "value": 0,
           "then": [
             {
               "type": "add_entity_var",
@@ -118,11 +123,8 @@
           ],
           "else": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pending_index",
+              "type": "if",
               "op": "eq",
-              "value": 1,
               "then": [
                 {
                   "type": "add_entity_var",
@@ -138,14 +140,28 @@
                   "name": "input_value_2",
                   "amount": "$self.pending_amount"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_index"
+                }
+              },
+              "right": 1
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "pending_index"
+            }
+          },
+          "right": 0
         },
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "$self_id",
-          "event_id": "recalc"
+          "command_id": "recalc"
         }
       ]
     },
@@ -153,57 +169,69 @@
       "enabled": true,
       "commands": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "input_value_0",
+          "type": "if",
           "op": "eq",
-          "value": "$self.correct_value_0",
           "then": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "input_value_1",
+              "type": "if",
               "op": "eq",
-              "value": "$self.correct_value_1",
               "then": [
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "input_value_2",
+                  "type": "if",
                   "op": "eq",
-                  "value": "$self.correct_value_2",
                   "then": [
                     {
-                      "type": "run_event",
+                      "type": "run_entity_command",
                       "entity_id": "$self_id",
-                      "event_id": "open_gate"
+                      "command_id": "open_gate"
                     }
                   ],
                   "else": [
                     {
-                      "type": "run_event",
+                      "type": "run_entity_command",
                       "entity_id": "$self_id",
-                      "event_id": "close_gate"
+                      "command_id": "close_gate"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "input_value_2"
+                    }
+                  },
+                  "right": "$self.correct_value_2"
                 }
               ],
               "else": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "$self_id",
-                  "event_id": "close_gate"
+                  "command_id": "close_gate"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "input_value_1"
+                }
+              },
+              "right": "$self.correct_value_1"
             }
           ],
           "else": [
             {
-              "type": "run_event",
+              "type": "run_entity_command",
               "entity_id": "$self_id",
-              "event_id": "close_gate"
+              "command_id": "close_gate"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "input_value_0"
+            }
+          },
+          "right": "$self.correct_value_0"
         }
       ]
     },
@@ -211,11 +239,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "open",
+          "type": "if",
           "op": "eq",
-          "value": false,
           "then": [
             {
               "type": "set_entity_var",
@@ -243,7 +268,13 @@
             {
               "type": "play_animation",
               "entity_id": "$self_id",
-              "frame_sequence": [1, 2, 3, 4, 5],
+              "frame_sequence": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
               "frames_per_sprite_change": 4,
               "hold_last_frame": true,
               "wait": true
@@ -254,7 +285,14 @@
               "field_name": "visible",
               "value": false
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "open"
+            }
+          },
+          "right": false
         }
       ]
     },
@@ -262,11 +300,8 @@
       "enabled": true,
       "commands": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "open",
+          "type": "if",
           "op": "eq",
-          "value": true,
           "then": [
             {
               "type": "set_entity_var",
@@ -294,12 +329,25 @@
             {
               "type": "play_animation",
               "entity_id": "$self_id",
-              "frame_sequence": [4, 3, 2, 1, 0],
+              "frame_sequence": [
+                4,
+                3,
+                2,
+                1,
+                0
+              ],
               "frames_per_sprite_change": 4,
               "hold_last_frame": true,
               "wait": true
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "open"
+            }
+          },
+          "right": true
         }
       ]
     }

@@ -310,22 +310,22 @@ class PersistenceRuntime:
         variables[name] = copy.deepcopy(value)
         self.dirty = True
 
-    def set_entity_event_enabled(
+    def set_entity_command_enabled(
         self,
         entity_id: str,
-        event_id: str,
+        command_id: str,
         enabled: bool,
         *,
         entity: Entity | None = None,
         tile_size: int | None = None,
     ) -> None:
-        """Persist an entity event enabled-state override."""
+        """Persist an entity-command enabled-state override."""
         if entity is not None and entity.scope == "global":
             entity_state = self._ensure_entity_state(entity_id, entity=entity)
             entity_state.removed = False
             entity_state.spawned = None
-            event_states = entity_state.overrides.setdefault("event_states", {})
-            event_states[str(event_id)] = bool(enabled)
+            command_states = entity_state.overrides.setdefault("entity_command_states", {})
+            command_states[str(command_id)] = bool(enabled)
             self.dirty = True
             return
         if not self._is_authored_entity(entity_id):
@@ -334,8 +334,8 @@ class PersistenceRuntime:
         entity_state = self._ensure_entity_state(entity_id, entity=entity)
         entity_state.removed = False
         entity_state.spawned = None
-        event_states = entity_state.overrides.setdefault("event_states", {})
-        event_states[str(event_id)] = bool(enabled)
+        command_states = entity_state.overrides.setdefault("entity_command_states", {})
+        command_states[str(command_id)] = bool(enabled)
         self.dirty = True
 
     def remove_entity(self, entity_id: str, *, entity: Entity | None = None) -> None:
@@ -1123,8 +1123,8 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.present = bool(value)
         elif key == "visible":
             entity.visible = bool(value)
-        elif key == "events_enabled":
-            entity.events_enabled = bool(value)
+        elif key == "entity_commands_enabled":
+            entity.entity_commands_enabled = bool(value)
         elif key == "render_order":
             entity.render_order = int(value)
         elif key == "y_sort":
@@ -1137,17 +1137,17 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.color = (int(value[0]), int(value[1]), int(value[2]))
         elif key == "input_map":
             entity.input_map = {
-                str(action): str(event_name)
-                for action, event_name in dict(value).items()
+                str(action): str(command_name)
+                for action, command_name in dict(value).items()
             }
         elif key == "variables":
             entity.variables.update(copy.deepcopy(value))
-        elif key == "event_states":
-            for event_id, event_enabled in value.items():
-                event = entity.get_event(str(event_id))
-                if event is None:
+        elif key == "entity_command_states":
+            for command_id, command_enabled in value.items():
+                entity_command = entity.get_entity_command(str(command_id))
+                if entity_command is None:
                     continue
-                event.enabled = bool(event_enabled)
+                entity_command.enabled = bool(command_enabled)
         elif key == "visuals":
             entity.visuals = _deserialize_persistent_visuals(value)
         else:
@@ -1234,8 +1234,8 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["present"] = current_entity.present
     if current_entity.visible != authored_entity.visible:
         overrides["visible"] = current_entity.visible
-    if current_entity.events_enabled != authored_entity.events_enabled:
-        overrides["events_enabled"] = current_entity.events_enabled
+    if current_entity.entity_commands_enabled != authored_entity.entity_commands_enabled:
+        overrides["entity_commands_enabled"] = current_entity.entity_commands_enabled
     if current_entity.render_order != authored_entity.render_order:
         overrides["render_order"] = current_entity.render_order
     if current_entity.y_sort != authored_entity.y_sort:
@@ -1258,9 +1258,12 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
     if variable_overrides:
         overrides["variables"] = variable_overrides
 
-    event_state_overrides = _capture_event_state_overrides(authored_entity, current_entity)
-    if event_state_overrides:
-        overrides["event_states"] = event_state_overrides
+    entity_command_state_overrides = _capture_entity_command_state_overrides(
+        authored_entity,
+        current_entity,
+    )
+    if entity_command_state_overrides:
+        overrides["entity_command_states"] = entity_command_state_overrides
 
     return overrides
 
@@ -1277,19 +1280,19 @@ def _capture_variable_overrides(
     return overrides
 
 
-def _capture_event_state_overrides(
+def _capture_entity_command_state_overrides(
     authored_entity: Entity,
     current_entity: Entity,
 ) -> dict[str, bool]:
-    """Capture event enabled-state changes as persistent overrides."""
+    """Capture entity-command enabled-state changes as persistent overrides."""
     overrides: dict[str, bool] = {}
-    event_ids = set(authored_entity.events.keys()) | set(current_entity.events.keys())
-    for event_id in event_ids:
-        authored_event = authored_entity.get_event(event_id)
-        current_event = current_entity.get_event(event_id)
-        if authored_event is None or current_event is None:
+    command_ids = set(authored_entity.entity_commands.keys()) | set(current_entity.entity_commands.keys())
+    for command_id in command_ids:
+        authored_command = authored_entity.get_entity_command(command_id)
+        current_command = current_entity.get_entity_command(command_id)
+        if authored_command is None or current_command is None:
             continue
-        if current_event.enabled != authored_event.enabled:
-            overrides[event_id] = current_event.enabled
+        if current_command.enabled != authored_command.enabled:
+            overrides[command_id] = current_command.enabled
     return overrides
 

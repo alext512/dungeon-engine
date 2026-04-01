@@ -29,7 +29,11 @@
       "x": 16,
       "width": 232
     },
-    "choice_rows_y": [154, 164, 174]
+    "choice_rows_y": [
+      154,
+      164,
+      174
+    ]
   },
   "movement": {
     "_comment_ticks_per_tile": "Recommended to keep this even so the sprite change lands halfway through a tile move.",

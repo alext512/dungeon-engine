@@ -54,9 +54,9 @@ areas
 `-- override input-target defaults
 
 entity templates
-|-- define visuals, events, input maps, variables
+|-- define visuals, entity commands, input maps, variables
 |-- call project commands
-`-- call controller events to start dialogues
+`-- call controller entity commands to start dialogues
 
 ordinary JSON data
 `-- provide reusable dialogue/menu content or any other project-specific payloads
@@ -64,6 +64,11 @@ ordinary JSON data
 project commands
 `-- provide reusable behavior chains
 ```
+
+Two command-authoring rules apply everywhere:
+
+- Any `commands: [...]` list is sequential by default.
+- Use `run_commands` only when you want to execute a command-list value explicitly, such as one stored in a variable or passed as raw hook data.
 
 ## A Minimal Project
 
@@ -346,21 +351,23 @@ Example:
       "frames": [0]
     }
   ],
-  "events": {
+  "entity_commands": {
     "interact": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "dialogue_controller",
-          "event_id": "open_dialogue",
+          "command_id": "open_dialogue",
           "dialogue_path": "$dialogue_path",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
           "segment_hooks": [],
           "allow_cancel": false,
-          "actor_entity_id": "$actor_id",
-          "caller_entity_id": "$self_id"
+          "entity_refs": {
+            "instigator": "$ref_ids.instigator",
+            "caller": "$self_id"
+          }
         }
       ]
     }
@@ -383,7 +390,7 @@ Example:
 - `tags`
 - `variables`
 - `input_map`
-- `events`
+- `entity_commands`
 
 Entity rendering follows the same model as tile layers:
 
@@ -435,20 +442,26 @@ Rules:
 - screen-space entities must not author `x` / `y`
 - screen-space entities should use `pixel_x` / `pixel_y` or per-visual offsets
 
+Screen-space entities do not participate in world-tile position queries and should not be used for tile/collision-based room interactions. Use them for HUD overlays, dialogue panels, menu controllers, and other UI that floats above the game world. A common pattern is `space: "screen"` combined with `scope: "global"` for persistent UI elements that survive area transitions (e.g. a health bar controller).
+
+Screen-space entities are full entities with entity commands, variables, and command-driven behavior. This distinguishes them from the lightweight `show_screen_image` / `show_screen_text` commands, which create simple display-only screen elements without an entity command or variable system.
+
 ### `scope`
 
 `scope` controls lifetime:
 
 - `area`
-  Normal area-local entity.
+  Normal area-local entity. Authored in area JSON, lives only while that area is loaded, and persists per-area.
 - `global`
-  Project-level entity available in every runtime world.
+  Project-level runtime entity. Authored in `project.json` under `global_entities`. The runtime injects global entities into the active play world whenever an area is built, so they are always present regardless of which area is loaded.
+
+Global entity state is stored separately from area state and is not reset by area resets. Use global scope for entities that need to persist across area transitions: HUD controllers, party/inventory managers, music controllers, or other cross-cutting services. Use area scope for room-specific NPCs, objects, and interactions.
 
 In practice, author global service/controller entities in `project.json`.
 
 ### `input_map`
 
-`input_map` lets an entity decide which event handles a logical action.
+`input_map` lets an entity decide which entity command handles a logical action.
 
 Example:
 
@@ -466,9 +479,9 @@ Each logical action is routed independently through three layers:
 
 1. the input handler resolves a logical action such as `move_up`, `interact`, or `menu`
 2. the world chooses the routed entity for that action from the current `input_targets`, using project defaults plus any area overrides
-3. that routed entity's `input_map` decides which event to run for that action
+3. that routed entity's `input_map` decides which entity command to run for that action
 4. if there is no mapping for that action, nothing is dispatched
-5. the runner enqueues `run_event` on the routed entity
+5. the runner enqueues `run_entity_command` on the routed entity
 
 This is what allows dialogue controllers, menus, and other service entities to temporarily own only the inputs they need without a single active-entity focus model.
 
@@ -526,7 +539,32 @@ Notes:
 
 - project command ids are path-derived typed ids from file location, for example `commands/walk_one_tile`
 - do not author a top-level `id`
-- use `run_command` to call them
+- use `run_project_command` to call them
+- declare `deferred_params` when a specific parameter should remain raw data until a later explicit execution step, such as dialogue hook command arrays
+
+Example with deferred hook params:
+
+```json
+{
+  "params": ["dialogue_on_start", "dialogue_on_end"],
+  "deferred_params": ["dialogue_on_start", "dialogue_on_end"],
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$self_id",
+      "name": "dialogue_on_end",
+      "value_mode": "raw",
+      "value": "$dialogue_on_end"
+    },
+    {
+      "type": "run_commands",
+      "commands": "$dialogue_on_start"
+    }
+  ]
+}
+```
+
+`deferred_params` keeps the passed hook payloads raw while the project command is instantiated. `value_mode: "raw"` keeps a setter from recursively resolving nested command data when you want to store that payload for later execution.
 
 ### How To Read Command JSON
 
@@ -564,11 +602,11 @@ How to read it:
 - `"value": { "$sum": [...] }`
   `"$sum"` is a helper that computes the value before `set_entity_var` runs.
 
-When one JSON command chain needs to call another JSON command file, use `run_command`:
+When one JSON command chain needs to call another JSON command file, use `run_project_command`:
 
 ```json
 {
-  "type": "run_command",
+  "type": "run_project_command",
   "command_id": "commands/walk_one_tile",
   "offset_x": 1,
   "offset_y": 0
@@ -577,53 +615,44 @@ When one JSON command chain needs to call another JSON command file, use `run_co
 
 In the called project command file, `$offset_x` and `$offset_y` resolve from those passed params.
 
-This is a general rule: both `run_command` and `run_event` forward any extra fields on the command object into the called flow as runtime parameters. The called commands can then read those values with `$param_name` tokens. This is how the dialogue examples pass `dialogue_path`, `dialogue_on_start`, `segment_hooks`, and other caller-supplied data into the controller's event.
+This is a general rule: both `run_project_command` and `run_entity_command` forward any extra fields on the command object into the called flow as runtime parameters. The called commands can then read those values with `$param_name` tokens. This is how the dialogue examples pass `dialogue_path`, `dialogue_on_start`, `segment_hooks`, and other caller-supplied data into the controller's command chain.
 
 ## Runtime References and Tokens
 
-Commands often need to refer to the current entity or interaction initiator.
+Commands often need to refer to the current entity or an explicitly passed related entity.
 
-### Context Roles vs Strict Primitive IDs
+### `self`, `refs`, And `ref_ids`
 
-These are the three runtime context roles:
+Current command flows carry:
 
 - `self`
-- `actor`
-- `caller`
+  The entity that owns the current command chain.
+- `entity_refs`
+  A named map of explicitly passed related entities.
 
-Meaning:
-
-- `self`: the entity that owns the current event
-- `actor`: the entity that initiated the current input or interaction flow
-- `caller`: a caller explicitly forwarded by another command chain
-
-Use the raw symbolic ids `self`, `actor`, and `caller` only in higher-level orchestration commands that explicitly support them.
-
-For strict primitive commands, use resolved id tokens instead:
+Use these token surfaces:
 
 - `$self_id`
-- `$actor_id`
-- `$caller_id`
+- `$self.some_value`
+- `$refs.some_name.some_value`
+- `$ref_ids.some_name`
 
 ### Tokens
 
 The command runner also resolves tokens such as:
 
 - `$self_id`
-- `$actor_id`
-- `$caller_id`
 - `$self.some_value`
-- `$actor.some_value`
-- `$caller.some_value`
-- `$entity.<entity_id>.some_value`
+- `$refs.switch.some_value`
+- `$ref_ids.switch`
 - `$project.some.path`
 - `$area.tile_size`
 - `$camera.x`
 - `$current_area.some_value`
 
-`$self...`, `$actor...`, `$caller...`, and `$entity.<id>...` read entity `variables`, not built-in entity fields. Use `$entity_ref` with a `select` block when you need built-in fields like `grid_x` or `pixel_y`.
+`$self...` and `$refs.<name>...` read entity `variables`, not built-in entity fields. Use explicit query/value-source helpers with `select` when you need built-in fields like `grid_x` or `pixel_y`.
 
-`$current_area...` reads the live current-area/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_current_area_var`, `add_current_area_var`, `toggle_current_area_var`, and `check_current_area_var` operate on.
+`$current_area...` reads the live current-area/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_current_area_var`, `add_current_area_var`, and generic `if` checks over current-area values operate on.
 
 `$area...` exposes the current area's `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `name`.
 
@@ -635,14 +664,14 @@ Example:
 ```json
 {
   "type": "set_entity_var",
-  "entity_id": "$caller_id",
+  "entity_id": "$ref_ids.caller",
   "name": "toggled",
   "value": true,
   "persistent": true
 }
 ```
 
-For strict primitive entity-target commands, use explicit ids or resolved tokens such as `$self_id`, `$actor_id`, and `$caller_id` rather than symbolic `self` / `actor` / `caller` strings. This includes the explicit variable primitives plus strict entity/input, camera, movement, and visual/animation primitives such as `set_entity_field`, `set_entity_fields`, `set_event_enabled`, `set_input_target`, `route_inputs_to_entity`, `set_camera_follow`, `set_camera_state`, `set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_entity_world_position`, `move_entity_screen_position`, `wait_for_move`, `play_animation`, `wait_for_animation`, `stop_animation`, `set_visual_frame`, and `set_visual_flip_x`.
+For strict primitive entity-target commands, use explicit ids or resolved id tokens such as `$self_id` and `$ref_ids.some_name` rather than symbolic strings.
 
 ## Ordinary JSON Dialogue Data
 
@@ -749,8 +778,8 @@ The old authored `run_dialogue` path and the later `start_dialogue_session` / `d
 
 Current pattern:
 
-1. call `run_event` on the dialogue controller entity
-2. let that event load JSON dialogue data and store the session state on the controller entity
+1. call `run_entity_command` on the dialogue controller entity
+2. let that entity command load JSON dialogue data and store the session state on the controller entity
 3. let controller-owned project commands redraw the UI and react to later input
 
 Detailed lifecycle when a dialogue starts:
@@ -759,7 +788,7 @@ Detailed lifecycle when a dialogue starts:
 2. the controller loads ordinary JSON dialogue data into entity variables and resets its current segment/page/choice state
 3. caller-supplied `dialogue_on_start` commands run with those borrowed routes already in place
 4. controller-owned commands derive visible text/options and render them through the screen manager
-5. controller input routes to normal entity events like `interact`, `move_up`, `move_down`, and `menu`
+5. controller input routes to normal entity commands like `interact`, `move_up`, `move_down`, and `menu`
 6. nested dialogue/menu state is saved into the controller's `dialogue_state_stack` when another dialogue opens on top of the current one
 7. when the controller finally closes its outermost dialogue, it restores the borrowed routes through `pop_input_routes`
 8. authored `dialogue_on_end` commands can then safely run post-close behavior such as `save_game`, `load_game`, `new_game`, or `quit_game`
@@ -768,16 +797,16 @@ Practical rule:
 
 - use `dialogue_on_start` for setup that should happen after the controller borrows input
 - use `dialogue_on_end` for behavior that should happen after the controller restores input
-- do not rely on `actor` to restore input ownership
+- do not rely on implicit engine magic for interaction ownership; pass any needed `entity_refs` explicitly
 - modal controllers should use `push_input_routes` / `pop_input_routes`
 
 Example caller command:
 
 ```json
 {
-  "type": "run_event",
+  "type": "run_entity_command",
   "entity_id": "dialogue_controller",
-  "event_id": "open_dialogue",
+  "command_id": "open_dialogue",
   "dialogue_path": "dialogues/system/pause_menu.json",
   "dialogue_on_start": [
     {
@@ -789,11 +818,15 @@ Example caller command:
   ],
   "dialogue_on_end": [
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "pending_pause_menu_action",
+      "type": "if",
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "pending_pause_menu_action"
+        }
+      },
       "op": "eq",
-      "value": "load",
+      "right": "load",
       "then": [
         {
           "type": "load_game"
@@ -801,11 +834,15 @@ Example caller command:
       ]
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "pending_pause_menu_action",
+      "type": "if",
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "pending_pause_menu_action"
+        }
+      },
       "op": "eq",
-      "value": "exit",
+      "right": "exit",
       "then": [
         {
           "type": "quit_game"
@@ -818,7 +855,7 @@ Example caller command:
       "option_commands_by_id": {
         "continue": [
           {
-            "type": "run_command",
+            "type": "run_project_command",
             "command_id": "commands/dialogue/close_current_dialogue"
           }
         ],
@@ -830,7 +867,7 @@ Example caller command:
             "value": "load"
           },
           {
-            "type": "run_command",
+            "type": "run_project_command",
             "command_id": "commands/dialogue/close_current_dialogue"
           }
         ],
@@ -842,7 +879,7 @@ Example caller command:
             "value": "exit"
           },
           {
-            "type": "run_command",
+            "type": "run_project_command",
             "command_id": "commands/dialogue/close_current_dialogue"
           }
         ]
@@ -850,8 +887,10 @@ Example caller command:
     }
   ],
   "allow_cancel": true,
-  "actor_entity_id": "$self_id",
-  "caller_entity_id": "$self_id"
+  "entity_refs": {
+    "instigator": "$self_id",
+    "caller": "$self_id"
+  }
 }
 ```
 
@@ -868,20 +907,22 @@ A hook object can define:
 
 Use `option_commands_by_id` when your choice options have stable `option_id` values.
 
-If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. Optional `actor_entity_id` and `caller_entity_id` parameters can be passed at the call site when you need to preserve or override semantic context across dialogue-to-dialogue calls.
+If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. When you need to preserve cross-entity context, pass named `entity_refs` explicitly at the call site.
 
 Generic per-command lifecycle wrapper fields are removed from the active command model:
 
 - removed: command-level `on_start`
 - removed: command-level `on_end`
-- use `run_sequence` when later commands should wait for an earlier long-running command to finish
+- use the surrounding sequential `commands: [...]` body when later commands should wait for earlier ones
+- use `run_commands` when the next command chain is stored in a variable or passed as raw data
 - use `run_parallel` when a grouped set of child commands should start together and the group should complete by an explicit rule
 - use `spawn_flow` when work should start and the current sequence should continue immediately
 
 Scheduling model:
 
 - top-level command flows run independently by default
-- `run_sequence` is the explicit ordered composition command
+- any `commands: [...]` body runs in order by default
+- `run_commands` is the explicit executor for a stored command-list value
 - `run_parallel` is the explicit grouped parallel composition command
 - `spawn_flow` is the explicit fire-and-forget flow spawner
 
@@ -947,7 +988,7 @@ Entity queries now also support an optional `where` block for broad lookups by s
 - `scope`
 - `present`
 - `visible`
-- `events_enabled`
+- `entity_commands_enabled`
 
 Different `where` keys combine with implicit `AND`. Multi-result query helpers return matches in stable runtime order:
 
@@ -1009,7 +1050,7 @@ The engine does **not** automatically block movement against entities. It only p
 A typical movement flow:
 
 1. The player entity's `input_map` maps `move_up` to a `move_up` event.
-2. That event calls a command like `commands/attempt_move_one_tile` with the direction offset.
+2. That entity command calls a project command like `commands/attempt_move_one_tile` with the direction offset.
 3. The project command:
    - computes the target tile using `$sum` with the current position and the offset
    - checks `$cell_flags_at` for walkability
@@ -1019,13 +1060,13 @@ A typical movement flow:
 
 If your movement flow allows pushing, the push command should repeat the same destination validation for the pushed entity's own target tile before moving it. Otherwise, the bug is in authored JSON rather than the engine primitives: low-level move commands intentionally reposition without doing gameplay collision policy on their own.
 
-Minimal player `move_up` event:
+Minimal player `move_up` entity command:
 
 ```json
 "move_up": {
   "commands": [
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/attempt_move_one_tile",
       "direction": "up",
       "offset_x": 0,
@@ -1242,6 +1283,10 @@ Rules:
   - re-entering the origin area does not duplicate it
   - save/load restores the traveler in its current area
 
+A note on travelers: "traveler" is runtime state, not an authored entity type. There is no `"traveler": true` field in JSON. Any live area-scoped entity can become a traveler when it is named in `transfer_entity_ids` during a `change_area`. The engine then tracks that entity's current area for the rest of the session. Only `scope: "area"` entities can be transferred — global entities are already present everywhere and cannot be moved this way.
+
+This is different from global entities. Global entities are project-level and always present in the active world — they don't physically move between areas. A traveler is an entity that was in one area and has been relocated to another; it exists in exactly one area at a time. If you don't include an entity in `transfer_entity_ids`, it simply stays behind in the area it was in.
+
 ## Camera Control
 
 Camera behavior is explicit runtime state controlled by commands.
@@ -1329,7 +1374,7 @@ A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var`
 ```json
 {
   "type": "set_entity_fields",
-  "entity_id": "$caller_id",
+  "entity_id": "$ref_ids.caller",
   "set": {
     "fields": {
       "visible": true
@@ -1358,7 +1403,7 @@ Cross-area state uses a different surface:
 - `set_area_entity_var`
 - `set_area_entity_field`
 
-These commands are always persistent. They edit the target area's saved/authored state by `area_id`; they do not run live events in unloaded rooms. If the target `area_id` is the area currently loaded right now, the engine also mirrors the change into the live runtime when possible.
+These commands are always persistent. They edit the target area's saved/authored state by `area_id`; they do not run live command chains in unloaded rooms. If the target `area_id` is the area currently loaded right now, the engine also mirrors the change into the live runtime when possible.
 
 Example:
 

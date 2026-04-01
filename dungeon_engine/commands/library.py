@@ -22,9 +22,8 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_entity_var_length",
     "append_entity_var",
     "pop_entity_var",
-    "check_entity_var",
-    "set_event_enabled",
-    "set_events_enabled",
+    "set_entity_command_enabled",
+    "set_entity_commands_enabled",
     "set_input_target",
     "set_entity_field",
     "set_entity_fields",
@@ -46,7 +45,7 @@ _STRICT_ENTITY_TARGET_COMMANDS = {
     "set_color",
     "destroy_entity",
 }
-_RESERVED_ENTITY_IDS = {"self", "actor", "caller"}
+_RESERVED_ENTITY_IDS = {"self"}
 
 
 def _validate_strict_camera_follow(
@@ -78,6 +77,7 @@ class ProjectCommandDefinition:
 
     command_id: str
     params: list[str]
+    deferred_params: list[str]
     commands: list[dict[str, Any]]
     source_path: Path
 
@@ -237,6 +237,27 @@ def _load_project_command_definition_from_path(
                 f"Command definition '{resolved_id}' must use non-empty strings inside 'params'."
             )
 
+    raw_deferred_params = raw.get("deferred_params", [])
+    if raw_deferred_params is None:
+        raw_deferred_params = []
+    if not isinstance(raw_deferred_params, list):
+        raise ValueError(f"Command definition '{resolved_id}' must use a list for 'deferred_params'.")
+    for deferred_param in raw_deferred_params:
+        if not isinstance(deferred_param, str) or not deferred_param.strip():
+            raise ValueError(
+                f"Command definition '{resolved_id}' must use non-empty strings inside 'deferred_params'."
+            )
+    unknown_deferred = sorted(
+        str(name)
+        for name in raw_deferred_params
+        if str(name) not in {str(param) for param in raw_params}
+    )
+    if unknown_deferred:
+        formatted = ", ".join(unknown_deferred)
+        raise ValueError(
+            f"Command definition '{resolved_id}' uses unknown deferred parameter(s): {formatted}."
+        )
+
     raw_commands = raw.get("commands")
     if not isinstance(raw_commands, list):
         raise ValueError(f"Command definition '{resolved_id}' must use a list for 'commands'.")
@@ -254,6 +275,7 @@ def _load_project_command_definition_from_path(
     return ProjectCommandDefinition(
         command_id=resolved_id,
         params=[str(param) for param in raw_params],
+        deferred_params=[str(param) for param in raw_deferred_params],
         commands=[dict(command) for command in raw_commands],
         source_path=command_path,
     )
@@ -326,7 +348,7 @@ def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
 
 
 def validate_project_commands(project: ProjectContext) -> None:
-    """Validate command-library files and literal run_command references for a project."""
+    """Validate command-library files and literal run_project_command references for a project."""
     issues: list[str] = []
     database, database_issues = _scan_project_command_database(project)
     issues.extend(database_issues)
@@ -357,7 +379,7 @@ def _validate_literal_command_references(
     discovered_command_ids: set[str],
     issues: list[str],
 ) -> None:
-    """Check literal run_command references that can be resolved statically."""
+    """Check literal run_project_command references that can be resolved statically."""
     seen_missing_refs: set[tuple[Path, str, str]] = set()
     for source_path in _iter_command_reference_files(project):
         try:
@@ -386,7 +408,7 @@ def _validate_literal_command_references(
 
 
 def _iter_command_reference_files(project: ProjectContext) -> list[Path]:
-    """Return JSON files that may contain literal run_command references."""
+    """Return JSON files that may contain literal run_project_command references."""
     files: list[Path] = []
     seen: set[Path] = set()
 
@@ -426,13 +448,13 @@ def _find_literal_command_references(
     *,
     location: str = "$",
 ) -> list[tuple[str, str]]:
-    """Return literal run_command references with a human-readable JSON path."""
+    """Return literal run_project_command references with a human-readable JSON path."""
     references: list[tuple[str, str]] = []
 
     if isinstance(value, dict):
         command_type = value.get("type")
         command_id = value.get("command_id")
-        if command_type == "run_command" and isinstance(command_id, str):
+        if command_type == "run_project_command" and isinstance(command_id, str):
             references.append((command_id, location))
 
         for key, item in value.items():

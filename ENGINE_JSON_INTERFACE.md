@@ -19,7 +19,15 @@ For the philosophy behind this interface, see [PROJECT_SPIRIT.md](./PROJECT_SPIR
 - Gameplay is driven by JSON command specs. A command spec is a JSON object with a `"type"` field.
 - Runtime token strings start with `$...` or `${...}`.
 - Structured value sources are single-key objects like `{ "$entity_at": { ... } }`.
-- Entity-owned `events` and `input_map` are part of the live engine/JSON contract.
+- Entity-owned `entity_commands` and `input_map` are part of the live engine/JSON contract.
+
+## Command Chain Rules
+
+- Any `commands: [...]` list is a sequential command body by default.
+- This applies to area `enter_commands`, entity-command bodies, project-command bodies, `if.then`, `if.else`, and child command lists under flow/orchestration commands.
+- Use `run_parallel` only when child commands should start together.
+- Use `run_commands` only when you want to execute a command-list value explicitly, for example one stored in a variable or passed as a parameter.
+- Project command files may declare `deferred_params: string[]` when specific params should remain raw command/data payloads until a later explicit execution step.
 
 ## Content Roots And Path-Derived IDs
 
@@ -66,7 +74,7 @@ Notes:
   - `commands/`
 - `shared_variables_path` falls back to `shared_variables.json` if that file exists.
 - `save_dir` defaults to `saves`.
-- `global_entities` uses the same instance shape as area `entities`.
+- `global_entities` uses the same instance shape as area `entities`. Global entities are project-level runtime entities — the runtime injects them into the active play world whenever an area is built. Their persistent state is stored separately from per-area state and is not affected by area resets. Unlike travelers (entities transferred between areas via `change_area`), globals don't physically move — the runtime always includes them.
 - `input_targets` is a project-level logical-action routing table.
 
 Minimal example:
@@ -268,7 +276,7 @@ Current engine-known entity fields:
 - `scope`
 - `present`
 - `visible`
-- `events_enabled`
+- `entity_commands_enabled`
 - `render_order`
 - `y_sort`
 - `sort_y_offset`
@@ -276,7 +284,7 @@ Current engine-known entity fields:
 - `color`
 - `tags`
 - `visuals`
-- `events`
+- `entity_commands`
 - `variables`
 - `input_map`
 
@@ -320,36 +328,32 @@ Each `visuals[]` entry currently uses:
 - `offset_y`
 - `draw_order`
 
-### Events
+### Entity Commands
 
-Current `events` forms:
-
-Simple list form:
+Current `entity_commands` form:
 
 ```json
-"events": {
-  "interact": [
-    { "type": "run_command", "command_id": "commands/dialogue/open" }
-  ]
-}
-```
-
-Object form:
-
-```json
-"events": {
+"entity_commands": {
   "interact": {
     "enabled": true,
     "commands": [
-      { "type": "run_command", "command_id": "commands/dialogue/open" }
+      {
+        "type": "run_project_command",
+        "command_id": "commands/dialogue/open"
+      }
     ]
   }
 }
 ```
 
+Notes:
+- `entity_commands.<name>` always uses the long form object with `enabled` and `commands`.
+- The command body in `commands` runs sequentially by default.
+- Another command chain can invoke one named entity command with `run_entity_command`.
+
 ### Input Map
 
-`input_map` is an entity-owned mapping from logical input actions to event names:
+`input_map` is an entity-owned mapping from logical input actions to entity-command names:
 
 ```json
 "input_map": {
@@ -367,6 +371,7 @@ The engine routes a logical action to an entity through `input_targets`, then us
 Project command files are JSON objects with:
 
 - `params: string[]`
+- `deferred_params: string[]`
 - `commands: command[]`
 
 Example:
@@ -376,9 +381,9 @@ Example:
   "params": ["target_id"],
   "commands": [
     {
-      "type": "run_event",
+      "type": "run_entity_command",
       "entity_id": "$target_id",
-      "event_id": "interact"
+      "command_id": "interact"
     }
   ]
 }
@@ -388,6 +393,7 @@ Current rules:
 - command id is a path-derived typed id from the file path, for example `commands/dialogue/open`
 - file must not declare `id`
 - `params` is optional and defaults to `[]`
+- `deferred_params` is optional and defaults to `[]`
 - `commands` is required
 
 ## Ordinary Project JSON Data
@@ -408,7 +414,7 @@ Examples:
 
 ```json
 {
-  "type": "run_sequence",
+  "type": "run_commands",
   "commands": [
     { "type": "play_audio", "path": "assets/project/sfx/open.wav" },
     { "type": "set_current_area_var", "name": "opened", "value": true }
@@ -417,17 +423,15 @@ Examples:
 ```
 
 Command arrays currently appear in:
-- entity event command lists
+- entity command command lists
 - area `enter_commands`
 - project command `commands`
-- `run_sequence.commands`
+- `run_commands.commands`
 - `run_parallel.commands`
 - `spawn_flow.commands`
 - `run_commands_for_collection.commands`
-- `check_current_area_var.then`
-- `check_current_area_var.else`
-- `check_entity_var.then`
-- `check_entity_var.else`
+- `if.then`
+- `if.else`
 
 Lifecycle wrapper fields are no longer valid:
 - `on_start`
@@ -435,7 +439,8 @@ Lifecycle wrapper fields are no longer valid:
 - `on_complete`
 
 Use:
-- `run_sequence`
+- plain sequential `commands: [...]` bodies
+- `run_commands`
 - `run_parallel`
 - `spawn_flow`
 
@@ -475,7 +480,7 @@ How to read it:
 - `"value": { "$sum": [...] }`
   `"$sum"` is a helper that computes the value before `set_entity_var` runs.
 
-When one command chain needs to call another JSON command file, use `run_command` and pass the project command params as ordinary extra fields on that command object.
+When one command chain needs to call another JSON command file, use `run_project_command` and pass the project command params as ordinary extra fields on that command object.
 
 ## Runtime Tokens
 
@@ -493,26 +498,23 @@ Special numeric helper:
 Exact current token families:
 
 - `$self_id`
-- `$actor_id`
-- `$caller_id`
+- `$refs.<name>...`
+- `$ref_ids.<name>`
 - `$project...`
 - `$area...`
 - `$camera...`
 - `$current_area...`
-- `$entity.<entity_id>...`
 - `$self...`
-- `$actor...`
-- `$caller...`
 - `$<runtime_param>`
 
 Meaning:
 
 - `$self_id`
   - source entity id for the current flow
-- `$actor_id`
-  - actor entity id for the current flow
-- `$caller_id`
-  - caller entity id for the current flow
+- `$refs.some_name.some_var`
+  - lookup in one named referenced entity's `variables`
+- `$ref_ids.some_name`
+  - lookup of one named referenced entity id
 - `$project.foo.bar`
   - lookup in `shared_variables.json`
 - `$area.tile_size`
@@ -521,19 +523,13 @@ Meaning:
   - lookup in current camera state
 - `$current_area.some_var`
   - lookup in the current live current-area/runtime variable store
-- `$entity.some_entity.some_var`
-  - lookup in another entity's `variables`
 - `$self.some_var`
   - lookup in source entity `variables`
-- `$actor.some_var`
-  - lookup in actor entity `variables`
-- `$caller.some_var`
-  - lookup in caller entity `variables`
 - `$some_named_param`
 - lookup in runtime params passed by project commands, collection loops, or composition commands
 
 Important limitation:
-- `$entity.<id>...`, `$self...`, `$actor...`, and `$caller...` read entity `variables`, not built-in entity fields
+- `$self...` and `$refs.<name>...` read entity `variables`, not built-in entity fields
 
 Current area token state exposes:
 - `area_id`
@@ -840,7 +836,7 @@ Allowed `select.fields` values:
 - `pixel_y`
 - `present`
 - `visible`
-- `events_enabled`
+- `entity_commands_enabled`
 - `render_order`
 - `y_sort`
 - `sort_y_offset`
@@ -910,7 +906,7 @@ Current shape:
     "scope": "area",
     "present": true,
     "visible": true,
-    "events_enabled": true
+    "entity_commands_enabled": true
   }
 }
 ```
@@ -930,7 +926,7 @@ Allowed `where` keys:
 - `scope`
 - `present`
 - `visible`
-- `events_enabled`
+- `entity_commands_enabled`
 
 Allowed `where.space` values:
 - `world`
@@ -1242,10 +1238,10 @@ Notes:
 
 - `wait_frames(frames)`
 - `wait_seconds(seconds)`
-- `spawn_flow(commands?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `run_sequence(commands?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `run_parallel(commands?, completion?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, actor_entity_id?, caller_entity_id?)` — iterates a list/tuple and runs `commands` once per item, injecting the current item and index as runtime params
+- `spawn_flow(commands?, source_entity_id?, entity_refs?, refs_mode?)`
+- `run_commands(commands?, source_entity_id?, entity_refs?, refs_mode?)`
+- `run_parallel(commands?, completion?, source_entity_id?, entity_refs?, refs_mode?)`
+- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, entity_refs?, refs_mode?)` — iterates a list/tuple and runs `commands` once per item, injecting the current item and index as runtime params
 
 Current `run_parallel` completion shape:
 
@@ -1300,39 +1296,39 @@ Each `run_parallel.commands[]` child may also declare an optional `id` field, us
 
 Inside `commands`, `$item` resolves to the current list element and `$index` resolves to its zero-based position. The param names default to `item` and `index` but can be overridden with `item_param` and `index_param`.
 
-### Event And Project Command Dispatch
+### Entity And Project Command Dispatch
 
-- `run_event(entity_id, event_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
-- `run_command(command_id, source_entity_id?, actor_entity_id?, caller_entity_id?, ...extra_params)`
+- `run_entity_command(entity_id, command_id, source_entity_id?, entity_refs?, refs_mode?, ...extra_params)`
+- `run_project_command(command_id, source_entity_id?, entity_refs?, refs_mode?, ...extra_params)`
 
-Both commands forward any additional fields on the command object into the called flow as runtime parameters. The called commands can read those values with `$param_name` tokens. For example, passing `"dialogue_path": "dialogues/system/pause_menu.json"` on a `run_event` makes `$dialogue_path` available inside the target event's command chain.
+Both commands forward any additional fields on the command object into the called flow as runtime parameters. The called commands can read those values with `$param_name` tokens. For example, passing `"dialogue_path": "dialogues/system/pause_menu.json"` on a `run_entity_command` makes `$dialogue_path` available inside the target entity-command chain.
 
-### Event/Input Routing
+### Entity-Command/Input Routing
 
-- `set_event_enabled(entity_id, event_id, enabled, persistent?)`
-- `set_events_enabled(entity_id, enabled, persistent?)`
+- `set_entity_command_enabled(entity_id, command_id, enabled, persistent?)`
+- `set_entity_commands_enabled(entity_id, enabled, persistent?)`
 - `set_input_target(action, entity_id?)`
 - `route_inputs_to_entity(entity_id?, actions?)`
 - `push_input_routes(actions?)`
 - `pop_input_routes()`
 
 Notes:
-- `set_event_enabled` targets one named event on one entity
-- `set_events_enabled` gates the entity's event system as a whole
+- `set_entity_command_enabled` targets one named entity command on one entity
+- `set_entity_commands_enabled` gates the entity's command system as a whole
 - `push_input_routes` stores the current routed target ids for the selected actions on a runtime stack
 - `pop_input_routes` restores the most recently pushed routing snapshot for those actions
 
 ### Area / Save / Game Flow
 
-- `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
-- `new_game(area_id?, entry_id?, camera_follow?, source_entity_id?, actor_entity_id?, caller_entity_id?)`
+- `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
+- `new_game(area_id?, entry_id?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
 - `load_game(save_path?)`
 - `save_game(save_path?)`
 - `quit_game()`
 
 Notes:
 - `camera_follow` uses the same structured follow object as `set_camera_follow`
-- in `change_area` / `new_game`, `camera_follow.entity_id` may use symbolic `self`, `actor`, or `caller`
+- in `change_area` / `new_game`, `camera_follow.entity_id` must be an explicit id
 
 ### Debug Runtime
 
@@ -1364,7 +1360,7 @@ Notes:
 
 ### Entity State
 
-- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `events_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
+- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `entity_commands_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
 - `set_visible(entity_id, visible, persistent?)`
 - `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
 - `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes
@@ -1378,6 +1374,7 @@ Notes:
 - `set_current_area_var(name, value, persistent?)`
 - `set_entity_var(entity_id, name, value, persistent?)`
 - `add_current_area_var(name, amount?, persistent?)`
+- `value_mode: "raw"` on `set_current_area_var` / `set_entity_var` / append variants stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_commands`.
 - `add_entity_var(entity_id, name, amount?, persistent?)`
 - `toggle_current_area_var(name, persistent?)`
 - `toggle_entity_var(entity_id, name, persistent?)`
@@ -1387,8 +1384,7 @@ Notes:
 - `append_entity_var(entity_id, name, value, persistent?)`
 - `pop_current_area_var(name, store_var?, default?, persistent?)`
 - `pop_entity_var(entity_id, name, store_var?, default?, persistent?)`
-- `check_current_area_var(name, op?, value?, then?, else?)`
-- `check_entity_var(entity_id, name, op?, value?, then?, else?)`
+- `if(left, op?, right, then?, else?)`
 - `set_area_var(area_id, name, value)`
 - `set_area_entity_var(area_id, entity_id, name, value)`
 - `set_area_entity_field(area_id, entity_id, field_name, value)`
@@ -1415,10 +1411,10 @@ Example:
 
 ```json
 {
-  "type": "check_current_area_var",
-  "name": "gate_open",
+  "type": "if",
+  "left": "$current_area.gate_open",
   "op": "eq",
-  "value": true,
+  "right": true,
   "then": [
     {
       "type": "set_entity_field",
@@ -1460,15 +1456,13 @@ Some command params intentionally defer nested command specs instead of resolvin
 Current deferred command params:
 
 - `spawn_flow.commands`
-- `run_sequence.commands`
+- `run_commands.commands`
 - `run_parallel.commands`
 - `run_commands_for_collection.commands`
-- `check_current_area_var.then`
-- `check_current_area_var.else`
-- `check_entity_var.then`
-- `check_entity_var.else`
+- `if.then`
+- `if.else`
 
-Current special deferred params on `run_event`:
+Current special deferred params on `run_entity_command`:
 - `dialogue_on_start`
 - `dialogue_on_end`
 - `segment_hooks`
@@ -1488,7 +1482,7 @@ These fields are currently engine-known and actively interpreted, not just store
 - entity `scope`
 - entity `present`
 - entity `visible`
-- entity `events_enabled`
+- entity `entity_commands_enabled`
 - entity `render_order`
 - entity `y_sort`
 - entity `sort_y_offset`
@@ -1509,8 +1503,6 @@ Tile art itself does not define collision.
 These names are reserved runtime references and should not be used as authored entity ids:
 
 - `self`
-- `actor`
-- `caller`
 
 Strict primitive commands must not use raw symbolic ids like:
 
@@ -1529,11 +1521,12 @@ Use:
 The current command runner model is:
 
 - top-level dispatches become independent root flows
-- `run_sequence` executes child commands in order
+- any `commands: [...]` body executes child commands in order by default
+- `run_commands` executes an explicit stored command-list value
 - `run_parallel` executes child commands together with an explicit completion policy
 - `spawn_flow` starts a separate flow and returns immediately
 
-Routed input events are ordinary root-flow dispatches, not a special busy-state exception.
+Routed input entity commands are ordinary root-flow dispatches, not a special busy-state exception.
 
 ## Bitmap Font Definition
 

@@ -59,14 +59,19 @@ class TestTemplateCatalog(unittest.TestCase):
     def test_get_template_parameter_names_discovers_expected_variables(self):
         catalog = TemplateCatalog()
         catalog._templates["entity_templates/sign"] = {
-            "events": {
+            "entity_commands": {
                 "interact": {
+                    "enabled": True,
                     "commands": [
                         {
-                            "type": "run_event",
+                            "type": "run_entity_command",
+                            "entity_id": "$ref_ids.dialogue_controller",
+                            "command_id": "open",
                             "dialogue_path": "$dialogue_path",
-                            "actor_entity_id": "$actor_id",
-                            "caller_entity_id": "$self_id",
+                            "title": "$refs.speaker.title",
+                            "entity_refs": {
+                                "speaker": "$self_id",
+                            },
                         }
                     ]
                 }
@@ -80,8 +85,9 @@ class TestTemplateCatalog(unittest.TestCase):
     def test_get_template_parameter_names_caches_results_until_clear(self):
         catalog = TemplateCatalog()
         catalog._templates["entity_templates/door"] = {
-            "events": {
+            "entity_commands": {
                 "interact": {
+                    "enabled": True,
                     "commands": [
                         {"type": "change_area", "area_id": "$target_area"}
                     ]
@@ -95,8 +101,9 @@ class TestTemplateCatalog(unittest.TestCase):
         )
 
         catalog._templates["entity_templates/door"] = {
-            "events": {
+            "entity_commands": {
                 "interact": {
+                    "enabled": True,
                     "commands": [
                         {"type": "change_area", "entry_id": "$target_entry"}
                     ]
@@ -110,8 +117,9 @@ class TestTemplateCatalog(unittest.TestCase):
         )
         catalog.clear()
         catalog._templates["entity_templates/door"] = {
-            "events": {
+            "entity_commands": {
                 "interact": {
+                    "enabled": True,
                     "commands": [
                         {"type": "change_area", "entry_id": "$target_entry"}
                     ]

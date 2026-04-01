@@ -8,11 +8,8 @@
       "amount": 1
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_segment_type",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": "choice",
       "then": [
         {
           "type": "set_entity_var",
@@ -28,7 +25,14 @@
           "name": "dialogue_phase",
           "value": "text"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_segment_type"
+        }
+      },
+      "right": "choice"
     },
     {
       "type": "set_entity_var",
@@ -43,11 +47,8 @@
       }
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_speaker_id",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": null,
       "then": [
         {
           "type": "set_entity_var",
@@ -69,7 +70,14 @@
             }
           }
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_speaker_id"
+        }
+      },
+      "right": null
     },
     {
       "type": "set_entity_var",
@@ -126,25 +134,16 @@
       "value": false
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_current_speaker_id",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "neq",
-      "value": null,
       "then": [
         {
-          "type": "check_entity_var",
-          "name": "dialogue_current_portrait_path",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "neq",
-          "value": "",
           "then": [
             {
-              "type": "check_entity_var",
-              "name": "dialogue_current_segment_show_portrait",
-              "entity_id": "$self_id",
+              "type": "if",
               "op": "eq",
-              "value": false,
               "then": [],
               "else": [
                 {
@@ -153,18 +152,36 @@
                   "name": "dialogue_show_portrait",
                   "value": true
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "dialogue_current_segment_show_portrait"
+                }
+              },
+              "right": false
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_current_portrait_path"
+            }
+          },
+          "right": ""
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_current_speaker_id"
+        }
+      },
+      "right": null
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_show_portrait",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
           "type": "set_entity_var",
@@ -228,7 +245,14 @@
           "name": "choice_cursor_x",
           "value": "$self.layout.choice.plain.x"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_show_portrait"
+        }
+      },
+      "right": true
     },
     {
       "type": "show_screen_image",
@@ -243,11 +267,8 @@
       "anchor": "topleft"
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_show_portrait",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
           "type": "show_screen_image",
@@ -267,60 +288,79 @@
           "type": "remove_screen_element",
           "element_id": "$self.portrait_element_id"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_show_portrait"
+        }
+      },
+      "right": true
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_phase",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "eq",
-      "value": "choice",
       "then": [
         {
           "type": "remove_screen_element",
           "element_id": "$self.text_element_id"
         },
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/render_choice"
         }
       ],
       "else": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/render_text"
         },
         {
-          "type": "check_entity_var",
-          "name": "dialogue_current_advance_mode",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "eq",
-          "value": "timer",
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/dialogue/schedule_timer",
               "expected_revision": "$self.dialogue_revision"
             }
           ],
           "else": [
             {
-              "type": "check_entity_var",
-              "name": "dialogue_current_advance_mode",
-              "entity_id": "$self_id",
+              "type": "if",
               "op": "eq",
-              "value": "interact_or_timer",
               "then": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/dialogue/schedule_timer",
                   "expected_revision": "$self.dialogue_revision"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "dialogue_current_advance_mode"
+                }
+              },
+              "right": "interact_or_timer"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_current_advance_mode"
+            }
+          },
+          "right": "timer"
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_phase"
+        }
+      },
+      "right": "choice"
     }
   ]
 }

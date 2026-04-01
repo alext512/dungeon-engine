@@ -24,16 +24,13 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "entered_by": {
       "enabled": true,
       "commands": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "pressed",
+          "type": "if",
           "op": "eq",
-          "value": false,
           "then": [
             {
               "type": "set_entity_var",
@@ -47,37 +44,52 @@
               "frame": 1
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "target_gate_id",
+              "type": "if",
               "op": "neq",
-              "value": "",
               "then": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "$self.target_gate_id",
-                  "event_id": "set_input_value",
+                  "command_id": "set_input_value",
                   "index": "$self.target_index",
                   "value": "$self.press_value"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "target_gate_id"
+                }
+              },
+              "right": ""
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "single_use",
+              "type": "if",
               "op": "eq",
-              "value": true,
               "then": [
                 {
                   "type": "set_entity_field",
                   "entity_id": "$self_id",
-                  "field_name": "events_enabled",
+                  "field_name": "entity_commands_enabled",
                   "value": false
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "single_use"
+                }
+              },
+              "right": true
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "pressed"
+            }
+          },
+          "right": false
         }
       ]
     },
@@ -85,18 +97,12 @@
       "enabled": true,
       "commands": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "single_use",
+          "type": "if",
           "op": "eq",
-          "value": false,
           "then": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pressed",
+              "type": "if",
               "op": "eq",
-              "value": true,
               "then": [
                 {
                   "type": "set_entity_var",
@@ -110,24 +116,42 @@
                   "frame": 0
                 },
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "target_gate_id",
+                  "type": "if",
                   "op": "neq",
-                  "value": "",
                   "then": [
                     {
-                      "type": "run_event",
+                      "type": "run_entity_command",
                       "entity_id": "$self.target_gate_id",
-                      "event_id": "set_input_value",
+                      "command_id": "set_input_value",
                       "index": "$self.target_index",
                       "value": "$self.release_value"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "target_gate_id"
+                    }
+                  },
+                  "right": ""
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pressed"
+                }
+              },
+              "right": true
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "single_use"
+            }
+          },
+          "right": false
         }
       ]
     }

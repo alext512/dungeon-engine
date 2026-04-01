@@ -2,7 +2,7 @@
   "params": [],
   "commands": [
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/dialogue/clear_choice_elements"
     },
     {
@@ -66,11 +66,8 @@
           "value": " "
         },
         {
-          "type": "check_entity_var",
-          "name": "dialogue_selected_visible_choice_index",
-          "entity_id": "$self_id",
+          "type": "if",
           "op": "eq",
-          "value": "$index",
           "then": [
             {
               "type": "set_entity_var",
@@ -78,7 +75,14 @@
               "entity_id": "$self_id",
               "value": ">"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "dialogue_selected_visible_choice_index"
+            }
+          },
+          "right": "$index"
         },
         {
           "type": "show_screen_text",

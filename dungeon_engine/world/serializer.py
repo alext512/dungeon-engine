@@ -206,7 +206,7 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "scope": entity.scope,
         "present": entity.present,
         "visible": entity.visible,
-        "events_enabled": entity.events_enabled,
+        "entity_commands_enabled": entity.entity_commands_enabled,
         "render_order": entity.render_order,
         "y_sort": entity.y_sort,
         "sort_y_offset": _serialize_number(entity.sort_y_offset),
@@ -217,9 +217,9 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
     if entity.input_map:
         data["input_map"] = copy.deepcopy(entity.input_map)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
-    events = _serialize_events(entity)
-    if events:
-        data["events"] = events
+    entity_commands = _serialize_entity_commands(entity)
+    if entity_commands:
+        data["entity_commands"] = entity_commands
     return data
 
 
@@ -231,7 +231,7 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "scope": entity.scope,
         "present": entity.present,
         "visible": entity.visible,
-        "events_enabled": entity.events_enabled,
+        "entity_commands_enabled": entity.entity_commands_enabled,
         "render_order": entity.render_order,
         "y_sort": entity.y_sort,
         "sort_y_offset": _serialize_number(entity.sort_y_offset),
@@ -243,9 +243,9 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
     if entity.input_map:
         data["input_map"] = copy.deepcopy(entity.input_map)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
-    events = _serialize_events(entity)
-    if events:
-        data["events"] = events
+    entity_commands = _serialize_entity_commands(entity)
+    if entity_commands:
+        data["entity_commands"] = entity_commands
     return data
 
 
@@ -292,13 +292,13 @@ def _serialize_visuals(entity: Any) -> list[dict[str, Any]]:
     return serialized
 
 
-def _serialize_events(entity: Any) -> dict[str, Any]:
-    """Serialize named entity events in a stable JSON-friendly form."""
+def _serialize_entity_commands(entity: Any) -> dict[str, Any]:
+    """Serialize named entity commands in a stable JSON-friendly form."""
     serialized: dict[str, Any] = {}
-    for event_id, event in entity.events.items():
-        serialized[str(event_id)] = {
-            "enabled": bool(event.enabled),
-            "commands": copy.deepcopy(event.commands),
+    for command_id, entity_command in entity.entity_commands.items():
+        serialized[str(command_id)] = {
+            "enabled": bool(entity_command.enabled),
+            "commands": copy.deepcopy(entity_command.commands),
         }
     return serialized
 

@@ -56,8 +56,8 @@ Input should request top-level commands.
 Example:
 
 - pressing Up does not directly move an entity
-- it queues a `run_event` request for the currently routed `move_up` target's configured event
-- that event can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
+- it queues a `run_entity_command` request for the currently routed `move_up` target's configured entity command
+- that entity command can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
 
 Control routing is layered:
 
@@ -152,7 +152,7 @@ Typical state buckets:
 - interaction command chains
 - trigger command chains
 - stats and custom variables
-- visibility, presence, and event enabled state
+- visibility, presence, and entity-command enabled state
 
 ### Systems
 
@@ -192,7 +192,7 @@ The project needs a central command runner that can:
 - pass context between related commands
 
 Project command libraries should be indexed at project startup so runtime
-`run_command` calls only use in-memory definitions instead of rediscovering
+`run_project_command` calls only use in-memory definitions instead of rediscovering
 files from disk during active play.
 
 ### Command context
@@ -226,7 +226,7 @@ Movement should follow the same spirit.
 
 Example movement chain:
 
-1. receive `run_event(entity_id=input_target_for_move_right, event_id=configured_move_right_event)`
+1. receive `run_entity_command(entity_id=input_target_for_move_right, command_id=configured_move_right_command)`
 2. start any project-authored walk animation
 3. query the target tile and its blockers
 4. if blocked by a pushable object, try the push chain

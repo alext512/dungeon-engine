@@ -11,13 +11,28 @@
       "value": {
         "$collection_item": {
           "value": {
-            "up": { "x": 0, "y": -1 },
-            "down": { "x": 0, "y": 1 },
-            "left": { "x": -1, "y": 0 },
-            "right": { "x": 1, "y": 0 }
+            "up": {
+              "x": 0,
+              "y": -1
+            },
+            "down": {
+              "x": 0,
+              "y": 1
+            },
+            "left": {
+              "x": -1,
+              "y": 0
+            },
+            "right": {
+              "x": 1,
+              "y": 0
+            }
           },
           "key": "$direction",
-          "default": { "x": 0, "y": 0 }
+          "default": {
+            "x": 0,
+            "y": 0
+          }
         }
       }
     },
@@ -29,7 +44,10 @@
         "$entity_ref": {
           "entity_id": "$self_id",
           "select": {
-            "fields": ["grid_x", "grid_y"]
+            "fields": [
+              "grid_x",
+              "grid_y"
+            ]
           }
         }
       }
@@ -51,7 +69,10 @@
       "entity_id": "$self_id",
       "name": "push_target_x",
       "value": {
-        "$sum": ["$self.push_self_position.grid_x", "$self.push_offset.x"]
+        "$sum": [
+          "$self.push_self_position.grid_x",
+          "$self.push_offset.x"
+        ]
       }
     },
     {
@@ -59,7 +80,10 @@
       "entity_id": "$self_id",
       "name": "push_target_y",
       "value": {
-        "$sum": ["$self.push_self_position.grid_y", "$self.push_offset.y"]
+        "$sum": [
+          "$self.push_self_position.grid_y",
+          "$self.push_offset.y"
+        ]
       }
     },
     {
@@ -99,8 +123,14 @@
           "exclude_entity_id": "$self_id",
           "include_hidden": true,
           "select": {
-            "fields": ["entity_id", "kind"],
-            "variables": ["blocks_movement", "hole_shape"]
+            "fields": [
+              "entity_id",
+              "kind"
+            ],
+            "variables": [
+              "blocks_movement",
+              "hole_shape"
+            ]
           }
         }
       }
@@ -120,21 +150,15 @@
       }
     },
     {
-      "type": "check_entity_var",
-      "entity_id": "$self_id",
-      "name": "push_target_walkable",
+      "type": "if",
       "op": "eq",
-      "value": true,
       "then": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "push_blocking_entity",
+          "type": "if",
           "op": "eq",
-          "value": null,
           "then": [
             {
-              "type": "run_command",
+              "type": "run_project_command",
               "command_id": "commands/movement/walk_one_tile",
               "offset_x": "$self.push_offset.x",
               "offset_y": "$self.push_offset.y",
@@ -159,11 +183,8 @@
               }
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "push_blocking_kind",
+              "type": "if",
               "op": "eq",
-              "value": "hole",
               "then": [
                 {
                   "type": "set_entity_var",
@@ -178,36 +199,67 @@
                   }
                 },
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "shape",
+                  "type": "if",
                   "op": "eq",
-                  "value": "$self.push_blocking_hole_shape",
                   "then": [
                     {
-                      "type": "run_command",
+                      "type": "run_project_command",
                       "command_id": "commands/movement/run_tile_triggers",
                       "x": "$self.push_source_x",
                       "y": "$self.push_source_y",
-                      "tags_any": ["leave_trigger"],
-                      "event_id": "left_by",
+                      "tags_any": [
+                        "leave_trigger"
+                      ],
+                      "trigger_command_id": "left_by",
                       "exclude_entity_id": "$self_id",
-                      "actor_entity_id": "$self_id",
-                      "caller_entity_id": "$self_id"
+                      "entity_refs": {
+                        "instigator": "$self_id",
+                        "caller": "$self_id"
+                      }
                     },
                     {
-                      "type": "run_event",
+                      "type": "run_entity_command",
                       "entity_id": "$self.push_blocking_entity.entity_id",
-                      "event_id": "accept_actor",
-                      "actor_entity_id": "$self_id"
+                      "command_id": "accept_actor",
+                      "entity_refs": {
+                        "instigator": "$self_id"
+                      }
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "shape"
+                    }
+                  },
+                  "right": "$self.push_blocking_hole_shape"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "push_blocking_kind"
+                }
+              },
+              "right": "hole"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "push_blocking_entity"
+            }
+          },
+          "right": null
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "push_target_walkable"
+        }
+      },
+      "right": true
     }
   ]
 }

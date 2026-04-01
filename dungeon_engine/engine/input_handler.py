@@ -161,13 +161,12 @@ class InputHandler:
             return False
         if action_name.startswith("move_") and target_entity.is_world_space() and target_entity.movement.active:
             return False
-        event_name = self._resolve_input_target_event_name(action_name, target_entity)
-        if not event_name:
+        command_name = self._resolve_input_target_command_name(action_name, target_entity)
+        if not command_name:
             return False
-        return self.command_runner.dispatch_input_event(
+        return self.command_runner.dispatch_input_entity_command(
             entity_id=target_entity.entity_id,
-            event_id=event_name,
-            actor_entity_id=target_entity.entity_id,
+            command_id=command_name,
         )
 
     def _reset_direction_repeat(self, direction: str) -> None:
@@ -197,23 +196,22 @@ class InputHandler:
         return bool(self.held_directions[direction])
 
     def _enqueue_action_if_mapped(self, action_name: str) -> bool:
-        """Run the mapped event for the routed entity when one exists."""
+        """Run the mapped entity command for the routed entity when one exists."""
         target_entity = self.world.get_input_target(action_name)
         if target_entity is None:
             return False
-        event_name = self._resolve_input_target_event_name(action_name, target_entity)
-        if not event_name:
+        command_name = self._resolve_input_target_command_name(action_name, target_entity)
+        if not command_name:
             return False
-        return self.command_runner.dispatch_input_event(
+        return self.command_runner.dispatch_input_entity_command(
             entity_id=target_entity.entity_id,
-            event_id=event_name,
-            actor_entity_id=target_entity.entity_id,
+            command_id=command_name,
         )
 
-    def _resolve_input_target_event_name(self, action_name: str, target_entity) -> str:
-        """Resolve an input action to an event name on the routed entity."""
-        event_name = target_entity.input_map.get(action_name)
-        if event_name is not None:
-            return str(event_name).strip()
+    def _resolve_input_target_command_name(self, action_name: str, target_entity) -> str:
+        """Resolve an input action to a named entity command on the routed entity."""
+        command_name = target_entity.input_map.get(action_name)
+        if command_name is not None:
+            return str(command_name).strip()
         return ""
 

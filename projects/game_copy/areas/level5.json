@@ -2039,7 +2039,7 @@
       "persistent": true
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/system/save_progress"
     }
   ],
@@ -2091,7 +2091,7 @@
         "dialogue_on_start": [],
         "dialogue_on_end": [
           {
-            "type": "run_command",
+            "type": "run_project_command",
             "command_id": "commands/system/complete_level_return",
             "level_number": 5
           }
@@ -2130,7 +2130,7 @@
               ],
               "level_select": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/system/complete_level_return",
                   "level_number": 5
                 }
@@ -2157,30 +2157,30 @@
             "option_commands_by_id": {
               "up": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball1",
-                  "event_id": "push_from_down"
+                  "command_id": "push_from_down"
                 }
               ],
               "right": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball1",
-                  "event_id": "push_from_left"
+                  "command_id": "push_from_left"
                 }
               ],
               "down": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball1",
-                  "event_id": "push_from_up"
+                  "command_id": "push_from_up"
                 }
               ],
               "left": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball1",
-                  "event_id": "push_from_right"
+                  "command_id": "push_from_right"
                 }
               ]
             }
@@ -2205,30 +2205,30 @@
             "option_commands_by_id": {
               "up": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball2",
-                  "event_id": "push_from_down"
+                  "command_id": "push_from_down"
                 }
               ],
               "right": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball2",
-                  "event_id": "push_from_left"
+                  "command_id": "push_from_left"
                 }
               ],
               "down": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball2",
-                  "event_id": "push_from_up"
+                  "command_id": "push_from_up"
                 }
               ],
               "left": [
                 {
-                  "type": "run_event",
+                  "type": "run_entity_command",
                   "entity_id": "ball2",
-                  "event_id": "push_from_right"
+                  "command_id": "push_from_right"
                 }
               ]
             }

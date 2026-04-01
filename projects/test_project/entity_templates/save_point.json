@@ -14,14 +14,14 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "interact": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "dialogue_controller",
-          "event_id": "open_dialogue",
+          "command_id": "open_dialogue",
           "dialogue_path": "dialogues/system/save_prompt.json",
           "dialogue_on_start": [
             {
@@ -33,16 +33,20 @@
           ],
           "dialogue_on_end": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pending_save_prompt_action",
+              "type": "if",
               "op": "eq",
-              "value": "save",
               "then": [
                 {
                   "type": "save_game"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_save_prompt_action"
+                }
+              },
+              "right": "save"
             },
             {
               "type": "set_entity_var",
@@ -67,8 +71,10 @@
             }
           ],
           "allow_cancel": true,
-          "actor_entity_id": "$actor_id",
-          "caller_entity_id": "$self_id"
+          "entity_refs": {
+            "instigator": "$ref_ids.instigator",
+            "caller": "$self_id"
+          }
         }
       ]
     }

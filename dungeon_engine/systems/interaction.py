@@ -13,7 +13,7 @@ class InteractionSystem:
         self.world = world
 
     def get_facing_target(self, actor_entity_id: str) -> Entity | None:
-        """Return the first present entity with an enabled interact event ahead."""
+        """Return the first present entity with an enabled interact command ahead."""
         actor = self.world.get_entity(actor_entity_id)
         if actor is None:
             raise KeyError(f"Cannot resolve interaction target for '{actor_entity_id}'.")
@@ -31,7 +31,7 @@ class InteractionSystem:
                 exclude_entity_id=actor.entity_id,
             )
         ):
-            if entity.has_enabled_event("interact"):
+            if entity.has_enabled_entity_command("interact"):
                 return entity
         return None
 

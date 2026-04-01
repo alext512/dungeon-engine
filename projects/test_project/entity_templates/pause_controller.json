@@ -6,14 +6,14 @@
   "input_map": {
     "menu": "open_pause_menu"
   },
-  "events": {
+  "entity_commands": {
     "open_pause_menu": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_event",
+          "type": "run_entity_command",
           "entity_id": "dialogue_controller",
-          "event_id": "open_dialogue",
+          "command_id": "open_dialogue",
           "dialogue_path": "dialogues/system/pause_menu.json",
           "dialogue_on_start": [
             {
@@ -25,28 +25,36 @@
           ],
           "dialogue_on_end": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pending_pause_menu_action",
+              "type": "if",
               "op": "eq",
-              "value": "load",
               "then": [
                 {
                   "type": "load_game"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_pause_menu_action"
+                }
+              },
+              "right": "load"
             },
             {
-              "type": "check_entity_var",
-              "entity_id": "$self_id",
-              "name": "pending_pause_menu_action",
+              "type": "if",
               "op": "eq",
-              "value": "exit",
               "then": [
                 {
                   "type": "quit_game"
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_pause_menu_action"
+                }
+              },
+              "right": "exit"
             },
             {
               "type": "set_entity_var",
@@ -79,7 +87,9 @@
             }
           ],
           "allow_cancel": true,
-          "caller_entity_id": "$self_id"
+          "entity_refs": {
+            "caller": "$self_id"
+          }
         }
       ]
     }

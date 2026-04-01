@@ -12,6 +12,7 @@
     "panel_element_id": "dialogue_panel",
     "portrait_element_id": "dialogue_portrait",
     "text_element_id": "dialogue_text",
+    "scroll_hint_element_id": "dialogue_scroll_hint",
     "option_element_ids": [
       "dialogue_option_0",
       "dialogue_option_1",
@@ -55,6 +56,16 @@
           "x": 56,
           "width": 188
         }
+      },
+      "scroll_hint": {
+        "more_up": {
+          "x": 240,
+          "y": 154
+        },
+        "more_down": {
+          "x": 240,
+          "y": 174
+        }
       }
     },
     "ui_layer": 100,
@@ -93,12 +104,12 @@
     "dialogue_revision": 0
   },
   "visuals": [],
-  "events": {
+  "entity_commands": {
     "interact": {
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/interact"
         }
       ]
@@ -107,7 +118,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/cancel"
         }
       ]
@@ -116,7 +127,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/move_selection",
           "delta": -1
         }
@@ -126,7 +137,7 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/move_selection",
           "delta": 1
         }
@@ -136,15 +147,17 @@
       "enabled": true,
       "commands": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/open",
           "dialogue_path": "$dialogue_path",
           "dialogue_on_start": "$dialogue_on_start",
           "dialogue_on_end": "$dialogue_on_end",
           "segment_hooks": "$segment_hooks",
           "allow_cancel": "$allow_cancel",
-          "actor_entity_id": "$actor_entity_id",
-          "caller_entity_id": "$caller_entity_id"
+          "entity_refs": {
+            "instigator": "$ref_ids.instigator",
+            "caller": "$ref_ids.caller"
+          }
         }
       ]
     }

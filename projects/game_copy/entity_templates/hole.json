@@ -19,23 +19,17 @@
       ]
     }
   ],
-  "events": {
+  "entity_commands": {
     "accept_actor": {
       "enabled": true,
       "commands": [
         {
-          "type": "check_entity_var",
-          "entity_id": "$self_id",
-          "name": "filled",
+          "type": "if",
           "op": "eq",
-          "value": false,
           "then": [
             {
-              "type": "check_entity_var",
-              "entity_id": "$actor_id",
-              "name": "shape",
+              "type": "if",
               "op": "eq",
-              "value": "$self.hole_shape",
               "then": [
                 {
                   "type": "set_entity_var",
@@ -51,47 +45,65 @@
                 },
                 {
                   "type": "set_entity_field",
-                  "entity_id": "$actor_id",
+                  "entity_id": "$ref_ids.instigator",
                   "field_name": "present",
                   "value": false
                 },
                 {
                   "type": "set_entity_field",
-                  "entity_id": "$actor_id",
+                  "entity_id": "$ref_ids.instigator",
                   "field_name": "visible",
                   "value": false
                 },
                 {
                   "type": "set_entity_field",
-                  "entity_id": "$actor_id",
-                  "field_name": "events_enabled",
+                  "entity_id": "$ref_ids.instigator",
+                  "field_name": "entity_commands_enabled",
                   "value": false
                 },
                 {
                   "type": "set_entity_var",
-                  "entity_id": "$actor_id",
+                  "entity_id": "$ref_ids.instigator",
                   "name": "blocks_movement",
                   "value": false
                 },
                 {
-                  "type": "check_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "target_gate_id",
+                  "type": "if",
                   "op": "neq",
-                  "value": "",
                   "then": [
                     {
-                      "type": "run_event",
+                      "type": "run_entity_command",
                       "entity_id": "$self.target_gate_id",
-                      "event_id": "add_input_value",
+                      "command_id": "add_input_value",
                       "index": "$self.target_index",
                       "amount": "$self.target_amount"
                     }
-                  ]
+                  ],
+                  "left": {
+                    "$entity_var": {
+                      "entity_id": "$self_id",
+                      "name": "target_gate_id"
+                    }
+                  },
+                  "right": ""
                 }
-              ]
+              ],
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$ref_ids.instigator",
+                  "name": "shape"
+                }
+              },
+              "right": "$self.hole_shape"
             }
-          ]
+          ],
+          "left": {
+            "$entity_var": {
+              "entity_id": "$self_id",
+              "name": "filled"
+            }
+          },
+          "right": false
         }
       ]
     }

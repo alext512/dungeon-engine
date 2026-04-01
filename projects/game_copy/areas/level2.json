@@ -785,7 +785,7 @@
       "persistent": true
     },
     {
-      "type": "run_command",
+      "type": "run_project_command",
       "command_id": "commands/system/save_progress"
     }
   ],
@@ -882,7 +882,7 @@
             "option_commands_by_id": {
               "yes": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/system/complete_level_next",
                   "level_number": 2,
                   "next_level_number": 3,
@@ -891,7 +891,7 @@
               ],
               "return": [
                 {
-                  "type": "run_command",
+                  "type": "run_project_command",
                   "command_id": "commands/system/complete_level_return",
                   "level_number": 2
                 }

@@ -2,6 +2,10 @@
   "params": [],
   "commands": [
     {
+      "type": "remove_screen_element",
+      "element_id": "$self.scroll_hint_element_id"
+    },
+    {
       "type": "run_commands_for_collection",
       "value": "$self.option_element_ids",
       "commands": [

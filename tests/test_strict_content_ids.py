@@ -25,7 +25,7 @@ from dungeon_engine.commands.runner import (
     execute_registered_command,
 )
 from dungeon_engine.world.area import Area, TileLayer
-from dungeon_engine.world.entity import Entity, EntityEvent, EntityVisual
+from dungeon_engine.world.entity import Entity, EntityCommandDefinition, EntityVisual
 from dungeon_engine.world.world import World
 from dungeon_engine.project import load_project
 from dungeon_engine.world.loader import (
@@ -111,7 +111,7 @@ def _make_runtime_entity(
     space: str = "world",
     scope: str = "area",
     with_visual: bool = False,
-    events: dict[str, EntityEvent] | None = None,
+    entity_commands: dict[str, EntityCommandDefinition] | None = None,
 ) -> Entity:
     visuals = (
         [
@@ -134,7 +134,7 @@ def _make_runtime_entity(
         space=space,  # type: ignore[arg-type]
         scope=scope,  # type: ignore[arg-type]
         visuals=visuals,
-        events=events or {},
+        entity_commands=entity_commands or {},
     )
 
 
@@ -451,19 +451,18 @@ class _FacingStateCollisionSystem:
 
 class _RecordingInputDispatchRunner:
     def __init__(self) -> None:
-        self.dispatched: list[tuple[str, str, str | None]] = []
+        self.dispatched: list[tuple[str, str]] = []
 
     def has_pending_work(self) -> bool:
         return False
 
-    def dispatch_input_event(
+    def dispatch_input_entity_command(
         self,
         *,
         entity_id: str,
-        event_id: str,
-        actor_entity_id: str | None = None,
+        command_id: str,
     ) -> bool:
-        self.dispatched.append((entity_id, event_id, actor_entity_id))
+        self.dispatched.append((entity_id, command_id))
         return True
 
 
@@ -705,9 +704,9 @@ class StrictContentIdTests(unittest.TestCase):
         raw_area = _minimal_area()
         raw_area["enter_commands"] = [
             {
-                "type": "run_event",
+                "type": "run_entity_command",
                 "entity_id": "dialogue_controller",
-                "event_id": "open_dialogue",
+                "command_id": "open_dialogue",
                 "dialogue_path": "dialogues/system/title_menu.json",
                 "segment_hooks": [
                     {
@@ -722,7 +721,7 @@ class StrictContentIdTests(unittest.TestCase):
         area, _ = load_area_from_data(raw_area, source_name="<memory>", project=project)
 
         self.assertEqual(len(area.enter_commands), 1)
-        self.assertEqual(area.enter_commands[0]["type"], "run_event")
+        self.assertEqual(area.enter_commands[0]["type"], "run_entity_command")
         self.assertEqual(area.enter_commands[0]["entity_id"], "dialogue_controller")
         self.assertEqual(area.enter_commands[0]["dialogue_path"], "dialogues/system/title_menu.json")
 
@@ -913,7 +912,7 @@ class StrictContentIdTests(unittest.TestCase):
             [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE})]
         )
 
-        self.assertEqual(runner.dispatched, [("player", "confirm", "player")])
+        self.assertEqual(runner.dispatched, [("player", "confirm")])
 
     def test_input_handler_escape_without_menu_target_does_not_quit(self) -> None:
         import pygame
@@ -967,10 +966,10 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(
             runner.dispatched,
             [
-                ("debug_controller", "toggle_pause", "debug_controller"),
-                ("debug_controller", "step_tick", "debug_controller"),
-                ("debug_controller", "zoom_out", "debug_controller"),
-                ("debug_controller", "zoom_in", "debug_controller"),
+                ("debug_controller", "toggle_pause"),
+                ("debug_controller", "step_tick"),
+                ("debug_controller", "zoom_out"),
+                ("debug_controller", "zoom_in"),
             ],
         )
 
@@ -1047,7 +1046,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "commands": [
                         {
                             "type": "play_animation",
-                            "entity_id": "caller",
+                            "entity_id": "self",
                             "frame_sequence": [1, 2],
                         }
                     ],
@@ -1060,7 +1059,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'caller' with strict primitive 'play_animation'"
+                "must not use symbolic entity id 'self' with strict primitive 'play_animation'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -1074,7 +1073,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "commands": [
                         {
                             "type": "move_entity_world_position",
-                            "entity_id": "actor",
+                            "entity_id": "self",
                             "x": 16,
                             "y": 0,
                             "mode": "relative",
@@ -1089,7 +1088,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'actor' with strict primitive 'move_entity_world_position'"
+                "must not use symbolic entity id 'self' with strict primitive 'move_entity_world_position'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -1162,7 +1161,7 @@ class StrictContentIdTests(unittest.TestCase):
                 elif command_name == "query_facing_state":
                     params = {"entity_id": "self", "store_state_var": "move_attempt_state"}
                 elif command_name == "run_facing_event":
-                    params = {"entity_id": "self", "event_id": "interact"}
+                    params = {"entity_id": "self", "command_id": "interact"}
                 elif command_name == "interact_facing":
                     params = {"entity_id": "self"}
                 execute_registered_command(registry, context, command_name, params)
@@ -1459,7 +1458,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "name": "blocking_entity",
                 "value": {
                     "$find_in_collection": {
-                        "value": "$entity.player.target_entities",
+                        "value": "$self.target_entities",
                         "field": "variables.blocks_movement",
                         "op": "eq",
                         "match": True,
@@ -1467,6 +1466,7 @@ class StrictContentIdTests(unittest.TestCase):
                     }
                 },
             },
+            base_params={"source_entity_id": "player"},
         )
         handle.update(0.0)
 
@@ -1479,13 +1479,14 @@ class StrictContentIdTests(unittest.TestCase):
                 "name": "has_pushable_blocker",
                 "value": {
                     "$any_in_collection": {
-                        "value": "$entity.player.target_entities",
+                        "value": "$self.target_entities",
                         "field": "variables.pushable",
                         "op": "eq",
                         "match": True,
                     }
                 },
             },
+            base_params={"source_entity_id": "player"},
         )
         handle.update(0.0)
 
@@ -2186,17 +2187,18 @@ class StrictContentIdTests(unittest.TestCase):
                             },
                         },
                         {
-                            "type": "check_entity_var",
-                            "entity_id": "$self_id",
-                            "name": "interact_target",
+                            "type": "if",
+                            "left": "$self.interact_target",
                             "op": "neq",
-                            "value": None,
+                            "right": None,
                             "then": [
                                 {
-                                    "type": "run_event",
+                                    "type": "run_entity_command",
                                     "entity_id": "$self.interact_target.entity_id",
-                                    "event_id": "interact",
-                                    "actor_entity_id": "$self_id",
+                                    "command_id": "interact",
+                                    "entity_refs": {
+                                        "instigator": "$self_id",
+                                    },
                                 }
                             ],
                         },
@@ -2212,8 +2214,8 @@ class StrictContentIdTests(unittest.TestCase):
         lever = _make_runtime_entity(
             "lever",
             kind="lever",
-            events={
-                "interact": EntityEvent(
+            entity_commands={
+                "interact": EntityCommandDefinition(
                     commands=[
                         {
                             "type": "set_current_area_var",
@@ -2234,12 +2236,14 @@ class StrictContentIdTests(unittest.TestCase):
             registry,
             context,
             {
-                "type": "run_command",
+                "type": "run_project_command",
                 "command_id": "commands/interact_one_tile",
             },
             base_params={
                 "source_entity_id": "player",
-                "actor_entity_id": "player",
+                "entity_refs": {
+                    "instigator": "player",
+                },
             },
         )
         while not handle.complete:
@@ -2331,15 +2335,19 @@ class StrictContentIdTests(unittest.TestCase):
                 "default": {},
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "check_entity_var",
             {
-                "entity_id": "dialogue_controller",
-                "name": "mode",
+                "type": "if",
+                "left": {
+                    "$entity_var": {
+                        "entity_id": "dialogue_controller",
+                        "name": "mode",
+                    }
+                },
                 "op": "eq",
-                "value": "menu",
+                "right": "menu",
                 "then": [
                     {
                         "type": "set_entity_var",
@@ -2440,14 +2448,14 @@ class StrictContentIdTests(unittest.TestCase):
                 "default": "",
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "check_current_area_var",
             {
-                "name": "mode",
+                "type": "if",
+                "left": "$current_area.mode",
                 "op": "eq",
-                "value": "play",
+                "right": "play",
                 "then": [
                     {
                         "type": "set_current_area_var",
@@ -2894,8 +2902,10 @@ class StrictContentIdTests(unittest.TestCase):
                 "name": "mode",
                 "value": "nested_dialogue",
                 "source_entity_id": "dialogue_controller",
-                "actor_entity_id": "player",
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "instigator": "player",
+                    "caller": "lever",
+                },
                 "scope": "entity",
                 "unused_named_param": 42,
             },
@@ -2909,16 +2919,15 @@ class StrictContentIdTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
 
-        self.assertEqual(registry.get_deferred_params("run_sequence"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("run_commands"), {"commands"})
         self.assertEqual(registry.get_deferred_params("spawn_flow"), {"commands"})
         self.assertEqual(registry.get_deferred_params("run_parallel"), {"commands"})
         self.assertEqual(registry.get_deferred_params("run_commands_for_collection"), {"commands"})
         self.assertEqual(
-            registry.get_deferred_params("run_event"),
+            registry.get_deferred_params("run_entity_command"),
             {"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
         )
-        self.assertEqual(registry.get_deferred_params("check_current_area_var"), {"then", "else"})
-        self.assertEqual(registry.get_deferred_params("check_entity_var"), {"then", "else"})
+        self.assertEqual(registry.get_deferred_params("if"), {"then", "else"})
 
     def test_append_and_pop_entity_var_support_nested_dialogue_snapshots(self) -> None:
         world = World()
@@ -2995,7 +3004,7 @@ class StrictContentIdTests(unittest.TestCase):
             validate_project_areas(project)
 
         self.assertTrue(
-            any("interact_commands" in issue and "events.interact" in issue for issue in raised.exception.issues)
+            any("interact_commands" in issue and "entity_commands.interact" in issue for issue in raised.exception.issues)
         )
 
     def test_area_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
@@ -3006,7 +3015,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "enter_commands": [
                         {
                             "type": "route_inputs_to_entity",
-                            "entity_id": "actor",
+                            "entity_id": "self",
                         }
                     ],
                 }
@@ -3018,7 +3027,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'actor' with strict primitive 'route_inputs_to_entity'"
+                "must not use symbolic entity id 'self' with strict primitive 'route_inputs_to_entity'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -3059,7 +3068,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "enter_commands": [
                         {
                             "type": "wait_for_move",
-                            "entity_id": "caller",
+                            "entity_id": "self",
                         }
                     ],
                 }
@@ -3071,7 +3080,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'caller' with strict primitive 'wait_for_move'"
+                "must not use symbolic entity id 'self' with strict primitive 'wait_for_move'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -3101,7 +3110,7 @@ class StrictContentIdTests(unittest.TestCase):
             any("reserved runtime entity reference 'self'" in issue for issue in raised.exception.issues)
         )
 
-    def test_area_validation_rejects_reserved_entity_id_actor(self) -> None:
+    def test_area_validation_allows_entity_id_actor(self) -> None:
         _, project = self._make_project(
             areas={
                 "test_room.json": {
@@ -3118,12 +3127,7 @@ class StrictContentIdTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaises(AreaValidationError) as raised:
-            validate_project_areas(project)
-
-        self.assertTrue(
-            any("reserved runtime entity reference 'actor'" in issue for issue in raised.exception.issues)
-        )
+        validate_project_areas(project)
 
     def test_area_validation_rejects_duplicate_project_global_entity_ids(self) -> None:
         _, project = self._make_project(
@@ -3303,22 +3307,22 @@ class StrictContentIdTests(unittest.TestCase):
             request_area_change=recorded_requests.append,
         )
 
-        handle = execute_registered_command(
+        handle = execute_command_spec(
             registry,
             context,
-            "change_area",
             {
+                "type": "change_area",
                 "area_id": "areas/village_house",
                 "entry_id": "from_square",
-                "transfer_entity_ids": ["actor"],
+                "transfer_entity_ids": ["$ref_ids.instigator"],
                 "camera_follow": {
                     "mode": "entity",
-                    "entity_id": "actor",
+                    "entity_id": "$ref_ids.instigator",
                     "offset_x": 12,
                     "offset_y": -8,
                 },
-                "actor_entity_id": "player",
             },
+            base_params={"entity_refs": {"instigator": "player"}},
         )
         handle.update(0.0)
 
@@ -3758,18 +3762,18 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertIsNotNone(selected_event_id)
 
         game.command_runner.enqueue(
-            "run_event",
+            "run_entity_command",
             entity_id="player",
-            event_id=selected_event_id,
+            command_id=selected_event_id,
         )
         game._advance_simulation_tick(1 / 60)
         self.assertTrue(player.movement.active)
 
         for _ in range(4):
             game.command_runner.enqueue(
-                "run_event",
+                "run_entity_command",
                 entity_id="player",
-                event_id=selected_event_id,
+                command_id=selected_event_id,
             )
             game._advance_simulation_tick(1 / 60)
 
@@ -3798,9 +3802,9 @@ class StrictContentIdTests(unittest.TestCase):
         assert player is not None
 
         game.command_runner.enqueue(
-            "run_event",
+            "run_entity_command",
             entity_id="player",
-            event_id="move_right",
+            command_id="move_right",
         )
         game._advance_simulation_tick(1 / 60)
 
@@ -3809,9 +3813,9 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(visual.flip_x)
 
         game.command_runner.enqueue(
-            "run_event",
+            "run_entity_command",
             entity_id="player",
-            event_id="move_left",
+            command_id="move_left",
         )
         game._advance_simulation_tick(1 / 60)
 
@@ -3847,9 +3851,9 @@ class StrictContentIdTests(unittest.TestCase):
         )
 
         game.command_runner.enqueue(
-            "run_event",
+            "run_entity_command",
             entity_id="house_block",
-            event_id="push_from_left",
+            command_id="push_from_left",
         )
         game._advance_simulation_tick(1 / 60)
 
@@ -3899,7 +3903,7 @@ class StrictContentIdTests(unittest.TestCase):
             handle = execute_registered_command(
                 registry,
                 context,
-                "run_command",
+                "run_project_command",
                 {
                     "command_id": command_id,
                     "source_entity_id": "dialogue_controller",
@@ -3959,16 +3963,15 @@ class StrictContentIdTests(unittest.TestCase):
         assert controller is not None
 
         game.command_runner.enqueue(
-            "run_event",
+            "run_entity_command",
             entity_id="dialogue_controller",
-            event_id="open_dialogue",
+            command_id="open_dialogue",
             dialogue_path="dialogues/showcase/village_square_note.json",
             dialogue_on_start=[],
             dialogue_on_end=[],
             segment_hooks=[],
             allow_cancel=False,
-            actor_entity_id="player",
-            caller_entity_id="player",
+            entity_refs={"instigator": "player", "caller": "player"},
         )
         for _ in range(4):
             game._advance_simulation_tick(1 / 60)
@@ -4012,10 +4015,10 @@ class StrictContentIdTests(unittest.TestCase):
         assert controller is not None
 
         game.command_runner.enqueue(
-            "run_event",
+            "run_entity_command",
             entity_id="house_lever",
-            event_id="interact",
-            actor_entity_id="player",
+            command_id="interact",
+            entity_refs={"instigator": "player"},
         )
         for _ in range(4):
             game._advance_simulation_tick(1 / 60)
@@ -4061,12 +4064,12 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.world.get_input_target_id("menu"), "pause_controller")
 
         game.command_runner.enqueue(
-            "run_sequence",
+            "run_commands",
             commands=[
                 {
-                    "type": "run_event",
+                    "type": "run_entity_command",
                     "entity_id": "dialogue_controller",
-                    "event_id": "open_dialogue",
+                    "command_id": "open_dialogue",
                     "dialogue_path": "dialogues/system/title_menu.json",
                     "dialogue_on_start": [],
                     "dialogue_on_end": [],
@@ -4074,9 +4077,9 @@ class StrictContentIdTests(unittest.TestCase):
                     "allow_cancel": False,
                 },
                 {
-                    "type": "run_event",
+                    "type": "run_entity_command",
                     "entity_id": "dialogue_controller",
-                    "event_id": "open_dialogue",
+                    "command_id": "open_dialogue",
                     "dialogue_path": "dialogues/system/save_prompt.json",
                     "dialogue_on_start": [],
                     "dialogue_on_end": [],
@@ -4084,8 +4087,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "allow_cancel": True,
                 },
             ],
-            actor_entity_id="player",
-            caller_entity_id="lever",
+            entity_refs={"instigator": "player", "caller": "lever"},
         )
         for _ in range(6):
             game._advance_simulation_tick(1 / 60)
@@ -4112,11 +4114,10 @@ class StrictContentIdTests(unittest.TestCase):
             self.assertEqual(game.world.get_input_target_id(action), "dialogue_controller")
 
         game.command_runner.enqueue(
-            "run_command",
+            "run_project_command",
             command_id="commands/dialogue/close_current_dialogue",
             source_entity_id="dialogue_controller",
-            actor_entity_id="player",
-            caller_entity_id="lever",
+            entity_refs={"instigator": "player", "caller": "lever"},
         )
         for _ in range(4):
             game._advance_simulation_tick(1 / 60)
@@ -4130,11 +4131,10 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.world.get_input_target_id("menu"), "dialogue_controller")
 
         game.command_runner.enqueue(
-            "run_command",
+            "run_project_command",
             command_id="commands/dialogue/close_current_dialogue",
             source_entity_id="dialogue_controller",
-            actor_entity_id="player",
-            caller_entity_id="lever",
+            entity_refs={"instigator": "player", "caller": "lever"},
         )
         for _ in range(4):
             game._advance_simulation_tick(1 / 60)
@@ -4223,7 +4223,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {"type": "pop_input_routes"},
                 {"type": "save_game", "save_path": str(save_path)},
             ],
-            base_params={"actor_entity_id": "player"},
+            base_params={"entity_refs": {"instigator": "player"}},
         )
 
         self.assertTrue(handle.complete)
@@ -4425,7 +4425,7 @@ class StrictContentIdTests(unittest.TestCase):
             )
 
 
-    def test_run_event_propagates_caller_entity_id(self) -> None:
+    def test_run_entity_command_propagates_named_entity_refs(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever")
         controller = _make_runtime_entity(
@@ -4433,12 +4433,12 @@ class StrictContentIdTests(unittest.TestCase):
             kind="system",
             space="screen",
             scope="global",
-            events={
-                "open_dialogue": EntityEvent(
+            entity_commands={
+                "open_dialogue": EntityCommandDefinition(
                     commands=[
                         {
                             "type": "set_entity_var",
-                            "entity_id": "$caller_id",
+                            "entity_id": "$ref_ids.caller",
                             "name": "toggled",
                             "value": True,
                         }
@@ -4454,19 +4454,21 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_event",
+            "run_entity_command",
             {
                 "entity_id": "dialogue_controller",
-                "event_id": "open_dialogue",
-                "actor_entity_id": "lever",
-                "caller_entity_id": "lever",
+                "command_id": "open_dialogue",
+                "entity_refs": {
+                    "instigator": "lever",
+                    "caller": "lever",
+                },
             },
         )
         handle.update(0.0)
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
-    def test_run_command_propagates_caller_entity_id(self) -> None:
+    def test_run_project_command_propagates_named_entity_refs(self) -> None:
         _, project = self._make_project(
             commands={
                 "toggle_caller.json": {
@@ -4474,7 +4476,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "commands": [
                         {
                             "type": "set_entity_var",
-                            "entity_id": "$caller_id",
+                            "entity_id": "$ref_ids.caller",
                             "name": "toggled",
                             "value": True,
                         }
@@ -4490,18 +4492,20 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_command",
+            "run_project_command",
             {
                 "command_id": "commands/toggle_caller",
-                "actor_entity_id": "lever",
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "instigator": "lever",
+                    "caller": "lever",
+                },
             },
         )
         handle.update(0.0)
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
-    def test_run_sequence_propagates_caller_entity_id(self) -> None:
+    def test_run_commands_propagates_named_entity_refs(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
@@ -4511,17 +4515,19 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
                 "commands": [
                     {
                         "type": "set_entity_var",
-                        "entity_id": "$caller_id",
+                        "entity_id": "$ref_ids.caller",
                         "name": "toggled",
                         "value": True,
                     }
                 ],
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "caller": "lever",
+                },
             },
         )
         handle.update(0.0)
@@ -4534,14 +4540,14 @@ class StrictContentIdTests(unittest.TestCase):
         runner = CommandRunner(registry, context)
 
         runner.enqueue(
-            "run_sequence",
+            "run_commands",
             commands=[
                 {"type": "wait_frames", "frames": 1},
                 {"type": "set_current_area_var", "name": "first_done", "value": True},
             ],
         )
         runner.enqueue(
-            "run_sequence",
+            "run_commands",
             commands=[
                 {"type": "wait_frames", "frames": 1},
                 {"type": "set_current_area_var", "name": "second_done", "value": True},
@@ -4554,13 +4560,13 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(world.variables["second_done"])
         self.assertFalse(runner.has_pending_work())
 
-    def test_spawn_flow_returns_immediately_inside_run_sequence(self) -> None:
+    def test_spawn_flow_returns_immediately_inside_run_commands(self) -> None:
         world = World()
         registry, context = self._make_command_context(world=world)
         runner = CommandRunner(registry, context)
 
         runner.enqueue(
-            "run_sequence",
+            "run_commands",
             commands=[
                 {
                     "type": "spawn_flow",
@@ -4588,7 +4594,7 @@ class StrictContentIdTests(unittest.TestCase):
         runner = CommandRunner(registry, context)
 
         runner.enqueue(
-            "run_sequence",
+            "run_commands",
             commands=[
                 {
                     "type": "run_parallel",
@@ -4605,7 +4611,7 @@ class StrictContentIdTests(unittest.TestCase):
                         },
                         {
                             "id": "slow",
-                            "type": "run_sequence",
+                            "type": "run_commands",
                             "commands": [
                                 {"type": "wait_frames", "frames": 2},
                                 {"type": "set_current_area_var", "name": "slow_done", "value": True},
@@ -4626,7 +4632,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(world.variables["slow_done"])
         self.assertFalse(runner.has_pending_work())
 
-    def test_set_entity_field_supports_caller_token_via_run_sequence(self) -> None:
+    def test_set_entity_field_supports_named_ref_via_run_commands(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -4636,13 +4642,15 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "caller": "lever",
+                },
                 "commands": [
                     {
                         "type": "set_entity_field",
-                        "entity_id": "$caller_id",
+                        "entity_id": "$ref_ids.caller",
                         "field_name": "visuals.main.tint",
                         "value": [5, 6, 7],
                     }
@@ -4654,7 +4662,7 @@ class StrictContentIdTests(unittest.TestCase):
         caller_visual = world.get_entity("lever").require_visual("main")  # type: ignore[union-attr]
         self.assertEqual(caller_visual.tint, (5, 6, 7))
 
-    def test_route_inputs_to_entity_command_supports_actor_token_via_run_sequence(self) -> None:
+    def test_route_inputs_to_entity_command_supports_instigator_ref_via_run_commands(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -4671,13 +4679,15 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
-                "actor_entity_id": "player",
+                "entity_refs": {
+                    "instigator": "player",
+                },
                 "commands": [
                     {
                         "type": "route_inputs_to_entity",
-                        "entity_id": "$actor_id",
+                        "entity_id": "$ref_ids.instigator",
                     }
                 ],
             },
@@ -4859,14 +4869,14 @@ class StrictContentIdTests(unittest.TestCase):
                 "set_input_target",
                 {
                     "action": "interact",
-                    "entity_id": "actor",
+                    "entity_id": "self",
                 },
             ),
             (
-                "set_event_enabled",
+                "set_entity_command_enabled",
                 {
-                    "entity_id": "caller",
-                    "event_id": "interact",
+                    "entity_id": "self",
+                    "command_id": "interact",
                     "enabled": False,
                 },
             ),
@@ -4875,7 +4885,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {
                     "follow": {
                         "mode": "entity",
-                        "entity_id": "actor",
+                        "entity_id": "self",
                     },
                 },
             ),
@@ -4889,7 +4899,7 @@ class StrictContentIdTests(unittest.TestCase):
             (
                 "move_entity_world_position",
                 {
-                    "entity_id": "caller",
+                    "entity_id": "self",
                     "x": 16,
                     "y": 0,
                     "mode": "relative",
@@ -4900,7 +4910,7 @@ class StrictContentIdTests(unittest.TestCase):
                 with self.assertRaises(CommandExecutionError) as raised:
                     execute_registered_command(registry, context, command_name, params)
                 self.assertIsNotNone(raised.exception.__cause__)
-                self.assertIn("use '$self_id', '$actor_id', or '$caller_id'", str(raised.exception.__cause__))
+                self.assertIn("use '$self_id' or '$ref_ids.<name>'", str(raised.exception.__cause__))
 
     def test_push_and_pop_input_routes_restore_nested_snapshots(self) -> None:
         world = World(
@@ -4976,7 +4986,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {},
             )
 
-    def test_animation_commands_accept_visual_id_and_caller_token_via_run_sequence(self) -> None:
+    def test_animation_commands_accept_visual_id_and_named_ref_via_run_commands(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -4988,13 +4998,15 @@ class StrictContentIdTests(unittest.TestCase):
         play_handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "caller": "lever",
+                },
                 "commands": [
                     {
                         "type": "play_animation",
-                        "entity_id": "$caller_id",
+                        "entity_id": "$ref_ids.caller",
                         "visual_id": "main",
                         "frame_sequence": [1, 2, 3],
                         "frames_per_sprite_change": 2,
@@ -5009,13 +5021,15 @@ class StrictContentIdTests(unittest.TestCase):
         wait_handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "caller": "lever",
+                },
                 "commands": [
                     {
                         "type": "wait_for_animation",
-                        "entity_id": "$caller_id",
+                        "entity_id": "$ref_ids.caller",
                         "visual_id": "main",
                     }
                 ],
@@ -5029,7 +5043,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
 
-    def test_move_entity_world_position_supports_caller_token_via_run_sequence(self) -> None:
+    def test_move_entity_world_position_supports_named_ref_via_run_commands(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -5040,13 +5054,15 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "caller": "lever",
+                },
                 "commands": [
                     {
                         "type": "move_entity_world_position",
-                        "entity_id": "$caller_id",
+                        "entity_id": "$ref_ids.caller",
                         "x": 16,
                         "y": 0,
                         "mode": "relative",
@@ -5063,7 +5079,7 @@ class StrictContentIdTests(unittest.TestCase):
             [("lever", 16.0, 0.0, None, 8, None, "none", None, None)],
         )
 
-    def test_set_camera_follow_supports_caller_token_via_run_sequence(self) -> None:
+    def test_set_camera_follow_supports_named_ref_via_run_commands(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -5074,15 +5090,17 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_sequence",
+            "run_commands",
             {
-                "caller_entity_id": "lever",
+                "entity_refs": {
+                    "caller": "lever",
+                },
                 "commands": [
                     {
                         "type": "set_camera_follow",
                         "follow": {
                             "mode": "entity",
-                            "entity_id": "$caller_id",
+                            "entity_id": "$ref_ids.caller",
                             "offset_x": 4,
                             "offset_y": -2,
                         },
@@ -5267,7 +5285,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "set_input_event_name",
                 {
                     "action": "interact",
-                    "event_id": "confirm",
+                    "command_id": "confirm",
                 },
             )
 

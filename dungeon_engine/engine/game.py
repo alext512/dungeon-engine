@@ -450,7 +450,7 @@ class Game:
         if self.command_runner is None or not self.area.enter_commands:
             return
         self.command_runner.enqueue(
-            "run_sequence",
+            "run_commands",
             commands=copy.deepcopy(self.area.enter_commands),
         )
 

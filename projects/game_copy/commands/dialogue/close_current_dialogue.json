@@ -32,11 +32,8 @@
       "value": "$self.dialogue_state_stack"
     },
     {
-      "type": "check_entity_var",
-      "name": "dialogue_stack_count",
-      "entity_id": "$self_id",
+      "type": "if",
       "op": "gt",
-      "value": 0,
       "then": [
         {
           "type": "pop_entity_var",
@@ -46,14 +43,16 @@
           "default": {}
         },
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/restore_snapshot"
         },
         {
-          "type": "run_sequence",
+          "type": "run_commands",
           "commands": "$self.dialogue_pending_on_end",
-          "actor_entity_id": "$self.dialogue_pending_actor_id",
-          "caller_entity_id": "$self.dialogue_pending_caller_id"
+          "entity_refs": {
+            "instigator": "$self.dialogue_pending_actor_id",
+            "caller": "$self.dialogue_pending_caller_id"
+          }
         },
         {
           "type": "set_entity_var",
@@ -76,7 +75,7 @@
       ],
       "else": [
         {
-          "type": "run_command",
+          "type": "run_project_command",
           "command_id": "commands/dialogue/clear_ui"
         },
         {
@@ -167,10 +166,12 @@
           "type": "pop_input_routes"
         },
         {
-          "type": "run_sequence",
+          "type": "run_commands",
           "commands": "$self.dialogue_pending_on_end",
-          "actor_entity_id": "$self.dialogue_pending_actor_id",
-          "caller_entity_id": "$self.dialogue_pending_caller_id"
+          "entity_refs": {
+            "instigator": "$self.dialogue_pending_actor_id",
+            "caller": "$self.dialogue_pending_caller_id"
+          }
         },
         {
           "type": "set_entity_var",
@@ -190,8 +191,14 @@
           "name": "dialogue_pending_caller_id",
           "value": null
         }
-      ]
+      ],
+      "left": {
+        "$entity_var": {
+          "entity_id": "$self_id",
+          "name": "dialogue_stack_count"
+        }
+      },
+      "right": 0
     }
   ]
 }
-

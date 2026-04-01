@@ -9,7 +9,7 @@
     "debug_zoom_in": "zoom_in",
     "debug_zoom_out": "zoom_out"
   },
-  "events": {
+  "entity_commands": {
     "toggle_pause": {
       "enabled": true,
       "commands": [

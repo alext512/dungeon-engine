@@ -9,7 +9,7 @@
     "level_select_entry": "level_1"
   },
   "visuals": [],
-  "events": {
+  "entity_commands": {
     "refresh_level_select_entry": {
       "enabled": true,
       "commands": [
