@@ -23,6 +23,9 @@ The goal of this rework is to make core physics:
 This rework is not an attempt to build a generic physics engine.
 It is a focused grid-physics contract for dungeon/puzzle RPG behavior.
 
+The goal is to make common physics behavior easier and more explicit, not to
+remove the ability to author unusual behavior with low-level commands.
+
 ## Design Rules
 
 - The engine owns generic physical semantics.
@@ -33,6 +36,7 @@ It is a focused grid-physics contract for dungeon/puzzle RPG behavior.
 - The engine uses fixed engine defaults only.
 - Shared project values may still exist, but only through explicit reads.
 - V1 stays grid-only.
+- Low-level JSON command power remains available as an escape hatch.
 
 ## Core Cell Contract
 
@@ -240,6 +244,8 @@ Important:
 - core physics must work with no tags at all
 - tags exist from day one
 - tag-based movement and push restrictions are an advanced extension layer
+- advanced projects may still bypass or extend the standard rules through
+  explicit low-level command logic when needed
 
 ## Advanced Optional Tag-Based Extensions
 
@@ -263,6 +269,20 @@ Rule:
 
 - advanced tag rules refine or veto default physics
 - they do not replace the default physics contract
+
+## Escape Hatch Rule
+
+Physics V1 should define a clear standard contract for ordinary movement and
+pushing, but it should not eliminate the existing low-level command escape
+hatch.
+
+This means:
+
+- ordinary projects should be able to rely on the built-in physics defaults
+- advanced projects should still be able to author custom movement-adjacent
+  behavior with explicit command logic
+- the engine should become easier by default without becoming weaker for unusual
+  puzzle cases
 
 ## Ice and Sliding
 
@@ -442,6 +462,55 @@ standard authoring layer may later want small generic helper surfaces such as:
 
 Those future helpers should remain generic. They should not turn into
 special-purpose built-in puzzle mechanics.
+
+## Standard Interaction Resolution
+
+The engine should likely own the standard "interact with what is in front of
+me" lookup and dispatch flow.
+
+This means the engine should provide a default interaction process that:
+
+1. reads the actor's `facing`
+2. resolves the adjacent target cell
+3. gathers candidate interaction targets in that cell
+4. selects one target by a deterministic rule
+5. dispatches to that target's authored `interact` behavior
+
+This is the interaction equivalent of standard movement resolution: generic
+lookup belongs in the engine, but interaction meaning belongs in project
+content.
+
+### Suggested Interaction Defaults
+
+Recommended direction:
+
+- only check the adjacent facing cell in V1
+- only resolve entity targets in V1
+- if no valid target exists, nothing happens
+- if multiple targets exist, use a deterministic selection rule
+
+Likely engine-known fields:
+
+- `interactable: bool`
+- `interaction_priority: int`
+
+Recommended defaults:
+
+- `interactable = false`
+- `interaction_priority = 0`
+
+### Important Clarification
+
+The target entity's `interact` behavior should remain a normal authored command
+or event surface.
+
+That means:
+
+- engine-owned standard interaction resolution may dispatch to `interact`
+- other authored logic may still call the same `interact` behavior directly
+
+The rework should not make `interact` a privileged engine-only path. It should
+remain reusable project-authored behavior.
 
 ## Suggested Defaults Summary
 
