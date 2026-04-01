@@ -45,9 +45,11 @@ class InputHandler:
         self,
         command_runner: CommandRunner,
         world: World,
+        dialogue_runtime: object | None = None,
     ) -> None:
         self.command_runner = command_runner
         self.world = world
+        self.dialogue_runtime = dialogue_runtime
         self.held_directions: dict[str, bool] = {
             "up": False,
             "down": False,
@@ -156,6 +158,8 @@ class InputHandler:
 
     def _enqueue_held_direction_if_possible(self, action_name: str) -> bool:
         """Dispatch one held directional action using the normal routed flow model."""
+        if self._dispatch_modal_action(action_name):
+            return True
         target_entity = self.world.get_input_target(action_name)
         if target_entity is None:
             return False
@@ -201,6 +205,8 @@ class InputHandler:
 
     def _enqueue_action_if_mapped(self, action_name: str) -> bool:
         """Run the mapped entity command for the routed entity when one exists."""
+        if self._dispatch_modal_action(action_name):
+            return True
         target_entity = self.world.get_input_target(action_name)
         if target_entity is None:
             return False
@@ -218,4 +224,14 @@ class InputHandler:
         if command_name is not None:
             return str(command_name).strip()
         return ""
+
+    def _dispatch_modal_action(self, action_name: str) -> bool:
+        """Let an active modal runtime consume logical input before world routing."""
+        runtime = self.dialogue_runtime
+        if runtime is None:
+            return False
+        handle_action = getattr(runtime, "handle_action", None)
+        if handle_action is None:
+            return False
+        return bool(handle_action(action_name))
 

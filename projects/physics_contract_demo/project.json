@@ -4,7 +4,8 @@
     "../test_project/entity_templates/"
   ],
   "asset_paths": [
-    "../test_project/assets/"
+    "../test_project/assets/",
+    "../game_copy/assets/"
   ],
   "area_paths": [
     "areas/"
@@ -12,14 +13,7 @@
   "command_paths": [
     "../test_project/commands/"
   ],
-  "shared_variables_path": "../test_project/shared_variables.json",
-  "global_entities": [
-    {
-      "id": "dialogue_controller",
-      "template": "entity_templates/dialogue_panel",
-      "render_order": 100
-    }
-  ],
+  "shared_variables_path": "shared_variables.json",
   "startup_area": "areas/physics_contract_demo",
   "debug_inspection_enabled": true
 }

@@ -64,7 +64,8 @@ The current engine already supports:
 - entities with visuals, variables, input mappings, named behaviors, and engine-known runtime fields
 - command-driven movement, interaction, pushing, animation, and persistence
 - standard engine-owned grid movement, pushing, and facing interaction helpers
-- dialogue and menu flow handled by controller entities
+- dialogue and menu flow handled either by controller entities or by the newer
+  engine-owned dialogue session runtime
 - area changes through authored entry points
 - camera follow, bounds, deadzones, and saved camera state
 - save slots layered on top of authored room data
@@ -99,7 +100,7 @@ The repo also includes a focused contract demo project in
 [projects/physics_contract_demo](./projects/physics_contract_demo/).
 
 That smaller demo exists specifically to show the newer canonical movement /
-interaction contract:
+interaction contract and the newer engine-owned dialogue session path:
 
 - top-level `facing`, `solid`, `pushable`, `weight`, `push_strength`
 - cell `blocked`
@@ -107,6 +108,8 @@ interaction contract:
 - `push_facing`
 - `interact_facing`
 - `on_blocked`, `on_occupant_enter`, and `on_occupant_leave`
+- `open_dialogue_session` and `close_dialogue_session`
+- nested engine-owned dialogue sessions that suspend and resume cleanly
 
 The older sample projects remain useful examples of lower-level authored JSON
 flows. They still work on the current engine, but they are not the canonical
@@ -277,9 +280,11 @@ Other useful docs:
 - Interaction is command-driven too. The engine now also exposes
   `interact_facing` as the standard facing-target lookup, while target behavior
   remains authored on the target's normal `interact` command.
-- Dialogue is not a hidden engine subsystem with special privileged state.
-  Instead, controller entities own the dialogue/menu state and render the UI
-  through normal commands plus ordinary JSON data.
+- Dialogue now has two valid authoring paths:
+  - the newer engine-owned session runtime, opened through
+    `open_dialogue_session`
+  - the older controller-owned authored flow still used by the older sample
+    projects
 - Projects can route different logical inputs to different entities at runtime.
 - Save data stores the current area, current routed input targets, camera state,
   traveler state, visited-area persistent diffs, and the current diff of the

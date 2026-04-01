@@ -12,7 +12,8 @@ It focuses on:
 - entity template JSON
 - project command JSON
 - dialogue JSON
-- the current controller-owned dialogue/menu pattern
+- both the newer engine-owned dialogue runtime and the older controller-owned
+  dialogue/menu pattern
 
 Use this guide for authoring patterns. Use `ENGINE_JSON_INTERFACE.md` when you need the exact current command/value-source surface.
 
@@ -56,7 +57,7 @@ areas
 entity templates
 |-- define visuals, entity commands, input maps, variables
 |-- call project commands
-`-- call controller entity commands to start dialogues
+`-- call dialogue builtins or controller entity commands to start dialogues
 
 ordinary JSON data
 `-- provide reusable dialogue/menu content or any other project-specific payloads
@@ -385,9 +386,7 @@ Example:
       "enabled": true,
       "commands": [
         {
-          "type": "run_entity_command",
-          "entity_id": "dialogue_controller",
-          "command_id": "open_dialogue",
+          "type": "open_dialogue_session",
           "dialogue_path": "$dialogue_path",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
@@ -837,13 +836,44 @@ When omitted, the segment advances on player interaction (the default). When `mo
 
 The old authored `run_dialogue` path and the later `start_dialogue_session` / `dialogue_*` / text-session commands are removed. They are not part of the active command surface anymore.
 
-Current pattern:
+Recommended new pattern:
+
+1. call `open_dialogue_session`
+2. let the engine-owned dialogue runtime load the dialogue JSON
+3. let the runtime own session state, paging, choice selection, timer advance, and modal input behavior
+4. let dialogue content plus hooks decide what commands actually run
+5. if one engine-owned dialogue opens another, the parent session is suspended and resumes when the child closes
+
+Example caller command:
+
+```json
+{
+  "type": "open_dialogue_session",
+  "dialogue_path": "dialogues/showcase/runtime_menu.json",
+  "dialogue_on_start": [],
+  "dialogue_on_end": [],
+  "segment_hooks": [],
+  "allow_cancel": true,
+  "entity_refs": {
+    "instigator": "$ref_ids.instigator",
+    "caller": "$self_id"
+  }
+}
+```
+
+The engine-owned runtime currently expects:
+
+- named dialogue UI presets under `shared_variables.dialogue_ui`
+- ordinary dialogue JSON files, usually under `dialogues/`
+- one common `segments` array in each dialogue file
+
+Older controller-owned pattern:
 
 1. call `run_entity_command` on the dialogue controller entity
 2. let that entity command load JSON dialogue data and store the session state on the controller entity
 3. let controller-owned project commands redraw the UI and react to later input
 
-Detailed lifecycle when a dialogue starts:
+Detailed lifecycle for the older controller-owned pattern:
 
 1. when opening an outermost session, the controller borrows the needed logical inputs through `push_input_routes` and `route_inputs_to_entity`
 2. the controller loads ordinary JSON dialogue data into entity variables and resets its current segment/page/choice state
@@ -861,7 +891,7 @@ Practical rule:
 - do not rely on implicit engine magic for interaction ownership; pass any needed `entity_refs` explicitly
 - modal controllers should use `push_input_routes` / `pop_input_routes`
 
-Example caller command:
+Controller-path example caller command:
 
 ```json
 {
@@ -958,6 +988,10 @@ Example caller command:
 ### Segment hooks
 
 Each `segment_hooks` entry matches one dialogue segment by index.
+
+They are used by the older controller-owned path today, and they are also the
+current caller-hook surface for the newer engine-owned `open_dialogue_session`
+runtime.
 
 A hook object can define:
 
@@ -1375,22 +1409,31 @@ Examples:
 }
 ```
 
-### Treat Dialogue As Controller-Owned State
+### Treat Dialogue As Session State
 
-The current dialogue model is:
+There are now two valid dialogue models:
 
-1. another entity sends an event to the dialogue controller
-2. the controller loads dialogue JSON data
-3. the controller stores session state on itself
-4. controller-owned project commands redraw the screen-space UI and handle later input
+1. the newer engine-owned session runtime opened through
+   `open_dialogue_session`
+2. the older controller-owned path still used by the older sample projects
 
-That means dialogue/menu logic should usually be built by composing:
+For new content, prefer the engine-owned runtime when:
 
-- one controller entity
-- ordinary JSON dialogue data
-- controller-owned project commands
-- explicit `push_input_routes` / `pop_input_routes`
-- explicit `dialogue_on_start` / `dialogue_on_end` hooks when callers need setup or cleanup
+- you want a standard modal dialogue or menu
+- you want engine-owned paging, choice selection, timer advance, and cancel
+  behavior
+- you want dialogue UI presets from `shared_variables.json`
+
+The older controller-owned path is still useful when:
+
+- you are working in an older authored project that already uses it heavily
+- you want to keep the dialogue flow explicitly authored in project commands
+
+That means dialogue/menu logic can currently be built from either:
+
+- engine-owned sessions plus ordinary JSON dialogue data
+- controller entities plus ordinary JSON dialogue data and controller-owned
+  project commands
 
 ## Area Transfers
 

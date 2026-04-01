@@ -99,6 +99,7 @@ class CommandContext:
     camera: Any | None = None
     audio_player: Any | None = None
     screen_manager: Any | None = None
+    dialogue_runtime: Any | None = None
     command_runner: Any | None = None
     random_generator: Any | None = None
     persistence_runtime: Any | None = None

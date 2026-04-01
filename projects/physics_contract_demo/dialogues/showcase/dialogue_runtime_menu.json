@@ -1,0 +1,88 @@
+{
+  "ui_preset": "standard",
+  "segments": [
+    {
+      "type": "text",
+      "speaker_id": "guide",
+      "portrait": {
+        "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+        "frame_width": 38,
+        "frame_height": 38,
+        "frame": 0
+      },
+      "text": "This terminal uses the new engine-owned dialogue runtime. Its choice behavior is authored inline in the dialogue file itself.",
+      "advance": {
+        "mode": "interact"
+      }
+    },
+    {
+      "type": "choice",
+      "speaker_id": "guide",
+      "portrait": {
+        "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+        "frame_width": 38,
+        "frame_height": 38,
+        "frame": 0
+      },
+      "text": "Pick an action for the nearby indicator.",
+      "options": [
+        {
+          "text": "Turn the indicator on",
+          "option_id": "indicator_on",
+          "commands": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": true
+            }
+          ]
+        },
+        {
+          "text": "Turn the indicator off",
+          "option_id": "indicator_off",
+          "commands": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": false
+            }
+          ]
+        },
+        {
+          "text": "Flash the indicator briefly",
+          "option_id": "indicator_flash",
+          "commands": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": true
+            },
+            {
+              "type": "wait_frames",
+              "frames": 12
+            },
+            {
+              "type": "set_entity_field",
+              "entity_id": "$refs.caller.target_indicator_id",
+              "field_name": "visible",
+              "value": false
+            }
+          ]
+        },
+        {
+          "text": "Leave the indicator as it is",
+          "option_id": "indicator_keep",
+          "commands": []
+        },
+        {
+          "text": "Close the menu",
+          "option_id": "close",
+          "commands": []
+        }
+      ]
+    }
+  ]
+}

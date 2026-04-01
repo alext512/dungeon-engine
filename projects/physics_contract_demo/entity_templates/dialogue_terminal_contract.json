@@ -1,8 +1,11 @@
 {
-  "kind": "sign",
+  "kind": "terminal",
   "solid": true,
   "interactable": true,
   "interaction_priority": 10,
+  "variables": {
+    "target_indicator_id": "$target_indicator_id"
+  },
   "visuals": [
     {
       "id": "main",
@@ -20,11 +23,11 @@
       "commands": [
         {
           "type": "open_dialogue_session",
-          "dialogue_path": "$dialogue_path",
+          "dialogue_path": "dialogues/showcase/dialogue_runtime_menu.json",
           "dialogue_on_start": [],
           "dialogue_on_end": [],
           "segment_hooks": [],
-          "allow_cancel": false,
+          "allow_cancel": true,
           "entity_refs": {
             "instigator": "$ref_ids.instigator",
             "caller": "$self_id"

@@ -1,0 +1,61 @@
+{
+  "display": {
+    "internal_width": 256,
+    "internal_height": 192
+  },
+  "movement": {
+    "ticks_per_tile": 16
+  },
+  "dialogue_ui": {
+    "default_preset": "standard",
+    "presets": {
+      "standard": {
+        "panel": {
+          "path": "assets/project/ui/dialogue_panel.png",
+          "x": 0,
+          "y": 148
+        },
+        "portrait_slot": {
+          "x": 3,
+          "y": 151,
+          "width": 38,
+          "height": 38
+        },
+        "text": {
+          "plain": {
+            "x": 8,
+            "y": 154,
+            "width": 240,
+            "max_lines": 3
+          },
+          "with_portrait": {
+            "x": 56,
+            "y": 154,
+            "width": 192,
+            "max_lines": 3
+          }
+        },
+        "choices": {
+          "mode": "inline",
+          "visible_rows": 3,
+          "base_y": 154,
+          "row_height": 10,
+          "overflow": "marquee",
+          "plain": {
+            "x": 8,
+            "width": 240
+          },
+          "with_portrait": {
+            "x": 56,
+            "width": 188
+          }
+        },
+        "font_id": "pixelbet",
+        "text_color": [245, 232, 190],
+        "choice_text_color": [238, 242, 248],
+        "ui_layer": 100,
+        "text_layer": 101
+      }
+    }
+  }
+}

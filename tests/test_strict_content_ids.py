@@ -50,6 +50,7 @@ from dungeon_engine.world.persistence import (
 )
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
+from dungeon_engine.engine.dialogue_runtime import DialogueRuntime
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
@@ -93,6 +94,61 @@ def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
         ],
         "cell_flags": [[True]],
         "entities": [],
+    }
+
+
+def _dialogue_shared_variables() -> dict[str, object]:
+    return {
+        "dialogue_ui": {
+            "default_preset": "standard",
+            "presets": {
+                "standard": {
+                    "panel": {
+                        "path": "assets/project/ui/dialogue_panel.png",
+                        "x": 0,
+                        "y": 148,
+                    },
+                    "portrait_slot": {
+                        "x": 3,
+                        "y": 151,
+                        "width": 38,
+                        "height": 38,
+                    },
+                    "text": {
+                        "plain": {
+                            "x": 8,
+                            "y": 154,
+                            "width": 240,
+                            "max_lines": 3,
+                        },
+                        "with_portrait": {
+                            "x": 56,
+                            "y": 154,
+                            "width": 192,
+                            "max_lines": 3,
+                        },
+                    },
+                    "choices": {
+                        "visible_rows": 3,
+                        "base_y": 154,
+                        "row_height": 10,
+                        "plain": {
+                            "x": 8,
+                            "width": 240,
+                        },
+                        "with_portrait": {
+                            "x": 56,
+                            "width": 188,
+                        },
+                    },
+                    "font_id": "pixelbet",
+                    "text_color": [245, 232, 190],
+                    "choice_text_color": [238, 242, 248],
+                    "ui_layer": 100,
+                    "text_layer": 101,
+                }
+            },
+        }
     }
 
 
@@ -425,6 +481,23 @@ class _StubTextRenderer:
         _ = font_id
         return [part for part in str(text).split(" ") if part]
 
+    def paginate_text(
+        self,
+        text: str,
+        max_width: int,
+        max_lines: int,
+        *,
+        font_id: str = "",
+    ) -> list[str]:
+        lines = self.wrap_lines(text, max_width, font_id=font_id)
+        if not lines:
+            return [""]
+        chunk_size = max(1, int(max_lines))
+        pages: list[str] = []
+        for index in range(0, len(lines), chunk_size):
+            pages.append("\n".join(lines[index:index + chunk_size]))
+        return pages or [""]
+
 
 class _FacingStateCollisionSystem:
     def __init__(self, *, blocking_entity=None, can_move: bool = True) -> None:
@@ -618,6 +691,7 @@ class StrictContentIdTests(unittest.TestCase):
         areas: dict[str, dict[str, object]] | None = None,
         commands: dict[str, dict[str, object]] | None = None,
         dialogues: dict[str, dict[str, object]] | None = None,
+        shared_variables: dict[str, object] | None = None,
     ) -> tuple[Path, object]:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -637,6 +711,8 @@ class StrictContentIdTests(unittest.TestCase):
             project_payload["global_entities"] = global_entities
 
         _write_json(project_root / "project.json", project_payload)
+        if shared_variables is not None:
+            _write_json(project_root / "shared_variables.json", shared_variables)
 
         for relative_path, template_payload in (entity_templates or {}).items():
             _write_json(project_root / "entity_templates" / relative_path, template_payload)
@@ -670,6 +746,25 @@ class StrictContentIdTests(unittest.TestCase):
             persistence_runtime=persistence_runtime,
         )
         return registry, context
+
+    def _install_dialogue_runtime(
+        self,
+        *,
+        registry: CommandRegistry,
+        context: CommandContext,
+        project: object,
+    ) -> DialogueRuntime:
+        dialogue_runtime = DialogueRuntime(
+            project=project,
+            screen_manager=ScreenElementManager(),
+            text_renderer=_StubTextRenderer(),
+            registry=registry,
+            command_context=context,
+        )
+        context.screen_manager = dialogue_runtime.screen_manager
+        context.text_renderer = dialogue_runtime.text_renderer
+        context.dialogue_runtime = dialogue_runtime
+        return dialogue_runtime
 
     def _make_occupancy_runtime(
         self,
@@ -1901,6 +1996,363 @@ class StrictContentIdTests(unittest.TestCase):
                 execute_registered_command(registry, context, command_name, {})
             self.assertIsNotNone(raised.exception.__cause__)
             self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
+
+    def test_open_dialogue_session_runs_hooks_and_renders_text(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_note.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Engine owned dialogue runtime",
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_note.json",
+                "dialogue_on_start": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "$self_id",
+                        "name": "phase",
+                        "value": "opened",
+                    }
+                ],
+                "dialogue_on_end": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "$self_id",
+                        "name": "phase",
+                        "value": "closed",
+                    }
+                ],
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+        self.assertFalse(handle.complete)
+        self.assertTrue(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["phase"], "opened")
+
+        text_element = context.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
+        assert text_element is not None
+        self.assertIn("Engine", text_element.text)
+
+        close_handle = execute_registered_command(
+            registry,
+            context,
+            "close_dialogue_session",
+            {},
+        )
+        self.assertTrue(close_handle.complete)
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["phase"], "closed")
+        handle.update(0.0)
+        self.assertTrue(handle.complete)
+
+    def test_dialogue_runtime_choice_window_scrolls_after_three_visible_rows(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_choices.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Pick one",
+                            "options": [
+                                {"text": "One", "option_id": "one"},
+                                {"text": "Two", "option_id": "two"},
+                                {"text": "Three", "option_id": "three"},
+                                {"text": "Four", "option_id": "four"},
+                                {"text": "Five", "option_id": "five"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_choices.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.choice_index, 0)
+        self.assertEqual(session.choice_scroll_offset, 0)
+
+        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_1 = context.screen_manager.get_element("engine_dialogue_option_1")
+        option_2 = context.screen_manager.get_element("engine_dialogue_option_2")
+        assert option_0 is not None
+        assert option_1 is not None
+        assert option_2 is not None
+        self.assertEqual(option_0.text, ">One")
+        self.assertEqual(option_1.text, " Two")
+        self.assertEqual(option_2.text, " Three")
+
+        dialogue_runtime.handle_action("move_down")
+        dialogue_runtime.handle_action("move_down")
+        dialogue_runtime.handle_action("move_down")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.choice_index, 3)
+        self.assertEqual(session.choice_scroll_offset, 1)
+
+        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_1 = context.screen_manager.get_element("engine_dialogue_option_1")
+        option_2 = context.screen_manager.get_element("engine_dialogue_option_2")
+        assert option_0 is not None
+        assert option_1 is not None
+        assert option_2 is not None
+        self.assertEqual(option_0.text, " Two")
+        self.assertEqual(option_1.text, " Three")
+        self.assertEqual(option_2.text, ">Four")
+
+    def test_dialogue_runtime_segment_hooks_override_inline_option_commands(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_override.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Resolve the choice",
+                            "options": [
+                                {
+                                    "text": "Apply behavior",
+                                    "option_id": "apply",
+                                    "commands": [
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "mode",
+                                            "value": "inline",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_override.json",
+                "segment_hooks": [
+                    {
+                        "option_commands_by_id": {
+                            "apply": [
+                                {
+                                    "type": "set_entity_var",
+                                    "entity_id": "$self_id",
+                                    "name": "mode",
+                                    "value": "hook",
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        self.assertTrue(dialogue_runtime.is_active())
+        dialogue_runtime.handle_action("interact")
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["mode"], "hook")
+
+    def test_dialogue_runtime_timer_segments_advance_without_input(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_timer.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Soon",
+                            "advance": {
+                                "mode": "timer",
+                                "seconds": 0.25,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": "Later",
+                        },
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_timer.json",
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.segment_index, 0)
+
+        dialogue_runtime.update(0.25)
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.segment_index, 1)
+        text_element = context.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
+        assert text_element is not None
+        self.assertIn("Later", text_element.text)
+
+    def test_nested_dialogue_sessions_suspend_parent_flow_until_child_closes(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_parent.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Open the child dialogue",
+                            "options": [
+                                {
+                                    "text": "Open child",
+                                    "option_id": "open_child",
+                                    "commands": [
+                                        {
+                                            "type": "open_dialogue_session",
+                                            "dialogue_path": "dialogues/system/runtime_child.json",
+                                            "allow_cancel": True,
+                                        },
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "result",
+                                            "value": "resumed",
+                                        },
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "system/runtime_child.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Nested child session",
+                        }
+                    ]
+                },
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_parent.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+        self.assertFalse(parent_handle.complete)
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_parent.json")
+
+        dialogue_runtime.handle_action("interact")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_child.json")
+        self.assertNotIn("result", caller.variables)
+
+        dialogue_runtime.handle_action("menu")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_parent.json")
+        self.assertNotIn("result", caller.variables)
+
+        dialogue_runtime.update(0.0)
+
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["result"], "resumed")
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
 
     def test_wrapped_lines_and_text_window_value_sources_store_visible_text(self) -> None:
         world = World()
@@ -4621,6 +5073,86 @@ class StrictContentIdTests(unittest.TestCase):
             (5 * game.area.tile_size, 2 * game.area.tile_size),
         )
         self.assertFalse(block.movement_state.active)
+        self.assertIsNone(game.command_runner.last_error_notice)
+
+    def test_demo_dialogue_runtime_intercepts_input_and_runs_inline_choice_commands(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        project_path = (
+            Path(__file__).resolve().parents[1]
+            / "projects"
+            / "physics_contract_demo"
+            / "project.json"
+        )
+        project = load_project(project_path)
+        area_path = project.resolve_area_reference("areas/physics_contract_demo")
+        assert area_path is not None
+
+        game = Game(area_path=area_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        for _ in range(3):
+            game._advance_simulation_tick(1 / 60)
+
+        player = game.world.get_entity("player")
+        indicator = game.world.get_entity("occupancy_indicator")
+        assert player is not None
+        assert indicator is not None
+
+        game.movement_system.set_grid_position("player", 4, 4)
+        game.movement_system.set_pixel_position(
+            "player",
+            4 * game.area.tile_size,
+            4 * game.area.tile_size,
+        )
+        player.set_facing_value("right")
+
+        self.assertFalse(indicator.visible)
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+        game._advance_simulation_tick(1 / 60)
+
+        self.assertIsNotNone(game.dialogue_runtime)
+        assert game.dialogue_runtime is not None
+        self.assertTrue(game.dialogue_runtime.is_active())
+        self.assertEqual((player.grid_x, player.grid_y), (4, 4))
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT)])
+        game._advance_simulation_tick(1 / 60)
+        self.assertEqual((player.grid_x, player.grid_y), (4, 4))
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYUP, key=pygame.K_LEFT)])
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+        game._advance_simulation_tick(1 / 60)
+
+        session = game.dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.segment_index, 1)
+        self.assertEqual(session.choice_index, 0)
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)])
+        game._advance_simulation_tick(1 / 60)
+        session = game.dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.choice_index, 1)
+        self.assertEqual((player.grid_x, player.grid_y), (4, 4))
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYUP, key=pygame.K_DOWN)])
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP)])
+        game._advance_simulation_tick(1 / 60)
+        session = game.dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.choice_index, 0)
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYUP, key=pygame.K_UP)])
+
+        game.input_handler.handle_events([pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+        game._advance_simulation_tick(1 / 60)
+
+        self.assertFalse(game.dialogue_runtime.is_active())
+        self.assertTrue(indicator.visible)
+        self.assertEqual((player.grid_x, player.grid_y), (4, 4))
         self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_dialogue_choice_window_scrolls_after_three_visible_rows(self) -> None:

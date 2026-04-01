@@ -2173,6 +2173,70 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             refs_mode="merge",
         )
 
+    @registry.register(
+        "open_dialogue_session",
+        deferred_params={"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
+    )
+    def open_dialogue_session(
+        context: CommandContext,
+        *,
+        dialogue_path: str,
+        dialogue_on_start: list[dict[str, Any]] | dict[str, Any] | None = None,
+        dialogue_on_end: list[dict[str, Any]] | dict[str, Any] | None = None,
+        segment_hooks: list[Any] | None = None,
+        allow_cancel: bool = False,
+        actor_id: str | None = None,
+        caller_id: str | None = None,
+        ui_preset: str | None = None,
+        source_entity_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Open one engine-owned dialogue session using the canonical modal runtime."""
+        from dungeon_engine.engine.dialogue_runtime import DialogueSessionWaitHandle
+
+        dialogue_runtime = context.dialogue_runtime
+        if dialogue_runtime is None:
+            raise ValueError("open_dialogue_session requires an active dialogue runtime.")
+
+        resolved_actor_id = None if actor_id in (None, "") else str(actor_id).strip()
+        resolved_caller_id = None if caller_id in (None, "") else str(caller_id).strip()
+        if isinstance(entity_refs, dict):
+            if resolved_actor_id in (None, ""):
+                instigator_id = entity_refs.get("instigator")
+                if instigator_id not in (None, ""):
+                    resolved_actor_id = str(instigator_id).strip()
+            if resolved_caller_id in (None, ""):
+                caller_ref_id = entity_refs.get("caller")
+                if caller_ref_id not in (None, ""):
+                    resolved_caller_id = str(caller_ref_id).strip()
+        if resolved_caller_id in (None, "") and source_entity_id not in (None, ""):
+            resolved_caller_id = str(source_entity_id).strip()
+
+        session = dialogue_runtime.open_session(
+            dialogue_path=str(dialogue_path),
+            dialogue_on_start=dialogue_on_start,
+            dialogue_on_end=dialogue_on_end,
+            segment_hooks=segment_hooks,
+            allow_cancel=bool(allow_cancel),
+            actor_id=resolved_actor_id,
+            caller_id=resolved_caller_id,
+            ui_preset_name=None if ui_preset in (None, "") else str(ui_preset).strip(),
+        )
+        return DialogueSessionWaitHandle(dialogue_runtime, session)
+
+    @registry.register("close_dialogue_session")
+    def close_dialogue_session(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Close the currently active engine-owned dialogue session when one exists."""
+        dialogue_runtime = context.dialogue_runtime
+        if dialogue_runtime is None:
+            raise ValueError("close_dialogue_session requires an active dialogue runtime.")
+        dialogue_runtime.close_current_session()
+        return ImmediateHandle()
+
     @registry.register("wait_for_move")
     def wait_for_move(
         world: Any,

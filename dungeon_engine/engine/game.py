@@ -21,6 +21,7 @@ from dungeon_engine.commands.runner import (
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.camera import Camera
+from dungeon_engine.engine.dialogue_runtime import DialogueRuntime
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
@@ -93,6 +94,7 @@ class Game:
         self.animation_system: AnimationSystem | None = None
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
+        self.dialogue_runtime: DialogueRuntime | None = None
         self._pending_area_change_request: AreaTransitionRequest | None = None
         self._pending_new_game_request: AreaTransitionRequest | None = None
         self._pending_load_save_path: Path | None = None
@@ -182,14 +184,20 @@ class Game:
             raise RuntimeError("Game runtime is missing an animation system.")
 
         self.command_runner.update(0.0)
+        if self.dialogue_runtime is not None:
+            self.dialogue_runtime.update(0.0)
         self.movement_system.update_tick()
         self.input_handler.update_held_direction_repeat(dt)
         self.animation_system.update_tick(dt)
+        self.command_runner.update(dt)
+        if self.dialogue_runtime is not None:
+            self.dialogue_runtime.update(dt)
         self.screen_manager.update_tick()
         self.camera.update(self.world, advance_tick=True)
-        self.command_runner.update(dt)
         self._apply_pending_reset_if_idle()
         self.command_runner.update(0.0)
+        if self.dialogue_runtime is not None:
+            self.dialogue_runtime.update(0.0)
         self._apply_pending_reset_if_idle()
         self._apply_pending_load_if_idle()
         self._apply_pending_new_game_if_idle()
@@ -219,6 +227,7 @@ class Game:
             camera=self.camera,
             audio_player=self.audio_player,
             screen_manager=self.screen_manager,
+            dialogue_runtime=None,
             command_runner=None,
             random_generator=random.Random(),
             persistence_runtime=self.persistence_runtime,
@@ -234,7 +243,19 @@ class Game:
             adjust_output_scale=self._adjust_output_scale,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
-        self.input_handler = InputHandler(self.command_runner, self.world)
+        self.dialogue_runtime = DialogueRuntime(
+            project=self.project,
+            screen_manager=self.screen_manager,
+            text_renderer=self.renderer.text_renderer,
+            registry=self.command_registry,
+            command_context=command_context,
+        )
+        command_context.dialogue_runtime = self.dialogue_runtime
+        self.input_handler = InputHandler(
+            self.command_runner,
+            self.world,
+            dialogue_runtime=self.dialogue_runtime,
+        )
         self.movement_system.occupancy_transition_callback = self._queue_occupancy_transition_hooks
 
     def request_area_change(self, request: AreaTransitionRequest) -> None:
@@ -291,17 +312,27 @@ class Game:
                 len(self.command_runner.pending),
                 len(self.command_runner.root_handles),
                 tuple(id(handle) for handle in self.command_runner.root_handles),
+                False if self.dialogue_runtime is None else self.dialogue_runtime.has_pending_work(),
             )
             self.command_runner.update(0.0)
+            if self.dialogue_runtime is not None:
+                self.dialogue_runtime.update(0.0)
             after_state = (
                 len(self.command_runner.pending),
                 len(self.command_runner.root_handles),
                 tuple(id(handle) for handle in self.command_runner.root_handles),
+                False if self.dialogue_runtime is None else self.dialogue_runtime.has_pending_work(),
             )
-            if not self.command_runner.has_pending_work():
+            if not self._has_blocking_runtime_work():
                 break
             if after_state == before_state:
                 break
+
+    def _has_blocking_runtime_work(self) -> bool:
+        """Return whether any active runtime lane should block deferred transitions."""
+        runner_busy = self.command_runner is not None and self.command_runner.has_pending_work()
+        dialogue_busy = self.dialogue_runtime is not None and self.dialogue_runtime.has_pending_work()
+        return bool(runner_busy or dialogue_busy)
 
     def _load_area_runtime(
         self,
@@ -657,7 +688,7 @@ class Game:
 
     def _apply_pending_reset_if_idle(self) -> None:
         """Apply queued immediate reset requests once the command lane is idle."""
-        if self.command_runner is None or self.command_runner.has_pending_work():
+        if self.command_runner is None or self._has_blocking_runtime_work():
             return
 
         request = self.persistence_runtime.consume_immediate_reset()
@@ -676,7 +707,7 @@ class Game:
 
     def _apply_pending_load_if_idle(self) -> None:
         """Apply a queued save-slot load once the command lane is idle."""
-        if self.command_runner is None or self.command_runner.has_pending_work():
+        if self.command_runner is None or self._has_blocking_runtime_work():
             return
         if self._pending_load_save_path is None:
             return
@@ -688,7 +719,7 @@ class Game:
 
     def _apply_pending_new_game_if_idle(self) -> None:
         """Apply a queued new-game request once the command lane is idle."""
-        if self.command_runner is None or self.command_runner.has_pending_work():
+        if self.command_runner is None or self._has_blocking_runtime_work():
             return
         if self._pending_new_game_request is None:
             return
@@ -701,7 +732,7 @@ class Game:
 
     def _apply_pending_area_change_if_idle(self) -> None:
         """Apply a queued area transition once the main command lane is idle."""
-        if self.command_runner is None or self.command_runner.has_pending_work():
+        if self.command_runner is None or self._has_blocking_runtime_work():
             return
         if self._pending_area_change_request is None:
             return

@@ -97,6 +97,13 @@ Minimal example:
 }
 ```
 
+Notes:
+- Projects are not required to define a `dialogue_controller` global entity.
+- The newer engine-owned dialogue path opens sessions directly through
+  `open_dialogue_session`.
+- Older authored projects may still keep a `dialogue_controller` because that
+  remains a valid authored pattern.
+
 ## Shared Variables: `shared_variables.json`
 
 This is an ordinary JSON object loaded once at project startup.
@@ -109,8 +116,13 @@ The engine exposes it through runtime tokens:
 Special current use:
 - `display.internal_width`
 - `display.internal_height`
+- `dialogue_ui.default_preset`
+- `dialogue_ui.presets`
 
 These influence the runtime internal display size if present.
+
+For the newer engine-owned dialogue runtime, `dialogue_ui.presets` is the
+current shared-variable convention for named dialogue UI layouts.
 
 ## Area Files
 
@@ -1235,6 +1247,29 @@ Those hooks receive:
 - `entity_refs.instigator`
 - runtime params `from_x`, `from_y`, `to_x`, `to_y` when the relevant endpoints exist
 
+### Dialogue
+
+- `open_dialogue_session(dialogue_path, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
+- `close_dialogue_session()`
+
+Current engine-owned dialogue runtime behavior:
+- loads ordinary dialogue JSON by `dialogue_path`
+- reads named UI presets from `shared_variables.dialogue_ui`
+- owns current segment, page, choice index, choice scroll, timer advance, and
+  modal input behavior
+- supports caller hooks through `dialogue_on_start`, `dialogue_on_end`, and
+  `segment_hooks`
+- currently also supports inline segment `on_start` / `on_end` and inline
+  option `commands`
+- opening a child engine-owned dialogue suspends the parent session and
+  resumes it after the child closes
+- when both caller-provided hooks and inline dialogue commands exist for the
+  same segment/option scope, caller hooks win and inline commands act as the
+  default fallback
+
+Older controller-owned dialogue flows are still valid authored content, but
+they are no longer the only dialogue path.
+
 Movement timing precedence for interpolated move commands is:
 - `frames_needed`
 - `duration`
@@ -1506,6 +1541,11 @@ Current special deferred params on `run_entity_command`:
 - `segment_hooks`
 
 Those are part of the current dialogue/controller surface.
+
+Current special deferred params on `open_dialogue_session`:
+- `dialogue_on_start`
+- `dialogue_on_end`
+- `segment_hooks`
 
 ## Current Engine-Known Special Fields
 

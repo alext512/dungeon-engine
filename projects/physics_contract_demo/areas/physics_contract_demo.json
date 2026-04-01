@@ -130,6 +130,15 @@
       "parameters": {
         "dialogue_path": "dialogues/showcase/physics_contract_note.json"
       }
+    },
+    {
+      "id": "dialogue_terminal",
+      "x": 5,
+      "y": 4,
+      "template": "entity_templates/dialogue_terminal_contract",
+      "parameters": {
+        "target_indicator_id": "occupancy_indicator"
+      }
     }
   ]
 }
