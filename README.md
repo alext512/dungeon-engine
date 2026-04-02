@@ -67,7 +67,7 @@ The current engine already supports:
 - standard engine-owned grid movement, pushing, and facing interaction helpers
 - Inventory V1 with entity-owned stack inventories, authored item definitions,
   `add_inventory_item` / `remove_inventory_item` / `use_inventory_item`,
-  and inventory value sources
+  inventory value sources, and the first engine-owned inventory UI session
 - dialogue and menu flow handled either by controller entities or by the newer
   engine-owned dialogue session runtime
 - area changes through authored entry points
@@ -112,9 +112,10 @@ interaction contract and the newer engine-owned dialogue session path:
 - `push_facing`
 - `interact_facing`
 - Inventory V1 item definitions, entity-owned inventory state, pickup templates,
-  item-gated doors, and direct item use without a dedicated inventory UI yet
+  item-gated doors, direct item use, and the first engine-owned inventory UI
 - `on_blocked`, `on_occupant_enter`, and `on_occupant_leave`
 - `open_dialogue_session` and `close_dialogue_session`
+- `open_inventory_session` and `close_inventory_session`
 - nested engine-owned dialogue sessions that suspend and resume cleanly
 - preset-driven inline or separate-panel choice layouts, including marquee overflow
 
@@ -205,6 +206,7 @@ On Windows, you can also double-click:
 
 - `WASD` or arrow keys: move
 - `Space` or `Enter`: interact, advance dialogue, confirm a choice
+- `I`: open inventory directly when the active project routes the `inventory` action
 - `Escape`: open the pause menu in playable areas
 
 If debug inspection is enabled in the active project's `project.json`:
@@ -227,6 +229,7 @@ Useful things to try:
 
 - walk with `WASD` or the arrow keys
 - press `Space` or `Enter` to interact
+- press `I` in `physics_contract_demo` to open the inventory
 - stand by the house door and enter `village_house`
 - toggle the lever in the house
 - leave and return to confirm the lever/gate state persisted
@@ -287,6 +290,10 @@ Other useful docs:
 - Interaction is command-driven too. The engine now also exposes
   `interact_facing` as the standard facing-target lookup, while target behavior
   remains authored on the target's normal `interact` command.
+- Inventory now has two layers:
+  - gameplay/data through item definitions plus inventory builtins
+  - a newer engine-owned inventory session opened through
+    `open_inventory_session`
 - Dialogue now has two valid authoring paths:
   - the newer engine-owned session runtime, opened through
     `open_dialogue_session`

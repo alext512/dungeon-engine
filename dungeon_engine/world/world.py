@@ -14,6 +14,7 @@ DEFAULT_INPUT_ACTIONS: tuple[str, ...] = (
     "move_left",
     "move_right",
     "interact",
+    "inventory",
     "menu",
 )
 

@@ -26,6 +26,7 @@ ACTION_KEYS = {
     pygame.K_RETURN,
     pygame.K_KP_ENTER,
 }
+INVENTORY_KEYS = {pygame.K_i}
 
 HELD_DIRECTION_REPEAT_INITIAL_DELAY_SECONDS = 0.18
 HELD_DIRECTION_REPEAT_INTERVAL_SECONDS = 0.12
@@ -46,10 +47,12 @@ class InputHandler:
         command_runner: CommandRunner,
         world: World,
         dialogue_runtime: object | None = None,
+        inventory_runtime: object | None = None,
     ) -> None:
         self.command_runner = command_runner
         self.world = world
         self.dialogue_runtime = dialogue_runtime
+        self.inventory_runtime = inventory_runtime
         self.held_directions: dict[str, bool] = {
             "up": False,
             "down": False,
@@ -99,6 +102,10 @@ class InputHandler:
                 if event.key in ACTION_KEYS:
                     self.action_press_count += 1
                     self._enqueue_action_if_mapped("interact")
+                    continue
+
+                if event.key in INVENTORY_KEYS:
+                    self._enqueue_action_if_mapped("inventory")
                     continue
 
                 direction = KEY_TO_DIRECTION.get(event.key)
@@ -226,12 +233,20 @@ class InputHandler:
         return ""
 
     def _dispatch_modal_action(self, action_name: str) -> bool:
-        """Let an active modal runtime consume logical input before world routing."""
-        runtime = self.dialogue_runtime
-        if runtime is None:
-            return False
-        handle_action = getattr(runtime, "handle_action", None)
-        if handle_action is None:
-            return False
-        return bool(handle_action(action_name))
+        """Let active modal runtimes consume or block logical input before world routing."""
+        for runtime in (self.dialogue_runtime, self.inventory_runtime):
+            if runtime is None:
+                continue
+            is_active = getattr(runtime, "is_active", None)
+            runtime_active = bool(is_active()) if callable(is_active) else False
+            if not runtime_active:
+                has_pending_work = getattr(runtime, "has_pending_work", None)
+                runtime_active = bool(has_pending_work()) if callable(has_pending_work) else False
+            if not runtime_active:
+                continue
+            handle_action = getattr(runtime, "handle_action", None)
+            if callable(handle_action) and handle_action(action_name):
+                return True
+            return True
+        return False
 

@@ -124,6 +124,8 @@ Special current use:
 - `display.internal_height`
 - `dialogue_ui.default_preset`
 - `dialogue_ui.presets`
+- `inventory_ui.default_preset`
+- `inventory_ui.presets`
 
 These influence the runtime internal display size if present.
 
@@ -138,6 +140,23 @@ choice-layout presets may define:
 - `choices.panel` plus `choices.x` / `choices.y` / `choices.width` for
   separate-panel choice menus
 
+For the engine-owned inventory runtime, `inventory_ui.presets` is the current
+shared-variable convention for named inventory UI layouts. Current presets may
+define:
+
+- `list_panel`
+- `list`
+- `detail_panel`
+- `portrait_slot`
+- `text`
+- `action_popup`
+- `deny_sfx_path`
+- `font_id`
+- `text_color`
+- `choice_text_color`
+- `ui_layer`
+- `text_layer`
+
 ## Item Files
 
 Item definitions are plain JSON files discovered through `item_paths`.
@@ -147,6 +166,7 @@ Current item file fields:
 - `name: string`
 - `description: string`
 - `icon: object`
+- `portrait: object`
 - `max_stack: integer`
 - `consume_quantity_on_use: integer`
 - `use_commands: command[]`
@@ -1399,6 +1419,8 @@ Movement timing precedence for interpolated move commands is:
 - `remove_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?)`
 - `use_inventory_item(entity_id, item_id, quantity?, result_var_name?)`
 - `set_inventory_max_stacks(entity_id, max_stacks)`
+- `open_inventory_session(entity_id, ui_preset?, wait?)`
+- `close_inventory_session()`
 
 Current inventory rules:
 
@@ -1416,6 +1438,10 @@ Current inventory rules:
   `changed_quantity > 0`
 - `use_inventory_item` only consumes after the item's `use_commands` finish
   cleanly
+- `open_inventory_session` opens the engine-owned inventory browser for one
+  entity-owned inventory
+- `open_inventory_session(wait=false)` returns immediately instead of waiting
+  for the inventory session to close
 
 ### Animation, Audio, And Entity Visuals
 

@@ -22,6 +22,7 @@ from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.camera import Camera
 from dungeon_engine.engine.dialogue_runtime import DialogueRuntime
+from dungeon_engine.engine.inventory_runtime import InventoryRuntime
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
@@ -95,6 +96,7 @@ class Game:
         self.command_runner: CommandRunner | None = None
         self.input_handler: InputHandler | None = None
         self.dialogue_runtime: DialogueRuntime | None = None
+        self.inventory_runtime: InventoryRuntime | None = None
         self._pending_area_change_request: AreaTransitionRequest | None = None
         self._pending_new_game_request: AreaTransitionRequest | None = None
         self._pending_load_save_path: Path | None = None
@@ -186,18 +188,24 @@ class Game:
         self.command_runner.update(0.0)
         if self.dialogue_runtime is not None:
             self.dialogue_runtime.update(0.0)
+        if self.inventory_runtime is not None:
+            self.inventory_runtime.update(0.0)
         self.movement_system.update_tick()
         self.input_handler.update_held_direction_repeat(dt)
         self.animation_system.update_tick(dt)
         self.command_runner.update(dt)
         if self.dialogue_runtime is not None:
             self.dialogue_runtime.update(dt)
+        if self.inventory_runtime is not None:
+            self.inventory_runtime.update(dt)
         self.screen_manager.update_tick()
         self.camera.update(self.world, advance_tick=True)
         self._apply_pending_reset_if_idle()
         self.command_runner.update(0.0)
         if self.dialogue_runtime is not None:
             self.dialogue_runtime.update(0.0)
+        if self.inventory_runtime is not None:
+            self.inventory_runtime.update(0.0)
         self._apply_pending_reset_if_idle()
         self._apply_pending_load_if_idle()
         self._apply_pending_new_game_if_idle()
@@ -228,6 +236,7 @@ class Game:
             audio_player=self.audio_player,
             screen_manager=self.screen_manager,
             dialogue_runtime=None,
+            inventory_runtime=None,
             command_runner=None,
             random_generator=random.Random(),
             persistence_runtime=self.persistence_runtime,
@@ -250,11 +259,19 @@ class Game:
             registry=self.command_registry,
             command_context=command_context,
         )
+        self.inventory_runtime = InventoryRuntime(
+            project=self.project,
+            screen_manager=self.screen_manager,
+            text_renderer=self.renderer.text_renderer,
+            command_context=command_context,
+        )
         command_context.dialogue_runtime = self.dialogue_runtime
+        command_context.inventory_runtime = self.inventory_runtime
         self.input_handler = InputHandler(
             self.command_runner,
             self.world,
             dialogue_runtime=self.dialogue_runtime,
+            inventory_runtime=self.inventory_runtime,
         )
         self.movement_system.occupancy_transition_callback = self._queue_occupancy_transition_hooks
 
@@ -313,15 +330,19 @@ class Game:
                 len(self.command_runner.root_handles),
                 tuple(id(handle) for handle in self.command_runner.root_handles),
                 False if self.dialogue_runtime is None else self.dialogue_runtime.has_pending_work(),
+                False if self.inventory_runtime is None else self.inventory_runtime.has_pending_work(),
             )
             self.command_runner.update(0.0)
             if self.dialogue_runtime is not None:
                 self.dialogue_runtime.update(0.0)
+            if self.inventory_runtime is not None:
+                self.inventory_runtime.update(0.0)
             after_state = (
                 len(self.command_runner.pending),
                 len(self.command_runner.root_handles),
                 tuple(id(handle) for handle in self.command_runner.root_handles),
                 False if self.dialogue_runtime is None else self.dialogue_runtime.has_pending_work(),
+                False if self.inventory_runtime is None else self.inventory_runtime.has_pending_work(),
             )
             if not self._has_blocking_runtime_work():
                 break
@@ -332,7 +353,8 @@ class Game:
         """Return whether any active runtime lane should block deferred transitions."""
         runner_busy = self.command_runner is not None and self.command_runner.has_pending_work()
         dialogue_busy = self.dialogue_runtime is not None and self.dialogue_runtime.has_pending_work()
-        return bool(runner_busy or dialogue_busy)
+        inventory_busy = self.inventory_runtime is not None and self.inventory_runtime.has_pending_work()
+        return bool(runner_busy or dialogue_busy or inventory_busy)
 
     def _load_area_runtime(
         self,

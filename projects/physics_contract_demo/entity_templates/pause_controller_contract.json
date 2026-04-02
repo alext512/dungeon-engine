@@ -1,0 +1,122 @@
+{
+  "kind": "system",
+  "space": "screen",
+  "visible": false,
+  "render_order": 99,
+  "input_map": {
+    "menu": "open_pause_menu"
+  },
+  "entity_commands": {
+    "open_pause_menu": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "open_dialogue_session",
+          "dialogue_path": "dialogues/system/pause_menu.json",
+          "dialogue_on_start": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "pending_pause_menu_action",
+              "value": ""
+            }
+          ],
+          "dialogue_on_end": [
+            {
+              "type": "if",
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_pause_menu_action"
+                }
+              },
+              "op": "eq",
+              "right": "inventory",
+              "then": [
+                {
+                  "type": "open_inventory_session",
+                  "entity_id": "player",
+                  "wait": false
+                }
+              ]
+            },
+            {
+              "type": "if",
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_pause_menu_action"
+                }
+              },
+              "op": "eq",
+              "right": "load",
+              "then": [
+                {
+                  "type": "load_game"
+                }
+              ]
+            },
+            {
+              "type": "if",
+              "left": {
+                "$entity_var": {
+                  "entity_id": "$self_id",
+                  "name": "pending_pause_menu_action"
+                }
+              },
+              "op": "eq",
+              "right": "exit",
+              "then": [
+                {
+                  "type": "quit_game"
+                }
+              ]
+            },
+            {
+              "type": "set_entity_var",
+              "entity_id": "$self_id",
+              "name": "pending_pause_menu_action",
+              "value": ""
+            }
+          ],
+          "segment_hooks": [
+            {
+              "option_commands_by_id": {
+                "resume": [],
+                "inventory": [
+                  {
+                    "type": "set_entity_var",
+                    "entity_id": "$self_id",
+                    "name": "pending_pause_menu_action",
+                    "value": "inventory"
+                  }
+                ],
+                "load": [
+                  {
+                    "type": "set_entity_var",
+                    "entity_id": "$self_id",
+                    "name": "pending_pause_menu_action",
+                    "value": "load"
+                  }
+                ],
+                "exit": [
+                  {
+                    "type": "set_entity_var",
+                    "entity_id": "$self_id",
+                    "name": "pending_pause_menu_action",
+                    "value": "exit"
+                  }
+                ]
+              }
+            }
+          ],
+          "allow_cancel": true,
+          "entity_refs": {
+            "caller": "$self_id"
+          }
+        }
+      ]
+    }
+  },
+  "y_sort": false
+}

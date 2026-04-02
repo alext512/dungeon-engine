@@ -169,6 +169,18 @@ Example:
 {
   "name": "Light Orb",
   "description": "Feeds the nearby beacon terminal once.",
+  "icon": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 2
+  },
+  "portrait": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 2
+  },
   "max_stack": 3,
   "consume_quantity_on_use": 1,
   "use_commands": [
@@ -187,6 +199,7 @@ Important fields:
 - `name`
 - `description`
 - `icon`
+- `portrait`
 - `max_stack`
 - `consume_quantity_on_use`
 - `use_commands`
@@ -209,6 +222,7 @@ Good use cases:
 - render resolution
 - movement timing like `ticks_per_tile`
 - dialogue layout defaults
+- inventory UI presets
 - common tuning values reused by multiple commands
 
 Example:
@@ -222,8 +236,11 @@ Example:
   "movement": {
     "ticks_per_tile": 16
   },
-  "dialogue": {
-    "max_lines": 3
+  "dialogue_ui": {
+    "default_preset": "standard"
+  },
+  "inventory_ui": {
+    "default_preset": "standard"
   }
 }
 ```
@@ -232,7 +249,8 @@ Read these values with tokens such as:
 
 - `$project.display.internal_width`
 - `$project.movement.ticks_per_tile`
-- `$project.dialogue.max_lines`
+- `$project.dialogue_ui.default_preset`
+- `$project.inventory_ui.default_preset`
 
 ## Areas
 
@@ -519,6 +537,8 @@ Inventory V1 currently gives you:
 - `remove_inventory_item`
 - `use_inventory_item`
 - `set_inventory_max_stacks`
+- `open_inventory_session`
+- `close_inventory_session`
 - `$inventory_item_count`
 - `$inventory_has_item`
 
@@ -530,6 +550,9 @@ Important rules:
   `$self_id.variables[result_var_name]`
 - if authored logic cares whether inventory state actually changed, check
   `changed_quantity > 0`
+- item `icon` is for list rows; item `portrait` is for the bottom detail panel
+- the engine-owned inventory UI derives usability from whether `use_commands`
+  exists and is non-empty
 
 Typical pickup pattern:
 

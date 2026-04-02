@@ -1,6 +1,18 @@
 {
   "name": "Copper Key",
   "description": "Opens the copper door in the demo room.",
+  "icon": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 1
+  },
+  "portrait": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 1
+  },
   "max_stack": 1,
   "consume_quantity_on_use": 0
 }

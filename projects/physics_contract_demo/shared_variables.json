@@ -103,5 +103,13 @@
         "text_layer": 101
       }
     }
+  },
+  "inventory_ui": {
+    "default_preset": "standard",
+    "presets": {
+      "standard": {
+        "deny_sfx_path": "assets/project/sfx/bump.wav"
+      }
+    }
   }
 }

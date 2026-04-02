@@ -26,14 +26,12 @@
       "enabled": true,
       "commands": [
         {
-          "type": "use_inventory_item",
+          "type": "remove_inventory_item",
           "entity_id": "$ref_ids.instigator",
           "item_id": "$self.item_id",
           "quantity": 1,
-          "result_var_name": "last_inventory_result",
-          "entity_refs": {
-            "target_indicator": "$self.target_indicator_id"
-          }
+          "quantity_mode": "atomic",
+          "result_var_name": "last_inventory_result"
         },
         {
           "type": "if",
@@ -41,6 +39,12 @@
           "op": "gt",
           "right": 0,
           "then": [
+            {
+              "type": "set_entity_field",
+              "entity_id": "$self.target_indicator_id",
+              "field_name": "visible",
+              "value": true
+            },
             {
               "type": "open_dialogue_session",
               "dialogue_path": "$self.success_dialogue_path",

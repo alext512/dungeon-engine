@@ -1,6 +1,28 @@
 {
   "name": "Apple",
-  "description": "A simple pickup used by the inventory contract demo.",
+  "description": "A simple pickup used by the inventory UI demo.",
+  "icon": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 0
+  },
+  "portrait": {
+    "path": "assets/project/sprites/object_sheet.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 0
+  },
   "max_stack": 9,
-  "consume_quantity_on_use": 0
+  "consume_quantity_on_use": 1,
+  "use_commands": [
+    {
+      "type": "open_dialogue_session",
+      "dialogue_path": "dialogues/showcase/apple_used.json",
+      "allow_cancel": false,
+      "entity_refs": {
+        "instigator": "$ref_ids.instigator"
+      }
+    }
+  ]
 }

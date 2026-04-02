@@ -4,6 +4,21 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Inventory UI V1
+
+- Added the first engine-owned inventory session runtime with modal browsing,
+  snapped list scrolling, a bottom detail panel, and a small `Use / Cancel`
+  popup
+- Added `open_inventory_session` and `close_inventory_session` builtins
+- Added inventory-key routing (`I`) plus modal input blocking so open dialogue
+  and inventory sessions prevent world input from leaking through
+- Added optional item `portrait` support alongside existing `icon` support
+- Expanded `projects/physics_contract_demo` with inventory UI presets, an
+  inventory shortcut, a pause menu path to inventory, and item metadata for the
+  new browser
+- Added focused tests for inventory UI empty state, direct item use,
+  non-usable-item feedback, item portraits, and the new inventory input path
+
 ## Inventory V1
 
 - Added `item_paths` plus path-derived reusable item ids such as `items/light_orb`

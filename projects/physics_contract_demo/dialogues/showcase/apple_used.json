@@ -1,0 +1,11 @@
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "You eat the apple.",
+      "advance": {
+        "mode": "interact"
+      }
+    }
+  ]
+}

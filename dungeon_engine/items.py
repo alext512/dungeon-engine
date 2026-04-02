@@ -28,6 +28,7 @@ class ItemDefinition:
     name: str
     description: str
     icon: dict[str, Any] | None
+    portrait: dict[str, Any] | None
     max_stack: int
     consume_quantity_on_use: int
     use_commands: list[dict[str, Any]]
@@ -192,7 +193,18 @@ def _load_item_definition_from_path(
         source_name=f"Item definition '{resolved_item_id}'",
     )
     description = _optional_string(raw.get("description"))
-    icon = _parse_icon(raw.get("icon"), source_name=f"Item definition '{resolved_item_id}'")
+    icon = _parse_visual_payload(
+        raw.get("icon"),
+        source_name=f"Item definition '{resolved_item_id}'",
+        field_name="icon",
+        default_size=16,
+    )
+    portrait = _parse_visual_payload(
+        raw.get("portrait"),
+        source_name=f"Item definition '{resolved_item_id}'",
+        field_name="portrait",
+        default_size=38,
+    )
     max_stack = _coerce_positive_int(
         raw.get("max_stack", 1),
         field_name="max_stack",
@@ -212,6 +224,7 @@ def _load_item_definition_from_path(
         name=name,
         description=description,
         icon=icon,
+        portrait=portrait,
         max_stack=max_stack,
         consume_quantity_on_use=consume_quantity_on_use,
         use_commands=use_commands,
@@ -219,33 +232,39 @@ def _load_item_definition_from_path(
     )
 
 
-def _parse_icon(raw_icon: Any, *, source_name: str) -> dict[str, Any] | None:
-    """Validate one optional item-icon payload."""
-    if raw_icon is None:
+def _parse_visual_payload(
+    raw_visual: Any,
+    *,
+    source_name: str,
+    field_name: str,
+    default_size: int,
+) -> dict[str, Any] | None:
+    """Validate one optional item image payload used by icon and portrait fields."""
+    if raw_visual is None:
         return None
-    if not isinstance(raw_icon, dict):
-        raise ValueError(f"{source_name} field 'icon' must be a JSON object when present.")
-    icon = copy.deepcopy(raw_icon)
-    path = icon.get("path")
+    if not isinstance(raw_visual, dict):
+        raise ValueError(f"{source_name} field '{field_name}' must be a JSON object when present.")
+    visual = copy.deepcopy(raw_visual)
+    path = visual.get("path")
     if not isinstance(path, str) or not path.strip():
-        raise ValueError(f"{source_name} field 'icon.path' must be a non-empty string.")
-    icon["path"] = path.strip()
-    icon["frame_width"] = _coerce_positive_int(
-        icon.get("frame_width", 16),
-        field_name="icon.frame_width",
+        raise ValueError(f"{source_name} field '{field_name}.path' must be a non-empty string.")
+    visual["path"] = path.strip()
+    visual["frame_width"] = _coerce_positive_int(
+        visual.get("frame_width", default_size),
+        field_name=f"{field_name}.frame_width",
         source_name=source_name,
     )
-    icon["frame_height"] = _coerce_positive_int(
-        icon.get("frame_height", 16),
-        field_name="icon.frame_height",
+    visual["frame_height"] = _coerce_positive_int(
+        visual.get("frame_height", default_size),
+        field_name=f"{field_name}.frame_height",
         source_name=source_name,
     )
-    icon["frame"] = _coerce_non_negative_int(
-        icon.get("frame", 0),
-        field_name="icon.frame",
+    visual["frame"] = _coerce_non_negative_int(
+        visual.get("frame", 0),
+        field_name=f"{field_name}.frame",
         source_name=source_name,
     )
-    return icon
+    return visual
 
 
 def _parse_use_commands(raw_commands: Any, *, source_name: str) -> list[dict[str, Any]]:

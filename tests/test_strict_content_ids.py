@@ -64,6 +64,7 @@ from dungeon_engine.world.persistence import (
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.dialogue_runtime import DialogueRuntime
+from dungeon_engine.engine.inventory_runtime import InventoryRuntime
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
@@ -113,6 +114,9 @@ def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
 def _minimal_item(
     *,
     name: str = "Apple",
+    description: str | None = None,
+    icon: dict[str, object] | None = None,
+    portrait: dict[str, object] | None = None,
     max_stack: int = 9,
     consume_quantity_on_use: int = 0,
     use_commands: list[dict[str, object]] | None = None,
@@ -122,6 +126,12 @@ def _minimal_item(
         "max_stack": max_stack,
         "consume_quantity_on_use": consume_quantity_on_use,
     }
+    if description is not None:
+        payload["description"] = description
+    if icon is not None:
+        payload["icon"] = copy.deepcopy(icon)
+    if portrait is not None:
+        payload["portrait"] = copy.deepcopy(portrait)
     if use_commands is not None:
         payload["use_commands"] = use_commands
     return payload
@@ -228,6 +238,19 @@ def _dialogue_shared_variables() -> dict[str, object]:
             },
         }
     }
+
+
+def _inventory_shared_variables() -> dict[str, object]:
+    shared_variables = _dialogue_shared_variables()
+    shared_variables["inventory_ui"] = {
+        "default_preset": "standard",
+        "presets": {
+            "standard": {
+                "deny_sfx_path": "assets/project/sfx/bump.wav",
+            }
+        },
+    }
+    return shared_variables
 
 
 def _minimal_runtime_area() -> Area:
@@ -860,6 +883,38 @@ class StrictContentIdTests(unittest.TestCase):
         context.text_renderer = dialogue_runtime.text_renderer
         context.dialogue_runtime = dialogue_runtime
         return dialogue_runtime
+
+    def _install_inventory_runtime(
+        self,
+        *,
+        registry: CommandRegistry,
+        context: CommandContext,
+        project: object,
+    ) -> InventoryRuntime:
+        inventory_runtime = InventoryRuntime(
+            project=project,
+            screen_manager=ScreenElementManager(),
+            text_renderer=_StubTextRenderer(),
+            command_context=context,
+        )
+        context.screen_manager = inventory_runtime.screen_manager
+        context.text_renderer = inventory_runtime.text_renderer
+        context.inventory_runtime = inventory_runtime
+        if context.command_runner is None:
+            CommandRunner(registry, context)
+        return inventory_runtime
+
+    def _run_command_runner_until_idle(
+        self,
+        runner: CommandRunner,
+        *,
+        max_steps: int = 32,
+    ) -> None:
+        for _ in range(max_steps):
+            runner.update(0.0)
+            if not runner.has_pending_work():
+                return
+        self.fail("Command runner did not become idle within the expected number of steps.")
 
     def _make_occupancy_runtime(
         self,
@@ -1825,6 +1880,56 @@ class StrictContentIdTests(unittest.TestCase):
         )
 
         self.assertEqual(runner.dispatched, [("player", "confirm")])
+
+    def test_input_handler_routes_inventory_key_only_when_explicitly_mapped(self) -> None:
+        import pygame
+
+        world = World(default_input_targets={"inventory": "player"})
+        player = _make_runtime_entity("player", kind="player")
+        world.add_entity(player)
+        runner = _RecordingInputDispatchRunner()
+        input_handler = InputHandler(runner, world)
+
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_i})]
+        )
+        self.assertEqual(runner.dispatched, [])
+
+        player.input_map["inventory"] = "open_inventory"
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_i})]
+        )
+
+        self.assertEqual(runner.dispatched, [("player", "open_inventory")])
+
+    def test_input_handler_blocks_world_routing_when_inventory_modal_is_active(self) -> None:
+        import pygame
+
+        class _BlockingModalRuntime:
+            def __init__(self) -> None:
+                self.actions: list[str] = []
+
+            def is_active(self) -> bool:
+                return True
+
+            def handle_action(self, action_name: str) -> bool:
+                self.actions.append(str(action_name))
+                return False
+
+        world = World(default_input_targets={"inventory": "player"})
+        player = _make_runtime_entity("player", kind="player")
+        player.input_map["inventory"] = "open_inventory"
+        world.add_entity(player)
+        runner = _RecordingInputDispatchRunner()
+        modal_runtime = _BlockingModalRuntime()
+        input_handler = InputHandler(runner, world, inventory_runtime=modal_runtime)
+
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_i})]
+        )
+
+        self.assertEqual(modal_runtime.actions, ["inventory"])
+        self.assertEqual(runner.dispatched, [])
 
     def test_input_handler_escape_without_menu_target_does_not_quit(self) -> None:
         import pygame
@@ -5715,7 +5820,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
 
         self.assertTrue(handle.complete)
-        for action in game.world.list_input_actions():
+        for action in ("interact", "menu", "move_up", "move_down", "move_left", "move_right"):
             self.assertEqual(game.world.get_input_target_id(action), "player")
 
         save_payload = json.loads(save_path.read_text(encoding="utf-8"))
@@ -5727,8 +5832,8 @@ class StrictContentIdTests(unittest.TestCase):
         assert restored_save_data.current_input_targets is not None
         self.assertTrue(
             all(
-                target_id == "player"
-                for target_id in restored_save_data.current_input_targets.values()
+                restored_save_data.current_input_targets.get(action) == "player"
+                for action in ("interact", "menu", "move_up", "move_down", "move_left", "move_right")
             )
         )
 
@@ -7294,6 +7399,52 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(apple.name, "Apple")
         self.assertEqual(apple.max_stack, 9)
 
+    def test_item_definitions_support_optional_portrait_payloads(self) -> None:
+        _, project = self._make_project(
+            items={
+                "apple.json": _minimal_item(
+                    name="Apple",
+                    description="Crunchy.",
+                    icon={
+                        "path": "assets/project/sprites/object_sheet.png",
+                        "frame_width": 16,
+                        "frame_height": 16,
+                        "frame": 0,
+                    },
+                    portrait={
+                        "path": "assets/project/sprites/object_sheet.png",
+                        "frame_width": 16,
+                        "frame_height": 16,
+                        "frame": 1,
+                    },
+                    max_stack=9,
+                )
+            }
+        )
+
+        validate_project_items(project)
+        apple = load_item_definition(project, "items/apple")
+
+        self.assertEqual(apple.description, "Crunchy.")
+        self.assertEqual(
+            apple.icon,
+            {
+                "path": "assets/project/sprites/object_sheet.png",
+                "frame_width": 16,
+                "frame_height": 16,
+                "frame": 0,
+            },
+        )
+        self.assertEqual(
+            apple.portrait,
+            {
+                "path": "assets/project/sprites/object_sheet.png",
+                "frame_width": 16,
+                "frame_height": 16,
+                "frame": 1,
+            },
+        )
+
     def test_item_validation_rejects_authored_id_fields(self) -> None:
         _, project = self._make_project(
             items={
@@ -7771,6 +7922,137 @@ class StrictContentIdTests(unittest.TestCase):
             )
 
         self.assertEqual(inventory_item_count(player.inventory, "items/orb"), 1)
+
+    def test_open_inventory_session_renders_empty_state_and_waits_for_close(self) -> None:
+        _, project = self._make_project(shared_variables=_inventory_shared_variables())
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(max_stacks=4, stacks=[])
+        world.add_entity(player)
+        registry, context = self._make_command_context(project=project, world=world)
+        inventory_runtime = self._install_inventory_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "open_inventory_session",
+            {
+                "entity_id": "player",
+            },
+        )
+
+        self.assertTrue(inventory_runtime.is_active())
+        self.assertFalse(handle.complete)
+        empty_row = inventory_runtime.screen_manager.get_element("engine_inventory_row_text_0")
+        detail_text = inventory_runtime.screen_manager.get_element("engine_inventory_detail_text")
+        self.assertIsNotNone(empty_row)
+        self.assertEqual(empty_row.text, " No items")
+        self.assertIsNotNone(detail_text)
+        self.assertEqual(detail_text.text, "Inventory empty.")
+
+        execute_registered_command(
+            registry,
+            context,
+            "close_inventory_session",
+            {},
+        ).update(0.0)
+        handle.update(0.0)
+
+        self.assertTrue(handle.complete)
+        self.assertFalse(inventory_runtime.is_active())
+
+    def test_inventory_runtime_uses_selected_item_and_closes_session(self) -> None:
+        _, project = self._make_project(
+            items={
+                "apple.json": _minimal_item(
+                    name="Apple",
+                    max_stack=9,
+                    consume_quantity_on_use=1,
+                    use_commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$ref_ids.instigator",
+                            "name": "ate_apple",
+                            "value": True,
+                        }
+                    ],
+                )
+            },
+            shared_variables=_inventory_shared_variables(),
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=4,
+            stacks=[InventoryStack(item_id="items/apple", quantity=2)],
+        )
+        world.add_entity(player)
+        registry, context = self._make_command_context(project=project, world=world)
+        inventory_runtime = self._install_inventory_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+        assert context.command_runner is not None
+
+        inventory_runtime.open_session(entity_id="player")
+        inventory_runtime.handle_action("interact")
+        self.assertIsNotNone(
+            inventory_runtime.screen_manager.get_element("engine_inventory_action_panel")
+        )
+
+        inventory_runtime.handle_action("interact")
+        self._run_command_runner_until_idle(context.command_runner)
+
+        self.assertFalse(inventory_runtime.is_active())
+        self.assertTrue(player.variables["ate_apple"])  # type: ignore[index]
+        self.assertEqual(inventory_item_count(player.inventory, "items/apple"), 1)
+
+    def test_inventory_runtime_interact_on_non_usable_item_only_plays_deny_feedback(self) -> None:
+        class _RecordingAudioPlayer:
+            def __init__(self) -> None:
+                self.paths: list[str] = []
+
+            def play_audio(self, relative_path: str, *, volume: float | None = None) -> bool:
+                _ = volume
+                self.paths.append(str(relative_path))
+                return True
+
+        _, project = self._make_project(
+            items={
+                "copper_key.json": _minimal_item(
+                    name="Copper Key",
+                    max_stack=1,
+                )
+            },
+            shared_variables=_inventory_shared_variables(),
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=4,
+            stacks=[InventoryStack(item_id="items/copper_key", quantity=1)],
+        )
+        world.add_entity(player)
+        registry, context = self._make_command_context(project=project, world=world)
+        context.audio_player = _RecordingAudioPlayer()
+        inventory_runtime = self._install_inventory_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        inventory_runtime.open_session(entity_id="player")
+        inventory_runtime.handle_action("interact")
+
+        self.assertIsNone(
+            inventory_runtime.screen_manager.get_element("engine_inventory_action_panel")
+        )
+        self.assertEqual(context.audio_player.paths, ["assets/project/sfx/bump.wav"])  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+{
+  "segments": [
+    {
+      "type": "choice",
+      "text": "Paused.",
+      "options": [
+        {
+          "text": "Resume",
+          "option_id": "resume"
+        },
+        {
+          "text": "Inventory (I)",
+          "option_id": "inventory"
+        },
+        {
+          "text": "Load",
+          "option_id": "load"
+        },
+        {
+          "text": "Exit",
+          "option_id": "exit"
+        }
+      ]
+    }
+  ]
+}

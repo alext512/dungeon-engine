@@ -2300,6 +2300,42 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         dialogue_runtime.close_current_session()
         return ImmediateHandle()
 
+    @registry.register("open_inventory_session")
+    def open_inventory_session(
+        context: CommandContext,
+        *,
+        entity_id: str,
+        ui_preset: str | None = None,
+        wait: bool = True,
+        **_: Any,
+    ) -> CommandHandle:
+        """Open one engine-owned inventory session for an entity-owned inventory."""
+        from dungeon_engine.engine.inventory_runtime import InventorySessionWaitHandle
+
+        inventory_runtime = context.inventory_runtime
+        if inventory_runtime is None:
+            raise ValueError("open_inventory_session requires an active inventory runtime.")
+
+        session = inventory_runtime.open_session(
+            entity_id=str(entity_id),
+            ui_preset_name=None if ui_preset in (None, "") else str(ui_preset).strip(),
+        )
+        if not bool(wait):
+            return ImmediateHandle()
+        return InventorySessionWaitHandle(inventory_runtime, session)
+
+    @registry.register("close_inventory_session")
+    def close_inventory_session(
+        context: CommandContext,
+        **_: Any,
+    ) -> CommandHandle:
+        """Close the currently active engine-owned inventory session when one exists."""
+        inventory_runtime = context.inventory_runtime
+        if inventory_runtime is None:
+            raise ValueError("close_inventory_session requires an active inventory runtime.")
+        inventory_runtime.close_current_session()
+        return ImmediateHandle()
+
     @registry.register("wait_for_move")
     def wait_for_move(
         world: Any,

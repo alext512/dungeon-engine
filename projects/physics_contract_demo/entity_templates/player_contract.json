@@ -8,7 +8,8 @@
     "move_down": "move_down",
     "move_left": "move_left",
     "move_right": "move_right",
-    "interact": "interact"
+    "interact": "interact",
+    "inventory": "open_inventory"
   },
   "variables": {
     "walk_phase": 0
@@ -56,6 +57,15 @@
       "commands": [
         {
           "type": "interact_facing",
+          "entity_id": "$self_id"
+        }
+      ]
+    },
+    "open_inventory": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "open_inventory_session",
           "entity_id": "$self_id"
         }
       ]
