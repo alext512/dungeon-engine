@@ -53,6 +53,16 @@
     },
     {
       "type": "text",
+      "portrait": {
+        "path": "assets/16x16-RPG-characters/sprites/new-style/chibi-layered.png",
+        "frame_width": 38,
+        "frame_height": 38,
+        "frame": 0
+      },
+      "text": "The east side of the room now also demonstrates Inventory V1: walk over the apple pickup, get a Copper Key from the keeper, power the beacon with the starting Light Orb, and unlock the nearby door."
+    },
+    {
+      "type": "text",
       "text": "The older sample projects stay authored the older way on purpose. This room is just the clean-contract reference."
     }
   ]

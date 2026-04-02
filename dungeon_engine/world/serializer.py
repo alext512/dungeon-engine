@@ -13,6 +13,7 @@ import copy
 import math
 from typing import Any
 
+from dungeon_engine.inventory import serialize_inventory_state
 from dungeon_engine.project import ProjectContext
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.loader import instantiate_entity
@@ -221,6 +222,7 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "interactable": entity.is_effectively_interactable(),
         "interaction_priority": int(entity.interaction_priority),
         "entity_commands_enabled": entity.entity_commands_enabled,
+        "inventory": serialize_inventory_state(entity.inventory),
         "render_order": entity.render_order,
         "y_sort": entity.y_sort,
         "sort_y_offset": _serialize_number(entity.sort_y_offset),
@@ -230,6 +232,8 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
     }
     if entity.input_map:
         data["input_map"] = copy.deepcopy(entity.input_map)
+    if data["inventory"] is None:
+        data.pop("inventory", None)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
     entity_commands = _serialize_entity_commands(entity)
     if entity_commands:
@@ -254,6 +258,7 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "interactable": entity.is_effectively_interactable(),
         "interaction_priority": int(entity.interaction_priority),
         "entity_commands_enabled": entity.entity_commands_enabled,
+        "inventory": serialize_inventory_state(entity.inventory),
         "render_order": entity.render_order,
         "y_sort": entity.y_sort,
         "sort_y_offset": _serialize_number(entity.sort_y_offset),
@@ -264,6 +269,8 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
     }
     if entity.input_map:
         data["input_map"] = copy.deepcopy(entity.input_map)
+    if data["inventory"] is None:
+        data.pop("inventory", None)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
     entity_commands = _serialize_entity_commands(entity)
     if entity_commands:

@@ -1,0 +1,128 @@
+{
+  "kind": "door",
+  "solid": true,
+  "interactable": true,
+  "interaction_priority": 10,
+  "render_order": 10,
+  "variables": {
+    "unlocked": false,
+    "required_item_id": "$required_item_id",
+    "locked_dialogue_path": "$locked_dialogue_path",
+    "success_dialogue_path": "$success_dialogue_path",
+    "open_dialogue_path": "$open_dialogue_path"
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/sign.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "entity_commands": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.unlocked",
+          "op": "eq",
+          "right": true,
+          "then": [
+            {
+              "type": "open_dialogue_session",
+              "dialogue_path": "$self.open_dialogue_path",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [],
+              "allow_cancel": false,
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
+            }
+          ],
+          "else": [
+            {
+              "type": "if",
+              "left": {
+                "$inventory_has_item": {
+                  "entity_id": "$ref_ids.instigator",
+                  "item_id": "$self.required_item_id",
+                  "quantity": 1
+                }
+              },
+              "op": "eq",
+              "right": true,
+              "then": [
+                {
+                  "type": "remove_inventory_item",
+                  "entity_id": "$ref_ids.instigator",
+                  "item_id": "$self.required_item_id",
+                  "quantity": 1,
+                  "quantity_mode": "atomic",
+                  "result_var_name": "last_inventory_result"
+                },
+                {
+                  "type": "if",
+                  "left": "$self.last_inventory_result.changed_quantity",
+                  "op": "gt",
+                  "right": 0,
+                  "then": [
+                    {
+                      "type": "set_entity_var",
+                      "entity_id": "$self_id",
+                      "name": "unlocked",
+                      "value": true
+                    },
+                    {
+                      "type": "set_entity_field",
+                      "entity_id": "$self_id",
+                      "field_name": "solid",
+                      "value": false
+                    },
+                    {
+                      "type": "set_entity_field",
+                      "entity_id": "$self_id",
+                      "field_name": "visible",
+                      "value": false
+                    },
+                    {
+                      "type": "open_dialogue_session",
+                      "dialogue_path": "$self.success_dialogue_path",
+                      "dialogue_on_start": [],
+                      "dialogue_on_end": [],
+                      "segment_hooks": [],
+                      "allow_cancel": false,
+                      "entity_refs": {
+                        "instigator": "$ref_ids.instigator",
+                        "caller": "$self_id"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "type": "open_dialogue_session",
+                  "dialogue_path": "$self.locked_dialogue_path",
+                  "dialogue_on_start": [],
+                  "dialogue_on_end": [],
+                  "segment_hooks": [],
+                  "allow_cancel": false,
+                  "entity_refs": {
+                    "instigator": "$ref_ids.instigator",
+                    "caller": "$self_id"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

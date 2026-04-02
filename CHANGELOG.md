@@ -4,6 +4,19 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Inventory V1
+
+- Added `item_paths` plus path-derived reusable item ids such as `items/light_orb`
+- Added item-definition loading, validation, and startup validation for `items/*.json`
+- Added entity-owned inventory state with stack-based persistence and serialization
+- Added inventory builtins: `add_inventory_item`, `remove_inventory_item`,
+  `use_inventory_item`, and `set_inventory_max_stacks`
+- Added inventory value sources: `$inventory_item_count` and `$inventory_has_item`
+- Added focused runtime tests for item ids, inventory parsing, add/remove modes,
+  item use, and inventory value-source behavior
+- Expanded `projects/physics_contract_demo` to show the new contract through an
+  auto-pickup item, an NPC gift, a key-locked door, and direct consumable item use
+
 ## Unified Render Ordering
 
 - Replaced the old tile-layer `draw_above_entities` split with a unified runtime render model shared by tile layers and entities

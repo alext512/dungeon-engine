@@ -8,6 +8,7 @@ It focuses on:
 
 - `project.json`
 - `shared_variables.json`
+- `items/*.json`
 - area JSON
 - entity template JSON
 - project command JSON
@@ -23,10 +24,11 @@ The engine is built from a few content layers:
 
 1. `project.json`
 2. `shared_variables.json`
-3. `areas/*.json`
-4. `entity_templates/*.json`
-5. `commands/*.json`
-6. ordinary project JSON data such as `dialogues/*.json`
+3. `items/*.json`
+4. `areas/*.json`
+5. `entity_templates/*.json`
+6. `commands/*.json`
+7. ordinary project JSON data such as `dialogues/*.json`
 
 The engine provides primitive commands. Your project combines them into behavior using JSON.
 
@@ -44,9 +46,13 @@ project.json
 |-- points to areas/
 |-- points to entity_templates/
 |-- points to commands/
+|-- points to items/
 |-- points to assets/
 |-- points to shared_variables.json
 `-- instantiates global_entities
+
+items
+`-- define reusable item records with path-derived ids such as `items/copper_key`
 
 areas
 |-- place entity instances
@@ -79,6 +85,7 @@ Typical layout:
 my_project/
     project.json
     shared_variables.json
+    items/
     areas/
     entity_templates/
     commands/
@@ -100,6 +107,7 @@ Example:
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "command_paths": ["commands/"],
+  "item_paths": ["items/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     {
@@ -137,6 +145,8 @@ Example:
   Folders containing area JSON files.
 - `command_paths`
   Folders containing reusable project command JSON files.
+- `item_paths`
+  Folders containing reusable item definition JSON files.
 - `shared_variables_path`
   Project-wide shared variable file.
 - `global_entities`
@@ -147,6 +157,48 @@ Example:
   Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
 - `save_dir`
   Directory for save files. Defaults to `saves`.
+
+## `items/*.json`
+
+Inventory V1 item definitions are ordinary JSON files discovered through the
+manifest `item_paths`.
+
+Example:
+
+```json
+{
+  "name": "Light Orb",
+  "description": "Feeds the nearby beacon terminal once.",
+  "max_stack": 3,
+  "consume_quantity_on_use": 1,
+  "use_commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$ref_ids.target_indicator",
+      "field_name": "visible",
+      "value": true
+    }
+  ]
+}
+```
+
+Important fields:
+
+- `name`
+- `description`
+- `icon`
+- `max_stack`
+- `consume_quantity_on_use`
+- `use_commands`
+
+Current rules:
+
+- item ids are path-derived, for example `items/light_orb`
+- item files must not author their own `id`
+- `max_stack` must be at least `1`
+- `consume_quantity_on_use` must be `0` or greater
+- items with no `use_commands` are still valid items
+- `use_inventory_item` only consumes after the use commands finish cleanly
 
 ## `shared_variables.json`
 
@@ -417,6 +469,7 @@ Example:
 - `stack_order`
 - `tags`
 - `variables`
+- `inventory`
 - `input_map`
 - `entity_commands`
 - `facing`
@@ -427,6 +480,69 @@ Example:
 - `collision_push_strength`
 - `interactable`
 - `interaction_priority`
+
+### `inventory`
+
+Inventories are entity-owned. That keeps the contract generic enough for the
+player now and for chests, shops, or other containers later.
+
+Example:
+
+```json
+{
+  "kind": "player",
+  "inventory": {
+    "max_stacks": 4,
+    "stacks": [
+      {
+        "item_id": "items/light_orb",
+        "quantity": 1
+      }
+    ]
+  }
+}
+```
+
+Current rules:
+
+- `inventory.max_stacks` limits how many stacks can exist
+- each stack stores `item_id` plus `quantity`
+- stack quantities must stay within the item's `max_stack`
+- authored content rejects missing item definitions
+- save/load preserves unresolved saved item ids with a warning instead of silently deleting them
+
+### Inventory helpers
+
+Inventory V1 currently gives you:
+
+- `add_inventory_item`
+- `remove_inventory_item`
+- `use_inventory_item`
+- `set_inventory_max_stacks`
+- `$inventory_item_count`
+- `$inventory_has_item`
+
+Important rules:
+
+- `add_inventory_item` and `remove_inventory_item` require
+  `quantity_mode: "atomic" | "partial"`
+- if you provide `result_var_name`, the operation result is written to
+  `$self_id.variables[result_var_name]`
+- if authored logic cares whether inventory state actually changed, check
+  `changed_quantity > 0`
+
+Typical pickup pattern:
+
+```json
+{
+  "type": "add_inventory_item",
+  "entity_id": "$ref_ids.instigator",
+  "item_id": "$self.item_id",
+  "quantity": "$self.quantity",
+  "quantity_mode": "partial",
+  "result_var_name": "last_inventory_result"
+}
+```
 
 Entity rendering follows the same model as tile layers:
 

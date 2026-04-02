@@ -7,6 +7,11 @@ from dungeon_engine.commands.library import (
     log_project_command_validation_error,
     validate_project_commands,
 )
+from dungeon_engine.items import (
+    ItemDefinitionValidationError,
+    log_item_definition_validation_error,
+    validate_project_items,
+)
 from dungeon_engine.world.loader import (
     AreaValidationError,
     EntityTemplateValidationError,
@@ -24,6 +29,7 @@ def validate_project_startup(
     show_dialog: bool = True,
 ) -> (
     ProjectCommandValidationError
+    | ItemDefinitionValidationError
     | EntityTemplateValidationError
     | AreaValidationError
     | None
@@ -34,6 +40,17 @@ def validate_project_startup(
         validate_project_entity_templates(project)
     except EntityTemplateValidationError as error:
         log_entity_template_validation_error(error)
+        message = error.format_user_message()
+        print(message)
+        if show_dialog:
+            _show_error_dialog(ui_title, message)
+        return error
+
+    # Validate item definitions.
+    try:
+        validate_project_items(project)
+    except ItemDefinitionValidationError as error:
+        log_item_definition_validation_error(error)
         message = error.format_user_message()
         print(message)
         if show_dialog:

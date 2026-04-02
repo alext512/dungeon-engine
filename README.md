@@ -60,10 +60,14 @@ The current engine already supports:
 - standalone play mode
 - project manifests through `project.json`
 - tile-based rooms with separate walkability data
+- item definitions through `item_paths`
 - reusable entity templates with per-instance parameters
-- entities with visuals, variables, input mappings, named behaviors, and engine-known runtime fields
+- entities with visuals, variables, inventories, input mappings, named behaviors, and engine-known runtime fields
 - command-driven movement, interaction, pushing, animation, and persistence
 - standard engine-owned grid movement, pushing, and facing interaction helpers
+- Inventory V1 with entity-owned stack inventories, authored item definitions,
+  `add_inventory_item` / `remove_inventory_item` / `use_inventory_item`,
+  and inventory value sources
 - dialogue and menu flow handled either by controller entities or by the newer
   engine-owned dialogue session runtime
 - area changes through authored entry points
@@ -107,6 +111,8 @@ interaction contract and the newer engine-owned dialogue session path:
 - `move_in_direction`
 - `push_facing`
 - `interact_facing`
+- Inventory V1 item definitions, entity-owned inventory state, pickup templates,
+  item-gated doors, and direct item use without a dedicated inventory UI yet
 - `on_blocked`, `on_occupant_enter`, and `on_occupant_leave`
 - `open_dialogue_session` and `close_dialogue_session`
 - nested engine-owned dialogue sessions that suspend and resume cleanly

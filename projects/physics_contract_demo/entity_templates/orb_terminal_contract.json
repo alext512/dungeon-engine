@@ -1,0 +1,75 @@
+{
+  "kind": "terminal",
+  "solid": true,
+  "interactable": true,
+  "interaction_priority": 10,
+  "render_order": 10,
+  "variables": {
+    "item_id": "$item_id",
+    "target_indicator_id": "$target_indicator_id",
+    "success_dialogue_path": "$success_dialogue_path",
+    "failure_dialogue_path": "$failure_dialogue_path"
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/sign.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "entity_commands": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "use_inventory_item",
+          "entity_id": "$ref_ids.instigator",
+          "item_id": "$self.item_id",
+          "quantity": 1,
+          "result_var_name": "last_inventory_result",
+          "entity_refs": {
+            "target_indicator": "$self.target_indicator_id"
+          }
+        },
+        {
+          "type": "if",
+          "left": "$self.last_inventory_result.changed_quantity",
+          "op": "gt",
+          "right": 0,
+          "then": [
+            {
+              "type": "open_dialogue_session",
+              "dialogue_path": "$self.success_dialogue_path",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [],
+              "allow_cancel": false,
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
+            }
+          ],
+          "else": [
+            {
+              "type": "open_dialogue_session",
+              "dialogue_path": "$self.failure_dialogue_path",
+              "dialogue_on_start": [],
+              "dialogue_on_end": [],
+              "segment_hooks": [],
+              "allow_cancel": false,
+              "entity_refs": {
+                "instigator": "$ref_ids.instigator",
+                "caller": "$self_id"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

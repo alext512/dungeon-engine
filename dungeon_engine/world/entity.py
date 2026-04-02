@@ -59,6 +59,22 @@ class EntityCommandDefinition:
 
 
 @dataclass(slots=True)
+class InventoryStack:
+    """One ordered item stack in an entity-owned inventory."""
+
+    item_id: str
+    quantity: int = 1
+
+
+@dataclass(slots=True)
+class InventoryState:
+    """Simple stack-based inventory data owned by one entity."""
+
+    max_stacks: int = 0
+    stacks: list[InventoryStack] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class EntityVisual:
     """One persistent visual attached to an entity."""
 
@@ -140,6 +156,7 @@ class Entity:
     template_id: str | None = None
     template_parameters: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+    inventory: InventoryState | None = None
     visuals: list[EntityVisual] = field(default_factory=list)
     entity_commands: dict[str, EntityCommandDefinition] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)

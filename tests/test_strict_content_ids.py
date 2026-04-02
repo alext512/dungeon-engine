@@ -14,6 +14,12 @@ from dungeon_engine.commands.library import (
     ProjectCommandValidationError,
     validate_project_commands,
 )
+from dungeon_engine.inventory import inventory_item_count
+from dungeon_engine.items import (
+    ItemDefinitionValidationError,
+    load_item_definition,
+    validate_project_items,
+)
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     AreaTransitionRequest,
@@ -26,7 +32,13 @@ from dungeon_engine.commands.runner import (
     execute_registered_command,
 )
 from dungeon_engine.world.area import Area, TileLayer
-from dungeon_engine.world.entity import Entity, EntityCommandDefinition, EntityVisual
+from dungeon_engine.world.entity import (
+    Entity,
+    EntityCommandDefinition,
+    EntityVisual,
+    InventoryStack,
+    InventoryState,
+)
 from dungeon_engine.world.world import World
 from dungeon_engine.project import load_project
 from dungeon_engine.world.loader import (
@@ -96,6 +108,23 @@ def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
         "cell_flags": [[True]],
         "entities": [],
     }
+
+
+def _minimal_item(
+    *,
+    name: str = "Apple",
+    max_stack: int = 9,
+    consume_quantity_on_use: int = 0,
+    use_commands: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "name": name,
+        "max_stack": max_stack,
+        "consume_quantity_on_use": consume_quantity_on_use,
+    }
+    if use_commands is not None:
+        payload["use_commands"] = use_commands
+    return payload
 
 
 def _dialogue_shared_variables() -> dict[str, object]:
@@ -745,6 +774,7 @@ class StrictContentIdTests(unittest.TestCase):
         entity_templates: dict[str, dict[str, object]] | None = None,
         areas: dict[str, dict[str, object]] | None = None,
         commands: dict[str, dict[str, object]] | None = None,
+        items: dict[str, dict[str, object]] | None = None,
         dialogues: dict[str, dict[str, object]] | None = None,
         shared_variables: dict[str, object] | None = None,
     ) -> tuple[Path, object]:
@@ -756,6 +786,7 @@ class StrictContentIdTests(unittest.TestCase):
             "area_paths": ["areas/"],
             "entity_template_paths": ["entity_templates/"],
             "command_paths": ["commands/"],
+            "item_paths": ["items/"],
             "shared_variables_path": "shared_variables.json",
         }
         if startup_area is not None:
@@ -775,6 +806,8 @@ class StrictContentIdTests(unittest.TestCase):
             _write_json(project_root / "areas" / relative_path, area_payload)
         for relative_path, command_payload in (commands or {}).items():
             _write_json(project_root / "commands" / relative_path, command_payload)
+        for relative_path, item_payload in (items or {}).items():
+            _write_json(project_root / "items" / relative_path, item_payload)
         for relative_path, dialogue_payload in (dialogues or {}).items():
             _write_json(project_root / "dialogues" / relative_path, dialogue_payload)
 
@@ -801,6 +834,13 @@ class StrictContentIdTests(unittest.TestCase):
             persistence_runtime=persistence_runtime,
         )
         return registry, context
+
+    def _complete_handle(self, handle: object, *, max_steps: int = 32) -> None:
+        for _ in range(max_steps):
+            if getattr(handle, "complete", False):
+                return
+            handle.update(0.0)
+        self.fail("Command handle did not complete within the expected number of steps.")
 
     def _install_dialogue_runtime(
         self,
@@ -7234,6 +7274,503 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(game.area.area_id, "areas/room_a")
         self.assertIsNone(game.world.get_entity("crate"))
+
+    def test_item_definitions_use_path_derived_ids(self) -> None:
+        _, project = self._make_project(
+            items={
+                "consumables/apple.json": _minimal_item(name="Apple", max_stack=9),
+                "keys/copper_key.json": _minimal_item(name="Copper Key", max_stack=1),
+            }
+        )
+
+        validate_project_items(project)
+
+        self.assertEqual(
+            sorted(project.list_item_ids()),
+            ["items/consumables/apple", "items/keys/copper_key"],
+        )
+        apple = load_item_definition(project, "items/consumables/apple")
+        self.assertEqual(apple.item_id, "items/consumables/apple")
+        self.assertEqual(apple.name, "Apple")
+        self.assertEqual(apple.max_stack, 9)
+
+    def test_item_validation_rejects_authored_id_fields(self) -> None:
+        _, project = self._make_project(
+            items={
+                "apple.json": {
+                    "id": "items/apple",
+                    **_minimal_item(name="Apple", max_stack=9),
+                }
+            }
+        )
+
+        with self.assertRaises(ItemDefinitionValidationError) as exc_info:
+            validate_project_items(project)
+
+        self.assertTrue(
+            any("must not declare 'id'" in issue for issue in exc_info.exception.issues)
+        )
+
+    def test_entity_inventory_round_trips_through_loader_and_serializer(self) -> None:
+        _, project = self._make_project(
+            items={
+                "apple.json": _minimal_item(name="Apple", max_stack=9),
+                "keys/copper_key.json": _minimal_item(name="Copper Key", max_stack=1),
+            }
+        )
+        entity = instantiate_entity(
+            {
+                "id": "player",
+                "kind": "player",
+                "x": 0,
+                "y": 0,
+                "inventory": {
+                    "max_stacks": 3,
+                    "stacks": [
+                        {"item_id": "items/apple", "quantity": 2},
+                        {"item_id": "items/keys/copper_key", "quantity": 1},
+                    ],
+                },
+            },
+            16,
+            project=project,
+            source_name="test entity",
+        )
+        assert entity.inventory is not None
+        self.assertEqual(entity.inventory.max_stacks, 3)
+        self.assertEqual(
+            [(stack.item_id, stack.quantity) for stack in entity.inventory.stacks],
+            [("items/apple", 2), ("items/keys/copper_key", 1)],
+        )
+
+        area = _minimal_runtime_area()
+        world = World()
+        world.add_entity(entity)
+        serialized = serialize_area(area, world, project=project)
+        self.assertEqual(
+            serialized["entities"][0]["inventory"],
+            {
+                "max_stacks": 3,
+                "stacks": [
+                    {"item_id": "items/apple", "quantity": 2},
+                    {"item_id": "items/keys/copper_key", "quantity": 1},
+                ],
+            },
+        )
+
+    def test_loader_inventory_rejects_missing_items_unless_explicitly_allowed(self) -> None:
+        _, project = self._make_project()
+        entity_payload = {
+            "id": "player",
+            "kind": "player",
+            "x": 0,
+            "y": 0,
+            "inventory": {
+                "max_stacks": 2,
+                "stacks": [
+                    {"item_id": "items/missing_key", "quantity": 1},
+                ],
+            },
+        }
+
+        with self.assertRaises(ValueError):
+            instantiate_entity(
+                entity_payload,
+                16,
+                project=project,
+                source_name="test entity",
+            )
+
+        entity = instantiate_entity(
+            entity_payload,
+            16,
+            project=project,
+            source_name="saved entity",
+            allow_missing_inventory_items=True,
+        )
+        assert entity.inventory is not None
+        self.assertEqual(entity.inventory.max_stacks, 2)
+        self.assertEqual(
+            [(stack.item_id, stack.quantity) for stack in entity.inventory.stacks],
+            [("items/missing_key", 1)],
+        )
+
+    def test_add_inventory_item_supports_partial_adds_and_writes_result_on_command_owner(self) -> None:
+        _, project = self._make_project(
+            items={
+                "apple.json": _minimal_item(name="Apple", max_stack=9),
+            }
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=1,
+            stacks=[InventoryStack(item_id="items/apple", quantity=8)],
+        )
+        pickup = _make_runtime_entity(
+            "apple_pickup",
+            kind="pickup",
+            entity_commands={
+                "interact": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "add_inventory_item",
+                            "entity_id": "$ref_ids.instigator",
+                            "item_id": "items/apple",
+                            "quantity": 3,
+                            "quantity_mode": "partial",
+                            "result_var_name": "last_inventory_result",
+                        }
+                    ]
+                )
+            },
+        )
+        world.add_entity(player)
+        world.add_entity(pickup)
+        registry, context = self._make_command_context(project=project, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "run_entity_command",
+            {
+                "entity_id": "apple_pickup",
+                "command_id": "interact",
+                "entity_refs": {"instigator": "player"},
+            },
+        )
+        self._complete_handle(handle)
+
+        self.assertEqual(inventory_item_count(player.inventory, "items/apple"), 9)
+        self.assertEqual(
+            pickup.variables["last_inventory_result"],
+            {
+                "success": True,
+                "item_id": "items/apple",
+                "requested_quantity": 3,
+                "changed_quantity": 1,
+                "remaining_quantity": 2,
+            },
+        )
+
+    def test_remove_inventory_item_respects_atomic_and_partial_modes(self) -> None:
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=3,
+            stacks=[InventoryStack(item_id="items/apple", quantity=3)],
+        )
+        controller = _make_runtime_entity("controller", kind="system", space="screen")
+        world.add_entity(player)
+        world.add_entity(controller)
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "remove_inventory_item",
+            {
+                "entity_id": "player",
+                "item_id": "items/apple",
+                "quantity": 5,
+                "quantity_mode": "atomic",
+                "source_entity_id": "controller",
+                "result_var_name": "last_inventory_result",
+            },
+        ).update(0.0)
+        self.assertEqual(inventory_item_count(player.inventory, "items/apple"), 3)
+        self.assertEqual(
+            controller.variables["last_inventory_result"],
+            {
+                "success": True,
+                "item_id": "items/apple",
+                "requested_quantity": 5,
+                "changed_quantity": 0,
+                "remaining_quantity": 5,
+            },
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "remove_inventory_item",
+            {
+                "entity_id": "player",
+                "item_id": "items/apple",
+                "quantity": 5,
+                "quantity_mode": "partial",
+                "source_entity_id": "controller",
+                "result_var_name": "last_inventory_result",
+            },
+        ).update(0.0)
+        self.assertEqual(inventory_item_count(player.inventory, "items/apple"), 0)
+        self.assertEqual(
+            controller.variables["last_inventory_result"],
+            {
+                "success": True,
+                "item_id": "items/apple",
+                "requested_quantity": 5,
+                "changed_quantity": 3,
+                "remaining_quantity": 2,
+            },
+        )
+
+    def test_inventory_value_sources_return_counts_and_requirements(self) -> None:
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=3,
+            stacks=[InventoryStack(item_id="items/apple", quantity=3)],
+        )
+        controller = _make_runtime_entity("controller", kind="system", space="screen")
+        world.add_entity(player)
+        world.add_entity(controller)
+        registry, context = self._make_command_context(world=world)
+
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "controller",
+                "name": "apple_count",
+                "value": {
+                    "$inventory_item_count": {
+                        "entity_id": "player",
+                        "item_id": "items/apple",
+                    }
+                },
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "controller",
+                "name": "has_two_apples",
+                "value": {
+                    "$inventory_has_item": {
+                        "entity_id": "player",
+                        "item_id": "items/apple",
+                        "quantity": 2,
+                    }
+                },
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "controller",
+                "name": "has_four_apples",
+                "value": {
+                    "$inventory_has_item": {
+                        "entity_id": "player",
+                        "item_id": "items/apple",
+                        "quantity": 4,
+                    }
+                },
+            },
+        ).update(0.0)
+
+        self.assertEqual(controller.variables["apple_count"], 3)
+        self.assertTrue(controller.variables["has_two_apples"])
+        self.assertFalse(controller.variables["has_four_apples"])
+
+    def test_set_inventory_max_stacks_creates_inventory_and_refuses_unsafe_shrink(self) -> None:
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        world.add_entity(player)
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_inventory_max_stacks",
+            {
+                "entity_id": "player",
+                "max_stacks": 2,
+            },
+        ).update(0.0)
+
+        assert player.inventory is not None
+        self.assertEqual(player.inventory.max_stacks, 2)
+        self.assertEqual(player.inventory.stacks, [])
+
+        player.inventory.stacks = [
+            InventoryStack(item_id="items/apple", quantity=1),
+            InventoryStack(item_id="items/key", quantity=1),
+        ]
+        execute_registered_command(
+            registry,
+            context,
+            "set_inventory_max_stacks",
+            {
+                "entity_id": "player",
+                "max_stacks": 1,
+            },
+        ).update(0.0)
+
+        self.assertEqual(player.inventory.max_stacks, 2)
+
+    def test_use_inventory_item_runs_commands_with_instigator_and_consumes_after_success(self) -> None:
+        _, project = self._make_project(
+            items={
+                "orb.json": _minimal_item(
+                    name="Orb of Light",
+                    max_stack=3,
+                    consume_quantity_on_use=1,
+                    use_commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$ref_ids.instigator",
+                            "name": "orb_used",
+                            "value": True,
+                        }
+                    ],
+                )
+            }
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=3,
+            stacks=[InventoryStack(item_id="items/orb", quantity=2)],
+        )
+        controller = _make_runtime_entity("controller", kind="system", space="screen")
+        world.add_entity(player)
+        world.add_entity(controller)
+        registry, context = self._make_command_context(project=project, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "use_inventory_item",
+            {
+                "entity_id": "player",
+                "item_id": "items/orb",
+                "quantity": 1,
+                "source_entity_id": "controller",
+                "result_var_name": "last_inventory_result",
+            },
+        )
+        self._complete_handle(handle)
+
+        self.assertTrue(player.variables["orb_used"])  # type: ignore[index]
+        self.assertEqual(inventory_item_count(player.inventory, "items/orb"), 1)
+        self.assertEqual(
+            controller.variables["last_inventory_result"],
+            {
+                "success": True,
+                "item_id": "items/orb",
+                "requested_quantity": 1,
+                "changed_quantity": 1,
+                "remaining_quantity": 0,
+            },
+        )
+
+    def test_use_inventory_item_can_succeed_without_consuming_inventory(self) -> None:
+        _, project = self._make_project(
+            items={
+                "key.json": _minimal_item(
+                    name="Reusable Key",
+                    max_stack=1,
+                    consume_quantity_on_use=0,
+                    use_commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$ref_ids.instigator",
+                            "name": "key_used",
+                            "value": True,
+                        }
+                    ],
+                )
+            }
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=3,
+            stacks=[InventoryStack(item_id="items/key", quantity=1)],
+        )
+        controller = _make_runtime_entity("controller", kind="system", space="screen")
+        world.add_entity(player)
+        world.add_entity(controller)
+        registry, context = self._make_command_context(project=project, world=world)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "use_inventory_item",
+            {
+                "entity_id": "player",
+                "item_id": "items/key",
+                "quantity": 1,
+                "source_entity_id": "controller",
+                "result_var_name": "last_inventory_result",
+            },
+        )
+        self._complete_handle(handle)
+
+        self.assertTrue(player.variables["key_used"])  # type: ignore[index]
+        self.assertEqual(inventory_item_count(player.inventory, "items/key"), 1)
+        self.assertEqual(
+            controller.variables["last_inventory_result"],
+            {
+                "success": True,
+                "item_id": "items/key",
+                "requested_quantity": 1,
+                "changed_quantity": 0,
+                "remaining_quantity": 0,
+            },
+        )
+
+    def test_use_inventory_item_does_not_consume_inventory_when_use_commands_fail(self) -> None:
+        _, project = self._make_project(
+            items={
+                "orb.json": _minimal_item(
+                    name="Broken Orb",
+                    max_stack=3,
+                    consume_quantity_on_use=1,
+                    use_commands=[
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "missing_target",
+                            "name": "orb_used",
+                            "value": True,
+                        }
+                    ],
+                )
+            }
+        )
+        world = World()
+        player = _make_runtime_entity("player", kind="player")
+        player.inventory = InventoryState(
+            max_stacks=3,
+            stacks=[InventoryStack(item_id="items/orb", quantity=1)],
+        )
+        controller = _make_runtime_entity("controller", kind="system", space="screen")
+        world.add_entity(player)
+        world.add_entity(controller)
+        registry, context = self._make_command_context(project=project, world=world)
+
+        with self.assertRaises(CommandExecutionError):
+            execute_registered_command(
+                registry,
+                context,
+                "use_inventory_item",
+                {
+                    "entity_id": "player",
+                    "item_id": "items/orb",
+                    "quantity": 1,
+                    "source_entity_id": "controller",
+                    "result_var_name": "last_inventory_result",
+                },
+            )
+
+        self.assertEqual(inventory_item_count(player.inventory, "items/orb"), 1)
 
 
 if __name__ == "__main__":

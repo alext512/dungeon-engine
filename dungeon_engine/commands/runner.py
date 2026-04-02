@@ -11,6 +11,7 @@ import random
 from typing import Any, Callable
 
 from dungeon_engine import config
+from dungeon_engine.inventory import inventory_has_item, inventory_item_count, serialize_inventory_state
 from dungeon_engine.systems.collision import CollisionSystem
 from dungeon_engine.systems.interaction import InteractionSystem
 from dungeon_engine.systems.animation import AnimationSystem
@@ -46,6 +47,7 @@ _PLAIN_ENTITY_REF_FIELDS = (
     "interactable",
     "interaction_priority",
     "entity_commands_enabled",
+    "inventory",
     "render_order",
     "y_sort",
     "sort_y_offset",
@@ -336,6 +338,9 @@ def _serialize_entity_fields(entity: Any, *, fields: list[str] | tuple[str, ...]
     for field_name in fields:
         if field_name == "tags":
             data[field_name] = list(entity.tags)
+            continue
+        if field_name == "inventory":
+            data[field_name] = serialize_inventory_state(entity.inventory)
             continue
         data[field_name] = copy.deepcopy(getattr(entity, field_name))
     return data
@@ -758,6 +763,41 @@ def _resolve_current_area_var_value(context: CommandContext, resolved_source: An
     return copy.deepcopy(context.world.variables.get(name))
 
 
+def _resolve_inventory_item_count_value(context: CommandContext, resolved_source: Any) -> int:
+    """Return one item-count lookup from an explicitly chosen live entity inventory."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$inventory_item_count value source requires a JSON object.")
+    entity_id = str(resolved_source.get("entity_id", "")).strip()
+    if not entity_id:
+        raise ValueError("$inventory_item_count value source requires a non-empty entity_id.")
+    item_id = str(resolved_source.get("item_id", "")).strip()
+    if not item_id:
+        raise ValueError("$inventory_item_count value source requires a non-empty item_id.")
+    entity = context.world.get_entity(entity_id)
+    if entity is None:
+        return 0
+    return int(inventory_item_count(entity.inventory, item_id))
+
+
+def _resolve_inventory_has_item_value(context: CommandContext, resolved_source: Any) -> bool:
+    """Return True when an explicitly chosen live entity inventory has enough of one item."""
+    if not isinstance(resolved_source, dict):
+        raise TypeError("$inventory_has_item value source requires a JSON object.")
+    entity_id = str(resolved_source.get("entity_id", "")).strip()
+    if not entity_id:
+        raise ValueError("$inventory_has_item value source requires a non-empty entity_id.")
+    item_id = str(resolved_source.get("item_id", "")).strip()
+    if not item_id:
+        raise ValueError("$inventory_has_item value source requires a non-empty item_id.")
+    quantity = int(resolved_source.get("quantity", 1))
+    if quantity <= 0:
+        raise ValueError("$inventory_has_item value source quantity must be positive.")
+    entity = context.world.get_entity(entity_id)
+    if entity is None:
+        return False
+    return bool(inventory_has_item(entity.inventory, item_id, quantity=quantity))
+
+
 def _resolve_entities_at_value(context: CommandContext, resolved_source: Any) -> list[dict[str, Any]]:
     """Return plain-data refs for world-space entities at one tile."""
     if not isinstance(resolved_source, dict):
@@ -1112,6 +1152,12 @@ def _resolve_runtime_value_source(
     if source_name == "$current_area_var":
         return _resolve_current_area_var_value(context, resolved_source)
 
+    if source_name == "$inventory_item_count":
+        return _resolve_inventory_item_count_value(context, resolved_source)
+
+    if source_name == "$inventory_has_item":
+        return _resolve_inventory_has_item_value(context, resolved_source)
+
     if source_name == "$sum":
         return _resolve_sum_value(resolved_source)
 
@@ -1310,6 +1356,8 @@ def _resolve_runtime_values(
                 "$area_entity_ref",
                 "$entity_var",
                 "$current_area_var",
+                "$inventory_item_count",
+                "$inventory_has_item",
                 "$cell_flags_at",
                 "$entities_at",
                 "$entity_at",

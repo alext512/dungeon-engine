@@ -13,6 +13,9 @@
   "command_paths": [
     "../test_project/commands/"
   ],
+  "item_paths": [
+    "items/"
+  ],
   "shared_variables_path": "shared_variables.json",
   "startup_area": "areas/physics_contract_demo",
   "debug_inspection_enabled": true

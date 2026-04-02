@@ -36,16 +36,19 @@ For the philosophy behind this interface, see [PROJECT_SPIRIT.md](./PROJECT_SPIR
 - assets
 - areas
 - project commands
+- item definitions
 
 The engine derives these ids from the relative path under each configured root:
 - area id
 - entity template id
 - project command id
+- item id
 
 Examples:
 - `areas/village_square.json` -> area id `areas/village_square`
 - `entity_templates/npcs/guard.json` -> template id `entity_templates/npcs/guard`
 - `commands/dialogue/open.json` -> command id `commands/dialogue/open`
+- `items/light_orb.json` -> item id `items/light_orb`
 
 These files must not author their own path-derived ids internally:
 - area files must not contain `area_id`
@@ -59,6 +62,7 @@ Current manifest fields the engine reads:
 - `asset_paths: string[]`
 - `area_paths: string[]`
 - `command_paths: string[]`
+- `item_paths: string[]`
 - `shared_variables_path: string`
 - `save_dir: string`
 - `global_entities: object[]`
@@ -72,6 +76,7 @@ Notes:
   - `assets/`
   - `areas/`
   - `commands/`
+  - `items/`
 - `shared_variables_path` falls back to `shared_variables.json` if that file exists.
 - `save_dir` defaults to `saves`.
 - `global_entities` uses the same instance shape as area `entities`. Global entities are project-level runtime entities — the runtime injects them into the active play world whenever an area is built. Their persistent state is stored separately from per-area state and is not affected by area resets. Unlike travelers (entities transferred between areas via `change_area`), globals don't physically move — the runtime always includes them.
@@ -85,6 +90,7 @@ Minimal example:
   "asset_paths": ["assets/"],
   "area_paths": ["areas/"],
   "command_paths": ["commands/"],
+  "item_paths": ["items/"],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [
     { "id": "dialogue_controller", "template": "entity_templates/dialogue_panel" }
@@ -131,6 +137,46 @@ choice-layout presets may define:
 - `choices.row_height`
 - `choices.panel` plus `choices.x` / `choices.y` / `choices.width` for
   separate-panel choice menus
+
+## Item Files
+
+Item definitions are plain JSON files discovered through `item_paths`.
+
+Current item file fields:
+
+- `name: string`
+- `description: string`
+- `icon: object`
+- `max_stack: integer`
+- `consume_quantity_on_use: integer`
+- `use_commands: command[]`
+
+Current rules:
+
+- item ids are path-derived and the file must not author `id`
+- `max_stack` must be `>= 1`
+- `consume_quantity_on_use` must be `>= 0`
+- `use_commands` is optional
+- `use_inventory_item` only consumes after the use commands finish cleanly
+
+Example:
+
+```json
+{
+  "name": "Light Orb",
+  "description": "Feeds the nearby beacon terminal once.",
+  "max_stack": 3,
+  "consume_quantity_on_use": 1,
+  "use_commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$ref_ids.target_indicator",
+      "field_name": "visible",
+      "value": true
+    }
+  ]
+}
+```
 
 ## Area Files
 
@@ -319,6 +365,7 @@ Current engine-known entity fields:
 - `visuals`
 - `entity_commands`
 - `variables`
+- `inventory`
 - `input_map`
 
 Template-only / instance metadata that the engine also tracks:
@@ -329,6 +376,32 @@ Runtime-only fields not authored directly:
 - movement state
 - animation playback state
 - session/origin ids
+
+### Inventory
+
+Inventories are entity-owned. Current authored shape:
+
+```json
+"inventory": {
+  "max_stacks": 4,
+  "stacks": [
+    {
+      "item_id": "items/light_orb",
+      "quantity": 1
+    }
+  ]
+}
+```
+
+Current rules:
+
+- `inventory.max_stacks` limits the number of stacks
+- each stack uses `item_id` plus `quantity`
+- authored stack quantities must be positive and must not exceed the item's
+  `max_stack`
+- authored content rejects missing item definitions
+- saved inventories preserve unresolved item ids with a warning instead of
+  silently deleting them
 
 ### World-Space vs Screen-Space
 
@@ -606,6 +679,8 @@ Current value sources:
 - `$entity_at`
 - `$entities_query`
 - `$entity_query`
+- `$inventory_item_count`
+- `$inventory_has_item`
 - `$collection_item`
 - `$sum`
 - `$product`
@@ -837,6 +912,37 @@ Shape:
 }
 ```
 
+### `$inventory_item_count`
+
+Returns the total quantity of one item across an entity inventory.
+
+Shape:
+
+```json
+{
+  "$inventory_item_count": {
+    "entity_id": "player",
+    "item_id": "items/apple"
+  }
+}
+```
+
+### `$inventory_has_item`
+
+Returns whether an entity inventory contains at least the requested quantity.
+
+Shape:
+
+```json
+{
+  "$inventory_has_item": {
+    "entity_id": "player",
+    "item_id": "items/copper_key",
+    "quantity": 1
+  }
+}
+```
+
 ### Shared Entity-Query `select` Shape
 
 `$entity_ref`, `$entities_at`, `$entity_at`, `$entities_query`, and `$entity_query` all use the same `select` object, and all five currently require it.
@@ -884,6 +990,7 @@ Allowed `select.fields` values:
 - `sort_y_offset`
 - `stack_order`
 - `tags`
+- `inventory`
 
 `select.variables` is a list of variable keys to copy into a `variables` object on the returned result. Keys that do not exist are omitted.
 
@@ -1285,6 +1392,30 @@ Movement timing precedence for interpolated move commands is:
 - `duration`
 - `speed_px_per_second`
 - engine default fallback
+
+### Inventory
+
+- `add_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?)`
+- `remove_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?)`
+- `use_inventory_item(entity_id, item_id, quantity?, result_var_name?)`
+- `set_inventory_max_stacks(entity_id, max_stacks)`
+
+Current inventory rules:
+
+- `quantity_mode` is required on `add_inventory_item` and `remove_inventory_item`
+- allowed modes are `"atomic"` and `"partial"`
+- `result_var_name`, when provided, writes the result payload to
+  `$self_id.variables[result_var_name]`
+- current result shape is:
+  - `success`
+  - `item_id`
+  - `requested_quantity`
+  - `changed_quantity`
+  - `remaining_quantity`
+- if authored logic cares whether inventory state changed, it should check
+  `changed_quantity > 0`
+- `use_inventory_item` only consumes after the item's `use_commands` finish
+  cleanly
 
 ### Animation, Audio, And Entity Visuals
 

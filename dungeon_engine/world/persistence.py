@@ -14,13 +14,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from dungeon_engine.inventory import clone_inventory_state, serialize_inventory_state
 from dungeon_engine.project import ProjectContext
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import Entity, EntityVisual
 from dungeon_engine.world.world import World
 
 
-SAVE_DATA_VERSION = 6
+SAVE_DATA_VERSION = 7
 
 
 @dataclass(slots=True)
@@ -971,6 +972,7 @@ def _instantiate_saved_entity(
         tile_size,
         project=project,
         source_name="<saved entity>",
+        allow_missing_inventory_items=True,
     )
 
 
@@ -1141,6 +1143,10 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.interaction_priority = int(value)
         elif key == "entity_commands_enabled":
             entity.entity_commands_enabled = bool(value)
+        elif key == "inventory":
+            entity.inventory = clone_inventory_state(
+                _deserialize_inventory_state(value)
+            )
         elif key == "render_order":
             entity.render_order = int(value)
         elif key == "y_sort":
@@ -1234,6 +1240,45 @@ def _deserialize_persistent_visuals(raw_visuals: Any) -> list[EntityVisual]:
     return visuals
 
 
+def _deserialize_inventory_state(raw_inventory: Any) -> Any:
+    """Parse one persisted inventory payload back into a runtime inventory state."""
+    if raw_inventory is None:
+        return None
+    if not isinstance(raw_inventory, dict):
+        raise ValueError("Persistent 'inventory' override must be a JSON object or null.")
+    max_stacks = int(raw_inventory.get("max_stacks", 0))
+    if max_stacks < 0:
+        raise ValueError("Persistent 'inventory.max_stacks' must be zero or positive.")
+    raw_stacks = raw_inventory.get("stacks", [])
+    if raw_stacks is None:
+        raw_stacks = []
+    if not isinstance(raw_stacks, list):
+        raise ValueError("Persistent 'inventory.stacks' override must be a JSON array.")
+
+    from dungeon_engine.world.entity import InventoryStack, InventoryState
+
+    stacks: list[InventoryStack] = []
+    for index, raw_stack in enumerate(raw_stacks):
+        if not isinstance(raw_stack, dict):
+            raise ValueError(f"Persistent inventory.stacks[{index}] must be a JSON object.")
+        item_id = str(raw_stack.get("item_id", "")).strip()
+        if not item_id:
+            raise ValueError(
+                f"Persistent inventory.stacks[{index}] requires a non-empty item_id."
+            )
+        quantity = int(raw_stack.get("quantity", 0))
+        if quantity <= 0:
+            raise ValueError(
+                f"Persistent inventory.stacks[{index}] quantity must be positive."
+            )
+        stacks.append(InventoryStack(item_id=item_id, quantity=quantity))
+    if len(stacks) > max_stacks:
+        raise ValueError(
+            f"Persistent inventory uses {len(stacks)} stack(s) but max_stacks is {max_stacks}."
+        )
+    return InventoryState(max_stacks=max_stacks, stacks=stacks)
+
+
 def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -> dict[str, Any]:
     """Return only the persistent fields that differ from authored defaults."""
     overrides: dict[str, Any] = {}
@@ -1268,6 +1313,8 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["interaction_priority"] = int(current_entity.interaction_priority)
     if current_entity.entity_commands_enabled != authored_entity.entity_commands_enabled:
         overrides["entity_commands_enabled"] = current_entity.entity_commands_enabled
+    if serialize_inventory_state(current_entity.inventory) != serialize_inventory_state(authored_entity.inventory):
+        overrides["inventory"] = serialize_inventory_state(current_entity.inventory)
     if current_entity.render_order != authored_entity.render_order:
         overrides["render_order"] = current_entity.render_order
     if current_entity.y_sort != authored_entity.y_sort:

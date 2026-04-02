@@ -17,9 +17,17 @@ from pathlib import Path
 from typing import Any
 
 from dungeon_engine import config
+from dungeon_engine.inventory import clone_inventory_state
+from dungeon_engine.items import load_item_definition
 from dungeon_engine.logging_utils import get_logger
 from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
-from dungeon_engine.world.entity import Entity, EntityCommandDefinition, EntityVisual
+from dungeon_engine.world.entity import (
+    Entity,
+    EntityCommandDefinition,
+    EntityVisual,
+    InventoryStack,
+    InventoryState,
+)
 from dungeon_engine.world.persistence import PersistentAreaState, apply_persistent_area_state
 from dungeon_engine.world.world import World
 
@@ -203,6 +211,7 @@ def instantiate_entity(
     *,
     project: ProjectContext,
     source_name: str = "<entity>",
+    allow_missing_inventory_items: bool = False,
 ) -> Entity:
     """Create a runtime entity from an instance definition or template reference."""
     if not isinstance(entity_instance, dict):
@@ -252,6 +261,12 @@ def instantiate_entity(
         source_name=source_name,
     )
     interactable = _parse_entity_interactable(entity_data)
+    inventory = _parse_entity_inventory(
+        entity_data,
+        project=project,
+        source_name=source_name,
+        allow_missing_item_definitions=allow_missing_inventory_items,
+    )
     entity = Entity(
         entity_id=entity_id,
         kind=kind,
@@ -280,6 +295,7 @@ def instantiate_entity(
         template_id=template_id,
         template_parameters=copy.deepcopy(entity_instance.get("parameters", {})),
         tags=_coerce_string_list(entity_data.get("tags", []), field_name="tags", source_name=source_name),
+        inventory=clone_inventory_state(inventory),
         visuals=visuals,
         entity_commands=entity_commands,
         variables=variables,
@@ -296,6 +312,96 @@ def _parse_entity_variables(entity_data: dict[str, Any], *, source_name: str) ->
     if not isinstance(raw_variables, dict):
         raise ValueError(f"{source_name} field 'variables' must be a JSON object.")
     return copy.deepcopy(raw_variables)
+
+
+def _parse_entity_inventory(
+    entity_data: dict[str, Any],
+    *,
+    project: ProjectContext,
+    source_name: str,
+    allow_missing_item_definitions: bool,
+) -> InventoryState | None:
+    """Parse one entity's optional inventory payload."""
+    raw_inventory = entity_data.get("inventory")
+    if raw_inventory is None:
+        return None
+    if not isinstance(raw_inventory, dict):
+        raise ValueError(f"{source_name} field 'inventory' must be a JSON object.")
+
+    if "max_stacks" not in raw_inventory:
+        raise ValueError(f"{source_name} field 'inventory' must define 'max_stacks'.")
+    max_stacks = int(raw_inventory.get("max_stacks", 0))
+    if max_stacks < 0:
+        raise ValueError(f"{source_name} field 'inventory.max_stacks' must be zero or positive.")
+
+    raw_stacks = raw_inventory.get("stacks", [])
+    if raw_stacks is None:
+        raw_stacks = []
+    if not isinstance(raw_stacks, list):
+        raise ValueError(f"{source_name} field 'inventory.stacks' must be a JSON array.")
+
+    stacks: list[InventoryStack] = []
+    item_max_stack_cache: dict[str, int | None] = {}
+    for index, raw_stack in enumerate(raw_stacks):
+        if not isinstance(raw_stack, dict):
+            raise ValueError(f"{source_name} inventory.stacks[{index}] must be a JSON object.")
+        item_id = _require_non_empty_string(
+            raw_stack,
+            "item_id",
+            source_name=f"{source_name} inventory.stacks[{index}]",
+        )
+        quantity = _coerce_required_int(
+            raw_stack,
+            "quantity",
+            source_name=f"{source_name} inventory.stacks[{index}]",
+        )
+        if quantity <= 0:
+            raise ValueError(
+                f"{source_name} inventory.stacks[{index}] field 'quantity' must be positive."
+            )
+
+        item_max_stack = item_max_stack_cache.get(item_id)
+        if item_id not in item_max_stack_cache:
+            try:
+                item_definition = load_item_definition(project, item_id)
+            except FileNotFoundError:
+                if allow_missing_item_definitions:
+                    logger.warning(
+                        "%s inventory.stacks[%d] preserves unresolved item '%s' because its definition is missing.",
+                        source_name,
+                        index,
+                        item_id,
+                    )
+                    item_max_stack = None
+                else:
+                    raise ValueError(
+                        f"{source_name} inventory.stacks[{index}] references unknown item '{item_id}'."
+                    ) from None
+            else:
+                item_max_stack = int(item_definition.max_stack)
+            item_max_stack_cache[item_id] = item_max_stack
+
+        if item_max_stack is not None and quantity > item_max_stack:
+            raise ValueError(
+                f"{source_name} inventory.stacks[{index}] quantity {quantity} exceeds item "
+                f"'{item_id}' max_stack {item_max_stack}."
+            )
+        stacks.append(
+            InventoryStack(
+                item_id=item_id,
+                quantity=quantity,
+            )
+        )
+
+    if len(stacks) > max_stacks:
+        raise ValueError(
+            f"{source_name} inventory uses {len(stacks)} stack(s) but max_stacks is {max_stacks}."
+        )
+
+    return InventoryState(
+        max_stacks=max_stacks,
+        stacks=stacks,
+    )
 
 
 def _parse_entity_facing(

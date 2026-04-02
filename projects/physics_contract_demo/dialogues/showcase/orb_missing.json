@@ -1,0 +1,9 @@
+{
+  "ui_preset": "standard",
+  "segments": [
+    {
+      "type": "text",
+      "text": "The beacon needs a Light Orb from your inventory."
+    }
+  ]
+}

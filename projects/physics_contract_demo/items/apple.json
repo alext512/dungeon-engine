@@ -1,0 +1,6 @@
+{
+  "name": "Apple",
+  "description": "A simple pickup used by the inventory contract demo.",
+  "max_stack": 9,
+  "consume_quantity_on_use": 0
+}

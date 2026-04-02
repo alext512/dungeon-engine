@@ -1,0 +1,14 @@
+{
+  "name": "Light Orb",
+  "description": "Feeds the nearby beacon terminal once.",
+  "max_stack": 3,
+  "consume_quantity_on_use": 1,
+  "use_commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$ref_ids.target_indicator",
+      "field_name": "visible",
+      "value": true
+    }
+  ]
+}

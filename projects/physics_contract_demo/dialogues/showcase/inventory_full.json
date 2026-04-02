@@ -1,0 +1,9 @@
+{
+  "ui_preset": "standard",
+  "segments": [
+    {
+      "type": "text",
+      "text": "Your inventory cannot fit that right now."
+    }
+  ]
+}

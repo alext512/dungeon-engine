@@ -1,0 +1,47 @@
+{
+  "kind": "pickup",
+  "solid": false,
+  "render_order": 9,
+  "variables": {
+    "item_id": "$item_id",
+    "quantity": "$quantity"
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/sprites/object_sheet.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ],
+  "entity_commands": {
+    "on_occupant_enter": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "add_inventory_item",
+          "entity_id": "$ref_ids.instigator",
+          "item_id": "$self.item_id",
+          "quantity": "$self.quantity",
+          "quantity_mode": "partial",
+          "result_var_name": "last_inventory_result"
+        },
+        {
+          "type": "if",
+          "left": "$self.last_inventory_result.changed_quantity",
+          "op": "gt",
+          "right": 0,
+          "then": [
+            {
+              "type": "destroy_entity",
+              "entity_id": "$self_id"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

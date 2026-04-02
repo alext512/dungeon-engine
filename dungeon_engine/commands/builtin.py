@@ -8,6 +8,17 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from dungeon_engine import config
+from dungeon_engine.inventory import (
+    add_inventory_item_to_state,
+    inventory_has_item,
+    inventory_item_count,
+    make_inventory_change_result,
+    normalize_quantity_mode,
+    remove_inventory_item_from_state,
+    serialize_inventory_state,
+    set_inventory_max_stacks_on_state,
+)
+from dungeon_engine.items import load_item_definition
 from dungeon_engine.commands.library import (
     instantiate_project_command_commands,
     load_project_command_definition,
@@ -575,6 +586,58 @@ def _persist_entity_field(
         entity=entity,
         tile_size=area.tile_size,
     )
+
+
+def _persist_inventory_state(
+    *,
+    area: Any,
+    persistence_runtime: Any | None,
+    entity: Any,
+) -> None:
+    """Persist one entity's full inventory payload when runtime persistence is available."""
+    _persist_entity_field(
+        area=area,
+        persistence_runtime=persistence_runtime,
+        entity_id=entity.entity_id,
+        field_name="inventory",
+        value=serialize_inventory_state(entity.inventory),
+        entity=entity,
+    )
+
+
+def _write_inventory_result_if_requested(
+    *,
+    world: Any,
+    source_entity_id: str | None,
+    result_var_name: str | None,
+    result: dict[str, Any],
+) -> None:
+    """Write one inventory result payload onto the current command owner when requested."""
+    if result_var_name in (None, ""):
+        return
+    if source_entity_id in (None, ""):
+        raise ValueError(
+            "Inventory commands that use result_var_name require a source entity context."
+        )
+    owner_entity = _require_exact_entity(world, str(source_entity_id))
+    owner_entity.variables[str(result_var_name)] = copy.deepcopy(result)
+
+
+def _load_runtime_item_definition(
+    project: Any | None,
+    *,
+    item_id: str,
+    command_name: str,
+) -> Any | None:
+    """Return one item definition when it exists, logging a warning otherwise."""
+    if project is None:
+        logger.warning("%s: skipping because no active project context exists.", command_name)
+        return None
+    try:
+        return load_item_definition(project, item_id)
+    except FileNotFoundError:
+        logger.warning("%s: skipping because item '%s' was not found.", command_name, item_id)
+        return None
 
 
 def _persist_entity_command_enabled(
@@ -2926,6 +2989,307 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             set_payload=set,
             persistent=persistent,
         )
+
+    @registry.register("add_inventory_item")
+    def add_inventory_item(
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        project: Any | None,
+        *,
+        entity_id: str,
+        item_id: str,
+        quantity: int = 1,
+        quantity_mode: str,
+        result_var_name: str | None = None,
+        source_entity_id: str | None = None,
+    ) -> CommandHandle:
+        """Add item quantity to one entity-owned inventory."""
+        resolved_entity_id = str(entity_id).strip()
+        resolved_item_id = str(item_id).strip()
+        requested_quantity = int(quantity)
+        if not resolved_entity_id:
+            logger.warning("add_inventory_item: skipping because entity_id resolved to blank.")
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=make_inventory_change_result(
+                    success=False,
+                    item_id=resolved_item_id,
+                    requested_quantity=requested_quantity,
+                    changed_quantity=0,
+                    remaining_quantity=max(0, requested_quantity),
+                ),
+            )
+            return ImmediateHandle()
+        item_definition = _load_runtime_item_definition(
+            project,
+            item_id=resolved_item_id,
+            command_name="add_inventory_item",
+        )
+        if item_definition is None:
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=make_inventory_change_result(
+                    success=False,
+                    item_id=resolved_item_id,
+                    requested_quantity=requested_quantity,
+                    changed_quantity=0,
+                    remaining_quantity=max(0, requested_quantity),
+                ),
+            )
+            return ImmediateHandle()
+
+        entity = _require_exact_entity(world, resolved_entity_id)
+        result = add_inventory_item_to_state(
+            entity.inventory,
+            item_id=resolved_item_id,
+            quantity=requested_quantity,
+            max_stack=int(item_definition.max_stack),
+            quantity_mode=normalize_quantity_mode(quantity_mode),
+        )
+        if entity.inventory is not None and int(result.get("changed_quantity", 0)) > 0:
+            _persist_inventory_state(
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity=entity,
+            )
+        _write_inventory_result_if_requested(
+            world=world,
+            source_entity_id=source_entity_id,
+            result_var_name=result_var_name,
+            result=result,
+        )
+        return ImmediateHandle()
+
+    @registry.register("remove_inventory_item")
+    def remove_inventory_item(
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        *,
+        entity_id: str,
+        item_id: str,
+        quantity: int = 1,
+        quantity_mode: str,
+        result_var_name: str | None = None,
+        source_entity_id: str | None = None,
+    ) -> CommandHandle:
+        """Remove item quantity from one entity-owned inventory."""
+        resolved_entity_id = str(entity_id).strip()
+        resolved_item_id = str(item_id).strip()
+        requested_quantity = int(quantity)
+        if not resolved_entity_id:
+            logger.warning("remove_inventory_item: skipping because entity_id resolved to blank.")
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=make_inventory_change_result(
+                    success=False,
+                    item_id=resolved_item_id,
+                    requested_quantity=requested_quantity,
+                    changed_quantity=0,
+                    remaining_quantity=max(0, requested_quantity),
+                ),
+            )
+            return ImmediateHandle()
+
+        entity = _require_exact_entity(world, resolved_entity_id)
+        result = remove_inventory_item_from_state(
+            entity.inventory,
+            item_id=resolved_item_id,
+            quantity=requested_quantity,
+            quantity_mode=normalize_quantity_mode(quantity_mode),
+        )
+        if entity.inventory is not None and int(result.get("changed_quantity", 0)) > 0:
+            _persist_inventory_state(
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity=entity,
+            )
+        _write_inventory_result_if_requested(
+            world=world,
+            source_entity_id=source_entity_id,
+            result_var_name=result_var_name,
+            result=result,
+        )
+        return ImmediateHandle()
+
+    @registry.register("use_inventory_item")
+    def use_inventory_item(
+        context: CommandContext,
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        project: Any | None,
+        *,
+        entity_id: str,
+        item_id: str,
+        quantity: int = 1,
+        result_var_name: str | None = None,
+        source_entity_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
+    ) -> CommandHandle:
+        """Run one item's authored use-commands and consume it only on clean success."""
+        resolved_entity_id = str(entity_id).strip()
+        resolved_item_id = str(item_id).strip()
+        requested_quantity = int(quantity)
+        failure_result = make_inventory_change_result(
+            success=False,
+            item_id=resolved_item_id,
+            requested_quantity=requested_quantity,
+            changed_quantity=0,
+            remaining_quantity=max(0, requested_quantity),
+        )
+        if not resolved_entity_id:
+            logger.warning("use_inventory_item: skipping because entity_id resolved to blank.")
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=failure_result,
+            )
+            return ImmediateHandle()
+
+        entity = _require_exact_entity(world, resolved_entity_id)
+        item_definition = _load_runtime_item_definition(
+            project,
+            item_id=resolved_item_id,
+            command_name="use_inventory_item",
+        )
+        if item_definition is None:
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=failure_result,
+            )
+            return ImmediateHandle()
+        if requested_quantity <= 0:
+            raise ValueError("use_inventory_item quantity must be positive.")
+        if not item_definition.use_commands:
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=failure_result,
+            )
+            return ImmediateHandle()
+
+        consume_total = int(item_definition.consume_quantity_on_use) * requested_quantity
+        required_quantity = max(requested_quantity, consume_total)
+        if not inventory_has_item(entity.inventory, resolved_item_id, quantity=required_quantity):
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=make_inventory_change_result(
+                    success=True,
+                    item_id=resolved_item_id,
+                    requested_quantity=requested_quantity,
+                    changed_quantity=0,
+                    remaining_quantity=requested_quantity,
+                ),
+            )
+            return ImmediateHandle()
+
+        child_runtime_params = _build_child_runtime_params(
+            {
+                "source_entity_id": source_entity_id,
+                "entity_refs": copy.deepcopy(entity_refs or {}),
+            },
+            entity_refs={"instigator": entity.entity_id},
+            refs_mode="merge",
+        )
+        sequence_handle = SequenceCommandHandle(
+            registry,
+            context,
+            item_definition.use_commands,
+            base_params=child_runtime_params,
+        )
+
+        def _finalize_use() -> None:
+            if consume_total > 0:
+                consumption_result = remove_inventory_item_from_state(
+                    entity.inventory,
+                    item_id=resolved_item_id,
+                    quantity=consume_total,
+                    quantity_mode="atomic",
+                )
+                if entity.inventory is not None and int(consumption_result.get("changed_quantity", 0)) > 0:
+                    _persist_inventory_state(
+                        area=area,
+                        persistence_runtime=persistence_runtime,
+                        entity=entity,
+                    )
+                if int(consumption_result.get("changed_quantity", 0)) != consume_total:
+                    logger.warning(
+                        "use_inventory_item: item '%s' use completed but post-use consumption did not remove the expected quantity.",
+                        resolved_item_id,
+                    )
+                    _write_inventory_result_if_requested(
+                        world=world,
+                        source_entity_id=source_entity_id,
+                        result_var_name=result_var_name,
+                        result=failure_result,
+                    )
+                    return
+
+            _write_inventory_result_if_requested(
+                world=world,
+                source_entity_id=source_entity_id,
+                result_var_name=result_var_name,
+                result=make_inventory_change_result(
+                    success=True,
+                    item_id=resolved_item_id,
+                    requested_quantity=requested_quantity,
+                    changed_quantity=consume_total,
+                    remaining_quantity=0,
+                ),
+            )
+
+        return PostActionCommandHandle(sequence_handle, _finalize_use)
+
+    @registry.register("set_inventory_max_stacks")
+    def set_inventory_max_stacks(
+        world: Any,
+        area: Any,
+        persistence_runtime: Any | None,
+        *,
+        entity_id: str,
+        max_stacks: int,
+    ) -> CommandHandle:
+        """Create or resize one entity-owned inventory capacity without discarding items."""
+        entity = _require_exact_entity(world, entity_id)
+        resolved_max_stacks = int(max_stacks)
+        if entity.inventory is None:
+            from dungeon_engine.world.entity import InventoryState
+
+            if resolved_max_stacks < 0:
+                raise ValueError("set_inventory_max_stacks max_stacks must be zero or positive.")
+            entity.inventory = InventoryState(max_stacks=resolved_max_stacks, stacks=[])
+            _persist_inventory_state(
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity=entity,
+            )
+            return ImmediateHandle()
+        if not set_inventory_max_stacks_on_state(entity.inventory, max_stacks=resolved_max_stacks):
+            logger.warning(
+                "set_inventory_max_stacks: refusing to shrink inventory for entity '%s' below the number of occupied stacks.",
+                entity.entity_id,
+            )
+            return ImmediateHandle()
+        _persist_inventory_state(
+            area=area,
+            persistence_runtime=persistence_runtime,
+            entity=entity,
+        )
+        return ImmediateHandle()
 
     @registry.register("route_inputs_to_entity")
     def route_inputs_to_entity(

@@ -1,0 +1,6 @@
+{
+  "name": "Copper Key",
+  "description": "Opens the copper door in the demo room.",
+  "max_stack": 1,
+  "consume_quantity_on_use": 0
+}

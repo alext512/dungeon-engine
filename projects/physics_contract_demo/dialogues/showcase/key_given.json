@@ -1,0 +1,9 @@
+{
+  "ui_preset": "standard",
+  "segments": [
+    {
+      "type": "text",
+      "text": "Take this Copper Key. It should unlock the door to the east."
+    }
+  ]
+}

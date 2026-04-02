@@ -15,12 +15,14 @@
       "name": "background",
       "render_order": 0,
       "grid": [
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0]
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ]
     }
   ],
@@ -32,6 +34,11 @@
       {"blocked": true, "tags": ["wall"]},
       {"blocked": true, "tags": ["wall"]},
       {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
       {"blocked": true, "tags": ["wall"]}
     ],
     [
@@ -41,20 +48,7 @@
       {"blocked": false},
       {"blocked": false},
       {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
-    ],
-    [
       {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
-    ],
-    [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
       {"blocked": false},
       {"blocked": false},
       {"blocked": false},
@@ -68,9 +62,75 @@
       {"blocked": false},
       {"blocked": false},
       {"blocked": false},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
       {"blocked": true, "tags": ["wall"]}
     ],
     [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": false},
+      {"blocked": true, "tags": ["wall"]}
+    ],
+    [
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
+      {"blocked": true, "tags": ["wall"]},
       {"blocked": true, "tags": ["wall"]},
       {"blocked": true, "tags": ["wall"]},
       {"blocked": true, "tags": ["wall"]},
@@ -92,7 +152,16 @@
       "id": "player",
       "x": 1,
       "y": 2,
-      "template": "entity_templates/player_contract"
+      "template": "entity_templates/player_contract",
+      "inventory": {
+        "max_stacks": 4,
+        "stacks": [
+          {
+            "item_id": "items/light_orb",
+            "quantity": 1
+          }
+        ]
+      }
     },
     {
       "id": "occupancy_button",
@@ -110,6 +179,25 @@
       "template": "entity_templates/indicator_contract"
     },
     {
+      "id": "contract_sign",
+      "x": 5,
+      "y": 1,
+      "template": "entity_templates/sign_contract",
+      "parameters": {
+        "dialogue_path": "dialogues/showcase/physics_contract_note.json"
+      }
+    },
+    {
+      "id": "inventory_apple_pickup",
+      "x": 1,
+      "y": 3,
+      "template": "entity_templates/item_pickup_contract",
+      "parameters": {
+        "item_id": "items/apple",
+        "quantity": 1
+      }
+    },
+    {
       "id": "house_block",
       "x": 3,
       "y": 3,
@@ -123,12 +211,37 @@
       "weight": 2
     },
     {
-      "id": "contract_sign",
-      "x": 5,
+      "id": "key_keeper",
+      "x": 8,
+      "y": 2,
+      "template": "entity_templates/key_keeper_contract",
+      "parameters": {
+        "item_id": "items/copper_key",
+        "quantity": 1,
+        "success_dialogue_path": "dialogues/showcase/key_given.json",
+        "full_dialogue_path": "dialogues/showcase/inventory_full.json",
+        "repeat_dialogue_path": "dialogues/showcase/already_gave_key.json"
+      }
+    },
+    {
+      "id": "copper_door",
+      "x": 9,
+      "y": 2,
+      "template": "entity_templates/locked_door_contract",
+      "parameters": {
+        "required_item_id": "items/copper_key",
+        "locked_dialogue_path": "dialogues/showcase/door_locked.json",
+        "success_dialogue_path": "dialogues/showcase/door_unlocked.json",
+        "open_dialogue_path": "dialogues/showcase/door_open.json"
+      }
+    },
+    {
+      "id": "behind_door_sign",
+      "x": 10,
       "y": 2,
       "template": "entity_templates/sign_contract",
       "parameters": {
-        "dialogue_path": "dialogues/showcase/physics_contract_note.json"
+        "dialogue_path": "dialogues/showcase/behind_door_note.json"
       }
     },
     {
@@ -150,6 +263,24 @@
         "target_indicator_id": "occupancy_indicator",
         "dialogue_path": "dialogues/showcase/dialogue_runtime_menu_panel.json"
       }
+    },
+    {
+      "id": "orb_terminal",
+      "x": 8,
+      "y": 4,
+      "template": "entity_templates/orb_terminal_contract",
+      "parameters": {
+        "item_id": "items/light_orb",
+        "target_indicator_id": "orb_indicator",
+        "success_dialogue_path": "dialogues/showcase/orb_success.json",
+        "failure_dialogue_path": "dialogues/showcase/orb_missing.json"
+      }
+    },
+    {
+      "id": "orb_indicator",
+      "x": 9,
+      "y": 4,
+      "template": "entity_templates/indicator_contract"
     }
   ]
 }

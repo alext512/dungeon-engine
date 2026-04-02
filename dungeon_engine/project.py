@@ -11,6 +11,7 @@ Example ``project.json``::
         "asset_paths": ["assets/"],
         "area_paths": ["areas/"],
         "command_paths": ["commands/"],
+        "item_paths": ["items/"],
         "shared_variables_path": "shared_variables.json",
         "startup_area": "areas/title_screen",
         "input_targets": {
@@ -26,6 +27,7 @@ the selected project root:
 - ``assets/``
 - ``areas/``
 - ``commands/``
+- ``items/``
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from typing import Any
 AREA_ID_PREFIX = "areas"
 ENTITY_TEMPLATE_ID_PREFIX = "entity_templates"
 COMMAND_ID_PREFIX = "commands"
+ITEM_ID_PREFIX = "items"
 
 
 def _normalize_content_id(value: str) -> str:
@@ -81,6 +84,7 @@ class ProjectContext:
     asset_paths: list[Path] = field(default_factory=list)
     area_paths: list[Path] = field(default_factory=list)
     command_paths: list[Path] = field(default_factory=list)
+    item_paths: list[Path] = field(default_factory=list)
     shared_variables_path: Path | None = None
     global_entities: list[dict[str, Any]] = field(default_factory=list)
     startup_area: str | None = None
@@ -260,6 +264,93 @@ class ProjectContext:
             match_list = ", ".join(str(path) for path in matches)
             raise ValueError(
                 f"Duplicate command definition lookup for '{command_id}'. Matches: {match_list}"
+            )
+        return matches[0]
+
+    # ------------------------------------------------------------------
+    # Item discovery
+    # ------------------------------------------------------------------
+
+    def item_id(self, item_path: Path) -> str:
+        """Return the canonical id for one item-definition file."""
+        resolved = item_path.resolve()
+        for directory in self.item_paths:
+            try:
+                relative = resolved.relative_to(directory.resolve())
+                return _prefix_relative_id(
+                    str(relative.with_suffix("")).replace("\\", "/"),
+                    prefix=ITEM_ID_PREFIX,
+                )
+            except ValueError:
+                continue
+        return _prefix_relative_id(item_path.stem, prefix=ITEM_ID_PREFIX)
+
+    def list_item_files(self) -> list[Path]:
+        """Return all project item JSON files across all item paths."""
+        files: list[Path] = []
+        seen: set[Path] = set()
+        for directory in self.item_paths:
+            if not directory.is_dir():
+                continue
+            for file_path in sorted(directory.rglob("*.json")):
+                resolved = file_path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                files.append(file_path)
+        return files
+
+    def list_item_ids(self) -> list[str]:
+        """Return sorted unique item ids from all item roots."""
+        ids: set[str] = set()
+        for item_path in self.list_item_files():
+            ids.add(self.item_id(item_path))
+        return sorted(ids)
+
+    def find_item_matches(self, item_id: str) -> list[Path]:
+        """Return all matching item-definition JSON files for the requested id."""
+        normalized_id = _normalize_content_id(item_id)
+        if not normalized_id:
+            return []
+
+        relative_id = _relative_id_from_canonical(
+            normalized_id,
+            prefix=ITEM_ID_PREFIX,
+        )
+        if relative_id is None:
+            return []
+        matches: list[Path] = []
+        seen: set[Path] = set()
+
+        def _record(candidate: Path) -> None:
+            resolved = candidate.resolve()
+            if resolved in seen:
+                return
+            seen.add(resolved)
+            matches.append(candidate)
+
+        for directory in self.item_paths:
+            direct_candidate = directory / relative_id
+            if direct_candidate.suffix.lower() != ".json":
+                direct_candidate = direct_candidate.with_suffix(".json")
+            if direct_candidate.exists():
+                _record(direct_candidate)
+
+            for candidate in directory.rglob("*.json"):
+                relative_candidate = self.item_id(candidate)
+                if relative_candidate == normalized_id:
+                    _record(candidate)
+        return matches
+
+    def find_item(self, item_id: str) -> Path | None:
+        """Return the single matching item-definition JSON file, or *None*."""
+        matches = self.find_item_matches(item_id)
+        if not matches:
+            return None
+        if len(matches) > 1:
+            match_list = ", ".join(str(path) for path in matches)
+            raise ValueError(
+                f"Duplicate item definition lookup for '{item_id}'. Matches: {match_list}"
             )
         return matches[0]
 
@@ -494,6 +585,7 @@ def load_project(project_path: Path) -> ProjectContext:
         asset_paths=_resolve_paths("asset_paths", "assets"),
         area_paths=_resolve_paths("area_paths", "areas"),
         command_paths=_resolve_paths("command_paths", "commands"),
+        item_paths=_resolve_paths("item_paths", "items"),
         shared_variables_path=shared_variables_path,
         global_entities=_resolve_global_entities(raw.get("global_entities")),
         startup_area=_optional_manifest_str(raw.get("startup_area")),
