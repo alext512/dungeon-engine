@@ -12,6 +12,7 @@ from pathlib import Path
 from area_editor.project_io.manifest import (
     discover_areas,
     discover_entity_templates,
+    discover_global_entities,
     discover_items,
     load_manifest,
 )
@@ -84,6 +85,19 @@ class TestTemplateDiscovery(unittest.TestCase):
         ids = [t.template_id for t in templates]
         # The test project should have at least area_door
         self.assertIn("entity_templates/area_door", ids)
+
+
+@unittest.skipUnless(_TEST_PROJECT.is_dir(), "test_project fixture not found")
+class TestGlobalEntityDiscovery(unittest.TestCase):
+    def test_discovers_global_entities_in_manifest_order(self):
+        manifest = load_manifest(_TEST_PROJECT / "project.json")
+        entries = discover_global_entities(manifest)
+
+        self.assertEqual(
+            [entry.entity_id for entry in entries],
+            ["dialogue_controller", "pause_controller", "debug_controller"],
+        )
+        self.assertEqual(entries[1].template_id, "entity_templates/pause_controller")
 
 
 @unittest.skipUnless(_PHYSICS_PROJECT.is_dir(), "physics_contract_demo fixture not found")

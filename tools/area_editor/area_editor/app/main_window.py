@@ -42,6 +42,7 @@ from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.project_io.manifest import (
     ProjectManifest,
     discover_areas,
+    discover_global_entities,
     load_manifest,
 )
 from area_editor.operations.tilesets import (
@@ -59,6 +60,8 @@ from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
 from area_editor.widgets.file_tree_panel import FileTreePanel
+from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
+from area_editor.widgets.global_entities_panel import GlobalEntitiesPanel
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.layer_list_panel import LayerListPanel
 from area_editor.widgets.render_properties_panel import RenderPropertiesPanel
@@ -198,6 +201,9 @@ class MainWindow(QMainWindow):
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._item_panel)
 
+        self._global_entities_panel = GlobalEntitiesPanel()
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._global_entities_panel)
+
         self._dialogue_panel = FileTreePanel(
             "Dialogues", object_name="DialoguePanel"
         )
@@ -233,7 +239,8 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self._area_panel, self._entity_instance_panel, Qt.Orientation.Vertical)
         self.tabifyDockWidget(self._area_panel, self._template_panel)
         self.tabifyDockWidget(self._template_panel, self._item_panel)
-        self.tabifyDockWidget(self._item_panel, self._dialogue_panel)
+        self.tabifyDockWidget(self._item_panel, self._global_entities_panel)
+        self.tabifyDockWidget(self._global_entities_panel, self._dialogue_panel)
         self.tabifyDockWidget(self._dialogue_panel, self._command_panel)
         self.tabifyDockWidget(self._command_panel, self._asset_panel)
         self.resizeDocks(
@@ -276,6 +283,9 @@ class MainWindow(QMainWindow):
         )
         self._item_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ITEM)
+        )
+        self._global_entities_panel.global_entity_open_requested.connect(
+            self._open_global_entities_tab
         )
         self._dialogue_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.DIALOGUE)
@@ -368,6 +378,7 @@ class MainWindow(QMainWindow):
             self._manifest, self._templates, self._catalog
         )
         self._item_panel.populate(self._manifest.item_paths)
+        self._global_entities_panel.populate(discover_global_entities(self._manifest))
         self._dialogue_panel.populate(self._manifest.dialogue_paths)
         self._command_panel.populate(self._manifest.command_paths)
         self._asset_panel.populate(self._manifest.asset_paths)
@@ -421,6 +432,13 @@ class MainWindow(QMainWindow):
         self._open_shared_variables_action.setEnabled(False)
         self._open_shared_variables_action.triggered.connect(self._open_shared_variables_tab)
         project_menu.addAction(self._open_shared_variables_action)
+
+        self._open_global_entities_action = QAction("Open Global Entities", self)
+        self._open_global_entities_action.setEnabled(False)
+        self._open_global_entities_action.triggered.connect(
+            lambda: self._open_global_entities_tab(None)
+        )
+        project_menu.addAction(self._open_global_entities_action)
 
         edit_menu = self.menuBar().addMenu("&Edit")
 
@@ -553,13 +571,31 @@ class MainWindow(QMainWindow):
         self, content_id: str, file_path: Path, content_type: ContentType
     ) -> None:
         """Open a non-area content item in a tab."""
-        widget = self._tab_widget.open_tab(content_id, file_path, content_type)
-        if isinstance(widget, JsonViewerWidget) and content_id not in self._json_dirty_bound:
-            widget.dirty_changed.connect(
+        self._open_content_widget(content_id, file_path, content_type, None)
+
+    def _open_content_widget(
+        self,
+        content_id: str,
+        file_path: Path,
+        content_type: ContentType,
+        widget: QWidget | None,
+    ) -> QWidget:
+        opened_widget = self._tab_widget.open_tab(
+            content_id,
+            file_path,
+            content_type,
+            widget=widget,
+        )
+        if (
+            isinstance(opened_widget, (JsonViewerWidget, GlobalEntitiesEditorWidget))
+            and content_id not in self._json_dirty_bound
+        ):
+            opened_widget.dirty_changed.connect(
                 lambda dirty, cid=content_id: self._tab_widget.set_dirty(cid, dirty)
             )
             self._json_dirty_bound.add(content_id)
         self._sync_json_edit_actions()
+        return opened_widget
 
     def _open_project_manifest_tab(self) -> None:
         if self._manifest is None:
@@ -578,6 +614,29 @@ class MainWindow(QMainWindow):
             self._manifest.shared_variables_path,
             ContentType.SHARED_VARIABLES,
         )
+
+    def _open_global_entities_tab(self, entity_id: str | None) -> None:
+        if self._manifest is None:
+            return
+        content_id = "project/global_entities"
+        widget = self._tab_widget.widget_for_content(content_id)
+        if not isinstance(widget, GlobalEntitiesEditorWidget):
+            widget = GlobalEntitiesEditorWidget(self._manifest.project_file)
+            self._open_content_widget(
+                content_id,
+                self._manifest.project_file,
+                ContentType.GLOBAL_ENTITIES,
+                widget,
+            )
+        else:
+            self._tab_widget.open_tab(
+                content_id,
+                self._manifest.project_file,
+                ContentType.GLOBAL_ENTITIES,
+            )
+        widget.select_entity_id(entity_id)
+        if entity_id:
+            self._global_entities_panel.select_entity(entity_id)
 
     # ------------------------------------------------------------------
     # Slots — tab widget
@@ -681,6 +740,8 @@ class MainWindow(QMainWindow):
             return "Project Manifest"
         if content_type == ContentType.SHARED_VARIABLES:
             return "Shared Variables"
+        if content_type == ContentType.GLOBAL_ENTITIES:
+            return "Global Entities"
         return content_id
 
     def _update_project_content_actions(self) -> None:
@@ -692,6 +753,38 @@ class MainWindow(QMainWindow):
         )
         self._open_project_manifest_action.setEnabled(has_manifest)
         self._open_shared_variables_action.setEnabled(has_shared_variables)
+        self._open_global_entities_action.setEnabled(has_manifest)
+
+    def _refresh_project_metadata_surfaces(self) -> None:
+        """Reload manifest-backed non-area editor surfaces after project-level saves."""
+        if self._manifest is None:
+            return
+        try:
+            refreshed = load_manifest(self._manifest.project_file)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Project Metadata Stale",
+                f"Saved, but project metadata could not be reloaded:\n{exc}",
+            )
+            return
+        self._manifest = refreshed
+        resolver = AssetResolver(self._manifest.asset_paths)
+        self._catalog = TilesetCatalog(resolver)
+        self._templates = TemplateCatalog()
+        self._templates.load_from_manifest(self._manifest)
+        self._entity_instance_panel.set_template_catalog(self._templates)
+        self._display_width = self._manifest.display_width
+        self._display_height = self._manifest.display_height
+        self._template_panel.set_templates(
+            self._manifest, self._templates, self._catalog
+        )
+        self._item_panel.populate(self._manifest.item_paths)
+        self._global_entities_panel.populate(discover_global_entities(self._manifest))
+        self._dialogue_panel.populate(self._manifest.dialogue_paths)
+        self._command_panel.populate(self._manifest.command_paths)
+        self._asset_panel.populate(self._manifest.asset_paths)
+        self._update_project_content_actions()
 
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
@@ -1582,7 +1675,7 @@ class MainWindow(QMainWindow):
             return self._save_area(content_id)
 
         widget = self._tab_widget.widget_for_content(content_id)
-        if not isinstance(widget, JsonViewerWidget):
+        if not isinstance(widget, (JsonViewerWidget, GlobalEntitiesEditorWidget)):
             return True
         try:
             widget.save_to_file()
@@ -1594,6 +1687,12 @@ class MainWindow(QMainWindow):
             )
             return False
         self._tab_widget.set_dirty(content_id, False)
+        if info.content_type in {
+            ContentType.PROJECT_MANIFEST,
+            ContentType.SHARED_VARIABLES,
+            ContentType.GLOBAL_ENTITIES,
+        }:
+            self._refresh_project_metadata_surfaces()
         return True
 
     def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
@@ -1877,9 +1976,9 @@ class MainWindow(QMainWindow):
                 )
         return None
 
-    def _active_json_widget(self) -> JsonViewerWidget | None:
+    def _active_json_widget(self) -> JsonViewerWidget | GlobalEntitiesEditorWidget | None:
         widget = self._tab_widget.active_widget()
-        if isinstance(widget, JsonViewerWidget):
+        if isinstance(widget, (JsonViewerWidget, GlobalEntitiesEditorWidget)):
             return widget
         return None
 

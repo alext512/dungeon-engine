@@ -131,3 +131,63 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         updated = self.panel.build_entity_from_fields()
 
         self.assertEqual(updated.parameters, ["not", "a", "dict"])
+
+    def test_build_entity_from_fields_updates_common_engine_fields_and_variables(self):
+        entity = EntityDocument(
+            id="crate_1",
+            grid_x=2,
+            grid_y=3,
+            template="entity_templates/area_door",
+            _extra={
+                "kind": "crate",
+                "tags": ["wood", "pushable"],
+                "facing": "left",
+                "solid": True,
+                "pushable": True,
+                "weight": 3,
+                "push_strength": 2,
+                "collision_push_strength": 1,
+                "interactable": True,
+                "interaction_priority": 5,
+                "present": True,
+                "visible": True,
+                "entity_commands_enabled": True,
+                "variables": {"opened": False},
+                "custom_field": "keep-me",
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._kind_edit.setText("heavy_crate")
+        fields._tags_edit.setText("metal, movable")
+        fields._facing_combo.setCurrentText("up")
+        fields._solid_check.setChecked(False)
+        fields._pushable_check.setChecked(True)
+        fields._weight_spin.setValue(7)
+        fields._push_strength_spin.setValue(4)
+        fields._collision_push_strength_spin.setValue(6)
+        fields._interactable_check.setChecked(True)
+        fields._interaction_priority_spin.setValue(9)
+        fields._present_check.setChecked(False)
+        fields._visible_check.setChecked(False)
+        fields._entity_commands_enabled_check.setChecked(False)
+        fields._variables_text.setPlainText('{\n  "opened": true,\n  "uses": 3\n}')
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["kind"], "heavy_crate")
+        self.assertEqual(updated._extra["tags"], ["metal", "movable"])
+        self.assertEqual(updated._extra["facing"], "up")
+        self.assertFalse(updated._extra["solid"])
+        self.assertTrue(updated._extra["pushable"])
+        self.assertEqual(updated._extra["weight"], 7)
+        self.assertEqual(updated._extra["push_strength"], 4)
+        self.assertEqual(updated._extra["collision_push_strength"], 6)
+        self.assertTrue(updated._extra["interactable"])
+        self.assertEqual(updated._extra["interaction_priority"], 9)
+        self.assertFalse(updated._extra["present"])
+        self.assertFalse(updated._extra["visible"])
+        self.assertFalse(updated._extra["entity_commands_enabled"])
+        self.assertEqual(updated._extra["variables"], {"opened": True, "uses": 3})
+        self.assertEqual(updated._extra["custom_field"], "keep-me")

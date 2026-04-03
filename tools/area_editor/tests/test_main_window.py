@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 from area_editor.app.main_window import MainWindow
 from area_editor.widgets.document_tab_widget import ContentType
+from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 
 _TEST_PROJECT = (
@@ -829,6 +830,12 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
 
             fields._id_edit.setText("front_door")
             fields._x_spin.setValue(1)
+            fields._kind_edit.setText("door")
+            fields._tags_edit.setText("front, locked")
+            fields._facing_combo.setCurrentText("left")
+            fields._interactable_check.setChecked(True)
+            fields._interaction_priority_spin.setValue(4)
+            fields._variables_text.setPlainText('{\n  "opened": false,\n  "key": "copper"\n}')
             fields._parameter_edits["target_area"].setText("areas/updated_house")
             QApplication.processEvents()
 
@@ -847,6 +854,12 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 "target_area": "areas/updated_house",
                 "target_entry": "from_square",
             })
+            self.assertEqual(entity._extra["kind"], "door")
+            self.assertEqual(entity._extra["tags"], ["front", "locked"])
+            self.assertEqual(entity._extra["facing"], "left")
+            self.assertTrue(entity._extra["interactable"])
+            self.assertEqual(entity._extra["interaction_priority"], 4)
+            self.assertEqual(entity._extra["variables"], {"opened": False, "key": "copper"})
             self.assertEqual(entity.render_order, 14)
             self.assertEqual(canvas.selected_entity_id, "front_door")
             self.assertFalse(window._entity_instance_panel.fields_dirty)
@@ -991,11 +1004,17 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
 
             self.assertTrue(window._open_project_manifest_action.isEnabled())
             self.assertTrue(window._open_shared_variables_action.isEnabled())
+            self.assertTrue(window._open_global_entities_action.isEnabled())
 
             entries = self._panel_file_entries(window._item_panel)
             self.assertEqual(
                 [content_id for content_id, _path in entries],
                 ["items/apple", "items/keys/silver_key"],
+            )
+            self.assertEqual(window._global_entities_panel._tree.topLevelItemCount(), 1)
+            self.assertEqual(
+                window._global_entities_panel._tree.topLevelItem(0).text(0),
+                "pause_controller",
             )
 
     def test_item_panel_signal_opens_item_json_tab(self):
@@ -1055,6 +1074,45 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             saved = (project_file.parent / "shared_variables.json").read_text(encoding="utf-8")
             self.assertIn('"preset": "compact"', saved)
             self.assertFalse(window._tab_widget.is_dirty("project/shared_variables"))
+
+    def test_global_entities_panel_opens_focused_editor_and_saves_back_to_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            window._global_entities_panel.global_entity_open_requested.emit("pause_controller")
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, GlobalEntitiesEditorWidget)
+            assert isinstance(widget, GlobalEntitiesEditorWidget)
+            self.assertEqual(
+                window._tab_widget.active_info().content_type,
+                ContentType.GLOBAL_ENTITIES,
+            )
+            self.assertIn("pause_controller", widget.toPlainText())
+            self.assertIn("pause_controller", widget._target_label.text())
+
+            window._enable_json_editing_action.setChecked(True)
+            updated_text = widget.toPlainText().replace(
+                '"pause_controller"',
+                '"pause_controller_v2"',
+            )
+            widget.setPlainText(updated_text)
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("project/global_entities"))
+            window._on_save_active()
+
+            saved = project_file.read_text(encoding="utf-8")
+            self.assertIn('"pause_controller_v2"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("project/global_entities"))
+            self.assertEqual(
+                window._global_entities_panel._tree.topLevelItem(0).text(0),
+                "pause_controller_v2",
+            )
 
     def test_template_brush_switches_active_paint_target_and_places_entities(self):
         with tempfile.TemporaryDirectory() as tmp:

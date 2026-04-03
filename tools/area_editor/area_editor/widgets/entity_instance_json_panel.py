@@ -9,6 +9,7 @@ from PySide6.QtCore import QSignalBlocker, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDockWidget,
     QFormLayout,
     QHBoxLayout,
@@ -27,6 +28,28 @@ from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
 
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
+_ENTITY_BOOL_DEFAULTS = {
+    "solid": False,
+    "pushable": False,
+    "interactable": False,
+    "present": True,
+    "visible": True,
+    "entity_commands_enabled": True,
+}
+_ENTITY_INT_DEFAULTS = {
+    "weight": 1,
+    "push_strength": 0,
+    "collision_push_strength": 0,
+    "interaction_priority": 0,
+}
+_MANAGED_EXTRA_KEYS = {
+    "kind",
+    "tags",
+    "facing",
+    *list(_ENTITY_BOOL_DEFAULTS.keys()),
+    *list(_ENTITY_INT_DEFAULTS.keys()),
+    "variables",
+}
 
 
 def _section_label(text: str) -> QLabel:
@@ -57,6 +80,10 @@ def _parse_parameter_text(text: str):
         except json.JSONDecodeError:
             return text, True
     return text, True
+
+
+def _parse_tag_list(text: str) -> list[str]:
+    return [part.strip() for part in text.split(",") if part.strip()]
 
 
 class _EntityInstanceJsonEditor(QWidget):
@@ -214,6 +241,15 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._template_label.setText("-")
         self._form.addRow(self._template_label_title, self._template_label)
 
+        self._kind_label = QLabel("kind")
+        self._kind_edit = QLineEdit()
+        self._form.addRow(self._kind_label, self._kind_edit)
+
+        self._tags_label = QLabel("tags")
+        self._tags_edit = QLineEdit()
+        self._tags_edit.setPlaceholderText("comma,separated,tags")
+        self._form.addRow(self._tags_label, self._tags_edit)
+
         self._form.addRow(_section_label("Position"))
         self._space_label_title = QLabel("space")
         self._space_label = QLabel("world")
@@ -251,6 +287,68 @@ class _EntityInstanceFieldsEditor(QWidget):
         pixel_y_layout.addWidget(self._pixel_y_spin, 1)
         self._form.addRow(self._pixel_y_label, self._pixel_y_row)
 
+        self._facing_label = QLabel("facing")
+        self._facing_combo = QComboBox()
+        self._facing_combo.addItems(["down", "up", "left", "right"])
+        self._form.addRow(self._facing_label, self._facing_combo)
+
+        self._form.addRow(_section_label("Physics / Interaction"))
+
+        self._solid_label = QLabel("solid")
+        self._solid_check = QCheckBox()
+        self._form.addRow(self._solid_label, self._solid_check)
+
+        self._pushable_label = QLabel("pushable")
+        self._pushable_check = QCheckBox()
+        self._form.addRow(self._pushable_label, self._pushable_check)
+
+        self._weight_label = QLabel("weight")
+        self._weight_spin = QSpinBox()
+        self._weight_spin.setRange(1, 999999)
+        self._form.addRow(self._weight_label, self._weight_spin)
+
+        self._push_strength_label = QLabel("push_strength")
+        self._push_strength_spin = QSpinBox()
+        self._push_strength_spin.setRange(0, 999999)
+        self._form.addRow(self._push_strength_label, self._push_strength_spin)
+
+        self._collision_push_strength_label = QLabel("collision_push_strength")
+        self._collision_push_strength_spin = QSpinBox()
+        self._collision_push_strength_spin.setRange(0, 999999)
+        self._form.addRow(
+            self._collision_push_strength_label,
+            self._collision_push_strength_spin,
+        )
+
+        self._interactable_label = QLabel("interactable")
+        self._interactable_check = QCheckBox()
+        self._form.addRow(self._interactable_label, self._interactable_check)
+
+        self._interaction_priority_label = QLabel("interaction_priority")
+        self._interaction_priority_spin = QSpinBox()
+        self._interaction_priority_spin.setRange(0, 999999)
+        self._form.addRow(
+            self._interaction_priority_label,
+            self._interaction_priority_spin,
+        )
+
+        self._form.addRow(_section_label("Visibility"))
+
+        self._present_label = QLabel("present")
+        self._present_check = QCheckBox()
+        self._form.addRow(self._present_label, self._present_check)
+
+        self._visible_label = QLabel("visible")
+        self._visible_check = QCheckBox()
+        self._form.addRow(self._visible_label, self._visible_check)
+
+        self._entity_commands_enabled_label = QLabel("entity_commands_enabled")
+        self._entity_commands_enabled_check = QCheckBox()
+        self._form.addRow(
+            self._entity_commands_enabled_label,
+            self._entity_commands_enabled_check,
+        )
+
         self._render_note = QLabel("Render properties are in the Render Properties panel ->")
         self._render_note.setStyleSheet("color: #666; font-style: italic;")
         self._render_note.setWordWrap(True)
@@ -270,6 +368,16 @@ class _EntityInstanceFieldsEditor(QWidget):
             QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
         )
         self._form.addRow(self._parameters_widget)
+
+        self._form.addRow(_section_label("Variables"))
+        self._variables_text = QPlainTextEdit()
+        self._variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._variables_text.setFixedHeight(120)
+        self._variables_text.setPlaceholderText("{\n  \"key\": true\n}")
+        variables_font = QFont("Consolas", 10)
+        variables_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._variables_text.setFont(variables_font)
+        self._form.addRow(self._variables_text)
 
         self._form.addRow(_section_label("Extra"))
         self._extra_label = QLabel("extra")
@@ -304,12 +412,26 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._parameters_editable = True
 
         self._id_edit.textChanged.connect(self._on_field_changed)
+        self._kind_edit.textChanged.connect(self._on_field_changed)
+        self._tags_edit.textChanged.connect(self._on_field_changed)
         self._x_spin.valueChanged.connect(self._on_field_changed)
         self._y_spin.valueChanged.connect(self._on_field_changed)
         self._pixel_x_check.toggled.connect(self._on_pixel_check_toggled)
         self._pixel_y_check.toggled.connect(self._on_pixel_check_toggled)
         self._pixel_x_spin.valueChanged.connect(self._on_field_changed)
         self._pixel_y_spin.valueChanged.connect(self._on_field_changed)
+        self._facing_combo.currentIndexChanged.connect(self._on_field_changed)
+        self._solid_check.toggled.connect(self._on_field_changed)
+        self._pushable_check.toggled.connect(self._on_field_changed)
+        self._weight_spin.valueChanged.connect(self._on_field_changed)
+        self._push_strength_spin.valueChanged.connect(self._on_field_changed)
+        self._collision_push_strength_spin.valueChanged.connect(self._on_field_changed)
+        self._interactable_check.toggled.connect(self._on_field_changed)
+        self._interaction_priority_spin.valueChanged.connect(self._on_field_changed)
+        self._present_check.toggled.connect(self._on_field_changed)
+        self._visible_check.toggled.connect(self._on_field_changed)
+        self._entity_commands_enabled_check.toggled.connect(self._on_field_changed)
+        self._variables_text.textChanged.connect(self._on_field_changed)
 
         self._set_buttons_enabled(False)
         self._clear_parameter_rows()
@@ -340,14 +462,30 @@ class _EntityInstanceFieldsEditor(QWidget):
         try:
             blockers = [
                 QSignalBlocker(self._id_edit),
+                QSignalBlocker(self._kind_edit),
+                QSignalBlocker(self._tags_edit),
                 QSignalBlocker(self._x_spin),
                 QSignalBlocker(self._y_spin),
                 QSignalBlocker(self._pixel_x_check),
                 QSignalBlocker(self._pixel_y_check),
                 QSignalBlocker(self._pixel_x_spin),
                 QSignalBlocker(self._pixel_y_spin),
+                QSignalBlocker(self._facing_combo),
+                QSignalBlocker(self._solid_check),
+                QSignalBlocker(self._pushable_check),
+                QSignalBlocker(self._weight_spin),
+                QSignalBlocker(self._push_strength_spin),
+                QSignalBlocker(self._collision_push_strength_spin),
+                QSignalBlocker(self._interactable_check),
+                QSignalBlocker(self._interaction_priority_spin),
+                QSignalBlocker(self._present_check),
+                QSignalBlocker(self._visible_check),
+                QSignalBlocker(self._entity_commands_enabled_check),
+                QSignalBlocker(self._variables_text),
             ]
             self._id_edit.clear()
+            self._kind_edit.clear()
+            self._tags_edit.clear()
             self._template_label.setText("-")
             self._space_label.setText("world")
             self._x_spin.setValue(0)
@@ -356,6 +494,22 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._pixel_y_check.setChecked(False)
             self._pixel_x_spin.setValue(0)
             self._pixel_y_spin.setValue(0)
+            self._facing_combo.setCurrentText("down")
+            self._solid_check.setChecked(False)
+            self._pushable_check.setChecked(False)
+            self._weight_spin.setValue(_ENTITY_INT_DEFAULTS["weight"])
+            self._push_strength_spin.setValue(_ENTITY_INT_DEFAULTS["push_strength"])
+            self._collision_push_strength_spin.setValue(
+                _ENTITY_INT_DEFAULTS["collision_push_strength"]
+            )
+            self._interactable_check.setChecked(False)
+            self._interaction_priority_spin.setValue(
+                _ENTITY_INT_DEFAULTS["interaction_priority"]
+            )
+            self._present_check.setChecked(True)
+            self._visible_check.setChecked(True)
+            self._entity_commands_enabled_check.setChecked(True)
+            self._variables_text.clear()
             del blockers
         finally:
             self._loading = False
@@ -375,18 +529,37 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._effective_space = self._compute_effective_space(entity)
         has_pixel_x = entity.pixel_x is not None
         has_pixel_y = entity.pixel_y is not None
+        raw_tags = entity._extra.get("tags", [])
+        tag_text = ", ".join(str(tag) for tag in raw_tags) if isinstance(raw_tags, list) else ""
+        raw_variables = entity._extra.get("variables", {})
         self._loading = True
         try:
             blockers = [
                 QSignalBlocker(self._id_edit),
+                QSignalBlocker(self._kind_edit),
+                QSignalBlocker(self._tags_edit),
                 QSignalBlocker(self._x_spin),
                 QSignalBlocker(self._y_spin),
                 QSignalBlocker(self._pixel_x_check),
                 QSignalBlocker(self._pixel_y_check),
                 QSignalBlocker(self._pixel_x_spin),
                 QSignalBlocker(self._pixel_y_spin),
+                QSignalBlocker(self._facing_combo),
+                QSignalBlocker(self._solid_check),
+                QSignalBlocker(self._pushable_check),
+                QSignalBlocker(self._weight_spin),
+                QSignalBlocker(self._push_strength_spin),
+                QSignalBlocker(self._collision_push_strength_spin),
+                QSignalBlocker(self._interactable_check),
+                QSignalBlocker(self._interaction_priority_spin),
+                QSignalBlocker(self._present_check),
+                QSignalBlocker(self._visible_check),
+                QSignalBlocker(self._entity_commands_enabled_check),
+                QSignalBlocker(self._variables_text),
             ]
             self._id_edit.setText(entity.id)
+            self._kind_edit.setText(str(entity._extra.get("kind", "")))
+            self._tags_edit.setText(tag_text)
             self._template_label.setText(entity.template or "-")
             self._template_label.setCursorPosition(0)
             self._space_label.setText(self._effective_space)
@@ -396,6 +569,26 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._pixel_y_check.setChecked(has_pixel_y)
             self._pixel_x_spin.setValue(entity.pixel_x or 0)
             self._pixel_y_spin.setValue(entity.pixel_y or 0)
+            self._facing_combo.setCurrentText(str(entity._extra.get("facing", "down")))
+            self._solid_check.setChecked(bool(entity._extra.get("solid", False)))
+            self._pushable_check.setChecked(bool(entity._extra.get("pushable", False)))
+            self._weight_spin.setValue(int(entity._extra.get("weight", 1)))
+            self._push_strength_spin.setValue(int(entity._extra.get("push_strength", 0)))
+            self._collision_push_strength_spin.setValue(
+                int(entity._extra.get("collision_push_strength", 0))
+            )
+            self._interactable_check.setChecked(bool(entity._extra.get("interactable", False)))
+            self._interaction_priority_spin.setValue(
+                int(entity._extra.get("interaction_priority", 0))
+            )
+            self._present_check.setChecked(bool(entity._extra.get("present", True)))
+            self._visible_check.setChecked(bool(entity._extra.get("visible", True)))
+            self._entity_commands_enabled_check.setChecked(
+                bool(entity._extra.get("entity_commands_enabled", True))
+            )
+            self._variables_text.setPlainText(
+                json.dumps(raw_variables, indent=2, ensure_ascii=False)
+            )
             del blockers
         finally:
             self._loading = False
@@ -418,6 +611,10 @@ class _EntityInstanceFieldsEditor(QWidget):
             raise RuntimeError("No entity is currently loaded.")
 
         parameters = self._build_parameters_value()
+        extra = dict(self._entity._extra)
+        for key in _MANAGED_EXTRA_KEYS:
+            extra.pop(key, None)
+
         if self._effective_space == "screen":
             space = "screen"
             grid_x = self._entity.grid_x
@@ -431,6 +628,60 @@ class _EntityInstanceFieldsEditor(QWidget):
             pixel_x = self._pixel_x_spin.value() if self._pixel_x_check.isChecked() else None
             pixel_y = self._pixel_y_spin.value() if self._pixel_y_check.isChecked() else None
 
+        kind = self._kind_edit.text().strip()
+        if kind:
+            extra["kind"] = kind
+
+        tags = _parse_tag_list(self._tags_edit.text())
+        if tags:
+            extra["tags"] = tags
+
+        self._apply_extra_value(
+            extra,
+            key="facing",
+            value=self._facing_combo.currentText(),
+            default="down",
+        )
+
+        for key, widget in (
+            ("solid", self._solid_check),
+            ("pushable", self._pushable_check),
+            ("interactable", self._interactable_check),
+            ("present", self._present_check),
+            ("visible", self._visible_check),
+            ("entity_commands_enabled", self._entity_commands_enabled_check),
+        ):
+            self._apply_extra_value(
+                extra,
+                key=key,
+                value=bool(widget.isChecked()),
+                default=_ENTITY_BOOL_DEFAULTS[key],
+            )
+
+        for key, widget in (
+            ("weight", self._weight_spin),
+            ("push_strength", self._push_strength_spin),
+            ("collision_push_strength", self._collision_push_strength_spin),
+            ("interaction_priority", self._interaction_priority_spin),
+        ):
+            self._apply_extra_value(
+                extra,
+                key=key,
+                value=int(widget.value()),
+                default=_ENTITY_INT_DEFAULTS[key],
+            )
+
+        variables_text = self._variables_text.toPlainText().strip()
+        if variables_text:
+            try:
+                variables_value = json.loads(variables_text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Variables must be valid JSON.\n{exc}") from exc
+            if not isinstance(variables_value, dict):
+                raise ValueError("Variables must be a JSON object.")
+            if variables_value:
+                extra["variables"] = variables_value
+
         return EntityDocument(
             id=self._id_edit.text().strip(),
             grid_x=grid_x,
@@ -440,8 +691,12 @@ class _EntityInstanceFieldsEditor(QWidget):
             space=space,
             template=self._entity.template,
             parameters=parameters,
-            _extra=dict(self._entity._extra),
+            _extra=extra,
         )
+
+    def _apply_extra_value(self, extra: dict[str, object], *, key: str, value, default) -> None:
+        if value != default or key in self._entity._extra:
+            extra[key] = value
 
     def _compute_effective_space(self, entity: EntityDocument) -> str:
         effective_space = entity.space

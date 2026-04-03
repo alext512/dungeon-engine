@@ -37,6 +37,13 @@ class ItemEntry:
 
 
 @dataclass
+class GlobalEntityEntry:
+    entity_id: str
+    template_id: str | None
+    index: int
+
+
+@dataclass
 class ProjectManifest:
     project_file: Path
     project_root: Path
@@ -238,3 +245,33 @@ def discover_items(manifest: ProjectManifest) -> list[ItemEntry]:
             )
             entries.append(ItemEntry(item_id=item_id, file_path=f))
     return sorted(entries, key=lambda e: e.item_id)
+
+
+def discover_global_entities(manifest: ProjectManifest) -> list[GlobalEntityEntry]:
+    """Return authored global entities in the manifest's stored order."""
+    raw_entries = manifest._raw.get("global_entities", [])
+    if not isinstance(raw_entries, list):
+        return []
+
+    entries: list[GlobalEntityEntry] = []
+    for index, raw_entry in enumerate(raw_entries):
+        if not isinstance(raw_entry, dict):
+            continue
+        raw_id = raw_entry.get("id")
+        entity_id = (
+            str(raw_id).strip()
+            if raw_id not in (None, "")
+            else f"<unnamed #{index + 1}>"
+        )
+        raw_template = raw_entry.get("template")
+        template_id = (
+            str(raw_template).strip() if raw_template not in (None, "") else None
+        )
+        entries.append(
+            GlobalEntityEntry(
+                entity_id=entity_id,
+                template_id=template_id,
+                index=index,
+            )
+        )
+    return entries
