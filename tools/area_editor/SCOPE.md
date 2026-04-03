@@ -2,7 +2,7 @@
 
 ## Intended Core Scope
 
-The first useful version of the future tool should focus on room editing only.
+The first useful version of the tool focused on room editing first.
 
 That means:
 
@@ -17,6 +17,15 @@ That means:
 - edit selected per-instance parameters
 - provide better UI for parameters that reference other entity ids
 - save safely back to JSON
+
+That room-first focus is still the core of the tool, but it is no longer the whole near-term story.
+The runtime now exposes additional project-authoring surfaces that the editor needs to catch up on,
+especially:
+
+- item definitions discovered through `item_paths`
+- `shared_variables.json`, including dialogue/inventory UI preset data
+- `project.json` `global_entities`
+- broader structured support for newer engine-owned entity fields
 
 ## Strong Candidates For Early Support
 
@@ -45,6 +54,9 @@ Do not treat these as required for version one:
 - combat, AI, or interaction debugging
 - importing or reproducing runtime `World`, `Entity`, or command-runner behavior
 
+So the editor may grow beyond room tabs into a few high-value project-level workflows,
+but it still should not try to become a giant all-purpose content suite all at once.
+
 ## Editing Philosophy
 
 The tool should own only the fields it can edit confidently.
@@ -72,6 +84,15 @@ The future tool should be cautious around:
 - nested data blobs it does not understand
 - fields that are clearly runtime-derived
 - any content outside the currently edited room unless explicitly requested
+
+## Near-Term Catch-Up
+
+These are now practical next steps rather than speculative long-term ideas:
+
+- item-definition browsing and guarded editing
+- `shared_variables.json` browsing/editing for shared data and UI presets
+- `global_entities` inspection/editing
+- broader structured widgets for newer engine-owned entity fields
 
 ## Future Expansion
 

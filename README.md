@@ -77,8 +77,12 @@ The current engine already supports:
 There is also a new external area editor under [tools/area_editor](./tools/area_editor/).
 It now supports active area-editing workflows such as tile painting, cell-flag editing,
 entity placement and nudging, render-property editing, and guarded JSON editing.
-Some editor workflows are still deferred, especially screen-space placement,
-`global_entities` editing, richer reference pickers, and runtime handoff.
+
+Be aware that the runtime has recently grown faster than the editor. The current tool is
+still useful for area-centric work, but it has not yet caught up to newer authoring
+surfaces such as first-class item browsing/editing, shared UI preset workflows,
+`global_entities`, and some newer engine-owned entity fields. A follow-up editor
+catch-up pass is planned.
 
 The older built-in editor is archived under [archived_editor](./archived_editor/)
 for reference only.
@@ -160,6 +164,7 @@ Typical layout:
 my_project/
     project.json
     shared_variables.json
+    items/
     areas/
     entity_templates/
     commands/
@@ -250,7 +255,11 @@ python_puzzle_engine/
     tools/area_editor/          # External area editor
     archived_editor/            # Old built-in editor kept only for reference
     projects/
-        test_project/           # Example project content
+        test_project/           # Full-featured example project
+        physics_contract_demo/  # Focused demo of newer movement/interaction contract
+    tests/                      # Engine unittest suite
+    plans/                      # Planning and design documents
+    archive/                    # Old documentation kept for reference
     run_game.py
     README.md
 ```
@@ -321,7 +330,7 @@ cd tools/area_editor
 
 - save/load UX works, but is still basic
 - external PNG import workflow is not finished
-- the external area editor still has some deferred workflows, especially screen-space placement, `global_entities` editing, richer reference pickers, and runtime handoff
+- the external area editor is currently behind the runtime on several newer authoring workflows, especially items, shared project config/UI presets, `global_entities`, screen-space placement, richer reference pickers, and runtime handoff
 - movement/render feel should still be checked periodically on real hardware as
   the project grows
 
@@ -329,7 +338,7 @@ cd tools/area_editor
 
 - build more real project content and let that pressure guide engine changes
 - expand dialogue/menu authoring support
-- continue turning the external editor into a full authoring tool
+- continue turning the external editor into a full authoring tool, starting with a catch-up pass for newer runtime-facing content such as items, shared project config, and `global_entities`
 - keep improving movement/render quality
 
 ## License

@@ -86,6 +86,14 @@ Deliverables:
 - walkability or cell-flag editing (done)
 - save with preservation guarantees (done)
 
+Current reality note:
+
+- the editor is usable for area-centric work, but the runtime has recently moved ahead in
+  other authoring surfaces
+- the next practical editor work should be a catch-up slice for item definitions,
+  `shared_variables.json` / UI preset editing, `global_entities`, and broader structured
+  support for newer engine-owned entity fields
+
 ## Phase 4: Entity Placement And Movement
 
 Goal:

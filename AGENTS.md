@@ -15,7 +15,7 @@ Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
 Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/test_project/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
-The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and now supports active area editing workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, and guarded JSON editing. Some workflows are still deferred, especially screen-space placement, `global_entities` editing, richer reference pickers, and runtime handoff.
+The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and supports active area editing workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, and guarded JSON editing. However, the runtime has recently expanded faster than the editor, so the tool currently lags behind newer authoring surfaces such as item browsing/editing, shared project config and UI presets, `global_entities`, some engine-owned entity fields, screen-space placement, richer reference pickers, and runtime handoff. Assume an editor catch-up pass is still needed unless the relevant workflow is already confirmed in code.
 
 ## How to Run
 
@@ -57,14 +57,23 @@ archived_editor/                 # Archived editor code and notes kept for refer
 tests/                           # Focused unittest coverage for engine behavior regressions
 dungeon_engine/
     config.py                    # Paths, constants, window sizes
+    display_setup.py             # Display/window initialization
+    inventory.py                 # Inventory data model and stack operations
+    items.py                     # Item definition loading and validation
+    launcher_state.py            # Launcher state management
     logging_utils.py             # Rotating error log setup
     project.py                   # project.json loading and search-path resolution
+    startup_validation.py        # Project startup checks
     engine/
         game.py                  # Play-mode runtime loop
         renderer.py              # Play-mode rendering
         asset_manager.py         # PNG loading, frame slicing, caching
+        audio.py                 # Sound/music playback
         camera.py                # Camera positioning and snapping
+        dialogue_runtime.py      # Engine-owned dialogue sessions
         input_handler.py         # Play-mode input polling
+        inventory_runtime.py     # Engine-owned inventory UI
+        screen.py                # Screen-space UI element management
         text.py                  # Bitmap font rendering
     world/
         area.py                  # Area data model (tilesets, tile layers, walkability, entity grid)
@@ -72,6 +81,7 @@ dungeon_engine/
         world.py                 # World state container
         loader.py                # JSON -> Area/World
         serializer.py            # Area/World -> JSON
+        persistence.py           # Save/load and persistent state
     systems/
         movement.py              # Grid movement execution
         collision.py             # Collision checks
@@ -81,13 +91,14 @@ dungeon_engine/
         registry.py              # Command type registry
         runner.py                # Command chain executor
         builtin.py               # Built-in command implementations
+        library.py               # Project command loading and validation
 ```
 
 ## Key Technical Decisions
 
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
-- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `command_paths`, `shared_variables_path`, and project-level settings such as `global_entities`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `command_paths`, `item_paths`, `shared_variables_path`, and project-level settings such as `global_entities` and `input_targets`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
 - **Path-derived reusable IDs**: Areas, entity templates, and commands derive identity from their path under the configured search roots instead of authored `id` fields.
 - **Project JSON data**: Reusable dialogue/menu data is now just ordinary project-relative JSON. The sample project keeps it under `dialogues/`, but that folder is conventional rather than a manifest-indexed content category.
 - **Authoring contract**: JSON area/entity/template files are the stable contract for the runtime and any future external tooling.

@@ -10,6 +10,12 @@ Phase 1 is implemented.
 Phase 2 is implemented.
 Phase 3 is in progress.
 
+The editor is still behind the runtime on several newer authoring workflows. In
+particular, recent engine additions around items, shared UI presets, `global_entities`,
+pause/inventory controller authoring, and some engine-owned entity fields have not all
+been surfaced cleanly in the tool yet. Treat editor catch-up work as active and
+expected, not as a regression surprise.
+
 The current tool already supports:
 
 - opening a `project.json` manifest
@@ -32,8 +38,11 @@ The current tool already supports:
 
 Still deferred:
 
+- item-definition browsing/editing from `item_paths`
+- direct `shared_variables.json` / UI preset editing
 - visual placement of new screen-space entities
 - editing project-level `global_entities`
+- broader structured support for newer engine-owned entity fields
 - rich reference pickers for entity-link parameters
 - runtime handoff
 

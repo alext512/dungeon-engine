@@ -5,6 +5,22 @@ Add notes here when ideas come up during development.
 
 ---
 
+## Editor Catch-Up Priorities
+
+The editor is currently strongest at area-centric work, but the runtime has recently
+gained newer authoring surfaces that the tool does not yet expose well. The next
+practical editor slice should likely focus on:
+
+- item-definition browsing/editing from `item_paths`
+- direct `shared_variables.json` editing, especially dialogue/inventory UI preset data
+- `project.json` `global_entities` inspection/editing
+- broader structured editing for newer engine-owned entity fields
+
+These are not "future maybe" ideas so much as known catch-up work that should happen
+before treating the editor as fully aligned with the runtime.
+
+---
+
 ## Move / Rename Areas and Templates via Editor Tree
 
 ### What

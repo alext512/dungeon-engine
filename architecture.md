@@ -258,6 +258,7 @@ projects/
         shared_variables.json
         areas/
         entity_templates/
+        items/
         assets/
         commands/
 
@@ -268,22 +269,18 @@ dungeon_engine/
     world/
     systems/
     commands/
-    ui/
-    data/
 
 tools/
-    area_authoring/
+    area_editor/
 ```
 
 Suggested responsibilities:
 
-- `engine/`: game loop, renderer, camera, asset loading, save/load
+- `engine/`: game loop, renderer, camera, asset loading, audio, dialogue/inventory session runtimes, screen-space UI
 - `world/`: area model, entity storage, data loading, persistence helpers
-- `systems/`: movement, collision, dialogue, animation
-- `commands/`: command runner, registry, command implementations
-- `ui/`: dialogue boxes, choices, debug overlays
+- `systems/`: movement, collision, interaction, animation
+- `commands/`: command runner, registry, command implementations, project command library
 - `tools/`: external authoring tools that operate on the same JSON data
-- `data/`: engine-owned internal support data only, if still needed
 
 Important boundary:
 
@@ -318,12 +315,21 @@ Dialogue needs:
 - branching results
 - temporary input ownership while active
 
-Current practical split:
+### Engine-owned dialogue sessions (recommended default)
 
-- the engine owns generic input routing, the input-route stack, text measurement/wrapping/rendering helpers, and generic variable/list commands
-- projects own panel images, portraits, choice layout, current page, selected option, nested dialogue state, dialogue-specific input flow, and when sessions advance or reset
+The engine now provides a built-in dialogue session runtime through
+`open_dialogue_session` and `close_dialogue_session`. This path handles input
+lock, text pagination, choice selection, nested session suspension/resume, and
+cleanup automatically. Projects supply dialogue data as ordinary JSON files and
+configure the visual layout through UI presets. Caller hooks allow project
+commands to run at session boundaries.
 
-So the intended dialogue pattern is:
+This is the recommended default for most dialogue and menu needs.
+
+### Controller-owned dialogue (advanced/custom)
+
+For flows that need full custom control, projects can still build dialogue
+manually using the same primitives the engine-owned path is built on:
 
 1. push the currently borrowed input routes
 2. reroute those actions to a UI entity
@@ -336,8 +342,8 @@ So the intended dialogue pattern is:
 9. if nested dialogue is needed, store the previous state in an entity-owned stack before replacing it
 10. pop the borrowed routes to restore the exact previous input ownership
 
-This keeps dialogue aligned with the general command architecture instead of
-turning it into a separate hardcoded menu system.
+Both paths stay aligned with the general command architecture instead of turning
+dialogue into a separate hardcoded menu system.
 
 ## Persistence
 
@@ -489,6 +495,74 @@ are especially relevant:
 - commands that move structured data such as dicts or lists into runtime variables should copy that data rather than aliasing the original command payload
 
 Those are implementation problems, not arguments against the layered persistence model itself.
+
+## Engine-Owned Runtime Sessions
+
+Some recurring gameplay patterns (dialogue, inventory browsing) involve enough
+boilerplate that projects should not need to rebuild them from scratch every time.
+The engine addresses this through **engine-owned runtime sessions**: modal
+runtimes that the engine manages end-to-end while still allowing project
+customization through presets, hooks, and caller-supplied data.
+
+Current engine-owned sessions:
+
+- **Dialogue sessions** (`open_dialogue_session` / `close_dialogue_session`):
+  text pagination, choice selection, nested session suspension/resume, preset-driven layout
+- **Inventory sessions** (`open_inventory_session` / `close_inventory_session`):
+  item list browsing, detail panel, action popup, preset-driven layout
+
+Each session takes exclusive input control for its duration, runs caller hooks at
+key boundaries, and restores the previous input state on close. Projects that
+need fully custom flows can still use the lower-level primitives directly.
+
+## Physics Contract
+
+The engine exposes a standard set of entity fields and built-in commands for
+grid-based movement and interaction so projects do not need to rebuild common
+physics from scratch:
+
+- **Entity fields**: `facing`, `solid`, `pushable`, `weight`, `push_strength`
+- **Cell flags**: `blocked`
+- **Built-in commands**: `move_in_direction`, `push_facing`, `interact_facing`
+
+This contract is opt-in. Projects can use these helpers for standard grid physics
+or build entirely custom movement through lower-level commands.
+
+## Occupancy Hooks
+
+Entities can declare command hooks that fire when other entities enter or leave
+their grid cell, or when movement into their cell is blocked:
+
+- `on_occupant_enter`: runs when another entity arrives on this cell
+- `on_occupant_leave`: runs when another entity leaves this cell
+- `on_blocked`: runs when another entity tries to enter this cell but is blocked
+
+These are ordinary `entity_commands` entries, so they compose with the rest of the
+command system. They replace the need for separate controller entities to watch
+for spatial triggers in many common puzzle scenarios.
+
+## Items and Inventory
+
+Items are a first-class content type:
+
+- **Item definitions** are authored JSON files discovered through `item_paths` in
+  `project.json`, with path-derived IDs matching the pattern used by areas and
+  entity templates
+- **Inventories** are entity-owned, stack-based, with configurable capacity
+- **Built-in commands** handle add, remove, use, and quantity queries
+- **Value sources** allow conditions to check inventory contents
+
+The inventory data model lives in `dungeon_engine/inventory.py` and
+`dungeon_engine/items.py`. The engine-owned inventory UI session lives in
+`dungeon_engine/engine/inventory_runtime.py`.
+
+## Travelers
+
+Entities that need to move between areas (such as a player or a follower) use the
+**traveler** system. When an area transition occurs, designated entities are
+detached from the current area, carried across the transition, and placed in the
+destination area. Traveler state is included in save data so cross-area entity
+transfer survives save/load cycles.
 
 ## Success Check
 

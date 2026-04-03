@@ -37,6 +37,8 @@ A reasonable point to revisit replatforming is after a fuller vertical slice exi
 
 ## Phase 1: Core Shell and Grid Room
 
+**Status: Complete.**
+
 ### Goal
 
 Boot the Python project, load a room from JSON, and move the player on a grid through commands.
@@ -65,6 +67,8 @@ Boot the Python project, load a room from JSON, and move the player on a grid th
 
 ## Phase 2: Interaction Core
 
+**Status: Complete.**
+
 ### Goal
 
 Make the room interactive through command chains.
@@ -87,6 +91,8 @@ Make the room interactive through command chains.
 - one-time interactions can disable themselves
 
 ## Phase 3: Authoring Workflow and World Creation
+
+**Status: Substantially complete for area-centric authoring.** The external area editor (`tools/area_editor/`) supports tile painting, walkability editing, entity placement, property editing, and save/load, but runtime handoff and several newer project-authoring workflows are still catching up.
 
 ### Goal
 
@@ -112,6 +118,8 @@ Create and test rooms through a lightweight authoring workflow instead of relyin
 
 ## Phase 4: Dialogue
 
+**Status: Complete.** Both a controller-owned authored flow and a newer engine-owned dialogue session runtime (`open_dialogue_session`/`close_dialogue_session`) are implemented.
+
 ### Goal
 
 Support NPC conversations and branching results with the same command system.
@@ -132,6 +140,8 @@ Support NPC conversations and branching results with the same command system.
 - player movement is blocked while dialogue is active
 
 ## Phase 5: Inventory, Requirements, and Usable Items
+
+**Status: Complete.** Inventory V1 includes item definitions, entity-owned stack inventories, add/remove/use commands, value sources, and an engine-owned inventory UI session.
 
 ### Goal
 
@@ -154,6 +164,8 @@ Make items part of the command-driven interaction model.
 - a usable item can trigger commands
 
 ## Phase 6: Cinematics, Area Changes, and Persistence
+
+**Status: Complete.** Area transitions, save/load with layered persistent overrides, camera state stacking, traveler entities, and scripted movement/wait commands are all implemented.
 
 ### Goal
 
@@ -180,6 +192,8 @@ Support short scripted sequences and a multi-room world that remembers state.
 - revisiting an area restores its changed state from saved overrides rather than replacing authored room data
 
 ## Phase 7: Content Pipeline and Quality Pass
+
+**Status: Substantially complete.** Audio commands, startup validation, and focused regression tests are implemented. Movement/render feel and authoring ergonomics remain ongoing.
 
 ### Goal
 
