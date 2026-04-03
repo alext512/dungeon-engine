@@ -39,8 +39,8 @@ class TestEntityOperations(unittest.TestCase):
         area.entities.append(
             EntityDocument(
                 id="hud",
-                x=0,
-                y=0,
+                grid_x=0,
+                grid_y=0,
                 pixel_x=10,
                 pixel_y=12,
                 space="screen",
@@ -55,7 +55,7 @@ class TestEntityOperations(unittest.TestCase):
 
     def test_move_entity_pixels_updates_pixel_coordinates_from_none(self):
         area = _make_area()
-        area.entities.append(EntityDocument(id="overlay", x=0, y=0))
+        area.entities.append(EntityDocument(id="overlay", grid_x=0, grid_y=0))
 
         changed = move_entity_pixels(area, "overlay", 5, -3)
 

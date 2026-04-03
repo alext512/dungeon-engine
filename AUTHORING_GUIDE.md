@@ -264,8 +264,8 @@ Example structure:
   "tile_size": 16,
   "entry_points": {
     "startup": {
-      "x": 8,
-      "y": 8,
+      "grid_x": 8,
+      "grid_y": 8,
       "facing": "down"
     }
   },
@@ -419,14 +419,16 @@ Placed entities usually reference a template:
 ```json
 {
   "id": "lever_1",
-  "x": 4,
-  "y": 2,
+  "grid_x": 4,
+  "grid_y": 2,
   "template": "lever_toggle",
   "parameters": {
     "target_gate": "gate"
   }
 }
 ```
+
+For world-space placement, authored entities now use `grid_x` / `grid_y`. Screen-space entities continue to use `pixel_x` / `pixel_y`.
 
 ## Entity Templates
 

@@ -617,8 +617,8 @@
   ],
   "entry_points": {
     "start": {
-      "x": 0,
-      "y": 0
+      "grid_x": 0,
+      "grid_y": 0
     }
   },
   "camera": {},

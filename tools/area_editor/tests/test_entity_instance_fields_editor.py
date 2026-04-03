@@ -47,8 +47,8 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
     def test_build_entity_from_fields_parses_named_parameters(self):
         entity = EntityDocument(
             id="door_1",
-            x=3,
-            y=4,
+            grid_x=3,
+            grid_y=4,
             template="entity_templates/area_door",
             parameters={"target_area": "areas/a", "target_entry": "entry_a"},
         )
@@ -73,8 +73,8 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
     def test_world_space_entity_keeps_pixel_offsets_none_until_enabled(self):
         entity = EntityDocument(
             id="actor",
-            x=1,
-            y=2,
+            grid_x=1,
+            grid_y=2,
             template="entity_templates/area_door",
         )
 
@@ -116,8 +116,8 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
     def test_non_dict_parameters_show_warning_and_preserve_original_value(self):
         entity = EntityDocument(
             id="odd",
-            x=0,
-            y=0,
+            grid_x=0,
+            grid_y=0,
             template="entity_templates/area_door",
             parameters=["not", "a", "dict"],
         )

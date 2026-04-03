@@ -38,6 +38,7 @@ class FileTreePanel(QDockWidget):
         object_name: str | None = None,
         icon_size: int = 0,
         file_extensions: tuple[str, ...] = (".json",),
+        content_prefix: str | None = None,
         parent=None,
     ) -> None:
         super().__init__(title, parent)
@@ -47,6 +48,9 @@ class FileTreePanel(QDockWidget):
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
         self._file_extensions = file_extensions
+        self._content_prefix = (
+            content_prefix.strip("/").replace("\\", "/") if content_prefix else None
+        )
         self._context_menu_builder: Callable[[QMenu, str, Path], None] | None = None
 
         container = QWidget()
@@ -88,7 +92,7 @@ class FileTreePanel(QDockWidget):
 
         entries = self._discover(root_dirs)
         for content_id, file_path in entries:
-            parts = content_id.split("/")
+            parts = self._display_parts_for_content_id(content_id)
 
             # Build folder nodes
             if len(parts) == 1:
@@ -198,8 +202,18 @@ class FileTreePanel(QDockWidget):
                     content_id = str(relative.with_suffix("")).replace("\\", "/")
                 except ValueError:
                     content_id = f.stem
+                if self._content_prefix:
+                    content_id = f"{self._content_prefix}/{content_id}"
                 entries.append((content_id, f))
         return sorted(entries, key=lambda e: e[0])
+
+    def _display_parts_for_content_id(self, content_id: str) -> list[str]:
+        display_id = content_id
+        if self._content_prefix:
+            prefix = f"{self._content_prefix}/"
+            if display_id.startswith(prefix):
+                display_id = display_id[len(prefix) :]
+        return [part for part in display_id.split("/") if part]
 
     def _find_item(self, content_id: str) -> QTreeWidgetItem | None:
         stack = [self._tree.topLevelItem(i) for i in range(self._tree.topLevelItemCount())]

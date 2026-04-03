@@ -191,6 +191,13 @@ class MainWindow(QMainWindow):
         self._template_panel = TemplateListPanel()
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._template_panel)
 
+        self._item_panel = FileTreePanel(
+            "Items",
+            object_name="ItemPanel",
+            content_prefix="items",
+        )
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._item_panel)
+
         self._dialogue_panel = FileTreePanel(
             "Dialogues", object_name="DialoguePanel"
         )
@@ -225,7 +232,8 @@ class MainWindow(QMainWindow):
         # entity-instance dock below it.
         self.splitDockWidget(self._area_panel, self._entity_instance_panel, Qt.Orientation.Vertical)
         self.tabifyDockWidget(self._area_panel, self._template_panel)
-        self.tabifyDockWidget(self._template_panel, self._dialogue_panel)
+        self.tabifyDockWidget(self._template_panel, self._item_panel)
+        self.tabifyDockWidget(self._item_panel, self._dialogue_panel)
         self.tabifyDockWidget(self._dialogue_panel, self._command_panel)
         self.tabifyDockWidget(self._command_panel, self._asset_panel)
         self.resizeDocks(
@@ -265,6 +273,9 @@ class MainWindow(QMainWindow):
         self._area_panel.area_open_requested.connect(self._on_area_open_requested)
         self._template_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ENTITY_TEMPLATE)
+        )
+        self._item_panel.file_open_requested.connect(
+            lambda cid, fp: self._open_content(cid, fp, ContentType.ITEM)
         )
         self._dialogue_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.DIALOGUE)
@@ -356,9 +367,11 @@ class MainWindow(QMainWindow):
         self._template_panel.set_templates(
             self._manifest, self._templates, self._catalog
         )
+        self._item_panel.populate(self._manifest.item_paths)
         self._dialogue_panel.populate(self._manifest.dialogue_paths)
         self._command_panel.populate(self._manifest.command_paths)
         self._asset_panel.populate(self._manifest.asset_paths)
+        self._update_project_content_actions()
 
         project_name = self._manifest.project_root.name
         self.setWindowTitle(f"Area Editor - {project_name}")
@@ -396,6 +409,18 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        project_menu = self.menuBar().addMenu("&Project")
+
+        self._open_project_manifest_action = QAction("Open Project Manifest", self)
+        self._open_project_manifest_action.setEnabled(False)
+        self._open_project_manifest_action.triggered.connect(self._open_project_manifest_tab)
+        project_menu.addAction(self._open_project_manifest_action)
+
+        self._open_shared_variables_action = QAction("Open Shared Variables", self)
+        self._open_shared_variables_action.setEnabled(False)
+        self._open_shared_variables_action.triggered.connect(self._open_shared_variables_tab)
+        project_menu.addAction(self._open_shared_variables_action)
 
         edit_menu = self.menuBar().addMenu("&Edit")
 
@@ -536,6 +561,24 @@ class MainWindow(QMainWindow):
             self._json_dirty_bound.add(content_id)
         self._sync_json_edit_actions()
 
+    def _open_project_manifest_tab(self) -> None:
+        if self._manifest is None:
+            return
+        self._open_content(
+            "project/project",
+            self._manifest.project_file,
+            ContentType.PROJECT_MANIFEST,
+        )
+
+    def _open_shared_variables_tab(self) -> None:
+        if self._manifest is None or self._manifest.shared_variables_path is None:
+            return
+        self._open_content(
+            "project/shared_variables",
+            self._manifest.shared_variables_path,
+            ContentType.SHARED_VARIABLES,
+        )
+
     # ------------------------------------------------------------------
     # Slots — tab widget
     # ------------------------------------------------------------------
@@ -587,7 +630,7 @@ class MainWindow(QMainWindow):
         elif content_id:
             self._layer_panel.clear_layers()
             self._tileset_panel.clear_tilesets()
-            self._status_area.setText(content_id)
+            self._status_area.setText(self._status_label_for_content(content_id, content_type))
             self._status_cell.setText("")
             self._status_layer.setText("")
             self._status_gid.setText("")
@@ -632,6 +675,23 @@ class MainWindow(QMainWindow):
             self._active_instance_entity_id = None
             self._entity_instance_panel.clear_entity()
             self._sync_json_edit_actions()
+
+    def _status_label_for_content(self, content_id: str, content_type: object) -> str:
+        if content_type == ContentType.PROJECT_MANIFEST:
+            return "Project Manifest"
+        if content_type == ContentType.SHARED_VARIABLES:
+            return "Shared Variables"
+        return content_id
+
+    def _update_project_content_actions(self) -> None:
+        has_manifest = self._manifest is not None and self._manifest.project_file.is_file()
+        has_shared_variables = (
+            self._manifest is not None
+            and self._manifest.shared_variables_path is not None
+            and self._manifest.shared_variables_path.is_file()
+        )
+        self._open_project_manifest_action.setEnabled(has_manifest)
+        self._open_shared_variables_action.setEnabled(has_shared_variables)
 
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
@@ -1042,7 +1102,10 @@ class MainWindow(QMainWindow):
                 2500,
             )
             return
-        self.statusBar().showMessage(f"Moved {selected_id} to ({entity.x}, {entity.y}).", 2500)
+        self.statusBar().showMessage(
+            f"Moved {selected_id} to grid ({entity.grid_x}, {entity.grid_y}).",
+            2500,
+        )
 
     def _on_apply_entity_instance_json(self) -> None:
         context = self._active_area_context()

@@ -27,8 +27,6 @@
   "current_area_state": {
     "entities": {
       "player": {
-        "x": 3,
-        "y": 7,
         "pixel_x": 48,
         "pixel_y": 112,
         "variables": {
@@ -74,7 +72,9 @@
             "stack_order": 0,
             "tags": []
           }
-        }
+        },
+        "grid_x": 3,
+        "grid_y": 7
       }
     }
   },

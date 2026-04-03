@@ -34,9 +34,12 @@ _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
 class ContentType(Enum):
     AREA = auto()
     ENTITY_TEMPLATE = auto()
+    ITEM = auto()
     DIALOGUE = auto()
     NAMED_COMMAND = auto()
     ASSET = auto()
+    SHARED_VARIABLES = auto()
+    PROJECT_MANIFEST = auto()
 
 
 class _TabInfo:
@@ -256,5 +259,10 @@ class DocumentTabWidget(QStackedWidget):
 
     @staticmethod
     def _tab_label(info: _TabInfo) -> str:
-        base = info.content_id.rsplit("/", 1)[-1]
+        if info.content_type == ContentType.PROJECT_MANIFEST:
+            base = info.file_path.stem
+        elif info.content_type == ContentType.SHARED_VARIABLES:
+            base = info.file_path.stem
+        else:
+            base = info.content_id.rsplit("/", 1)[-1]
         return f"*{base}" if info.dirty else base

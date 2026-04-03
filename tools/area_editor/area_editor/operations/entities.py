@@ -74,8 +74,8 @@ def place_entity(
     """Append one new world-space entity to the area document."""
     created = EntityDocument(
         id=entity_id or generate_entity_id(area, template_id),
-        x=col,
-        y=row,
+        grid_x=col,
+        grid_y=row,
         template=template_id,
         render_order=render_order,
         y_sort=y_sort,

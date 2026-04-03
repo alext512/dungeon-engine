@@ -1851,18 +1851,16 @@
   "entities": [
     {
       "id": "npc",
-      "x": 7,
-      "y": 11,
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level4_npc.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 7,
+      "grid_y": 11
     },
     {
       "id": "exit",
-      "x": 9,
-      "y": 1,
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -1899,12 +1897,12 @@
         ],
         "allow_cancel": false
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 9,
+      "grid_y": 1
     },
     {
       "id": "hole_t",
-      "x": 2,
-      "y": 8,
       "template": "entity_templates/hole",
       "parameters": {
         "hole_shape": "triangle",
@@ -1913,12 +1911,12 @@
         "target_index": 0,
         "target_amount": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 2,
+      "grid_y": 8
     },
     {
       "id": "hole_s1",
-      "x": 13,
-      "y": 11,
       "template": "entity_templates/hole",
       "parameters": {
         "hole_shape": "square",
@@ -1927,12 +1925,12 @@
         "target_index": 1,
         "target_amount": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 13,
+      "grid_y": 11
     },
     {
       "id": "hole_s2",
-      "x": 15,
-      "y": 5,
       "template": "entity_templates/hole",
       "parameters": {
         "hole_shape": "square",
@@ -1941,12 +1939,12 @@
         "target_index": 1,
         "target_amount": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 15,
+      "grid_y": 5
     },
     {
       "id": "hole_c",
-      "x": 9,
-      "y": 6,
       "template": "entity_templates/hole",
       "parameters": {
         "hole_shape": "circle",
@@ -1955,61 +1953,61 @@
         "target_index": 2,
         "target_amount": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 9,
+      "grid_y": 6
     },
     {
       "id": "ball",
-      "x": 9,
-      "y": 6,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
         "sprite_path": "assets/original/Moving_Objects_And_Holes_Assets/Rolling_Ball_2-sheet.png",
         "idle_frame": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 9,
+      "grid_y": 6
     },
     {
       "id": "pyramid",
-      "x": 11,
-      "y": 6,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "triangle",
         "sprite_path": "assets/original/Moving_Objects_And_Holes_Assets/Pyramid_block_Spritesheet.png",
         "idle_frame": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 11,
+      "grid_y": 6
     },
     {
       "id": "box1",
-      "x": 11,
-      "y": 7,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "square",
         "sprite_path": "assets/original/Moving_Objects_And_Holes_Assets/Box_Sprites.png",
         "idle_frame": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 11,
+      "grid_y": 7
     },
     {
       "id": "box2",
-      "x": 12,
-      "y": 9,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "square",
         "sprite_path": "assets/original/Moving_Objects_And_Holes_Assets/Box_Sprites.png",
         "idle_frame": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 12,
+      "grid_y": 9
     },
     {
       "id": "gate",
       "kind": "gate",
-      "x": 9,
-      "y": 3,
       "variables": {
         "blocks_movement": true,
         "open": false,
@@ -2203,13 +2201,13 @@
           ]
         }
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 9,
+      "grid_y": 3
     },
     {
       "id": "lever",
       "kind": "lever",
-      "x": 6,
-      "y": 5,
       "variables": {
         "blocks_movement": true
       },
@@ -2239,19 +2237,19 @@
           ]
         }
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 6,
+      "grid_y": 5
     },
     {
       "id": "player",
-      "x": 10,
-      "y": 11,
       "template": "entity_templates/player",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 10,
+      "grid_y": 11
     },
     {
       "id": "restart",
-      "x": 10,
-      "y": 11,
       "template": "entity_templates/restart_trigger",
       "parameters": {
         "dialogue_path": "dialogues/system/restart_or_return.json",
@@ -2280,7 +2278,9 @@
         ],
         "allow_cancel": true
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 10,
+      "grid_y": 11
     }
   ]
 }

@@ -209,9 +209,9 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._form.addRow(self._id_label, self._id_edit)
 
         self._template_label_title = QLabel("template")
-        self._template_label = QLabel("-")
-        self._template_label.setTextInteractionFlags(self._template_label.textInteractionFlags())
-        self._template_label.setWordWrap(True)
+        self._template_label = QLineEdit()
+        self._template_label.setReadOnly(True)
+        self._template_label.setText("-")
         self._form.addRow(self._template_label_title, self._template_label)
 
         self._form.addRow(_section_label("Position"))
@@ -219,12 +219,12 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._space_label = QLabel("world")
         self._form.addRow(self._space_label_title, self._space_label)
 
-        self._x_label = QLabel("x")
+        self._x_label = QLabel("grid_x")
         self._x_spin = QSpinBox()
         self._x_spin.setRange(0, 0)
         self._form.addRow(self._x_label, self._x_spin)
 
-        self._y_label = QLabel("y")
+        self._y_label = QLabel("grid_y")
         self._y_spin = QSpinBox()
         self._y_spin.setRange(0, 0)
         self._form.addRow(self._y_label, self._y_spin)
@@ -388,6 +388,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             ]
             self._id_edit.setText(entity.id)
             self._template_label.setText(entity.template or "-")
+            self._template_label.setCursorPosition(0)
             self._space_label.setText(self._effective_space)
             self._x_spin.setValue(entity.x)
             self._y_spin.setValue(entity.y)
@@ -419,21 +420,21 @@ class _EntityInstanceFieldsEditor(QWidget):
         parameters = self._build_parameters_value()
         if self._effective_space == "screen":
             space = "screen"
-            x = self._entity.x
-            y = self._entity.y
+            grid_x = self._entity.grid_x
+            grid_y = self._entity.grid_y
             pixel_x = self._pixel_x_spin.value()
             pixel_y = self._pixel_y_spin.value()
         else:
             space = self._entity.space
-            x = self._x_spin.value()
-            y = self._y_spin.value()
+            grid_x = self._x_spin.value()
+            grid_y = self._y_spin.value()
             pixel_x = self._pixel_x_spin.value() if self._pixel_x_check.isChecked() else None
             pixel_y = self._pixel_y_spin.value() if self._pixel_y_check.isChecked() else None
 
         return EntityDocument(
             id=self._id_edit.text().strip(),
-            x=x,
-            y=y,
+            grid_x=grid_x,
+            grid_y=grid_y,
             pixel_x=pixel_x,
             pixel_y=pixel_y,
             space=space,

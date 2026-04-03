@@ -27,7 +27,6 @@
   "current_area_state": {
     "entities": {
       "player": {
-        "x": 4,
         "pixel_x": 64.0,
         "visuals": [
           {
@@ -99,7 +98,8 @@
           "interact_target": {
             "entity_id": "village_save_point"
           }
-        }
+        },
+        "grid_x": 4
       }
     }
   },

@@ -2247,42 +2247,40 @@
   "entities": [
     {
       "id": "npc",
-      "x": 18,
-      "y": 6,
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level3_npc.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 18,
+      "grid_y": 6
     },
     {
       "id": "gate_main",
-      "x": 16,
-      "y": 5,
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
         "correct_value_1": 0,
         "correct_value_2": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 16,
+      "grid_y": 5
     },
     {
       "id": "gate_combo",
-      "x": 7,
-      "y": 8,
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
         "correct_value_1": 1,
         "correct_value_2": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 7,
+      "grid_y": 8
     },
     {
       "id": "restart",
-      "x": 4,
-      "y": 7,
       "template": "entity_templates/restart_trigger",
       "parameters": {
         "dialogue_path": "dialogues/system/restart_or_return.json",
@@ -2311,12 +2309,12 @@
         ],
         "allow_cancel": true
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 4,
+      "grid_y": 7
     },
     {
       "id": "exit",
-      "x": 16,
-      "y": 1,
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -2353,12 +2351,12 @@
         ],
         "allow_cancel": false
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 16,
+      "grid_y": 1
     },
     {
       "id": "button_combo_a",
-      "x": 7,
-      "y": 8,
       "template": "entity_templates/button",
       "parameters": {
         "single_use": true,
@@ -2367,12 +2365,12 @@
         "press_value": 1,
         "release_value": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 7,
+      "grid_y": 8
     },
     {
       "id": "button_combo_b",
-      "x": 7,
-      "y": 11,
       "template": "entity_templates/button",
       "parameters": {
         "single_use": true,
@@ -2381,12 +2379,12 @@
         "press_value": 1,
         "release_value": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 7,
+      "grid_y": 11
     },
     {
       "id": "button_main",
-      "x": 14,
-      "y": 8,
       "template": "entity_templates/button",
       "parameters": {
         "single_use": false,
@@ -2395,12 +2393,12 @@
         "press_value": 1,
         "release_value": 0
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 14,
+      "grid_y": 8
     },
     {
       "id": "ball",
-      "x": 15,
-      "y": 8,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
@@ -2421,14 +2419,16 @@
           3,
           0
         ]
-      }
+      },
+      "grid_x": 15,
+      "grid_y": 8
     },
     {
       "id": "player",
-      "x": 4,
-      "y": 7,
       "template": "entity_templates/player",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 4,
+      "grid_y": 7
     }
   ]
 }

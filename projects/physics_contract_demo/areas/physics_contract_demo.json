@@ -17,143 +17,557 @@
       "name": "background",
       "render_order": 0,
       "grid": [
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
       ]
     }
   ],
   "cell_flags": [
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": false},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": false
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ],
     [
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]},
-      {"blocked": true, "tags": ["wall"]}
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      },
+      {
+        "blocked": true,
+        "tags": [
+          "wall"
+        ]
+      }
     ]
   ],
   "entry_points": {
     "startup": {
-      "x": 1,
-      "y": 2,
-      "facing": "right"
+      "facing": "right",
+      "grid_x": 1,
+      "grid_y": 2
     }
   },
   "entities": [
     {
       "id": "player",
-      "x": 1,
-      "y": 2,
       "template": "entity_templates/player_contract",
       "inventory": {
         "max_stacks": 4,
@@ -163,7 +577,9 @@
             "quantity": 1
           }
         ]
-      }
+      },
+      "grid_x": 1,
+      "grid_y": 2
     },
     {
       "id": "pause_controller",
@@ -173,55 +589,53 @@
     },
     {
       "id": "occupancy_button",
-      "x": 2,
-      "y": 1,
       "template": "entity_templates/button_contract",
       "parameters": {
         "indicator_id": "occupancy_indicator"
-      }
+      },
+      "grid_x": 2,
+      "grid_y": 1
     },
     {
       "id": "occupancy_indicator",
-      "x": 3,
-      "y": 1,
-      "template": "entity_templates/indicator_contract"
+      "template": "entity_templates/indicator_contract",
+      "grid_x": 3,
+      "grid_y": 1
     },
     {
       "id": "contract_sign",
-      "x": 5,
-      "y": 1,
       "template": "entity_templates/sign_contract",
       "parameters": {
         "dialogue_path": "dialogues/showcase/physics_contract_note.json"
-      }
+      },
+      "grid_x": 5,
+      "grid_y": 1
     },
     {
       "id": "inventory_apple_pickup",
-      "x": 1,
-      "y": 3,
       "template": "entity_templates/item_pickup_contract",
       "parameters": {
         "item_id": "items/apple",
         "quantity": 1
-      }
+      },
+      "grid_x": 1,
+      "grid_y": 3
     },
     {
       "id": "house_block",
-      "x": 3,
-      "y": 3,
-      "template": "entity_templates/block_contract"
+      "template": "entity_templates/block_contract",
+      "grid_x": 3,
+      "grid_y": 3
     },
     {
       "id": "heavy_block",
-      "x": 4,
-      "y": 3,
       "template": "entity_templates/block_contract",
-      "weight": 2
+      "weight": 2,
+      "grid_x": 4,
+      "grid_y": 3
     },
     {
       "id": "key_keeper",
-      "x": 8,
-      "y": 2,
       "template": "entity_templates/key_keeper_contract",
       "parameters": {
         "item_id": "items/copper_key",
@@ -229,66 +643,68 @@
         "success_dialogue_path": "dialogues/showcase/key_given.json",
         "full_dialogue_path": "dialogues/showcase/inventory_full.json",
         "repeat_dialogue_path": "dialogues/showcase/already_gave_key.json"
-      }
+      },
+      "grid_x": 8,
+      "grid_y": 2
     },
     {
       "id": "copper_door",
-      "x": 9,
-      "y": 2,
       "template": "entity_templates/locked_door_contract",
       "parameters": {
         "required_item_id": "items/copper_key",
         "locked_dialogue_path": "dialogues/showcase/door_locked.json",
         "success_dialogue_path": "dialogues/showcase/door_unlocked.json",
         "open_dialogue_path": "dialogues/showcase/door_open.json"
-      }
+      },
+      "grid_x": 9,
+      "grid_y": 2
     },
     {
       "id": "behind_door_sign",
-      "x": 10,
-      "y": 2,
       "template": "entity_templates/sign_contract",
       "parameters": {
         "dialogue_path": "dialogues/showcase/behind_door_note.json"
-      }
+      },
+      "grid_x": 10,
+      "grid_y": 2
     },
     {
       "id": "dialogue_terminal",
-      "x": 5,
-      "y": 4,
       "template": "entity_templates/dialogue_terminal_contract",
       "parameters": {
         "target_indicator_id": "occupancy_indicator",
         "dialogue_path": "dialogues/showcase/dialogue_runtime_menu.json"
-      }
+      },
+      "grid_x": 5,
+      "grid_y": 4
     },
     {
       "id": "dialogue_terminal_panel",
-      "x": 2,
-      "y": 4,
       "template": "entity_templates/dialogue_terminal_contract",
       "parameters": {
         "target_indicator_id": "occupancy_indicator",
         "dialogue_path": "dialogues/showcase/dialogue_runtime_menu_panel.json"
-      }
+      },
+      "grid_x": 2,
+      "grid_y": 4
     },
     {
       "id": "orb_terminal",
-      "x": 8,
-      "y": 4,
       "template": "entity_templates/orb_terminal_contract",
       "parameters": {
         "item_id": "items/light_orb",
         "target_indicator_id": "orb_indicator",
         "success_dialogue_path": "dialogues/showcase/orb_success.json",
         "failure_dialogue_path": "dialogues/showcase/orb_missing.json"
-      }
+      },
+      "grid_x": 8,
+      "grid_y": 4
     },
     {
       "id": "orb_indicator",
-      "x": 9,
-      "y": 4,
-      "template": "entity_templates/indicator_contract"
+      "template": "entity_templates/indicator_contract",
+      "grid_x": 9,
+      "grid_y": 4
     }
   ]
 }

@@ -199,8 +199,8 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 '  "entities": [\n'
                 '    {\n'
                 '      "id": "actor",\n'
-                '      "x": 0,\n'
-                '      "y": 0,\n'
+                '      "grid_x": 0,\n'
+                '      "grid_y": 0,\n'
                 '      "render_order": 10,\n'
                 '      "y_sort": false,\n'
                 '      "stack_order": 0\n'
@@ -315,16 +315,16 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 '  "entities": [\n'
                 '    {\n'
                 '      "id": "npc_1",\n'
-                '      "x": 0,\n'
-                '      "y": 0,\n'
+                '      "grid_x": 0,\n'
+                '      "grid_y": 0,\n'
                 '      "render_order": 10,\n'
                 '      "y_sort": true,\n'
                 '      "stack_order": 0\n'
                 '    },\n'
                 '    {\n'
                 '      "id": "npc_2",\n'
-                '      "x": 0,\n'
-                '      "y": 0,\n'
+                '      "grid_x": 0,\n'
+                '      "grid_y": 0,\n'
                 '      "render_order": 10,\n'
                 '      "y_sort": true,\n'
                 '      "stack_order": 2\n'
@@ -396,8 +396,8 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 '  "entities": [\n'
                 '    {\n'
                 '      "id": "house_door",\n'
-                '      "x": 0,\n'
-                '      "y": 0,\n'
+                '      "grid_x": 0,\n'
+                '      "grid_y": 0,\n'
                 '      "template": "entity_templates/area_door",\n'
                 '      "parameters": {\n'
                 '        "target_area": "areas/village_house",\n'
@@ -517,6 +517,102 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             encoding="utf-8",
         )
         return project / "project.json"
+
+    def _create_project_content_project(self, root: Path) -> Path:
+        project = root / "project"
+        assets = project / "assets"
+        areas = project / "areas"
+        items = project / "items"
+        nested_items = items / "keys"
+        assets.mkdir(parents=True)
+        areas.mkdir()
+        nested_items.mkdir(parents=True)
+
+        base = QPixmap(16, 16)
+        base.fill(QColor("red"))
+        self.assertTrue(base.save(str(assets / "base.png")))
+
+        (project / "project.json").write_text(
+            (
+                '{\n'
+                '  "startup_area": "areas/demo",\n'
+                '  "item_paths": ["items/"],\n'
+                '  "shared_variables_path": "shared_variables.json",\n'
+                '  "global_entities": [\n'
+                '    {\n'
+                '      "id": "pause_controller",\n'
+                '      "template": "entity_templates/pause_controller"\n'
+                '    }\n'
+                '  ]\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (project / "shared_variables.json").write_text(
+            (
+                '{\n'
+                '  "display": {\n'
+                '    "internal_width": 320,\n'
+                '    "internal_height": 240\n'
+                '  },\n'
+                '  "inventory_ui": {\n'
+                '    "preset": "standard"\n'
+                '  }\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (areas / "demo.json").write_text(
+            (
+                '{\n'
+                '  "name": "Demo",\n'
+                '  "tile_size": 16,\n'
+                '  "tilesets": [\n'
+                '    {\n'
+                '      "firstgid": 1,\n'
+                '      "path": "assets/base.png",\n'
+                '      "tile_width": 16,\n'
+                '      "tile_height": 16\n'
+                '    }\n'
+                '  ],\n'
+                '  "tile_layers": [\n'
+                '    {\n'
+                '      "name": "ground",\n'
+                '      "render_order": 0,\n'
+                '      "y_sort": false,\n'
+                '      "stack_order": 0,\n'
+                '      "grid": [[1]]\n'
+                '    }\n'
+                '  ],\n'
+                '  "entities": [],\n'
+                '  "variables": {}\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (items / "apple.json").write_text(
+            '{\n  "name": "Apple",\n  "max_stack": 9\n}\n',
+            encoding="utf-8",
+        )
+        (nested_items / "silver_key.json").write_text(
+            '{\n  "name": "Silver Key",\n  "max_stack": 1\n}\n',
+            encoding="utf-8",
+        )
+        return project / "project.json"
+
+    def _panel_file_entries(self, panel) -> list[tuple[str, Path]]:
+        entries: list[tuple[str, Path]] = []
+        stack = [panel._tree.topLevelItem(i) for i in range(panel._tree.topLevelItemCount())]
+        while stack:
+            item = stack.pop()
+            if item is None:
+                continue
+            data = item.data(0, 256)
+            if data is not None:
+                entries.append(data)
+            for index in range(item.childCount()):
+                stack.append(item.child(index))
+        return sorted(entries, key=lambda pair: pair[0])
 
     def test_add_tileset_appends_safe_firstgid(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -681,8 +777,8 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             raw = (
                 '{\n'
                 '  "id": "npc_custom",\n'
-                '  "x": 1,\n'
-                '  "y": 1,\n'
+                '  "grid_x": 1,\n'
+                '  "grid_y": 1,\n'
                 '  "render_order": 12,\n'
                 '  "y_sort": false,\n'
                 '  "sort_y_offset": 2.5,\n'
@@ -885,6 +981,80 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             saved = dialogue_path.read_text(encoding="utf-8")
             self.assertIn('"text": "Updated hello"', saved)
             self.assertFalse(window._tab_widget.is_dirty("dialogues/intro"))
+
+    def test_open_project_populates_items_panel_and_project_actions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            self.assertTrue(window._open_project_manifest_action.isEnabled())
+            self.assertTrue(window._open_shared_variables_action.isEnabled())
+
+            entries = self._panel_file_entries(window._item_panel)
+            self.assertEqual(
+                [content_id for content_id, _path in entries],
+                ["items/apple", "items/keys/silver_key"],
+            )
+
+    def test_item_panel_signal_opens_item_json_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            entries = self._panel_file_entries(window._item_panel)
+            item_content_id, item_path = entries[0]
+            window._item_panel.file_open_requested.emit(item_content_id, item_path)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, JsonViewerWidget)
+            assert isinstance(widget, JsonViewerWidget)
+            self.assertEqual(window._tab_widget.active_info().content_type, ContentType.ITEM)
+            self.assertEqual(window._tab_widget.active_info().content_id, item_content_id)
+
+    def test_project_and_shared_variables_tabs_open_and_shared_variables_save(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            window._open_project_manifest_tab()
+            project_widget = window._tab_widget.active_widget()
+            self.assertIsInstance(project_widget, JsonViewerWidget)
+            assert isinstance(project_widget, JsonViewerWidget)
+            self.assertEqual(
+                window._tab_widget.active_info().content_type,
+                ContentType.PROJECT_MANIFEST,
+            )
+
+            window._open_shared_variables_tab()
+            shared_widget = window._tab_widget.active_widget()
+            self.assertIsInstance(shared_widget, JsonViewerWidget)
+            assert isinstance(shared_widget, JsonViewerWidget)
+            self.assertEqual(
+                window._tab_widget.active_info().content_type,
+                ContentType.SHARED_VARIABLES,
+            )
+            self.assertTrue(shared_widget.isReadOnly())
+
+            window._enable_json_editing_action.setChecked(True)
+            self.assertFalse(shared_widget.isReadOnly())
+
+            updated_text = shared_widget.toPlainText().replace('"preset": "standard"', '"preset": "compact"')
+            shared_widget.setPlainText(updated_text)
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("project/shared_variables"))
+            window._on_save_active()
+
+            saved = (project_file.parent / "shared_variables.json").read_text(encoding="utf-8")
+            self.assertIn('"preset": "compact"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("project/shared_variables"))
 
     def test_template_brush_switches_active_paint_target_and_places_entities(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -15,6 +15,7 @@ from typing import Any
 
 AREA_ID_PREFIX = "areas"
 TEMPLATE_ID_PREFIX = "entity_templates"
+ITEM_ID_PREFIX = "items"
 
 
 @dataclass
@@ -30,13 +31,22 @@ class TemplateEntry:
 
 
 @dataclass
+class ItemEntry:
+    item_id: str
+    file_path: Path
+
+
+@dataclass
 class ProjectManifest:
+    project_file: Path
     project_root: Path
     area_paths: list[Path] = field(default_factory=list)
     entity_template_paths: list[Path] = field(default_factory=list)
     asset_paths: list[Path] = field(default_factory=list)
     command_paths: list[Path] = field(default_factory=list)
     dialogue_paths: list[Path] = field(default_factory=list)
+    item_paths: list[Path] = field(default_factory=list)
+    shared_variables_path: Path | None = None
     display_width: int = 320
     display_height: int = 240
     startup_area: str | None = None
@@ -145,6 +155,7 @@ def load_manifest(project_path: Path) -> ProjectManifest:
     shared_variables = _load_shared_variables(shared_variables_path)
 
     return ProjectManifest(
+        project_file=project_file.resolve(),
         project_root=project_root,
         area_paths=_resolve_path_list(project_root, raw, "area_paths", "areas"),
         entity_template_paths=_resolve_path_list(
@@ -157,6 +168,8 @@ def load_manifest(project_path: Path) -> ProjectManifest:
         dialogue_paths=_resolve_path_list(
             project_root, raw, "dialogue_paths", "dialogues"
         ),
+        item_paths=_resolve_path_list(project_root, raw, "item_paths", "items"),
+        shared_variables_path=shared_variables_path,
         display_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
         display_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
         startup_area=raw.get("startup_area"),
@@ -204,3 +217,24 @@ def discover_entity_templates(manifest: ProjectManifest) -> list[TemplateEntry]:
             )
             entries.append(TemplateEntry(template_id=template_id, file_path=f))
     return sorted(entries, key=lambda e: e.template_id)
+
+
+def discover_items(manifest: ProjectManifest) -> list[ItemEntry]:
+    """Scan all item paths and return discovered item-definition entries."""
+    entries: list[ItemEntry] = []
+    seen: set[Path] = set()
+    for directory in manifest.item_paths:
+        if not directory.is_dir():
+            continue
+        for f in sorted(directory.rglob("*.json")):
+            resolved = f.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            item_id = _prefixed_content_id(
+                f,
+                manifest.item_paths,
+                prefix=ITEM_ID_PREFIX,
+            )
+            entries.append(ItemEntry(item_id=item_id, file_path=f))
+    return sorted(entries, key=lambda e: e.item_id)

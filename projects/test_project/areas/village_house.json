@@ -3,9 +3,9 @@
   "tile_size": 16,
   "entry_points": {
     "from_square": {
-      "x": 8,
-      "y": 9,
-      "facing": "up"
+      "facing": "up",
+      "grid_x": 8,
+      "grid_y": 9
     }
   },
   "camera": {
@@ -919,65 +919,65 @@
   "entities": [
     {
       "id": "player",
-      "x": 8,
-      "y": 9,
       "template": "entity_templates/player",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 8,
+      "grid_y": 9
     },
     {
       "id": "house_exit",
-      "x": 8,
-      "y": 10,
       "template": "entity_templates/area_door",
       "parameters": {
         "target_area": "areas/village_square",
         "target_entry": "from_house"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 8,
+      "grid_y": 10
     },
     {
       "id": "house_lever",
-      "x": 4,
-      "y": 4,
       "template": "entity_templates/lever_toggle",
       "parameters": {
         "target_gate": "house_gate"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 4,
+      "grid_y": 4
     },
     {
       "id": "house_gate",
-      "x": 11,
-      "y": 5,
       "template": "entity_templates/gate",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 11,
+      "grid_y": 5
     },
     {
       "id": "house_block",
-      "x": 6,
-      "y": 8,
       "template": "entity_templates/block",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 6,
+      "grid_y": 8
     },
     {
       "id": "house_block_note",
-      "x": 2,
-      "y": 8,
       "template": "entity_templates/sign",
       "parameters": {
         "dialogue_path": "dialogues/showcase/house_block_note.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 2,
+      "grid_y": 8
     },
     {
       "id": "house_gate_note",
-      "x": 13,
-      "y": 5,
       "template": "entity_templates/sign",
       "parameters": {
         "dialogue_path": "dialogues/showcase/house_gate_note.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 13,
+      "grid_y": 5
     }
   ]
 }

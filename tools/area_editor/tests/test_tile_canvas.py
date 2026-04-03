@@ -96,8 +96,8 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
             entities=[
                 EntityDocument(
                     id="player",
-                    x=0,
-                    y=0,
+                    grid_x=0,
+                    grid_y=0,
                     render_order=10,
                     y_sort=True,
                     sort_y_offset=0.0,
@@ -162,8 +162,8 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
     def test_select_mode_cycles_stacked_entities_and_clears_on_empty_cell(self):
         area = _make_area()
         area.entities = [
-            EntityDocument(id="npc_1", x=0, y=0, render_order=10, y_sort=True, stack_order=0),
-            EntityDocument(id="npc_2", x=0, y=0, render_order=10, y_sort=True, stack_order=2),
+            EntityDocument(id="npc_1", grid_x=0, grid_y=0, render_order=10, y_sort=True, stack_order=0),
+            EntityDocument(id="npc_2", grid_x=0, grid_y=0, render_order=10, y_sort=True, stack_order=2),
         ]
         canvas = TileCanvas()
         catalog = TilesetCatalog(AssetResolver([]))
@@ -234,7 +234,7 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
     def test_select_mode_can_pick_screen_entities_with_template_fallback(self):
         area = _make_area()
         area.entities = [
-            EntityDocument(id="npc", x=0, y=0, render_order=10, y_sort=True),
+            EntityDocument(id="npc", grid_x=0, grid_y=0, render_order=10, y_sort=True),
             EntityDocument(
                 id="overlay",
                 template="entity_templates/display_sprite",

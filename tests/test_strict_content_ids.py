@@ -1040,8 +1040,8 @@ class StrictContentIdTests(unittest.TestCase):
         raw_area = _minimal_area()
         raw_area["entry_points"] = {
             "front_door": {
-                "x": 3,
-                "y": 4,
+                "grid_x": 3,
+                "grid_y": 4,
                 "facing": "up",
                 "pixel_x": 52,
                 "pixel_y": 68,
@@ -1077,8 +1077,8 @@ class StrictContentIdTests(unittest.TestCase):
             serialized["entry_points"],
             {
                 "front_door": {
-                    "x": 3,
-                    "y": 4,
+                    "grid_x": 3,
+                    "grid_y": 4,
                     "facing": "up",
                     "pixel_x": 52,
                     "pixel_y": 68,
@@ -1104,8 +1104,8 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "id": "player",
                 "kind": "player",
-                "x": 0,
-                "y": 0,
+                "grid_x": 0,
+                "grid_y": 0,
                 "render_order": 12,
                 "y_sort": False,
                 "sort_y_offset": 5,
@@ -1167,8 +1167,8 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "id": "crate",
                 "kind": "block",
-                "x": 0,
-                "y": 0,
+                "grid_x": 0,
+                "grid_y": 0,
                 "facing": "left",
                 "solid": True,
                 "pushable": True,
@@ -1217,8 +1217,8 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "id": "explicit_block",
                 "kind": "block",
-                "x": 0,
-                "y": 0,
+                "grid_x": 0,
+                "grid_y": 0,
                 "facing": "left",
                 "solid": False,
                 "pushable": False,
@@ -1841,8 +1841,8 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "id": "hero",
                 "kind": "player",
-                "x": 0,
-                "y": 0,
+                "grid_x": 0,
+                "grid_y": 0,
             }
         ]
 
@@ -4189,8 +4189,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "switch_1",
                             "kind": "switch",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                             "variables": {"enabled": False},
                         }
                     ],
@@ -4201,8 +4201,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "gate_1",
                             "kind": "gate",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                             "variables": {"open": False},
                         }
                     ],
@@ -4324,8 +4324,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "gate_1",
                             "kind": "gate",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                             "variables": {"open": False},
                         }
                     ],
@@ -4479,8 +4479,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "sign_1",
                             "kind": "sign",
-                            "x": 1,
-                            "y": 1,
+                            "grid_x": 1,
+                            "grid_y": 1,
                             "interact_commands": [{"type": "run_dialogue", "text": "Old schema"}],
                         }
                     ],
@@ -4583,8 +4583,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "self",
                             "kind": "sign",
-                            "x": 1,
-                            "y": 1,
+                            "grid_x": 1,
+                            "grid_y": 1,
                         }
                     ],
                 }
@@ -4607,8 +4607,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "actor",
                             "kind": "sign",
-                            "x": 1,
-                            "y": 1,
+                            "grid_x": 1,
+                            "grid_y": 1,
                         }
                     ],
                 }
@@ -4660,8 +4660,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "dialogue_controller",
                             "kind": "sign",
-                            "x": 1,
-                            "y": 1,
+                            "grid_x": 1,
+                            "grid_y": 1,
                         }
                     ],
                 }
@@ -4972,8 +4972,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "player",
                             "kind": "player",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                         }
                     ],
                 },
@@ -4994,8 +4994,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "player",
                             "kind": "player",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                         }
                     ],
                 },
@@ -5779,8 +5779,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "player",
                             "kind": "player",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                         }
                     ],
                 }
@@ -5878,8 +5878,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "player",
                             "kind": "player",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                         }
                     ],
                 }
@@ -5916,8 +5916,8 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "player",
                             "kind": "player",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                             "visuals": [
                                 {
                                     "id": "body",
@@ -5939,8 +5939,8 @@ class StrictContentIdTests(unittest.TestCase):
                 {
                     "id": "player",
                     "kind": "player",
-                    "x": 0,
-                    "y": 0,
+                    "grid_x": 0,
+                    "grid_y": 0,
                     "visuals": [
                         {
                             "id": "body",
@@ -7314,14 +7314,14 @@ class StrictContentIdTests(unittest.TestCase):
                         {
                             "id": "player",
                             "kind": "player",
-                            "x": 0,
-                            "y": 0,
+                            "grid_x": 0,
+                            "grid_y": 0,
                         },
                         {
                             "id": "crate",
                             "kind": "crate",
-                            "x": 1,
-                            "y": 0,
+                            "grid_x": 1,
+                            "grid_y": 0,
                         },
                     ],
                 },
@@ -7340,8 +7340,8 @@ class StrictContentIdTests(unittest.TestCase):
                     "cell_flags": [[True, True, True]],
                     "entry_points": {
                         "landing": {
-                            "x": 2,
-                            "y": 0,
+                            "grid_x": 2,
+                            "grid_y": 0,
                         }
                     },
                     "entities": [],
@@ -7473,8 +7473,8 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "id": "player",
                 "kind": "player",
-                "x": 0,
-                "y": 0,
+                "grid_x": 0,
+                "grid_y": 0,
                 "inventory": {
                     "max_stacks": 3,
                     "stacks": [
@@ -7514,8 +7514,8 @@ class StrictContentIdTests(unittest.TestCase):
         entity_payload = {
             "id": "player",
             "kind": "player",
-            "x": 0,
-            "y": 0,
+            "grid_x": 0,
+            "grid_y": 0,
             "inventory": {
                 "max_stacks": 2,
                 "stacks": [

@@ -273,8 +273,8 @@ Other keys are stored as ordinary cell metadata.
 
 Each entry point object currently uses:
 
-- `x`
-- `y`
+- `grid_x`
+- `grid_y`
 - `facing`
 - `pixel_x`
 - `pixel_y`
@@ -359,8 +359,8 @@ Current engine-known entity fields:
 
 - `id`
 - `kind`
-- `x`
-- `y`
+- `grid_x`
+- `grid_y`
 - `pixel_x`
 - `pixel_y`
 - `space`

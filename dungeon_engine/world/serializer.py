@@ -99,8 +99,8 @@ def _serialize_tile_layer(layer: Any) -> dict[str, Any]:
 def _serialize_entry_point(entry_point: Any) -> dict[str, Any]:
     """Serialize one authored area-entry marker."""
     data: dict[str, Any] = {
-        "x": int(entry_point.grid_x),
-        "y": int(entry_point.grid_y),
+        "grid_x": int(entry_point.grid_x),
+        "grid_y": int(entry_point.grid_y),
     }
     if entry_point.facing is not None:
         data["facing"] = str(entry_point.facing)
@@ -135,8 +135,8 @@ def serialize_entity_instance(
         "id": entity.entity_id,
     }
     if entity.space == "world":
-        data["x"] = entity.grid_x
-        data["y"] = entity.grid_y
+        data["grid_x"] = entity.grid_x
+        data["grid_y"] = entity.grid_y
     data.update(_serialize_pixel_position_fields(entity, tile_size))
 
     if entity.template_id:
@@ -171,8 +171,8 @@ def _serialize_template_entity_overrides(
             {
                 "id": entity.entity_id,
                 "template": entity.template_id,
-                "x": entity.grid_x,
-                "y": entity.grid_y,
+                "grid_x": entity.grid_x,
+                "grid_y": entity.grid_y,
                 "parameters": copy.deepcopy(entity.template_parameters),
             }
             if entity.space == "world"

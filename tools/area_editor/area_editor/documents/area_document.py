@@ -101,8 +101,8 @@ class EntityDocument:
     """
 
     id: str
-    x: int = 0
-    y: int = 0
+    grid_x: int = 0
+    grid_y: int = 0
     pixel_x: int | None = None
     pixel_y: int | None = None
     space: str = "world"
@@ -120,8 +120,8 @@ class EntityDocument:
         space = d.pop("space", "world")
         return cls(
             id=d.pop("id", ""),
-            x=d.pop("x", 0),
-            y=d.pop("y", 0),
+            grid_x=d.pop("grid_x", 0),
+            grid_y=d.pop("grid_y", 0),
             pixel_x=d.pop("pixel_x", None),
             pixel_y=d.pop("pixel_y", None),
             space=space,
@@ -137,8 +137,8 @@ class EntityDocument:
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"id": self.id}
         if self.space == "world":
-            out["x"] = self.x
-            out["y"] = self.y
+            out["grid_x"] = self.grid_x
+            out["grid_y"] = self.grid_y
         if self.pixel_x is not None:
             out["pixel_x"] = self.pixel_x
         if self.pixel_y is not None:
@@ -159,6 +159,22 @@ class EntityDocument:
     @property
     def is_screen_space(self) -> bool:
         return self.space == "screen"
+
+    @property
+    def x(self) -> int:
+        return self.grid_x
+
+    @x.setter
+    def x(self, value: int) -> None:
+        self.grid_x = int(value)
+
+    @property
+    def y(self) -> int:
+        return self.grid_y
+
+    @y.setter
+    def y(self, value: int) -> None:
+        self.grid_y = int(value)
 
 
 # ---------------------------------------------------------------------------

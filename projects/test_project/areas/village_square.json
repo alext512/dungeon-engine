@@ -3,14 +3,14 @@
   "tile_size": 16,
   "entry_points": {
     "startup": {
-      "x": 8,
-      "y": 8,
-      "facing": "down"
+      "facing": "down",
+      "grid_x": 8,
+      "grid_y": 8
     },
     "from_house": {
-      "x": 8,
-      "y": 6,
-      "facing": "down"
+      "facing": "down",
+      "grid_x": 8,
+      "grid_y": 6
     }
   },
   "camera": {
@@ -924,38 +924,38 @@
   "entities": [
     {
       "id": "player",
-      "x": 8,
-      "y": 8,
       "template": "entity_templates/player",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 8,
+      "grid_y": 8
     },
     {
       "id": "village_save_point",
-      "x": 3,
-      "y": 8,
       "template": "entity_templates/save_point",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 3,
+      "grid_y": 8
     },
     {
       "id": "village_note",
-      "x": 12,
-      "y": 8,
       "template": "entity_templates/sign",
       "parameters": {
         "dialogue_path": "dialogues/showcase/village_square_note.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 12,
+      "grid_y": 8
     },
     {
       "id": "house_door",
-      "x": 8,
-      "y": 5,
       "template": "entity_templates/area_door",
       "parameters": {
         "target_area": "areas/village_house",
         "target_entry": "from_square"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 8,
+      "grid_y": 5
     }
   ]
 }

@@ -87,8 +87,8 @@ class TestUnknownFieldPreservation(unittest.TestCase):
     def test_entity_extra_fields(self):
         raw = {
             "id": "e1",
-            "x": 0,
-            "y": 0,
+            "grid_x": 0,
+            "grid_y": 0,
             "render_order": 10,
             "kind": "lever",
             "visuals": [{"id": "main"}],
@@ -106,7 +106,7 @@ class TestUnknownFieldPreservation(unittest.TestCase):
 
 class TestEntityPositioning(unittest.TestCase):
     def test_world_space_default(self):
-        ent = EntityDocument.from_dict({"id": "a", "x": 5, "y": 3})
+        ent = EntityDocument.from_dict({"id": "a", "grid_x": 5, "grid_y": 3})
         self.assertFalse(ent.is_screen_space)
 
     def test_screen_space(self):

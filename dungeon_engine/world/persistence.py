@@ -1109,10 +1109,10 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
     grid_position_changed = False
     pixel_position_changed = False
     for key, value in overrides.items():
-        if key == "x":
+        if key == "grid_x":
             entity.grid_x = int(value)
             grid_position_changed = True
-        elif key == "y":
+        elif key == "grid_y":
             entity.grid_y = int(value)
             grid_position_changed = True
         elif key == "pixel_x":
@@ -1284,9 +1284,9 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
     overrides: dict[str, Any] = {}
 
     if current_entity.grid_x != authored_entity.grid_x:
-        overrides["x"] = current_entity.grid_x
+        overrides["grid_x"] = current_entity.grid_x
     if current_entity.grid_y != authored_entity.grid_y:
-        overrides["y"] = current_entity.grid_y
+        overrides["grid_y"] = current_entity.grid_y
     if not math.isclose(current_entity.pixel_x, authored_entity.pixel_x, abs_tol=0.001):
         overrides["pixel_x"] = current_entity.pixel_x
     if not math.isclose(current_entity.pixel_y, authored_entity.pixel_y, abs_tol=0.001):

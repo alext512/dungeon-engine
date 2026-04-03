@@ -1515,42 +1515,40 @@
   "entities": [
     {
       "id": "npc",
-      "x": 6,
-      "y": 10,
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level1_npc.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 6,
+      "grid_y": 10
     },
     {
       "id": "gate",
-      "x": 7,
-      "y": 8,
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
         "correct_value_1": 0,
         "correct_value_2": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 7,
+      "grid_y": 8
     },
     {
       "id": "lever",
-      "x": 3,
-      "y": 10,
       "template": "entity_templates/lever_toggle",
       "parameters": {
         "target_gate_id": "gate",
         "target_index": 0,
         "trigger_only_once": true
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 3,
+      "grid_y": 10
     },
     {
       "id": "exit",
-      "x": 5,
-      "y": 2,
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -1587,19 +1585,19 @@
         ],
         "allow_cancel": false
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 5,
+      "grid_y": 2
     },
     {
       "id": "player",
-      "x": 5,
-      "y": 15,
       "template": "entity_templates/player",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 5,
+      "grid_y": 15
     },
     {
       "id": "ball",
-      "x": 7,
-      "y": 9,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
@@ -1620,12 +1618,12 @@
           3,
           0
         ]
-      }
+      },
+      "grid_x": 7,
+      "grid_y": 9
     },
     {
       "id": "restart",
-      "x": 5,
-      "y": 15,
       "template": "entity_templates/restart_trigger",
       "parameters": {
         "dialogue_path": "dialogues/system/restart_or_return.json",
@@ -1654,7 +1652,9 @@
         ],
         "allow_cancel": true
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 5,
+      "grid_y": 15
     }
   ]
 }

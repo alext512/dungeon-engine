@@ -813,30 +813,28 @@
   "entities": [
     {
       "id": "npc",
-      "x": 2,
-      "y": 8,
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level2_npc.json"
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 2,
+      "grid_y": 8
     },
     {
       "id": "gate",
-      "x": 3,
-      "y": 4,
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
         "correct_value_1": 1,
         "correct_value_2": 0
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 3,
+      "grid_y": 4
     },
     {
       "id": "button_a",
-      "x": 2,
-      "y": 5,
       "template": "entity_templates/button",
       "parameters": {
         "single_use": true,
@@ -845,12 +843,12 @@
         "press_value": 1,
         "release_value": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 2,
+      "grid_y": 5
     },
     {
       "id": "button_b",
-      "x": 4,
-      "y": 5,
       "template": "entity_templates/button",
       "parameters": {
         "single_use": true,
@@ -859,12 +857,12 @@
         "press_value": 1,
         "release_value": 1
       },
-      "render_order": 0
+      "render_order": 0,
+      "grid_x": 4,
+      "grid_y": 5
     },
     {
       "id": "exit",
-      "x": 3,
-      "y": 1,
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -901,12 +899,12 @@
         ],
         "allow_cancel": false
       },
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 3,
+      "grid_y": 1
     },
     {
       "id": "ball",
-      "x": 3,
-      "y": 6,
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
@@ -927,14 +925,16 @@
           3,
           0
         ]
-      }
+      },
+      "grid_x": 3,
+      "grid_y": 6
     },
     {
       "id": "player",
-      "x": 3,
-      "y": 9,
       "template": "entity_templates/player",
-      "render_order": 10
+      "render_order": 10,
+      "grid_x": 3,
+      "grid_y": 9
     }
   ]
 }

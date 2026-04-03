@@ -234,14 +234,17 @@ def instantiate_entity(
     space = _parse_entity_space(entity_data, source_name=source_name)
     scope = _parse_entity_scope(entity_data, source_name=source_name)
     if space == "world":
-        grid_x = _coerce_required_int(entity_data, "x", source_name=source_name)
-        grid_y = _coerce_required_int(entity_data, "y", source_name=source_name)
+        grid_x = _coerce_required_int(entity_data, "grid_x", source_name=source_name)
+        grid_y = _coerce_required_int(entity_data, "grid_y", source_name=source_name)
         default_pixel_x = float(grid_x * tile_size)
         default_pixel_y = float(grid_y * tile_size)
     else:
-        if "x" in entity_data or "y" in entity_data:
+        if (
+            "grid_x" in entity_data
+            or "grid_y" in entity_data
+        ):
             raise ValueError(
-                f"{source_name} screen-space entities must not declare 'x'/'y'; use 'pixel_x'/'pixel_y' or visual offsets."
+                f"{source_name} screen-space entities must not declare 'grid_x'/'grid_y'; use 'pixel_x'/'pixel_y' or visual offsets."
             )
         grid_x = 0
         grid_y = 0
@@ -800,12 +803,12 @@ def _parse_entry_points(
 
         grid_x = _coerce_required_int(
             raw_entry_data,
-            "x",
+            "grid_x",
             source_name=f"Area '{source_name}' entry_points.{entry_id}",
         )
         grid_y = _coerce_required_int(
             raw_entry_data,
-            "y",
+            "grid_y",
             source_name=f"Area '{source_name}' entry_points.{entry_id}",
         )
         facing = _optional_string(
