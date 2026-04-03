@@ -59,9 +59,11 @@ from area_editor.operations.entities import (
 from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
+from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
 from area_editor.widgets.file_tree_panel import FileTreePanel
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
 from area_editor.widgets.global_entities_panel import GlobalEntitiesPanel
+from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.layer_list_panel import LayerListPanel
 from area_editor.widgets.render_properties_panel import RenderPropertiesPanel
@@ -580,6 +582,10 @@ class MainWindow(QMainWindow):
         content_type: ContentType,
         widget: QWidget | None,
     ) -> QWidget:
+        if widget is None and content_type == ContentType.ENTITY_TEMPLATE:
+            widget = EntityTemplateEditorWidget(content_id, file_path)
+        if widget is None and content_type == ContentType.ITEM:
+            widget = ItemEditorWidget(content_id, file_path)
         opened_widget = self._tab_widget.open_tab(
             content_id,
             file_path,
@@ -587,7 +593,15 @@ class MainWindow(QMainWindow):
             widget=widget,
         )
         if (
-            isinstance(opened_widget, (JsonViewerWidget, GlobalEntitiesEditorWidget))
+            isinstance(
+                opened_widget,
+                (
+                    JsonViewerWidget,
+                    GlobalEntitiesEditorWidget,
+                    EntityTemplateEditorWidget,
+                    ItemEditorWidget,
+                ),
+            )
             and content_id not in self._json_dirty_bound
         ):
             opened_widget.dirty_changed.connect(
@@ -785,6 +799,20 @@ class MainWindow(QMainWindow):
         self._command_panel.populate(self._manifest.command_paths)
         self._asset_panel.populate(self._manifest.asset_paths)
         self._update_project_content_actions()
+
+    def _refresh_template_surfaces(self) -> None:
+        """Reload template-derived editor surfaces after template saves."""
+        if self._manifest is None:
+            return
+        self._templates = TemplateCatalog()
+        self._templates.load_from_manifest(self._manifest)
+        self._entity_instance_panel.set_template_catalog(self._templates)
+        if self._catalog is not None:
+            self._template_panel.set_templates(
+                self._manifest,
+                self._templates,
+                self._catalog,
+            )
 
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
@@ -1675,7 +1703,15 @@ class MainWindow(QMainWindow):
             return self._save_area(content_id)
 
         widget = self._tab_widget.widget_for_content(content_id)
-        if not isinstance(widget, (JsonViewerWidget, GlobalEntitiesEditorWidget)):
+        if not isinstance(
+            widget,
+            (
+                JsonViewerWidget,
+                GlobalEntitiesEditorWidget,
+                EntityTemplateEditorWidget,
+                ItemEditorWidget,
+            ),
+        ):
             return True
         try:
             widget.save_to_file()
@@ -1693,6 +1729,8 @@ class MainWindow(QMainWindow):
             ContentType.GLOBAL_ENTITIES,
         }:
             self._refresh_project_metadata_surfaces()
+        elif info.content_type == ContentType.ENTITY_TEMPLATE:
+            self._refresh_template_surfaces()
         return True
 
     def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
@@ -1976,9 +2014,25 @@ class MainWindow(QMainWindow):
                 )
         return None
 
-    def _active_json_widget(self) -> JsonViewerWidget | GlobalEntitiesEditorWidget | None:
+    def _active_json_widget(
+        self,
+    ) -> (
+        JsonViewerWidget
+        | GlobalEntitiesEditorWidget
+        | EntityTemplateEditorWidget
+        | ItemEditorWidget
+        | None
+    ):
         widget = self._tab_widget.active_widget()
-        if isinstance(widget, (JsonViewerWidget, GlobalEntitiesEditorWidget)):
+        if isinstance(
+            widget,
+            (
+                JsonViewerWidget,
+                GlobalEntitiesEditorWidget,
+                EntityTemplateEditorWidget,
+                ItemEditorWidget,
+            ),
+        ):
             return widget
         return None
 

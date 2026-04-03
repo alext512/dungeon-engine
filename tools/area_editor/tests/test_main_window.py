@@ -16,7 +16,9 @@ from PySide6.QtWidgets import QApplication
 
 from area_editor.app.main_window import MainWindow
 from area_editor.widgets.document_tab_widget import ContentType
+from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
+from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 
 _TEST_PROJECT = (
@@ -836,6 +838,16 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             fields._interactable_check.setChecked(True)
             fields._interaction_priority_spin.setValue(4)
             fields._variables_text.setPlainText('{\n  "opened": false,\n  "key": "copper"\n}')
+            fields._visuals_text.setPlainText(
+                '[\n'
+                '  {\n'
+                '    "id": "main",\n'
+                '    "path": "assets/project/sprites/front_door.png",\n'
+                '    "frame_width": 16,\n'
+                '    "frame_height": 16\n'
+                '  }\n'
+                ']'
+            )
             fields._parameter_edits["target_area"].setText("areas/updated_house")
             QApplication.processEvents()
 
@@ -860,6 +872,17 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(entity._extra["interactable"])
             self.assertEqual(entity._extra["interaction_priority"], 4)
             self.assertEqual(entity._extra["variables"], {"opened": False, "key": "copper"})
+            self.assertEqual(
+                entity._extra["visuals"],
+                [
+                    {
+                        "id": "main",
+                        "path": "assets/project/sprites/front_door.png",
+                        "frame_width": 16,
+                        "frame_height": 16,
+                    }
+                ],
+            )
             self.assertEqual(entity.render_order, 14)
             self.assertEqual(canvas.selected_entity_id, "front_door")
             self.assertFalse(window._entity_instance_panel.fields_dirty)
@@ -945,17 +968,19 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
 
             widget = window._tab_widget.active_widget()
-            self.assertIsInstance(widget, JsonViewerWidget)
-            assert isinstance(widget, JsonViewerWidget)
-            self.assertTrue(widget.isReadOnly())
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+            self.assertTrue(widget.raw_json_widget.isReadOnly())
             self.assertFalse(window._enable_json_editing_action.isChecked())
 
             window._enable_json_editing_action.setChecked(True)
-            self.assertFalse(widget.isReadOnly())
+            self.assertFalse(widget.raw_json_widget.isReadOnly())
 
-            text = widget.toPlainText()
+            text = widget.raw_json_widget.toPlainText()
             self.assertIn('"render_order": 10', text)
-            widget.setPlainText(text.replace('"render_order": 10', '"render_order": 11'))
+            widget.raw_json_widget.setPlainText(
+                text.replace('"render_order": 10', '"render_order": 11')
+            )
             QApplication.processEvents()
 
             self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
@@ -965,6 +990,44 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"render_order": 11', saved)
             self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
             self.assertTrue(window._enable_json_editing_action.isChecked())
+
+    def test_template_fields_editor_updates_visuals_and_saves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._visuals_text.setPlainText(
+                (
+                    '[\n'
+                    '  {\n'
+                    '    "id": "main",\n'
+                    '    "path": "assets/base.png",\n'
+                    '    "frame_width": 16,\n'
+                    '    "frame_height": 16\n'
+                    "  }\n"
+                    "]"
+                )
+            )
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"id": "main"', saved)
+            self.assertIn('"path": "assets/base.png"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
 
     def test_dialogue_json_tab_is_guarded_and_saveable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1022,6 +1085,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             project_file = self._create_project_content_project(Path(tmp))
             window = MainWindow()
             self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
             window.open_project(project_file)
 
             entries = self._panel_file_entries(window._item_panel)
@@ -1029,10 +1093,65 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             window._item_panel.file_open_requested.emit(item_content_id, item_path)
 
             widget = window._tab_widget.active_widget()
-            self.assertIsInstance(widget, JsonViewerWidget)
-            assert isinstance(widget, JsonViewerWidget)
+            self.assertIsInstance(widget, ItemEditorWidget)
+            assert isinstance(widget, ItemEditorWidget)
             self.assertEqual(window._tab_widget.active_info().content_type, ContentType.ITEM)
             self.assertEqual(window._tab_widget.active_info().content_id, item_content_id)
+            self.assertTrue(widget.raw_json_widget.isReadOnly())
+
+    def test_item_fields_editor_updates_basic_fields_and_art_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            item_path = project_file.parent / "items" / "apple.json"
+            window._open_content("items/apple", item_path, ContentType.ITEM)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, ItemEditorWidget)
+            assert isinstance(widget, ItemEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._name_edit.setText("Green Apple")
+            widget.fields_editor._description_edit.setPlainText("Fresh and tart.")
+            widget.fields_editor._max_stack_spin.setValue(12)
+            widget.fields_editor._consume_spin.setValue(1)
+            widget.fields_editor._icon_text.setPlainText(
+                (
+                    '{\n'
+                    '  "path": "assets/base.png",\n'
+                    '  "frame_width": 16,\n'
+                    '  "frame_height": 16,\n'
+                    '  "frame": 0\n'
+                    '}'
+                )
+            )
+            widget.fields_editor._portrait_text.setPlainText(
+                (
+                    '{\n'
+                    '  "path": "assets/base.png",\n'
+                    '  "frame_width": 32,\n'
+                    '  "frame_height": 32,\n'
+                    '  "frame": 0\n'
+                    '}'
+                )
+            )
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("items/apple"))
+            window._on_save_active()
+
+            saved = item_path.read_text(encoding="utf-8")
+            self.assertIn('"name": "Green Apple"', saved)
+            self.assertIn('"description": "Fresh and tart."', saved)
+            self.assertIn('"max_stack": 12', saved)
+            self.assertIn('"consume_quantity_on_use": 1', saved)
+            self.assertIn('"icon"', saved)
+            self.assertIn('"portrait"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("items/apple"))
 
     def test_project_and_shared_variables_tabs_open_and_shared_variables_save(self):
         with tempfile.TemporaryDirectory() as tmp:

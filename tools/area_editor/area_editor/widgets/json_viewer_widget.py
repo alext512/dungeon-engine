@@ -57,6 +57,15 @@ class JsonViewerWidget(QPlainTextEdit):
         self._file_path.write_text(f"{text}\n", encoding="utf-8")
         self._load()
 
+    def set_document_text(self, text: str, *, dirty: bool) -> None:
+        """Replace the editor contents programmatically and control dirty state."""
+        self._loading = True
+        try:
+            self.setPlainText(text)
+        finally:
+            self._loading = False
+        self._set_dirty(dirty)
+
     def _load(self) -> None:
         try:
             text = self._file_path.read_text(encoding="utf-8")

@@ -153,6 +153,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 "visible": True,
                 "entity_commands_enabled": True,
                 "variables": {"opened": False},
+                "visuals": [{"id": "main", "path": "assets/project/sprites/crate.png"}],
                 "custom_field": "keep-me",
             },
         )
@@ -173,6 +174,16 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         fields._visible_check.setChecked(False)
         fields._entity_commands_enabled_check.setChecked(False)
         fields._variables_text.setPlainText('{\n  "opened": true,\n  "uses": 3\n}')
+        fields._visuals_text.setPlainText(
+            '[\n'
+            '  {\n'
+            '    "id": "main",\n'
+            '    "path": "assets/project/sprites/heavy_crate.png",\n'
+            '    "frame_width": 16,\n'
+            '    "frame_height": 16\n'
+            '  }\n'
+            ']'
+        )
 
         updated = self.panel.build_entity_from_fields()
 
@@ -190,4 +201,30 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         self.assertFalse(updated._extra["visible"])
         self.assertFalse(updated._extra["entity_commands_enabled"])
         self.assertEqual(updated._extra["variables"], {"opened": True, "uses": 3})
+        self.assertEqual(
+            updated._extra["visuals"],
+            [
+                {
+                    "id": "main",
+                    "path": "assets/project/sprites/heavy_crate.png",
+                    "frame_width": 16,
+                    "frame_height": 16,
+                }
+            ],
+        )
         self.assertEqual(updated._extra["custom_field"], "keep-me")
+
+    def test_build_entity_from_fields_rejects_non_array_visuals(self):
+        entity = EntityDocument(
+            id="crate_1",
+            grid_x=2,
+            grid_y=3,
+            template="entity_templates/area_door",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._visuals_text.setPlainText('{"id": "main"}')
+
+        with self.assertRaisesRegex(ValueError, "Visuals must be a JSON array."):
+            self.panel.build_entity_from_fields()

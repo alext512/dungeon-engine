@@ -49,6 +49,7 @@ _MANAGED_EXTRA_KEYS = {
     *list(_ENTITY_BOOL_DEFAULTS.keys()),
     *list(_ENTITY_INT_DEFAULTS.keys()),
     "variables",
+    "visuals",
 }
 
 
@@ -84,6 +85,14 @@ def _parse_parameter_text(text: str):
 
 def _parse_tag_list(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _filtered_unmanaged_extra(extra: dict[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in extra.items()
+        if key not in _MANAGED_EXTRA_KEYS
+    }
 
 
 class _EntityInstanceJsonEditor(QWidget):
@@ -379,6 +388,32 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._variables_text.setFont(variables_font)
         self._form.addRow(self._variables_text)
 
+        self._form.addRow(_section_label("Visuals"))
+        self._visuals_note = QLabel(
+            "Instance-level visuals override. Use JSON array syntax."
+        )
+        self._visuals_note.setWordWrap(True)
+        self._visuals_note.setStyleSheet("color: #666; font-style: italic;")
+        self._form.addRow(self._visuals_note)
+
+        self._visuals_text = QPlainTextEdit()
+        self._visuals_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._visuals_text.setFixedHeight(140)
+        self._visuals_text.setPlaceholderText(
+            "[\n"
+            "  {\n"
+            '    "id": "main",\n'
+            '    "path": "assets/project/sprites/example.png",\n'
+            '    "frame_width": 16,\n'
+            '    "frame_height": 16\n'
+            "  }\n"
+            "]"
+        )
+        visuals_font = QFont("Consolas", 10)
+        visuals_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._visuals_text.setFont(visuals_font)
+        self._form.addRow(self._visuals_text)
+
         self._form.addRow(_section_label("Extra"))
         self._extra_label = QLabel("extra")
         self._extra_text = QPlainTextEdit()
@@ -432,6 +467,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._visible_check.toggled.connect(self._on_field_changed)
         self._entity_commands_enabled_check.toggled.connect(self._on_field_changed)
         self._variables_text.textChanged.connect(self._on_field_changed)
+        self._visuals_text.textChanged.connect(self._on_field_changed)
 
         self._set_buttons_enabled(False)
         self._clear_parameter_rows()
@@ -482,6 +518,7 @@ class _EntityInstanceFieldsEditor(QWidget):
                 QSignalBlocker(self._visible_check),
                 QSignalBlocker(self._entity_commands_enabled_check),
                 QSignalBlocker(self._variables_text),
+                QSignalBlocker(self._visuals_text),
             ]
             self._id_edit.clear()
             self._kind_edit.clear()
@@ -510,6 +547,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._visible_check.setChecked(True)
             self._entity_commands_enabled_check.setChecked(True)
             self._variables_text.clear()
+            self._visuals_text.clear()
             del blockers
         finally:
             self._loading = False
@@ -532,6 +570,8 @@ class _EntityInstanceFieldsEditor(QWidget):
         raw_tags = entity._extra.get("tags", [])
         tag_text = ", ".join(str(tag) for tag in raw_tags) if isinstance(raw_tags, list) else ""
         raw_variables = entity._extra.get("variables", {})
+        has_visuals_override = "visuals" in entity._extra
+        raw_visuals = entity._extra.get("visuals", [])
         self._loading = True
         try:
             blockers = [
@@ -556,6 +596,7 @@ class _EntityInstanceFieldsEditor(QWidget):
                 QSignalBlocker(self._visible_check),
                 QSignalBlocker(self._entity_commands_enabled_check),
                 QSignalBlocker(self._variables_text),
+                QSignalBlocker(self._visuals_text),
             ]
             self._id_edit.setText(entity.id)
             self._kind_edit.setText(str(entity._extra.get("kind", "")))
@@ -589,6 +630,11 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._variables_text.setPlainText(
                 json.dumps(raw_variables, indent=2, ensure_ascii=False)
             )
+            self._visuals_text.setPlainText(
+                json.dumps(raw_visuals, indent=2, ensure_ascii=False)
+                if has_visuals_override
+                else ""
+            )
             del blockers
         finally:
             self._loading = False
@@ -596,9 +642,10 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._apply_space_visibility(has_pixel_x=has_pixel_x, has_pixel_y=has_pixel_y)
         self._sync_pixel_spin_enabled()
         self._rebuild_parameter_rows(entity)
-        if entity._extra:
+        unmanaged_extra = _filtered_unmanaged_extra(entity._extra)
+        if unmanaged_extra:
             self._extra_text.setPlainText(
-                json.dumps(entity._extra, indent=2, ensure_ascii=False)
+                json.dumps(unmanaged_extra, indent=2, ensure_ascii=False)
             )
             self._set_extra_visible(True)
         else:
@@ -681,6 +728,16 @@ class _EntityInstanceFieldsEditor(QWidget):
                 raise ValueError("Variables must be a JSON object.")
             if variables_value:
                 extra["variables"] = variables_value
+
+        visuals_text = self._visuals_text.toPlainText().strip()
+        if visuals_text:
+            try:
+                visuals_value = json.loads(visuals_text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Visuals must be valid JSON.\n{exc}") from exc
+            if not isinstance(visuals_value, list):
+                raise ValueError("Visuals must be a JSON array.")
+            extra["visuals"] = visuals_value
 
         return EntityDocument(
             id=self._id_edit.text().strip(),
