@@ -6,55 +6,40 @@ Read this file first.
 
 ## Current Status
 
-Phase 1 is implemented.
-Phase 2 is implemented.
-Phase 3 is in progress.
+Phases 0-3 are complete.
+Later phases are planned in `ROADMAP.md`.
 
-The editor is still behind the runtime on several newer authoring workflows. In
-particular, recent engine additions around items, shared UI presets, `global_entities`,
-pause/inventory controller authoring, and some engine-owned entity fields have not all
-been surfaced cleanly in the tool yet. Treat editor catch-up work as active and
-expected, not as a regression surprise.
+The editor currently supports area-centric authoring:
 
-The current tool already supports:
+- tile painting
+- cell-flag editing
+- entity placement and nudging
+- basic entity editing
+- guarded raw JSON editing
 
-- opening a `project.json` manifest
-- browsing areas, entity templates, dialogues, commands, and assets
-- loading an area into an editable tile canvas
-- showing layer/entity visibility toggles plus a grid toggle
-- zooming, panning, and hovered world-cell or screen-pixel status feedback
-- showing entity markers and first-visual sprite previews when available
-- rendering area-owned screen-space entities in a dedicated screen pane
-- editing area `cell_flags` from the canvas in a dedicated edit mode
-- painting tiles on the active layer
-- placing/deleting world-space entities with the template brush
-- selecting world entities by cell and area-owned screen-space entities from the screen pane
-- nudging world entities by tiles and screen-space entities by pixels
-- editing selected entity instances through structured fields or guarded raw JSON
-- editing layer/entity render properties from a shared dock
-- editing dialogue/template/command JSON in guarded tabs
-- saving edited area files while preserving unknown JSON fields
-- running focused automated tests for manifest loading, asset resolution, and area-document round-tripping
+The next editor work should catch the tool up to the newer runtime-facing
+authoring surface:
 
-Still deferred:
+- better placed-entity configuration through exposed fields and parameters
+- item-definition browsing/editing
+- `shared_variables.json` / UI preset editing
+- `global_entities`
+- better reference pickers
 
-- item-definition browsing/editing from `item_paths`
-- direct `shared_variables.json` / UI preset editing
-- visual placement of new screen-space entities
-- editing project-level `global_entities`
-- broader structured support for newer engine-owned entity fields
-- rich reference pickers for entity-link parameters
-- runtime handoff
+The overarching goal is to let a non-coder build a full game through the
+supported template-driven workflow while keeping raw JSON escape hatches for
+advanced users.
 
 ## What This Folder Is
 
-`tools/area_editor/` is the home of the external authoring tool for:
+`tools/area_editor/` is the home of the external authoring tool. Its scope covers:
 
-- painting tilemaps
-- editing walkability or other cell flags
-- placing, moving, and deleting entity instances
-- editing a small set of high-value instance fields and parameters
-- especially helping with parameters that reference other entities in the same room
+- area editing: tile painting, cell flags, entity placement
+- entity instance editing: exposed engine-known fields, parameters, variables, visuals
+- content editing: supported items, dialogues/menus, and new areas
+- project configuration: selected settings such as global entities, input routing, shared variables, and UI presets
+- reference pickers: entity, template, area, item, dialogue, and asset references
+- runtime integration: external launch for quick testing later
 
 It is not part of the runtime package.
 
@@ -69,7 +54,8 @@ Follow these rules unless the user explicitly changes them:
 5. Do not simulate gameplay, command execution, persistence, or runtime state inside the tool unless the user later asks for that on purpose.
 6. Keep tool-only state outside game/runtime data.
 7. Prefer a focused convenience tool over a giant all-in-one editor.
-8. If a feature would require copying large parts of the runtime, stop and reconsider the design.
+8. Build around the curated template-driven workflow first; do not assume the editor must visually expose every arbitrary JSON possibility.
+9. If a feature would require copying large parts of the runtime, stop and reconsider the design.
 
 ## Read Order
 
@@ -85,7 +71,7 @@ Read these files in this order:
 8. `DECISIONS.md`
 9. `OPEN_QUESTIONS.md`
 
-Then refresh yourself on the runtime's JSON contract:
+Then refresh yourself on the runtime JSON contract:
 
 1. [../../AUTHORING_GUIDE.md](../../AUTHORING_GUIDE.md)
 2. [../../ENGINE_JSON_INTERFACE.md](../../ENGINE_JSON_INTERFACE.md)
@@ -117,8 +103,9 @@ If the tool launches the game later, it should do so as an external process.
 
 If you are asked to extend this tool later:
 
-- build on the existing Phase 1 foundation instead of treating this folder as docs-only
+- build on the existing foundation instead of treating this folder as docs-only
 - start with the smallest workflow that removes painful manual JSON editing
+- optimize first for curated templates plus exposed fields and references
 - keep the first versions narrow and boring
 - add strong save/load preservation before fancy UI behavior
 - prefer explicit boundary docs over clever shortcuts

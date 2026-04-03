@@ -24,7 +24,8 @@ The editor is currently useful but partially outdated relative to the runtime. R
 engine work added new authoring surfaces such as inventory items, shared UI presets,
 `global_entities`, pause/inventory controllers, and more engine-owned entity fields.
 Those workflows are not yet represented equally well in the tool, so an editor catch-up
-pass is planned before treating it as the primary way to author full projects.
+pass is planned before treating it as the primary way to author full projects through
+the supported template-driven workflow.
 
 The current editor can:
 
@@ -53,7 +54,7 @@ What is still not implemented:
 - visual placement of new screen-space entities from the canvas
 - drag-to-move entity manipulation
 - project-level `global_entities` editing
-- broader structured editing for newer engine-owned entity fields
+- broader structured editing for newer engine-owned entity fields and exposed workflow variables
 - advanced reference pickers for entity-linked parameters
 - runtime handoff / launch integration
 
@@ -90,7 +91,7 @@ The current editor still does not:
 
 It also should not be described as fully caught up with the runtime yet. Right now it is
 best understood as a strong area editor with some newer project-authoring workflows still
-pending.
+pending, especially around the curated template-driven game-building path.
 
 ## Folder Intent
 

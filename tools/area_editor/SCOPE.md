@@ -1,61 +1,38 @@
 # Scope
 
-## Intended Core Scope
+## Intended Scope
 
-The first useful version of the tool focused on room editing first.
+The editor's goal is to let a non-coder build a full game through the supported
+template-driven workflow while keeping raw JSON escape hatches for advanced users.
 
-That means:
+That means a content creator should be able to:
 
-- open a project
-- browse authored areas
-- open one area
-- view and edit tile layers
-- paint tiles
-- edit walkability and related cell flags
-- place, move, reorder, and delete entity instances
-- edit a small set of high-value instance fields
-- edit selected per-instance parameters
-- provide better UI for parameters that reference other entity ids
-- save safely back to JSON
+- create and edit areas
+- paint tiles and edit cell flags
+- place entities from a provided template library
+- configure exposed entity fields, parameters, variables, references, and assets
+- create or edit supported item records
+- create or edit supported dialogue and menu data
+- configure selected project-level settings such as startup area, shared variables,
+  UI presets, input routing, and global entities
+- launch the runtime directly from the editor for quick testing
 
-That room-first focus is still the core of the tool, but it is no longer the whole near-term story.
-The runtime now exposes additional project-authoring surfaces that the editor needs to catch up on,
-especially:
+The room-editing workflows are already implemented. The remaining scope is the
+editor catch-up work needed to support the newer runtime-facing authoring surface.
 
-- item definitions discovered through `item_paths`
-- `shared_variables.json`, including dialogue/inventory UI preset data
-- `project.json` `global_entities`
-- broader structured support for newer engine-owned entity fields
+## Out Of Scope
 
-## Strong Candidates For Early Support
+Do not treat these as required:
 
-These are especially aligned with the user's stated needs:
-
-- tileset browsing
-- visual layer selection
-- cell selection and coordinate feedback
-- entity list per cell
-- entity id generation help
-- parameter fields with room-local entity pickers
-- raw JSON view for advanced fields
-- save plus quick launch of the runtime as an external process
-
-## Out Of Scope For Early Versions
-
-Do not treat these as required for version one:
-
-- gameplay simulation
-- command execution preview
+- gameplay simulation or command execution preview
 - in-tool save/load persistence playback
-- dialogue runtime emulation
+- dialogue or inventory runtime emulation
 - animation preview systems that depend on runtime behavior
 - full visual command-chain editing
-- project-wide refactors across every content type
+- arbitrary visual authoring of every possible JSON structure the runtime can express
+- generic free-form entity-system authoring that ignores the curated template library
 - combat, AI, or interaction debugging
 - importing or reproducing runtime `World`, `Entity`, or command-runner behavior
-
-So the editor may grow beyond room tabs into a few high-value project-level workflows,
-but it still should not try to become a giant all-purpose content suite all at once.
 
 ## Editing Philosophy
 
@@ -65,42 +42,24 @@ For everything else:
 
 - preserve the original structure
 - avoid destructive rewrites
-- offer raw JSON escape hatches if needed later
+- offer raw JSON escape hatches
 
 ## Data Ownership Expectations
 
-The future tool may reasonably own:
+The tool may reasonably own structured editing for:
 
-- room tilesets
-- tile layers
-- cell flags
-- entity placement
-- entity ordering fields
-- selected instance parameters
+- area tilesets, tile layers, cell flags, entry points, and camera defaults
+- entity placement plus exposed engine-known fields, variables, visuals, and references
+- supported item definitions or item archetype records
+- dialogue/menu file structure
+- selected project manifest settings
+- shared variables and UI presets
+- input routing configuration
 
-The future tool should be cautious around:
+The tool should be cautious around:
 
 - large free-form command payloads
 - nested data blobs it does not understand
 - fields that are clearly runtime-derived
-- any content outside the currently edited room unless explicitly requested
-
-## Near-Term Catch-Up
-
-These are now practical next steps rather than speculative long-term ideas:
-
-- item-definition browsing and guarded editing
-- `shared_variables.json` browsing/editing for shared data and UI presets
-- `global_entities` inspection/editing
-- broader structured widgets for newer engine-owned entity fields
-
-## Future Expansion
-
-Possible later additions, but not assumed now:
-
-- stronger validation
-- reusable room templates
-- map-wide search tools
-- project-wide entity reference repair tools
-- richer side-panel inspectors
-- optional sidecar metadata for smarter field widgets
+- advanced template internals that are not part of the supported workflow
+- content outside the currently edited document unless explicitly requested

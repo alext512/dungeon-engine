@@ -3,21 +3,7 @@
 Planned features that are not part of the current phase.
 Add notes here when ideas come up during development.
 
----
-
-## Editor Catch-Up Priorities
-
-The editor is currently strongest at area-centric work, but the runtime has recently
-gained newer authoring surfaces that the tool does not yet expose well. The next
-practical editor slice should likely focus on:
-
-- item-definition browsing/editing from `item_paths`
-- direct `shared_variables.json` editing, especially dialogue/inventory UI preset data
-- `project.json` `global_entities` inspection/editing
-- broader structured editing for newer engine-owned entity fields
-
-These are not "future maybe" ideas so much as known catch-up work that should happen
-before treating the editor as fully aligned with the runtime.
+The main editor catch-up plan is now tracked in ROADMAP.md Phases 4-9.
 
 ---
 
@@ -70,13 +56,14 @@ Renaming an entity's `id` within an area. References that need updating:
 With the current type-prefixed id contract (see DECISIONS.md), ids like
 `areas/village_square`, `entity_templates/area_door`, and
 `commands/dialogue/open` are structurally
-unique across all content types. This makes the rename operation a safe
-blind find-and-replace:
+unique across all content types. This makes reference detection and targeted
+replacement much safer than plain-name matching, but it should still use a
+previewed update flow instead of assuming blind replacement is always safe:
 
 1. Move or rename the file on disk (the new root-relative path updates the id)
-2. Scan every JSON file in the project for string values matching the old id and replace with the new id
-3. No false positives are possible - `areas/door` cannot collide with `entity_templates/door`, `commands/door`, or an entity instance called `door`
-4. Show the user a preview of matches before applying (for confidence)
+2. Scan every JSON file in the project for candidate references to the old id
+3. Preview matches before applying replacements
+4. Apply targeted updates to the accepted matches
 5. Write all changed files
 
 Save files can be handled the same way - re-key the area_id entry in
