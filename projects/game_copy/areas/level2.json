@@ -793,7 +793,7 @@
   "camera": {
     "follow": {
       "mode": "entity",
-      "entity_id": "player"
+      "entity_id": "level2_player"
     },
     "bounds": {
       "x": 0,
@@ -804,15 +804,15 @@
     }
   },
   "input_targets": {
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player",
-    "interact": "player"
+    "move_up": "level2_player",
+    "move_down": "level2_player",
+    "move_left": "level2_player",
+    "move_right": "level2_player",
+    "interact": "level2_player"
   },
   "entities": [
     {
-      "id": "npc",
+      "id": "level2_npc",
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level2_npc.json"
@@ -822,7 +822,7 @@
       "grid_y": 8
     },
     {
-      "id": "gate",
+      "id": "level2_gate",
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
@@ -838,7 +838,7 @@
       "template": "entity_templates/button",
       "parameters": {
         "single_use": true,
-        "target_gate_id": "gate",
+        "target_gate_id": "level2_gate",
         "target_index": 0,
         "press_value": 1,
         "release_value": 1
@@ -852,7 +852,7 @@
       "template": "entity_templates/button",
       "parameters": {
         "single_use": true,
-        "target_gate_id": "gate",
+        "target_gate_id": "level2_gate",
         "target_index": 1,
         "press_value": 1,
         "release_value": 1
@@ -862,7 +862,7 @@
       "grid_y": 5
     },
     {
-      "id": "exit",
+      "id": "level2_exit",
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -904,7 +904,7 @@
       "grid_y": 1
     },
     {
-      "id": "ball",
+      "id": "level2_ball",
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
@@ -930,7 +930,7 @@
       "grid_y": 6
     },
     {
-      "id": "player",
+      "id": "level2_player",
       "template": "entity_templates/player",
       "render_order": 10,
       "grid_x": 3,

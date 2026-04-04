@@ -2047,7 +2047,7 @@
   "camera": {
     "follow": {
       "mode": "entity",
-      "entity_id": "player"
+      "entity_id": "level5_player"
     },
     "bounds": {
       "x": 0,
@@ -2058,15 +2058,15 @@
     }
   },
   "input_targets": {
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player",
-    "interact": "player"
+    "move_up": "level5_player",
+    "move_down": "level5_player",
+    "move_left": "level5_player",
+    "move_right": "level5_player",
+    "interact": "level5_player"
   },
   "entities": [
     {
-      "id": "npc",
+      "id": "level5_npc",
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level5_npc.json"
@@ -2076,7 +2076,7 @@
       "grid_y": 9
     },
     {
-      "id": "exit",
+      "id": "level5_exit",
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -2102,14 +2102,14 @@
       "grid_y": 5
     },
     {
-      "id": "player",
+      "id": "level5_player",
       "template": "entity_templates/player",
       "render_order": 10,
       "grid_x": 14,
       "grid_y": 11
     },
     {
-      "id": "restart",
+      "id": "level5_restart",
       "template": "entity_templates/restart_trigger",
       "parameters": {
         "dialogue_path": "dialogues/system/restart_or_return.json",
@@ -2239,7 +2239,7 @@
       "grid_y": 9
     },
     {
-      "id": "gate",
+      "id": "level5_gate",
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
@@ -2255,7 +2255,7 @@
       "template": "entity_templates/button",
       "parameters": {
         "single_use": false,
-        "target_gate_id": "gate",
+        "target_gate_id": "level5_gate",
         "target_index": 0,
         "press_value": 1,
         "release_value": 0
@@ -2269,7 +2269,7 @@
       "template": "entity_templates/button",
       "parameters": {
         "single_use": false,
-        "target_gate_id": "gate",
+        "target_gate_id": "level5_gate",
         "target_index": 1,
         "press_value": 1,
         "release_value": 0

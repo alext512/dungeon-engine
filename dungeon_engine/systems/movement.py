@@ -14,10 +14,17 @@ from dungeon_engine.world.world import World
 class MovementSystem:
     """Execute transform movement while keeping grid occupancy explicit."""
 
-    def __init__(self, area: Area, world: World, collision_system: object | None) -> None:
+    def __init__(
+        self,
+        area: Area,
+        world: World,
+        collision_system: object | None,
+        persistence_runtime: object | None = None,
+    ) -> None:
         self.area = area
         self.world = world
         self.collision_system = collision_system
+        self.persistence_runtime = persistence_runtime
         self.occupancy_transition_callback: (
             Callable[[Entity, tuple[int, int] | None, tuple[int, int] | None], None] | None
         ) = None
@@ -49,6 +56,7 @@ class MovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: GridSyncPolicy = "immediate",
+        persistent: bool | None = None,
     ) -> list[str]:
         """Move an entity one tile using explicit direction data and grid sync."""
         entity = self.world.get_entity(entity_id)
@@ -79,6 +87,9 @@ class MovementSystem:
             grid_sync=grid_sync,
             target_grid_x=target_x,
             target_grid_y=target_y,
+            persistent=persistent,
+            persist_grid=True,
+            persist_pixel=False,
         )
         return [entity.entity_id]
 
@@ -94,6 +105,7 @@ class MovementSystem:
         grid_sync: GridSyncPolicy = "none",
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
     ) -> list[str]:
         """Move an entity to an arbitrary world position in pixels."""
         entity = self.world.get_entity(entity_id)
@@ -139,6 +151,12 @@ class MovementSystem:
                 target_grid_y=target_grid_y,
                 when="complete",
             )
+            self._persist_position_state(
+                entity,
+                persistent=persistent,
+                persist_grid=grid_sync != "none" and target_grid_x is not None and target_grid_y is not None,
+                persist_pixel=True,
+            )
             return []
 
         self._start_move(
@@ -149,6 +167,9 @@ class MovementSystem:
             grid_sync=grid_sync,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            persistent=persistent,
+            persist_grid=grid_sync != "none" and target_grid_x is not None and target_grid_y is not None,
+            persist_pixel=True,
         )
         return [entity.entity_id]
 
@@ -164,6 +185,7 @@ class MovementSystem:
         grid_sync: GridSyncPolicy = "none",
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
     ) -> list[str]:
         """Move an entity by an arbitrary pixel offset."""
         entity = self.world.get_entity(entity_id)
@@ -182,6 +204,7 @@ class MovementSystem:
             grid_sync=grid_sync,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            persistent=persistent,
         )
 
     def request_move_to_grid_position(
@@ -194,6 +217,7 @@ class MovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: GridSyncPolicy = "on_complete",
+        persistent: bool | None = None,
     ) -> list[str]:
         """Move an entity toward a target addressed in grid coordinates."""
         return self.request_move_to_position(
@@ -206,6 +230,7 @@ class MovementSystem:
             grid_sync=grid_sync,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            persistent=persistent,
         )
 
     def request_move_by_grid_offset(
@@ -218,6 +243,7 @@ class MovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: GridSyncPolicy = "on_complete",
+        persistent: bool | None = None,
     ) -> list[str]:
         """Move an entity by a delta expressed in grid coordinates."""
         entity = self.world.get_entity(entity_id)
@@ -234,6 +260,7 @@ class MovementSystem:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             grid_sync=grid_sync,
+            persistent=persistent,
         )
 
     def set_grid_position(
@@ -241,6 +268,8 @@ class MovementSystem:
         entity_id: str,
         target_grid_x: int,
         target_grid_y: int,
+        *,
+        persistent: bool | None = None,
     ) -> None:
         """Instantly update an entity's logical grid placement without touching pixels."""
         entity = self.world.get_entity(entity_id)
@@ -258,12 +287,20 @@ class MovementSystem:
             target_grid_x=entity.grid_x,
             target_grid_y=entity.grid_y,
         )
+        self._persist_position_state(
+            entity,
+            persistent=persistent,
+            persist_grid=True,
+            persist_pixel=False,
+        )
 
     def set_pixel_position(
         self,
         entity_id: str,
         target_pixel_x: float,
         target_pixel_y: float,
+        *,
+        persistent: bool | None = None,
     ) -> None:
         """Instantly update an entity's pixel position without touching grid placement."""
         entity = self.world.get_entity(entity_id)
@@ -272,6 +309,12 @@ class MovementSystem:
         entity.movement_state.active = False
         entity.pixel_x = float(target_pixel_x)
         entity.pixel_y = float(target_pixel_y)
+        self._persist_position_state(
+            entity,
+            persistent=persistent,
+            persist_grid=False,
+            persist_pixel=True,
+        )
 
     def teleport_to_position(
         self,
@@ -281,6 +324,7 @@ class MovementSystem:
         *,
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
     ) -> None:
         """Instantly move an entity to a pixel position, optionally updating grid state too."""
         entity = self.world.get_entity(entity_id)
@@ -306,12 +350,20 @@ class MovementSystem:
                 target_grid_x=entity.grid_x,
                 target_grid_y=entity.grid_y,
             )
+        self._persist_position_state(
+            entity,
+            persistent=persistent,
+            persist_grid=target_grid_x is not None and target_grid_y is not None,
+            persist_pixel=True,
+        )
 
     def teleport_to_grid_position(
         self,
         entity_id: str,
         target_grid_x: int,
         target_grid_y: int,
+        *,
+        persistent: bool | None = None,
     ) -> None:
         """Instantly move an entity to a grid position and snap pixel position to match."""
         self.teleport_to_position(
@@ -320,6 +372,7 @@ class MovementSystem:
             target_grid_y * self.area.tile_size,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            persistent=persistent,
         )
 
     def update(self, dt: float) -> None:
@@ -358,6 +411,12 @@ class MovementSystem:
                     target_grid_y=movement.target_grid_y,
                     when="complete",
                 )
+                self._persist_position_state(
+                    entity,
+                    persistent=movement.persistent,
+                    persist_grid=movement.persist_grid,
+                    persist_pixel=movement.persist_pixel,
+                )
 
     def is_entity_moving(self, entity_id: str) -> bool:
         """Return True when the requested entity is still interpolating."""
@@ -376,6 +435,9 @@ class MovementSystem:
         grid_sync: GridSyncPolicy,
         target_grid_x: int | None,
         target_grid_y: int | None,
+        persistent: bool | None,
+        persist_grid: bool,
+        persist_pixel: bool,
     ) -> None:
         """Begin a transform interpolation and apply the requested grid-sync policy."""
         previous_grid_x = entity.grid_x
@@ -394,6 +456,9 @@ class MovementSystem:
         movement.elapsed_ticks = 0
         movement.total_ticks = max(0, int(total_ticks))
         movement.grid_sync = grid_sync
+        movement.persistent = persistent
+        movement.persist_grid = persist_grid
+        movement.persist_pixel = persist_pixel
 
         self._apply_grid_sync(
             entity,
@@ -492,6 +557,50 @@ class MovementSystem:
         if seconds <= 0 or config.FPS <= 0:
             return 0
         return max(1, round(seconds * config.FPS))
+
+    def _persist_position_state(
+        self,
+        entity: Entity,
+        *,
+        persistent: bool | None,
+        persist_grid: bool,
+        persist_pixel: bool,
+    ) -> None:
+        """Persist one entity's resolved transform state when policy allows it."""
+        if self.persistence_runtime is None:
+            return
+        if not entity.persistence.resolve_field(explicit=persistent):
+            return
+        if persist_grid:
+            self.persistence_runtime.set_entity_field(
+                entity.entity_id,
+                "grid_x",
+                entity.grid_x,
+                entity=entity,
+                tile_size=self.area.tile_size,
+            )
+            self.persistence_runtime.set_entity_field(
+                entity.entity_id,
+                "grid_y",
+                entity.grid_y,
+                entity=entity,
+                tile_size=self.area.tile_size,
+            )
+        if persist_pixel:
+            self.persistence_runtime.set_entity_field(
+                entity.entity_id,
+                "pixel_x",
+                entity.pixel_x,
+                entity=entity,
+                tile_size=self.area.tile_size,
+            )
+            self.persistence_runtime.set_entity_field(
+                entity.entity_id,
+                "pixel_y",
+                entity.pixel_y,
+                entity=entity,
+                tile_size=self.area.tile_size,
+            )
 
     def _infer_grid_target(
         self,

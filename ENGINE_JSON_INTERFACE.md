@@ -220,6 +220,7 @@ Current engine behavior:
 - `input_targets` is merged on top of project-level `input_targets`.
 - `enter_commands` runs when the area is entered.
 - `camera` is stored as area camera defaults.
+- authored entity ids must be unique across the whole project, including across different areas and `project.json` globals.
 
 ### `tilesets`
 
@@ -320,11 +321,15 @@ This is an action -> entity id mapping, for example:
 }
 ```
 
+Target ids in `input_targets` must refer to authored entity ids that are unique across the whole project, not just within one area.
+
 ### `entities`
 
 Each entry is either:
 - a full entity definition
 - or an instance that references a reusable template with `template` and `parameters`
+
+Authored entity `id` values are project-wide identities. Reusing the same entity id in multiple authored areas is invalid.
 
 ## Entity Templates And Entity Instances
 
@@ -385,6 +390,7 @@ Current engine-known entity fields:
 - `visuals`
 - `entity_commands`
 - `variables`
+- `persistence`
 - `inventory`
 - `input_map`
 
@@ -395,7 +401,28 @@ Template-only / instance metadata that the engine also tracks:
 Runtime-only fields not authored directly:
 - movement state
 - animation playback state
-- session/origin ids
+- traveler origin-area bookkeeping
+
+### Entity Persistence Policy
+
+Entities and templates can now author persistence defaults directly:
+
+```json
+"persistence": {
+  "entity_state": true,
+  "variables": {
+    "shake_timer": false,
+    "times_pushed": true
+  }
+}
+```
+
+Current rules:
+
+- `persistence.entity_state` is the default save policy for entity-targeted state mutations such as `set_entity_field`, `set_visible`, `destroy_entity`, and `spawn_entity`
+- `persistence.variables.<name>` overrides that default for one specific variable name
+- omitting `persistence` means the entity is transient by default
+- explicit command `persistent: true` / `persistent: false` still overrides the entity policy when a command supports it
 
 ### Inventory
 
@@ -1360,13 +1387,13 @@ Current builtin commands, grouped by role.
 
 ### Movement And Position
 
-- `set_entity_grid_position(entity_id, x, y, mode?)`
-- `set_entity_world_position(entity_id, x, y, mode?)`
-- `set_entity_screen_position(entity_id, x, y, mode?)`
-- `move_in_direction(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?)`
-- `push_facing(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?)`
-- `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
-- `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?)`
+- `set_entity_grid_position(entity_id, x, y, mode?, persistent?)`
+- `set_entity_world_position(entity_id, x, y, mode?, persistent?)`
+- `set_entity_screen_position(entity_id, x, y, mode?, persistent?)`
+- `move_in_direction(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
+- `push_facing(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
+- `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
+- `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
 - `wait_for_move(entity_id)`
 
 ### Interaction
@@ -1415,10 +1442,10 @@ Movement timing precedence for interpolated move commands is:
 
 ### Inventory
 
-- `add_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?)`
-- `remove_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?)`
-- `use_inventory_item(entity_id, item_id, quantity?, result_var_name?)`
-- `set_inventory_max_stacks(entity_id, max_stacks)`
+- `add_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?, persistent?)`
+- `remove_inventory_item(entity_id, item_id, quantity?, quantity_mode, result_var_name?, persistent?)`
+- `use_inventory_item(entity_id, item_id, quantity?, result_var_name?, persistent?)`
+- `set_inventory_max_stacks(entity_id, max_stacks, persistent?)`
 - `open_inventory_session(entity_id, ui_preset?, wait?)`
 - `close_inventory_session()`
 
@@ -1641,8 +1668,11 @@ Notes:
 - `set_current_area_var` and related current-area-variable commands operate on the live current-area/runtime variable store for the active play session
 - in normal play, this is the authored surface for current area/runtime state that can also be persisted
 - `toggle_current_area_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
-- persistence is chosen by the mutation command that writes the value, not by the variable name itself
-- authored content should treat each important variable consistently as either saved state or temporary session state
+- entity-targeted mutation commands (`set_entity_var`, `add_entity_var`, `toggle_entity_var`, `set_entity_var_length`, `append_entity_var`, `pop_entity_var`, `set_entity_field`, `set_entity_fields`, `set_visible`, `set_present`, `set_color`, `destroy_entity`, `spawn_entity`, `set_entity_command_enabled`, `set_entity_commands_enabled`) inherit from the target entity's authored `persistence` block when `persistent` is omitted
+- movement/position commands (`set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_in_direction`, `push_facing`, `move_entity_world_position`, `move_entity_screen_position`) also follow that same override-or-inherit rule
+- inventory mutation commands (`add_inventory_item`, `remove_inventory_item`, `use_inventory_item`, `set_inventory_max_stacks`) treat inventory as coarse entity state and also follow that same override-or-inherit rule
+- on those entity-targeted commands, explicit `persistent: true` / `persistent: false` overrides the entity policy
+- current-area variable commands still use command-level persistence only; omitted `persistent` there means transient
 - `set_area_var`, `set_area_entity_var`, and `set_area_entity_field` are always persistent cross-area writes
 - cross-area writes target area-owned authored state plus overrides for the named `area_id`; they do not run live commands in unloaded rooms
 - when a cross-area write targets the currently loaded area, the engine also mirrors the change into live runtime when possible
@@ -1678,7 +1708,7 @@ Example:
 
 ### Reset / Persistence Helpers
 
-- `reset_transient_state(include_tags?, exclude_tags?, apply?)`
+- `reset_transient_state(entity_id?, entity_ids?, include_tags?, exclude_tags?, apply?)`
 - `reset_persistent_state(include_tags?, exclude_tags?, apply?)`
 
 Terms:

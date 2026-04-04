@@ -24,6 +24,7 @@ from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
 from dungeon_engine.world.entity import (
     Entity,
     EntityCommandDefinition,
+    EntityPersistencePolicy,
     EntityVisual,
     InventoryStack,
     InventoryState,
@@ -252,6 +253,7 @@ def instantiate_entity(
         default_pixel_y = 0.0
 
     variables = _parse_entity_variables(entity_data, source_name=source_name)
+    persistence = _parse_entity_persistence(entity_data, source_name=source_name)
     visuals = _parse_entity_visuals(entity_data, tile_size=tile_size, source_name=source_name)
     entity_commands = _parse_entity_commands(entity_data)
     facing = _parse_entity_facing(entity_data, source_name=source_name)
@@ -303,6 +305,7 @@ def instantiate_entity(
         entity_commands=entity_commands,
         variables=variables,
         input_map=_parse_input_map(entity_data.get("input_map")),
+        persistence=persistence,
     )
     return entity
 
@@ -315,6 +318,47 @@ def _parse_entity_variables(entity_data: dict[str, Any], *, source_name: str) ->
     if not isinstance(raw_variables, dict):
         raise ValueError(f"{source_name} field 'variables' must be a JSON object.")
     return copy.deepcopy(raw_variables)
+
+
+def _parse_entity_persistence(
+    entity_data: dict[str, Any],
+    *,
+    source_name: str,
+) -> EntityPersistencePolicy:
+    """Parse one entity's optional persistence policy."""
+    raw_persistence = entity_data.get("persistence")
+    if raw_persistence is None:
+        return EntityPersistencePolicy()
+    if not isinstance(raw_persistence, dict):
+        raise ValueError(f"{source_name} field 'persistence' must be a JSON object.")
+
+    raw_entity_state = raw_persistence.get("entity_state", False)
+    if not isinstance(raw_entity_state, bool):
+        raise ValueError(f"{source_name} field 'persistence.entity_state' must be true or false.")
+
+    raw_variables = raw_persistence.get("variables", {})
+    if raw_variables is None:
+        raw_variables = {}
+    if not isinstance(raw_variables, dict):
+        raise ValueError(f"{source_name} field 'persistence.variables' must be a JSON object.")
+
+    variables: dict[str, bool] = {}
+    for name, raw_value in raw_variables.items():
+        resolved_name = str(name).strip()
+        if not resolved_name:
+            raise ValueError(
+                f"{source_name} field 'persistence.variables' must not use blank variable names."
+            )
+        if not isinstance(raw_value, bool):
+            raise ValueError(
+                f"{source_name} field 'persistence.variables.{resolved_name}' must be true or false."
+            )
+        variables[resolved_name] = raw_value
+
+    return EntityPersistencePolicy(
+        entity_state=raw_entity_state,
+        variables=variables,
+    )
 
 
 def _parse_entity_inventory(
@@ -1283,6 +1327,7 @@ def validate_project_areas(project: ProjectContext) -> None:
     issues: list[str] = []
     global_entity_ids, global_entity_issues = _validate_project_global_entities(project)
     issues.extend(global_entity_issues)
+    area_entity_ids: dict[str, list[Path]] = {}
     startup_area = getattr(project, "startup_area", None)
     if startup_area:
         resolved_startup_area = project.resolve_area_reference(startup_area)
@@ -1315,12 +1360,20 @@ def validate_project_areas(project: ProjectContext) -> None:
                 issues.append(
                     f"{area_path}: area entity id '{entity_id}' conflicts with project.json global entity id '{entity_id}'."
                 )
+            for entity_id in world.area_entities:
+                area_entity_ids.setdefault(entity_id, []).append(area_path)
         except json.JSONDecodeError as exc:
             issues.append(
                 f"{area_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )
         except Exception as exc:
             issues.append(f"{area_path}: {exc}")
+
+    for entity_id, area_paths in sorted(area_entity_ids.items()):
+        if len(area_paths) <= 1:
+            continue
+        formatted_paths = ", ".join(str(path) for path in area_paths)
+        issues.append(f"Duplicate area entity id '{entity_id}' found in: {formatted_paths}")
 
     if issues:
         raise AreaValidationError(project.project_root, issues)

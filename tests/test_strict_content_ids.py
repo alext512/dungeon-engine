@@ -351,7 +351,9 @@ class _RecordingMovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: str = "immediate",
+        persistent: bool | None = None,
     ) -> list[str]:
+        _ = persistent
         self.grid_steps.append(
             (entity_id, direction, duration, frames_needed, speed_px_per_second, grid_sync)
         )
@@ -369,7 +371,9 @@ class _RecordingMovementSystem:
         grid_sync: str = "none",
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
     ) -> list[str]:
+        _ = persistent
         self.move_to_positions.append(
             (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync, target_grid_x, target_grid_y)
         )
@@ -387,7 +391,9 @@ class _RecordingMovementSystem:
         grid_sync: str = "none",
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
     ) -> list[str]:
+        _ = persistent
         self.move_by_offsets.append(
             (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync, target_grid_x, target_grid_y)
         )
@@ -403,7 +409,9 @@ class _RecordingMovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: str = "on_complete",
+        persistent: bool | None = None,
     ) -> list[str]:
+        _ = persistent
         self.move_to_grid_positions.append(
             (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync)
         )
@@ -419,13 +427,23 @@ class _RecordingMovementSystem:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         grid_sync: str = "on_complete",
+        persistent: bool | None = None,
     ) -> list[str]:
+        _ = persistent
         self.move_by_grid_offsets.append(
             (entity_id, x, y, duration, frames_needed, speed_px_per_second, grid_sync)
         )
         return [entity_id]
 
-    def teleport_to_grid_position(self, entity_id: str, x: int, y: int) -> None:
+    def teleport_to_grid_position(
+        self,
+        entity_id: str,
+        x: int,
+        y: int,
+        *,
+        persistent: bool | None = None,
+    ) -> None:
+        _ = persistent
         self.teleport_grid_positions.append((entity_id, x, y))
 
     def teleport_to_position(
@@ -436,8 +454,32 @@ class _RecordingMovementSystem:
         *,
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
     ) -> None:
+        _ = persistent
         self.teleport_positions.append((entity_id, x, y, target_grid_x, target_grid_y))
+
+    def set_grid_position(
+        self,
+        entity_id: str,
+        x: int,
+        y: int,
+        *,
+        persistent: bool | None = None,
+    ) -> None:
+        _ = persistent
+        self.teleport_grid_positions.append((entity_id, x, y))
+
+    def set_pixel_position(
+        self,
+        entity_id: str,
+        x: float,
+        y: float,
+        *,
+        persistent: bool | None = None,
+    ) -> None:
+        _ = persistent
+        self.teleport_positions.append((entity_id, x, y, None, None))
 
     def is_entity_moving(self, entity_id: str) -> bool:
         return entity_id in self.moving_entities
@@ -4147,6 +4189,528 @@ class StrictContentIdTests(unittest.TestCase):
             "choice",
         )
 
+    def test_entity_persistence_policy_round_trips_through_loader_and_serializer(self) -> None:
+        _, project = self._make_project()
+        entity = instantiate_entity(
+            {
+                "id": "brown_box",
+                "kind": "box",
+                "grid_x": 2,
+                "grid_y": 3,
+                "persistence": {
+                    "entity_state": True,
+                    "variables": {
+                        "shake_timer": False,
+                        "times_pushed": True,
+                    },
+                },
+            },
+            16,
+            project=project,
+            source_name="test entity",
+        )
+
+        self.assertTrue(entity.persistence.entity_state)
+        self.assertEqual(
+            entity.persistence.variables,
+            {
+                "shake_timer": False,
+                "times_pushed": True,
+            },
+        )
+
+        area = _minimal_runtime_area()
+        world = World()
+        world.add_entity(entity)
+        serialized = serialize_area(area, world, project=project)
+        self.assertEqual(
+            serialized["entities"][0]["persistence"],
+            {
+                "entity_state": True,
+                "variables": {
+                    "shake_timer": False,
+                    "times_pushed": True,
+                },
+            },
+        )
+
+    def test_entity_var_persistence_inherits_entity_state_policy(self) -> None:
+        _, project = self._make_project()
+        authored_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        authored_world = World()
+        authored_world.add_entity(authored_entity)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
+
+        live_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        live_entity.persistence.entity_state = True
+        live_world = World()
+        live_world.add_entity(live_entity)
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "mode",
+                "value": "choice",
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertEqual(
+            area_state.entities["dialogue_controller"].overrides["variables"]["mode"],
+            "choice",
+        )
+
+    def test_entity_var_persistence_variable_override_wins_when_entity_state_is_transient(self) -> None:
+        _, project = self._make_project()
+        authored_entity = _make_runtime_entity("brown_box", kind="box")
+        authored_world = World()
+        authored_world.add_entity(authored_entity)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
+
+        live_entity = _make_runtime_entity("brown_box", kind="box")
+        live_entity.persistence.variables["times_pushed"] = True
+        live_world = World()
+        live_world.add_entity(live_entity)
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "add_entity_var",
+            {
+                "entity_id": "brown_box",
+                "name": "times_pushed",
+                "amount": 1,
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertEqual(
+            area_state.entities["brown_box"].overrides["variables"]["times_pushed"],
+            1,
+        )
+
+    def test_explicit_entity_var_persistent_false_overrides_entity_policy(self) -> None:
+        _, project = self._make_project()
+        authored_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        authored_world = World()
+        authored_world.add_entity(authored_entity)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
+
+        live_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        live_entity.persistence.entity_state = True
+        live_world = World()
+        live_world.add_entity(live_entity)
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_var",
+            {
+                "entity_id": "dialogue_controller",
+                "name": "mode",
+                "value": "choice",
+                "persistent": False,
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        self.assertTrue(area_state is None or "dialogue_controller" not in area_state.entities)
+
+    def test_entity_field_persistence_inherits_entity_state_policy(self) -> None:
+        _, project = self._make_project()
+        authored_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        authored_world = World()
+        authored_world.add_entity(authored_entity)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
+
+        live_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        live_entity.persistence.entity_state = True
+        live_world = World()
+        live_world.add_entity(live_entity)
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_visible",
+            {
+                "entity_id": "dialogue_controller",
+                "visible": False,
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertFalse(area_state.entities["dialogue_controller"].overrides["visible"])
+
+    def test_destroy_entity_inherits_entity_state_persistence(self) -> None:
+        _, project = self._make_project()
+        authored_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        authored_world = World()
+        authored_world.add_entity(authored_entity)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
+
+        live_entity = _make_runtime_entity("dialogue_controller", kind="system", space="screen")
+        live_entity.persistence.entity_state = True
+        live_world = World()
+        live_world.add_entity(live_entity)
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "destroy_entity",
+            {
+                "entity_id": "dialogue_controller",
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertTrue(area_state.entities["dialogue_controller"].removed)
+
+    def test_spawn_entity_inherits_entity_state_persistence(self) -> None:
+        _, project = self._make_project()
+        authored_world = World()
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area("areas/test_room", authored_world=authored_world)
+
+        live_world = World()
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "spawn_entity",
+            {
+                "entity": {
+                    "id": "menu_cursor",
+                    "kind": "system",
+                    "space": "screen",
+                    "pixel_x": 4,
+                    "pixel_y": 8,
+                    "persistence": {
+                        "entity_state": True,
+                    },
+                },
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertIn("menu_cursor", area_state.entities)
+        self.assertIsNotNone(area_state.entities["menu_cursor"].spawned)
+
+    def test_movement_system_grid_step_inherits_entity_state_persistence(self) -> None:
+        _, project = self._make_project()
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}]],
+        )
+        authored_world = World()
+        authored_player = _make_runtime_entity("player", kind="player")
+        authored_player.grid_x = 0
+        authored_player.grid_y = 0
+        authored_player.sync_pixel_position(area.tile_size)
+        authored_world.add_entity(authored_player)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area(area.area_id, authored_world=authored_world)
+
+        live_world = World()
+        live_player = _make_runtime_entity("player", kind="player")
+        live_player.grid_x = 0
+        live_player.grid_y = 0
+        live_player.sync_pixel_position(area.tile_size)
+        live_player.persistence.entity_state = True
+        live_world.add_entity(live_player)
+
+        movement_system = MovementSystem(
+            area,
+            live_world,
+            CollisionSystem(area, live_world),
+            runtime,
+        )
+        movement_system.request_grid_step("player", "right", frames_needed=0)
+        movement_system.update_tick()
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertEqual(area_state.entities["player"].overrides["grid_x"], 1)
+        self.assertEqual(area_state.entities["player"].overrides["grid_y"], 0)
+
+    def test_movement_system_explicit_transient_override_skips_persistence(self) -> None:
+        _, project = self._make_project()
+        area = Area(
+            area_id="areas/test_room",
+            name="Test Room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}]],
+        )
+        authored_world = World()
+        authored_player = _make_runtime_entity("player", kind="player")
+        authored_player.grid_x = 0
+        authored_player.grid_y = 0
+        authored_player.sync_pixel_position(area.tile_size)
+        authored_world.add_entity(authored_player)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area(area.area_id, authored_world=authored_world)
+
+        live_world = World()
+        live_player = _make_runtime_entity("player", kind="player")
+        live_player.grid_x = 0
+        live_player.grid_y = 0
+        live_player.sync_pixel_position(area.tile_size)
+        live_player.persistence.entity_state = True
+        live_world.add_entity(live_player)
+
+        movement_system = MovementSystem(
+            area,
+            live_world,
+            CollisionSystem(area, live_world),
+            runtime,
+        )
+        movement_system.request_grid_step("player", "right", frames_needed=0, persistent=False)
+        movement_system.update_tick()
+
+        area_state = runtime.current_area_state()
+        self.assertTrue(area_state is None or "player" not in area_state.entities)
+
+    def test_add_inventory_item_inherits_entity_state_persistence(self) -> None:
+        _, project = self._make_project(
+            items={
+                "apple.json": _minimal_item(name="Apple", max_stack=9),
+            }
+        )
+        area = _minimal_runtime_area()
+        authored_world = World()
+        authored_player = _make_runtime_entity("player", kind="player")
+        authored_world.add_entity(authored_player)
+        runtime = PersistenceRuntime(project=project)
+        runtime.bind_area(area.area_id, authored_world=authored_world)
+
+        live_world = World()
+        live_player = _make_runtime_entity("player", kind="player")
+        live_player.persistence.entity_state = True
+        live_player.inventory = InventoryState(max_stacks=2, stacks=[])
+        live_world.add_entity(live_player)
+        registry, context = self._make_command_context(
+            project=project,
+            world=live_world,
+            area=area,
+            persistence_runtime=runtime,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "add_inventory_item",
+            {
+                "entity_id": "player",
+                "item_id": "items/apple",
+                "quantity": 2,
+                "quantity_mode": "atomic",
+            },
+        ).update(0.0)
+
+        area_state = runtime.current_area_state()
+        assert area_state is not None
+        self.assertEqual(
+            area_state.entities["player"].overrides["inventory"],
+            {
+                "max_stacks": 2,
+                "stacks": [
+                    {"item_id": "items/apple", "quantity": 2},
+                ],
+            },
+        )
+
+    def test_reset_transient_state_with_entity_id_restores_traveler_baseline(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        _, project = self._make_project(
+            startup_area="areas/room_a",
+            areas={
+                "room_a.json": {
+                    "name": "Room A",
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
+                    "cell_flags": [[True, True, True]],
+                    "entities": [
+                        {"id": "player", "kind": "player", "grid_x": 0, "grid_y": 0},
+                        {
+                            "id": "crate",
+                            "kind": "crate",
+                            "grid_x": 1,
+                            "grid_y": 0,
+                            "persistence": {"entity_state": False},
+                        },
+                    ],
+                },
+                "room_b.json": {
+                    "name": "Room B",
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
+                    "cell_flags": [[True, True, True]],
+                    "entry_points": {"landing": {"grid_x": 2, "grid_y": 0}},
+                    "entities": [],
+                },
+            },
+        )
+
+        area_a_path = project.resolve_area_reference("areas/room_a")
+        assert area_a_path is not None
+        game = Game(area_path=area_a_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        game.request_area_change(
+            AreaTransitionRequest(
+                area_id="areas/room_b",
+                entry_id="landing",
+                transfer_entity_ids=["crate"],
+            )
+        )
+        game._apply_pending_area_change_if_idle()
+
+        crate = game.world.get_entity("crate")
+        assert crate is not None
+        crate.variables["temporary"] = True
+        game.movement_system.set_grid_position("crate", 0, 0)
+
+        game.command_runner.enqueue("reset_transient_state", entity_id="crate")
+        game.command_runner.update(0.0)
+        game._apply_pending_reset_if_idle()
+
+        reset_crate = game.world.get_entity("crate")
+        assert reset_crate is not None
+        self.assertEqual((reset_crate.grid_x, reset_crate.grid_y), (2, 0))
+        self.assertNotIn("temporary", reset_crate.variables)
+
+    def test_active_area_change_drops_transient_traveler_state(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        _, project = self._make_project(
+            startup_area="areas/room_a",
+            areas={
+                "room_a.json": {
+                    "name": "Room A",
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
+                    "cell_flags": [[True, True, True]],
+                    "entities": [
+                        {"id": "player", "kind": "player", "grid_x": 0, "grid_y": 0},
+                        {
+                            "id": "crate",
+                            "kind": "crate",
+                            "grid_x": 1,
+                            "grid_y": 0,
+                            "persistence": {"entity_state": False},
+                        },
+                    ],
+                },
+                "room_b.json": {
+                    "name": "Room B",
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
+                    "cell_flags": [[True, True, True]],
+                    "entry_points": {"landing": {"grid_x": 2, "grid_y": 0}},
+                    "entities": [],
+                },
+                "room_c.json": {
+                    "name": "Room C",
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
+                    "cell_flags": [[True, True, True]],
+                    "entities": [],
+                },
+            },
+        )
+
+        area_a_path = project.resolve_area_reference("areas/room_a")
+        assert area_a_path is not None
+        game = Game(area_path=area_a_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        game.request_area_change(
+            AreaTransitionRequest(
+                area_id="areas/room_b",
+                entry_id="landing",
+                transfer_entity_ids=["crate"],
+            )
+        )
+        game._apply_pending_area_change_if_idle()
+
+        crate = game.world.get_entity("crate")
+        assert crate is not None
+        crate.variables["temporary"] = True
+        game.movement_system.set_grid_position("crate", 0, 0)
+
+        game.request_area_change(AreaTransitionRequest(area_id="areas/room_c"))
+        game._apply_pending_area_change_if_idle()
+        game.request_area_change(AreaTransitionRequest(area_id="areas/room_b"))
+        game._apply_pending_area_change_if_idle()
+
+        restored_crate = game.world.get_entity("crate")
+        assert restored_crate is not None
+        self.assertEqual((restored_crate.grid_x, restored_crate.grid_y), (2, 0))
+        self.assertNotIn("temporary", restored_crate.variables)
+
     def test_current_area_runtime_token_replaces_world_token(self) -> None:
         world = World()
         world.variables["phase"] = "opening"
@@ -4644,6 +5208,78 @@ class StrictContentIdTests(unittest.TestCase):
             )
         )
 
+    def test_area_validation_rejects_duplicate_area_entity_ids_within_one_area(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "entities": [
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "grid_x": 1,
+                            "grid_y": 1,
+                        },
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "grid_x": 2,
+                            "grid_y": 1,
+                        },
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any(
+                "Entity id 'gate_1' already exists as a area-scope entity and cannot be added again."
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
+    def test_area_validation_rejects_duplicate_area_entity_ids_across_areas(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "room_a.json": {
+                    **_minimal_area(name="Room A"),
+                    "entities": [
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "grid_x": 1,
+                            "grid_y": 1,
+                        }
+                    ],
+                },
+                "room_b.json": {
+                    **_minimal_area(name="Room B"),
+                    "entities": [
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "grid_x": 2,
+                            "grid_y": 1,
+                        }
+                    ],
+                },
+            }
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any(
+                "Duplicate area entity id 'gate_1' found in:" in issue
+                for issue in raised.exception.issues
+            )
+        )
+
     def test_area_validation_rejects_area_entity_id_collision_with_project_global(self) -> None:
         _, project = self._make_project(
             global_entities=[
@@ -4702,6 +5338,47 @@ class StrictContentIdTests(unittest.TestCase):
         restored_entity = world.get_entity("dialogue_controller")
         assert restored_entity is not None
         self.assertEqual(restored_entity.scope, "global")
+
+    def test_world_rejects_same_scope_entity_id_collisions(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("gate_1", kind="gate"))
+
+        with self.assertRaises(ValueError):
+            world.add_entity(_make_runtime_entity("gate_1", kind="sign"))
+
+        restored_entity = world.get_entity("gate_1")
+        assert restored_entity is not None
+        self.assertEqual(restored_entity.kind, "gate")
+
+    def test_load_area_from_data_rejects_duplicate_entity_ids_in_one_area(self) -> None:
+        project = load_project(
+            Path(
+                r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_area_from_data(
+                {
+                    **_minimal_area(),
+                    "entities": [
+                        {
+                            "id": "gate_1",
+                            "kind": "gate",
+                            "grid_x": 1,
+                            "grid_y": 1,
+                        },
+                        {
+                            "id": "gate_1",
+                            "kind": "sign",
+                            "grid_x": 2,
+                            "grid_y": 1,
+                        },
+                    ],
+                },
+                source_name="<memory>",
+                project=project,
+            )
 
     def test_world_route_inputs_to_entity_clear_restores_defaults(self) -> None:
         world = World(
@@ -7271,7 +7948,42 @@ class StrictContentIdTests(unittest.TestCase):
             tile_size=area_a.tile_size,
         )
 
-        restored_save_data = save_data_from_dict(save_data_to_dict(runtime.save_data))
+        serialized_save_data = save_data_to_dict(runtime.save_data)
+        self.assertNotIn("next_session_entity_serial", serialized_save_data)
+        self.assertEqual(
+            serialized_save_data["travelers"]["crate"],
+            {
+                "current_area": "areas/room_b",
+                "entity": {
+                    "id": "crate",
+                    "grid_x": 5,
+                    "grid_y": 6,
+                    "kind": "crate",
+                    "space": "world",
+                    "scope": "area",
+                    "present": True,
+                    "visible": True,
+                    "facing": "down",
+                    "solid": False,
+                    "pushable": False,
+                    "weight": 1,
+                    "push_strength": 0,
+                    "collision_push_strength": 0,
+                    "interactable": False,
+                    "interaction_priority": 0,
+                    "entity_commands_enabled": True,
+                    "render_order": 10,
+                    "y_sort": True,
+                    "sort_y_offset": 0,
+                    "stack_order": 0,
+                    "color": [255, 255, 255],
+                    "tags": [],
+                    "variables": {"moved": True},
+                },
+                "origin_area": "areas/room_a",
+            },
+        )
+        restored_save_data = save_data_from_dict(serialized_save_data)
 
         world_a = World()
         world_a.add_entity(_make_runtime_entity("crate", kind="crate"))
@@ -7285,9 +7997,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(restored_crate.grid_x, 5)
         self.assertEqual(restored_crate.grid_y, 6)
         self.assertTrue(restored_crate.variables["moved"])  # type: ignore[index]
-        self.assertIsNotNone(restored_crate.session_entity_id)
         self.assertEqual(restored_crate.origin_area_id, "areas/room_a")
-        self.assertEqual(restored_crate.origin_entity_id, "crate")
 
     def test_game_area_change_without_returning_traveler_suppresses_origin_placeholder(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")

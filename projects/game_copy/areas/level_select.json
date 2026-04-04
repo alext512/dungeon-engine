@@ -124,7 +124,7 @@
     },
     {
       "type": "set_entity_grid_position",
-      "entity_id": "player",
+      "entity_id": "level_select_player",
       "x": 1,
       "y": 2,
       "mode": "absolute"
@@ -135,7 +135,7 @@
       "then": [
         {
           "type": "set_entity_grid_position",
-          "entity_id": "player",
+          "entity_id": "level_select_player",
           "x": 1,
           "y": 3,
           "mode": "absolute"
@@ -148,7 +148,7 @@
           "then": [
             {
               "type": "set_entity_grid_position",
-              "entity_id": "player",
+              "entity_id": "level_select_player",
               "x": 1,
               "y": 4,
               "mode": "absolute"
@@ -161,7 +161,7 @@
               "then": [
                 {
                   "type": "set_entity_grid_position",
-                  "entity_id": "player",
+                  "entity_id": "level_select_player",
                   "x": 1,
                   "y": 5,
                   "mode": "absolute"
@@ -174,7 +174,7 @@
                   "then": [
                     {
                       "type": "set_entity_grid_position",
-                      "entity_id": "player",
+                      "entity_id": "level_select_player",
                       "x": 1,
                       "y": 6,
                       "mode": "absolute"
@@ -368,7 +368,7 @@
   "camera": {
     "follow": {
       "mode": "entity",
-      "entity_id": "player"
+      "entity_id": "level_select_player"
     },
     "bounds": {
       "x": 0,
@@ -379,15 +379,15 @@
     }
   },
   "input_targets": {
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player",
-    "interact": "player"
+    "move_up": "level_select_player",
+    "move_down": "level_select_player",
+    "move_left": "level_select_player",
+    "move_right": "level_select_player",
+    "interact": "level_select_player"
   },
   "entities": [
     {
-      "id": "player",
+      "id": "level_select_player",
       "template": "entity_templates/player",
       "render_order": 10,
       "grid_x": 1,

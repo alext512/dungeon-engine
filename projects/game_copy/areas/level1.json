@@ -1495,7 +1495,7 @@
   "camera": {
     "follow": {
       "mode": "entity",
-      "entity_id": "player"
+      "entity_id": "level1_player"
     },
     "bounds": {
       "x": 0,
@@ -1506,15 +1506,15 @@
     }
   },
   "input_targets": {
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player",
-    "interact": "player"
+    "move_up": "level1_player",
+    "move_down": "level1_player",
+    "move_left": "level1_player",
+    "move_right": "level1_player",
+    "interact": "level1_player"
   },
   "entities": [
     {
-      "id": "npc",
+      "id": "level1_npc",
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level1_npc.json"
@@ -1524,7 +1524,7 @@
       "grid_y": 10
     },
     {
-      "id": "gate",
+      "id": "level1_gate",
       "template": "entity_templates/gate",
       "parameters": {
         "correct_value_0": 1,
@@ -1536,10 +1536,10 @@
       "grid_y": 8
     },
     {
-      "id": "lever",
+      "id": "level1_lever",
       "template": "entity_templates/lever_toggle",
       "parameters": {
-        "target_gate_id": "gate",
+        "target_gate_id": "level1_gate",
         "target_index": 0,
         "trigger_only_once": true
       },
@@ -1548,7 +1548,7 @@
       "grid_y": 10
     },
     {
-      "id": "exit",
+      "id": "level1_exit",
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -1590,14 +1590,14 @@
       "grid_y": 2
     },
     {
-      "id": "player",
+      "id": "level1_player",
       "template": "entity_templates/player",
       "render_order": 10,
       "grid_x": 5,
       "grid_y": 15
     },
     {
-      "id": "ball",
+      "id": "level1_ball",
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
@@ -1623,7 +1623,7 @@
       "grid_y": 9
     },
     {
-      "id": "restart",
+      "id": "level1_restart",
       "template": "entity_templates/restart_trigger",
       "parameters": {
         "dialogue_path": "dialogues/system/restart_or_return.json",

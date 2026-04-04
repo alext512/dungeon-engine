@@ -1831,7 +1831,7 @@
   "camera": {
     "follow": {
       "mode": "entity",
-      "entity_id": "player"
+      "entity_id": "level4_player"
     },
     "bounds": {
       "x": 0,
@@ -1842,15 +1842,15 @@
     }
   },
   "input_targets": {
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player",
-    "interact": "player"
+    "move_up": "level4_player",
+    "move_down": "level4_player",
+    "move_left": "level4_player",
+    "move_right": "level4_player",
+    "interact": "level4_player"
   },
   "entities": [
     {
-      "id": "npc",
+      "id": "level4_npc",
       "template": "entity_templates/npc",
       "parameters": {
         "dialogue_path": "dialogues/levels/level4_npc.json"
@@ -1860,7 +1860,7 @@
       "grid_y": 11
     },
     {
-      "id": "exit",
+      "id": "level4_exit",
       "template": "entity_templates/prompt_object",
       "parameters": {
         "sprite_path": "assets/original/Door.png",
@@ -1907,7 +1907,7 @@
       "parameters": {
         "hole_shape": "triangle",
         "sprite_path": "assets/original/triange_hole.png",
-        "target_gate_id": "gate",
+        "target_gate_id": "level4_gate",
         "target_index": 0,
         "target_amount": 1
       },
@@ -1921,7 +1921,7 @@
       "parameters": {
         "hole_shape": "square",
         "sprite_path": "assets/original/Square_Hole.png",
-        "target_gate_id": "gate",
+        "target_gate_id": "level4_gate",
         "target_index": 1,
         "target_amount": 1
       },
@@ -1935,7 +1935,7 @@
       "parameters": {
         "hole_shape": "square",
         "sprite_path": "assets/original/Square_Hole.png",
-        "target_gate_id": "gate",
+        "target_gate_id": "level4_gate",
         "target_index": 1,
         "target_amount": 1
       },
@@ -1949,7 +1949,7 @@
       "parameters": {
         "hole_shape": "circle",
         "sprite_path": "assets/original/circle_hole.png",
-        "target_gate_id": "gate",
+        "target_gate_id": "level4_gate",
         "target_index": 2,
         "target_amount": 1
       },
@@ -1958,7 +1958,7 @@
       "grid_y": 6
     },
     {
-      "id": "ball",
+      "id": "level4_ball",
       "template": "entity_templates/pushable_object",
       "parameters": {
         "shape": "circle",
@@ -2006,7 +2006,7 @@
       "grid_y": 9
     },
     {
-      "id": "gate",
+      "id": "level4_gate",
       "kind": "gate",
       "variables": {
         "blocks_movement": true,
@@ -2206,7 +2206,7 @@
       "grid_y": 3
     },
     {
-      "id": "lever",
+      "id": "level4_lever",
       "kind": "lever",
       "variables": {
         "blocks_movement": true
@@ -2228,7 +2228,7 @@
           "commands": [
             {
               "type": "run_entity_command",
-              "entity_id": "gate",
+              "entity_id": "level4_gate",
               "command_id": "attempt_open",
               "entity_refs": {
                 "instigator": "$ref_ids.instigator"
@@ -2242,14 +2242,14 @@
       "grid_y": 5
     },
     {
-      "id": "player",
+      "id": "level4_player",
       "template": "entity_templates/player",
       "render_order": 10,
       "grid_x": 10,
       "grid_y": 11
     },
     {
-      "id": "restart",
+      "id": "level4_restart",
       "template": "entity_templates/restart_trigger",
       "parameters": {
         "dialogue_path": "dialogues/system/restart_or_return.json",

@@ -918,13 +918,6 @@
   ],
   "entities": [
     {
-      "id": "player",
-      "template": "entity_templates/player",
-      "render_order": 10,
-      "grid_x": 8,
-      "grid_y": 9
-    },
-    {
       "id": "house_exit",
       "template": "entity_templates/area_door",
       "parameters": {

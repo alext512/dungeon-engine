@@ -220,7 +220,12 @@ class Game:
 
         self.collision_system = CollisionSystem(self.area, self.world)
         self.interaction_system = InteractionSystem(self.world)
-        self.movement_system = MovementSystem(self.area, self.world, self.collision_system)
+        self.movement_system = MovementSystem(
+            self.area,
+            self.world,
+            self.collision_system,
+            self.persistence_runtime,
+        )
         self.animation_system = AnimationSystem(self.world)
         command_context = CommandContext(
             area=self.area,
@@ -398,17 +403,16 @@ class Game:
             self.persistence_runtime.save_data,
             project=self.project,
         )
-        transferred_session_entity_ids = {
-            str(entity.session_entity_id)
+        transferred_entity_ids = {
+            str(entity.entity_id)
             for entity in (transferred_entities or [])
-            if getattr(entity, "session_entity_id", None)
         }
         apply_area_travelers(
             area,
             world,
             self.persistence_runtime.save_data,
             project=self.project,
-            skip_session_entity_ids=transferred_session_entity_ids,
+            skip_entity_ids=transferred_entity_ids,
         )
         self._install_transferred_entities(
             area,
@@ -429,7 +433,12 @@ class Game:
         )
         self._install_play_runtime()
         self._apply_area_camera_defaults()
-        self.persistence_runtime.refresh_live_travelers(self.area, self.world)
+        self.persistence_runtime.refresh_live_travelers(
+            self.area,
+            self.world,
+            include_transient=False,
+            force_entity_ids=transferred_entity_ids,
+        )
         if restored_input_targets:
             self.world.set_input_targets(restored_input_targets, replace=False)
         self._apply_transition_camera_follow(
@@ -778,19 +787,28 @@ class Game:
 
     def _apply_runtime_reset(self, request: ResetRequest) -> None:
         """Reset the whole room or matching entities against authored+persistent state."""
-        selected_ids = select_entity_ids_by_tags(
-            self.play_authored_world,
-            include_tags=request.include_tags,
-            exclude_tags=request.exclude_tags,
-        )
-        if not request.include_tags and not request.exclude_tags:
+        selected_ids = set(request.entity_ids)
+        if not selected_ids:
+            selected_ids = set(
+                select_entity_ids_by_tags(
+                    self.play_authored_world,
+                    include_tags=request.include_tags,
+                    exclude_tags=request.exclude_tags,
+                )
+            )
+        if not selected_ids and not request.include_tags and not request.exclude_tags:
             self._rebuild_play_world()
             return
         if not selected_ids:
             return
 
         reference_area, reference_world = self._build_current_play_reference()
-        _ = reference_area
+        apply_area_travelers(
+            reference_area,
+            reference_world,
+            self.persistence_runtime.save_data,
+            project=self.project,
+        )
         for entity_id in selected_ids:
             current_entity = self.world.get_entity(entity_id)
             reference_entity = reference_world.get_entity(entity_id)
@@ -798,7 +816,7 @@ class Game:
                 if current_entity is not None:
                     self.world.remove_entity(entity_id)
                 continue
-            self.world.add_entity(copy.deepcopy(reference_entity))
+            self.world.replace_entity(copy.deepcopy(reference_entity))
 
     def _build_current_play_reference(self):
         """Build a fresh play world from authored data plus current persistent overrides."""
@@ -826,6 +844,11 @@ class Game:
     def _apply_area_transition_request(self, request: AreaTransitionRequest) -> None:
         """Apply one authored area transition, optionally carrying runtime entities with it."""
         resolved_area_path = self._resolve_area_path(request.area_id)
+        self.persistence_runtime.refresh_live_travelers(
+            self.area,
+            self.world,
+            include_transient=False,
+        )
         transferred_entities = self._capture_transition_entities(request)
         for entity in transferred_entities:
             self.persistence_runtime.prepare_traveler_for_area(
@@ -946,7 +969,11 @@ class Game:
 
     def _rebuild_play_world(self) -> None:
         """Rebuild the current play world from authored data plus persistent overrides."""
-        self.persistence_runtime.refresh_live_travelers(self.area, self.world)
+        self.persistence_runtime.refresh_live_travelers(
+            self.area,
+            self.world,
+            include_transient=False,
+        )
         self.area, self.world = self._build_current_play_reference()
         apply_area_travelers(
             self.area,
@@ -964,7 +991,12 @@ class Game:
 
     def _write_save_slot(self, save_path: Path) -> None:
         """Write the current persistent/session state to one explicit save slot."""
-        self.persistence_runtime.refresh_live_travelers(self.area, self.world)
+        traveler_baseline = copy.deepcopy(self.persistence_runtime.save_data.travelers)
+        self.persistence_runtime.refresh_live_travelers(
+            self.area,
+            self.world,
+            include_transient=True,
+        )
         _, persistent_reference_world = self._build_current_play_reference()
         self.persistence_runtime.save_data.current_area = self._capture_current_area_reference()
         self.persistence_runtime.save_data.current_input_targets = copy.deepcopy(
@@ -991,6 +1023,7 @@ class Game:
         try:
             self.persistence_runtime.flush(force=True)
         finally:
+            self.persistence_runtime.save_data.travelers = traveler_baseline
             # The exact saved room state is for file output and one-time load restore only.
             self.persistence_runtime.save_data.current_camera = None
             self.persistence_runtime.save_data.current_area_state = None
@@ -1033,6 +1066,11 @@ class Game:
         )
         self._apply_saved_input_targets(current_input_targets)
         self._apply_saved_camera_state(current_camera)
+        self.persistence_runtime.refresh_live_travelers(
+            self.area,
+            self.world,
+            include_transient=False,
+        )
 
     def _resolve_saved_area_path(self) -> Path:
         """Resolve the saved session's current area reference, falling back safely."""

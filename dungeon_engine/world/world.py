@@ -45,7 +45,25 @@ class World:
         self.input_targets = merged_targets
 
     def add_entity(self, entity: Entity) -> None:
-        """Insert or replace an entity by its stable identifier."""
+        """Insert a new entity by id and fail on any duplicate identifier."""
+        existing_entity = self.get_entity(entity.entity_id)
+        if existing_entity is not None:
+            if existing_entity.scope != entity.scope:
+                raise ValueError(
+                    f"Entity id '{entity.entity_id}' already exists as a {existing_entity.scope}-scope "
+                    f"entity and cannot be added as a {entity.scope}-scope entity."
+                )
+            raise ValueError(
+                f"Entity id '{entity.entity_id}' already exists as a {entity.scope}-scope "
+                "entity and cannot be added again."
+            )
+        if entity.scope == "global":
+            self.global_entities[entity.entity_id] = entity
+            return
+        self.area_entities[entity.entity_id] = entity
+
+    def replace_entity(self, entity: Entity) -> None:
+        """Insert or replace an entity explicitly by its stable identifier."""
         existing_entity = self.get_entity(entity.entity_id)
         if existing_entity is not None and existing_entity.scope != entity.scope:
             raise ValueError(
@@ -311,7 +329,7 @@ class World:
         ]
 
     def generate_entity_id(self, base_name: str) -> str:
-        """Return a stable unique entity id for new authored instances."""
+        """Return a unique entity id within the current live world."""
         candidate = base_name
         counter = 1
         while self.get_entity(candidate) is not None:

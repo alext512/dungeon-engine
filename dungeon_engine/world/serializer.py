@@ -230,6 +230,9 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),
     }
+    persistence = _serialize_entity_persistence(entity)
+    if persistence is not None:
+        data["persistence"] = persistence
     if entity.input_map:
         data["input_map"] = copy.deepcopy(entity.input_map)
     if data["inventory"] is None:
@@ -267,6 +270,9 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "tags": copy.deepcopy(entity.tags),
         "variables": copy.deepcopy(entity.variables),
     }
+    persistence = _serialize_entity_persistence(entity)
+    if persistence is not None:
+        data["persistence"] = persistence
     if entity.input_map:
         data["input_map"] = copy.deepcopy(entity.input_map)
     if data["inventory"] is None:
@@ -287,6 +293,23 @@ def _serialize_pixel_position_fields(entity: Any, tile_size: int) -> dict[str, A
         data["pixel_x"] = _serialize_number(entity.pixel_x)
     if not math.isclose(entity.pixel_y, default_pixel_y, abs_tol=0.001):
         data["pixel_y"] = _serialize_number(entity.pixel_y)
+    return data
+
+
+def _serialize_entity_persistence(entity: Any) -> dict[str, Any] | None:
+    """Serialize an entity's authored persistence policy when it is non-default."""
+    policy = getattr(entity, "persistence", None)
+    if policy is None or policy.is_default():
+        return None
+
+    data: dict[str, Any] = {
+        "entity_state": bool(policy.entity_state),
+    }
+    if policy.variables:
+        data["variables"] = {
+            str(name): bool(value)
+            for name, value in sorted(policy.variables.items())
+        }
     return data
 
 

@@ -158,6 +158,8 @@ Example:
 - `save_dir`
   Directory for save files. Defaults to `saves`.
 
+Authored entity ids are now project-wide identities. Do not reuse the same entity id across different areas or between area entities and `global_entities`.
+
 ## `items/*.json`
 
 Inventory V1 item definitions are ordinary JSON files discovered through the
@@ -430,6 +432,8 @@ Placed entities usually reference a template:
 
 For world-space placement, authored entities now use `grid_x` / `grid_y`. Screen-space entities continue to use `pixel_x` / `pixel_y`.
 
+Authored `id` values are project-wide identities. If the same actor truly moves between areas, author it once and transfer it; do not keep duplicate placeholders with the same id in multiple areas.
+
 ## Entity Templates
 
 Entity templates define reusable gameplay objects.
@@ -552,6 +556,8 @@ Important rules:
   `$self_id.variables[result_var_name]`
 - if authored logic cares whether inventory state actually changed, check
   `changed_quantity > 0`
+- inventory mutation commands now follow the target entity's persistence
+  policy when `persistent` is omitted
 - item `icon` is for list rows; item `portrait` is for the bottom detail panel
 - the engine-owned inventory UI derives usability from whether `use_commands`
   exists and is non-empty
@@ -1668,7 +1674,10 @@ That pattern is useful when you want the camera to follow an entity normally, bu
 
 ## Persistence Notes
 
-If you want a gameplay change to survive save/load, use `persistent: true` on the relevant command when supported.
+If you want a gameplay change to survive save/load, you now have two layers:
+
+- authored entity/template persistence defaults
+- command-level `persistent: true` / `persistent: false` overrides
 
 Terms:
 
@@ -1677,11 +1686,44 @@ Terms:
 - `transient`
   - the change only affects the current live session and disappears when the runtime state is rebuilt or the game is reloaded
 
-Authoring guideline:
+Entity/template default:
 
-- treat persistence as a property of the write command, not the variable name itself
-- for any important gameplay variable, decide whether it represents saved state or temporary session state
-- then write that same variable consistently
+```json
+"persistence": {
+  "entity_state": true,
+  "variables": {
+    "shake_timer": false,
+    "times_pushed": true
+  }
+}
+```
+
+Meaning:
+
+- `entity_state: true`
+  - entity-targeted mutation commands save by default
+- `variables.<name>`
+  - overrides the default for one specific variable name
+
+Command behavior:
+
+- explicit `persistent: true`
+  - force-save the change
+- explicit `persistent: false`
+  - force the change to stay transient
+- omitted `persistent` on entity-targeted mutation commands
+  - inherit from the entity/template `persistence` policy
+- omitted `persistent` on movement and inventory mutation commands
+  - also inherit from the entity/template `persistence` policy
+- omitted `persistent` on current-area variable commands
+  - still means transient
+
+Area-change rule:
+
+- exact save/load of the currently active area preserves the full live snapshot
+- transient entity/traveler state is dropped when the active area changes
+- if you need to clear transient state earlier, `reset_transient_state` can now
+  target one entity directly with `entity_id` / `entity_ids`
 
 Good examples:
 
@@ -1690,7 +1732,7 @@ Good examples:
 - temporary controller/UI helpers such as `dialogue_open`, `selected_index`, or scratch movement vars
   - usually transient
 
-Avoid mixing the same variable between persistent and transient writes unless you are doing it intentionally and understand the consequences. If a variable is sometimes saved and sometimes not, later behavior can become hard to reason about.
+Avoid mixing the same variable between persistent and transient writes unless you are doing it intentionally and understand the consequences. Variable-specific persistence overrides can help make that intent explicit.
 
 Common examples:
 
@@ -1698,10 +1740,11 @@ Common examples:
 - `set_entity_var` with `persistent: true`
 - `set_entity_field` with `persistent: true`
 - `set_entity_fields` with `persistent: true`
+- or an entity/template with `persistence.entity_state: true` so those commands can omit `persistent`
 
 `set_current_area_var` is the current authored surface for live area/runtime state. Use it for room/session flags such as opened chests, current puzzle state, or temporary controller state that belongs to the current play session rather than one specific entity.
 
-A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var` with `persistent: true` to remember whether the lever is toggled, and `set_entity_field` or `set_entity_fields` with `persistent: true` to update the gate's runtime presentation/state.
+A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var` to remember whether the lever is toggled, and `set_entity_field` or `set_entity_fields` to update the gate's runtime presentation/state. You can still force persistence per command, but if the lever/gate entities already author the right `persistence` defaults, those commands can omit `persistent` cleanly.
 
 `set_entity_fields` is the structured bulk-mutation form. It lets one command update top-level entity fields, ordinary entity variables, and one or more visuals together:
 

@@ -35,6 +35,9 @@ class MovementState:
     elapsed_ticks: int = 0
     total_ticks: int = 0
     grid_sync: GridSyncPolicy = "immediate"
+    persistent: bool | None = None
+    persist_grid: bool = False
+    persist_pixel: bool = False
 
 
 @dataclass(slots=True)
@@ -72,6 +75,32 @@ class InventoryState:
 
     max_stacks: int = 0
     stacks: list[InventoryStack] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class EntityPersistencePolicy:
+    """Authored persistence defaults for one entity."""
+
+    entity_state: bool = False
+    variables: dict[str, bool] = field(default_factory=dict)
+
+    def resolve_field(self, *, explicit: bool | None = None) -> bool:
+        """Return whether one entity-state mutation should persist."""
+        if explicit is not None:
+            return bool(explicit)
+        return bool(self.entity_state)
+
+    def resolve_variable(self, name: str, *, explicit: bool | None = None) -> bool:
+        """Return whether one variable mutation should persist."""
+        if explicit is not None:
+            return bool(explicit)
+        if name in self.variables:
+            return bool(self.variables[name])
+        return bool(self.entity_state)
+
+    def is_default(self) -> bool:
+        """Return True when the policy is equivalent to the engine default."""
+        return not self.entity_state and not self.variables
 
 
 @dataclass(slots=True)
@@ -161,11 +190,10 @@ class Entity:
     entity_commands: dict[str, EntityCommandDefinition] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
     input_map: dict[str, str] = field(default_factory=dict)
+    persistence: EntityPersistencePolicy = field(default_factory=EntityPersistencePolicy)
     movement_state: MovementState = field(default_factory=MovementState)
     animation_playback: AnimationPlaybackState = field(default_factory=AnimationPlaybackState)
-    session_entity_id: str | None = None
     origin_area_id: str | None = None
-    origin_entity_id: str | None = None
 
     def sync_pixel_position(self, tile_size: int) -> None:
         """Align pixel coordinates to the current grid coordinate."""

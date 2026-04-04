@@ -21,7 +21,7 @@ from dungeon_engine.world.entity import Entity, EntityVisual
 from dungeon_engine.world.world import World
 
 
-SAVE_DATA_VERSION = 7
+SAVE_DATA_VERSION = 8
 
 
 @dataclass(slots=True)
@@ -45,11 +45,9 @@ class PersistentAreaState:
 class TravelerState:
     """Saved state for one entity that currently lives outside its authored origin room."""
 
-    session_entity_id: str
     current_area: str
     entity_data: dict[str, Any]
     origin_area: str | None = None
-    origin_entity_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -57,7 +55,6 @@ class SaveData:
     """Serializable save-slot data for persistent gameplay state."""
 
     version: int = SAVE_DATA_VERSION
-    next_session_entity_serial: int = 1
     globals: dict[str, Any] = field(default_factory=dict)
     global_entities: dict[str, PersistentEntityState] = field(default_factory=dict)
     current_area: str = ""
@@ -75,6 +72,7 @@ class ResetRequest:
 
     kind: str
     apply: str = "immediate"
+    entity_ids: tuple[str, ...] = ()
     include_tags: tuple[str, ...] = ()
     exclude_tags: tuple[str, ...] = ()
 
@@ -117,13 +115,6 @@ class PersistenceRuntime:
         else:
             self._current_authored_entity_ids = set()
 
-    def allocate_session_entity_id(self) -> str:
-        """Return a stable new runtime session id for a traveler-managed entity."""
-        session_entity_id = f"traveler_{int(self.save_data.next_session_entity_serial)}"
-        self.save_data.next_session_entity_serial += 1
-        self.dirty = True
-        return session_entity_id
-
     def prepare_traveler_for_area(
         self,
         entity: Entity,
@@ -132,23 +123,26 @@ class PersistenceRuntime:
         tile_size: int,
     ) -> None:
         """Move one runtime entity into traveler-managed session state for a new area."""
-        if entity.session_entity_id is None:
-            entity.session_entity_id = self.allocate_session_entity_id()
+        first_departure = entity.origin_area_id is None
         if entity.origin_area_id is None and self.current_area_id:
             entity.origin_area_id = self.current_area_id
-        if entity.origin_entity_id is None and self._is_authored_entity(entity.entity_id):
-            entity.origin_entity_id = entity.entity_id
 
-        self.save_data.travelers[entity.session_entity_id] = TravelerState(
-            session_entity_id=entity.session_entity_id,
+        self.save_data.travelers[entity.entity_id] = TravelerState(
             current_area=str(destination_area_id),
-            entity_data=_serialize_saved_entity(
-                entity,
-                tile_size,
-                project=self.project,
+            entity_data=(
+                _serialize_saved_entity(
+                    entity,
+                    tile_size,
+                    project=self.project,
+                )
+                if first_departure
+                else self._capture_traveler_entity_data(
+                    entity,
+                    tile_size=tile_size,
+                    include_transient=False,
+                )
             ),
             origin_area=entity.origin_area_id,
-            origin_entity_id=entity.origin_entity_id,
         )
         self._remove_entity_from_area_state(self.current_area_id, entity.entity_id)
         self.dirty = True
@@ -157,32 +151,42 @@ class PersistenceRuntime:
         self,
         area: Area,
         world: World,
+        *,
+        include_transient: bool = False,
+        force_entity_ids: set[str] | None = None,
     ) -> None:
         """Refresh saved traveler payloads from the currently loaded room."""
-        live_session_ids: set[str] = set()
+        forced_ids = set(force_entity_ids or set())
+        live_traveler_ids: set[str] = set()
         for entity in world.iter_area_entities(include_absent=True):
-            if not entity.session_entity_id:
+            if entity.origin_area_id is None:
                 continue
-            live_session_ids.add(entity.session_entity_id)
-            self.save_data.travelers[entity.session_entity_id] = TravelerState(
-                session_entity_id=entity.session_entity_id,
+            live_traveler_ids.add(entity.entity_id)
+            self.save_data.travelers[entity.entity_id] = TravelerState(
                 current_area=area.area_id,
-                entity_data=_serialize_saved_entity(
-                    entity,
-                    area.tile_size,
-                    project=self.project,
+                entity_data=(
+                    _serialize_saved_entity(
+                        entity,
+                        area.tile_size,
+                        project=self.project,
+                    )
+                    if entity.entity_id in forced_ids
+                    else self._capture_traveler_entity_data(
+                        entity,
+                        tile_size=area.tile_size,
+                        include_transient=include_transient,
+                    )
                 ),
                 origin_area=entity.origin_area_id,
-                origin_entity_id=entity.origin_entity_id,
             )
             self.dirty = True
         stale_ids = [
-            session_entity_id
-            for session_entity_id, traveler_state in self.save_data.travelers.items()
-            if traveler_state.current_area == area.area_id and session_entity_id not in live_session_ids
+            entity_id
+            for entity_id, traveler_state in self.save_data.travelers.items()
+            if traveler_state.current_area == area.area_id and entity_id not in live_traveler_ids
         ]
-        for session_entity_id in stale_ids:
-            self.save_data.travelers.pop(session_entity_id, None)
+        for entity_id in stale_ids:
+            self.save_data.travelers.pop(entity_id, None)
             self.dirty = True
 
     def flush(self, *, force: bool = False) -> bool:
@@ -245,6 +249,15 @@ class PersistenceRuntime:
             entity_state.overrides[field_name] = copy.deepcopy(value)
             self.dirty = True
             return
+        if entity is not None and entity.origin_area_id is not None:
+            self._persist_traveler_field(
+                entity_id,
+                field_name,
+                value,
+                entity=entity,
+                tile_size=tile_size,
+            )
+            return
         if not self._is_authored_entity(entity_id):
             self._record_spawned_entity(entity=entity, tile_size=tile_size)
             return
@@ -285,6 +298,15 @@ class PersistenceRuntime:
             variables = entity_state.overrides.setdefault("variables", {})
             variables[name] = copy.deepcopy(value)
             self.dirty = True
+            return
+        if entity is not None and entity.origin_area_id is not None:
+            self._persist_traveler_variable(
+                entity_id,
+                name,
+                value,
+                entity=entity,
+                tile_size=tile_size,
+            )
             return
         if not self._is_authored_entity(entity_id):
             self._record_spawned_entity(entity=entity, tile_size=tile_size)
@@ -329,6 +351,15 @@ class PersistenceRuntime:
             command_states[str(command_id)] = bool(enabled)
             self.dirty = True
             return
+        if entity is not None and entity.origin_area_id is not None:
+            self._persist_traveler_command_enabled(
+                entity_id,
+                command_id,
+                enabled,
+                entity=entity,
+                tile_size=tile_size,
+            )
+            return
         if not self._is_authored_entity(entity_id):
             self._record_spawned_entity(entity=entity, tile_size=tile_size)
             return
@@ -350,6 +381,11 @@ class PersistenceRuntime:
             entity_state.removed = True
             entity_state.spawned = None
             entity_state.overrides.clear()
+            self.dirty = True
+            return
+        if entity is not None and entity.origin_area_id is not None:
+            self.save_data.travelers.pop(entity_id, None)
+            self._remove_entity_from_area_state(self.current_area_id, entity_id)
             self.dirty = True
             return
         if not self._is_authored_entity(entity_id):
@@ -375,6 +411,7 @@ class PersistenceRuntime:
         *,
         kind: str,
         apply: str = "immediate",
+        entity_ids: list[str] | tuple[str, ...] | None = None,
         include_tags: list[str] | tuple[str, ...] | None = None,
         exclude_tags: list[str] | tuple[str, ...] | None = None,
     ) -> None:
@@ -387,6 +424,11 @@ class PersistenceRuntime:
         request = ResetRequest(
             kind=kind,
             apply=apply,
+            entity_ids=tuple(
+                entity_id
+                for entity_id in (str(raw_id).strip() for raw_id in (entity_ids or []))
+                if entity_id
+            ),
             include_tags=tuple(str(tag) for tag in (include_tags or [])),
             exclude_tags=tuple(str(tag) for tag in (exclude_tags or [])),
         )
@@ -507,6 +549,133 @@ class PersistenceRuntime:
         entity_state.overrides.clear()
         self.dirty = True
 
+    def _ensure_traveler_state(
+        self,
+        entity_id: str,
+        *,
+        entity: Entity | None,
+        tile_size: int | None,
+    ) -> TravelerState:
+        """Return one traveler's persistent baseline, creating it from runtime state when missing."""
+        traveler_state = self.save_data.travelers.get(entity_id)
+        if traveler_state is None:
+            if entity is None:
+                raise ValueError("Traveler persistence updates require the runtime entity.")
+            if tile_size is None:
+                raise ValueError("Traveler persistence updates require the active area tile size.")
+            traveler_state = TravelerState(
+                current_area=self.current_area_id,
+                entity_data=_serialize_saved_entity(
+                    entity,
+                    tile_size,
+                    project=self.project,
+                ),
+                origin_area=entity.origin_area_id,
+            )
+            self.save_data.travelers[entity_id] = traveler_state
+        return traveler_state
+
+    def _capture_traveler_entity_data(
+        self,
+        entity: Entity,
+        *,
+        tile_size: int,
+        include_transient: bool,
+    ) -> dict[str, Any]:
+        """Return one traveler's persisted payload, optionally including transient live state."""
+        if include_transient or entity.persistence.entity_state:
+            return _serialize_saved_entity(
+                entity,
+                tile_size,
+                project=self.project,
+            )
+
+        traveler_state = self.save_data.travelers.get(entity.entity_id)
+        if traveler_state is None:
+            entity_data = _serialize_saved_entity(
+                entity,
+                tile_size,
+                project=self.project,
+            )
+        else:
+            entity_data = copy.deepcopy(traveler_state.entity_data)
+
+        if entity.persistence.variables:
+            variables = entity_data.setdefault("variables", {})
+            for name, value in entity.variables.items():
+                if entity.persistence.resolve_variable(str(name)):
+                    variables[str(name)] = copy.deepcopy(value)
+        return entity_data
+
+    def _persist_traveler_field(
+        self,
+        entity_id: str,
+        field_name: str,
+        value: Any,
+        *,
+        entity: Entity | None,
+        tile_size: int | None,
+    ) -> None:
+        """Persist one traveler field directly onto the traveler baseline payload."""
+        traveler_state = self._ensure_traveler_state(
+            entity_id,
+            entity=entity,
+            tile_size=tile_size,
+        )
+        traveler_state.current_area = self.current_area_id or traveler_state.current_area
+        traveler_state.origin_area = entity.origin_area_id if entity is not None else traveler_state.origin_area
+        traveler_state.entity_data[str(field_name)] = copy.deepcopy(value)
+        self.dirty = True
+
+    def _persist_traveler_variable(
+        self,
+        entity_id: str,
+        name: str,
+        value: Any,
+        *,
+        entity: Entity | None,
+        tile_size: int | None,
+    ) -> None:
+        """Persist one traveler variable directly onto the traveler baseline payload."""
+        traveler_state = self._ensure_traveler_state(
+            entity_id,
+            entity=entity,
+            tile_size=tile_size,
+        )
+        traveler_state.current_area = self.current_area_id or traveler_state.current_area
+        traveler_state.origin_area = entity.origin_area_id if entity is not None else traveler_state.origin_area
+        variables = traveler_state.entity_data.setdefault("variables", {})
+        variables[str(name)] = copy.deepcopy(value)
+        self.dirty = True
+
+    def _persist_traveler_command_enabled(
+        self,
+        entity_id: str,
+        command_id: str,
+        enabled: bool,
+        *,
+        entity: Entity | None,
+        tile_size: int | None,
+    ) -> None:
+        """Persist one traveler entity-command enabled flag on the baseline payload."""
+        traveler_state = self._ensure_traveler_state(
+            entity_id,
+            entity=entity,
+            tile_size=tile_size,
+        )
+        traveler_state.current_area = self.current_area_id or traveler_state.current_area
+        traveler_state.origin_area = entity.origin_area_id if entity is not None else traveler_state.origin_area
+        entity_commands = traveler_state.entity_data.setdefault("entity_commands", {})
+        command_entry = entity_commands.setdefault(
+            str(command_id),
+            {
+                "enabled": bool(enabled),
+                "commands": [],
+            },
+        )
+        command_entry["enabled"] = bool(enabled)
+        self.dirty = True
+
     def _is_authored_entity(self, entity_id: str) -> bool:
         """Return True when the entity id belongs to the authored area document."""
         return entity_id in self._current_authored_entity_ids
@@ -550,7 +719,6 @@ def save_save_data(path: Path, save_data: SaveData) -> None:
 def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
     """Parse a JSON-like dict into structured save data."""
     version = int(raw_data.get("version", SAVE_DATA_VERSION))
-    next_session_entity_serial = int(raw_data.get("next_session_entity_serial", 1))
     globals_data = copy.deepcopy(raw_data.get("globals", {}))
     current_area = str(raw_data.get("current_area", "")).strip()
     raw_current_input_targets = raw_data.get("current_input_targets")
@@ -573,7 +741,6 @@ def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
 
     return SaveData(
         version=version,
-        next_session_entity_serial=max(1, next_session_entity_serial),
         globals=globals_data if isinstance(globals_data, dict) else {},
         global_entities=global_entities,
         current_area=current_area,
@@ -593,7 +760,6 @@ def save_data_to_dict(save_data: SaveData) -> dict[str, Any]:
         globals_payload["entities"] = _entity_state_mapping_to_dict(save_data.global_entities)
     data = {
         "version": save_data.version,
-        "next_session_entity_serial": max(1, int(save_data.next_session_entity_serial)),
         "globals": globals_payload,
         "current_area": str(save_data.current_area),
         "areas": _area_state_mapping_to_dict(save_data.areas),
@@ -699,27 +865,25 @@ def apply_area_travelers(
     save_data: SaveData,
     *,
     project: ProjectContext,
-    skip_session_entity_ids: set[str] | None = None,
+    skip_entity_ids: set[str] | None = None,
 ) -> None:
     """Suppress away travelers' origin placeholders and install travelers that belong here."""
-    skipped_ids = set(skip_session_entity_ids or set())
-    for traveler_state in save_data.travelers.values():
-        if traveler_state.origin_area == area.area_id and traveler_state.origin_entity_id:
+    skipped_ids = set(skip_entity_ids or set())
+    for entity_id, traveler_state in save_data.travelers.items():
+        if traveler_state.origin_area == area.area_id:
             if traveler_state.current_area != area.area_id:
-                world.remove_entity(traveler_state.origin_entity_id)
+                world.remove_entity(entity_id)
 
         if traveler_state.current_area != area.area_id:
             continue
-        if traveler_state.session_entity_id in skipped_ids:
+        if entity_id in skipped_ids:
             continue
         entity = _instantiate_saved_entity(
             traveler_state.entity_data,
             area.tile_size,
             project=project,
         )
-        entity.session_entity_id = traveler_state.session_entity_id
         entity.origin_area_id = traveler_state.origin_area
-        entity.origin_entity_id = traveler_state.origin_entity_id
         world.add_entity(entity)
 
 
@@ -890,38 +1054,30 @@ def _traveler_state_from_dict(raw_state: Any, *, fallback_id: str) -> TravelerSt
     raw_entity_data = raw_state.get("entity")
     if not current_area or not isinstance(raw_entity_data, dict):
         return None
+    entity_data = copy.deepcopy(raw_entity_data)
+    entity_id = str(entity_data.get("id", fallback_id)).strip() or fallback_id
+    entity_data["id"] = entity_id
     origin_area = raw_state.get("origin_area")
-    origin_entity_id = raw_state.get("origin_entity_id")
     normalized_origin_area = (
         str(origin_area).strip()
         if origin_area is not None
         else ""
     )
-    normalized_origin_entity_id = (
-        str(origin_entity_id).strip()
-        if origin_entity_id is not None
-        else ""
-    )
     return TravelerState(
-        session_entity_id=str(raw_state.get("session_entity_id", fallback_id)).strip() or fallback_id,
         current_area=current_area,
-        entity_data=copy.deepcopy(raw_entity_data),
+        entity_data=entity_data,
         origin_area=normalized_origin_area or None,
-        origin_entity_id=normalized_origin_entity_id or None,
     )
 
 
 def _traveler_state_to_dict(traveler_state: TravelerState) -> dict[str, Any]:
     """Convert one traveler state into a JSON-friendly dict."""
     data: dict[str, Any] = {
-        "session_entity_id": traveler_state.session_entity_id,
         "current_area": traveler_state.current_area,
         "entity": copy.deepcopy(traveler_state.entity_data),
     }
     if traveler_state.origin_area is not None:
         data["origin_area"] = traveler_state.origin_area
-    if traveler_state.origin_entity_id is not None:
-        data["origin_entity_id"] = traveler_state.origin_entity_id
     return data
 
 
@@ -930,11 +1086,12 @@ def _load_traveler_state_mapping(raw_travelers: Any) -> dict[str, TravelerState]
     if not isinstance(raw_travelers, dict):
         return {}
     travelers: dict[str, TravelerState] = {}
-    for session_entity_id, raw_state in raw_travelers.items():
-        traveler_state = _traveler_state_from_dict(raw_state, fallback_id=str(session_entity_id))
+    for fallback_id, raw_state in raw_travelers.items():
+        traveler_state = _traveler_state_from_dict(raw_state, fallback_id=str(fallback_id))
         if traveler_state is None:
             continue
-        travelers[traveler_state.session_entity_id] = traveler_state
+        entity_id = str(traveler_state.entity_data.get("id", fallback_id)).strip() or str(fallback_id)
+        travelers[entity_id] = traveler_state
     return travelers
 
 
@@ -943,8 +1100,8 @@ def _traveler_state_mapping_to_dict(
 ) -> dict[str, Any]:
     """Serialize the save file's traveler-state mapping."""
     serialized: dict[str, Any] = {}
-    for session_entity_id, traveler_state in travelers.items():
-        serialized[str(session_entity_id)] = _traveler_state_to_dict(traveler_state)
+    for entity_id, traveler_state in travelers.items():
+        serialized[str(entity_id)] = _traveler_state_to_dict(traveler_state)
     return serialized
 
 
@@ -1019,7 +1176,7 @@ def _capture_area_state(
     traveler_entity_ids = {
         entity_id
         for entity_id, entity in current_entities.items()
-        if entity.session_entity_id is not None
+        if entity.origin_area_id is not None
     }
     for entity_id in traveler_entity_ids:
         authored_entities.pop(entity_id, None)

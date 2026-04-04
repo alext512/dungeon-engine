@@ -14,11 +14,11 @@
   "current_area": "areas/level2",
   "areas": {},
   "current_input_targets": {
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player",
-    "interact": "player"
+    "move_up": "level2_player",
+    "move_down": "level2_player",
+    "move_left": "level2_player",
+    "move_right": "level2_player",
+    "interact": "level2_player"
   },
   "current_camera": {
     "x": -56.0,
@@ -27,7 +27,7 @@
       "mode": "entity",
       "offset_x": 0.0,
       "offset_y": 0.0,
-      "entity_id": "player"
+      "entity_id": "level2_player"
     },
     "bounds": {
       "x": 0.0,

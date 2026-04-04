@@ -593,8 +593,11 @@ def _persist_inventory_state(
     area: Any,
     persistence_runtime: Any | None,
     entity: Any,
+    persistent: bool | None = None,
 ) -> None:
     """Persist one entity's full inventory payload when runtime persistence is available."""
+    if not entity.persistence.resolve_field(explicit=persistent):
+        return
     _persist_entity_field(
         area=area,
         persistence_runtime=persistence_runtime,
@@ -1197,6 +1200,23 @@ _COMPARE_OPS: dict[str, Any] = {
 def register_builtin_commands(registry: CommandRegistry) -> None:
     """Register the minimal command set needed for the first movement slice."""
 
+    def _should_persist_entity_field(entity: Any, *, persistent: bool | None) -> bool:
+        """Resolve effective persistence for one entity-state mutation."""
+        return entity.persistence.resolve_field(explicit=persistent)
+
+    def _should_persist_entity_variable(
+        entity: Any,
+        *,
+        name: str,
+        persistent: bool | None,
+    ) -> bool:
+        """Resolve effective persistence for one entity-variable mutation."""
+        return entity.persistence.resolve_variable(str(name), explicit=persistent)
+
+    def _should_persist_entity_inventory(entity: Any, *, persistent: bool | None) -> bool:
+        """Resolve effective persistence for one inventory mutation."""
+        return entity.persistence.resolve_field(explicit=persistent)
+
     def _set_exact_entity_field_handle(
         *,
         context: CommandContext | None,
@@ -1206,7 +1226,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         field_name: str,
         value: Any,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Apply one generic entity field mutation through the shared helper."""
         entity = _require_exact_entity(world, entity_id)
@@ -1216,7 +1236,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             str(field_name),
             value,
         )
-        if persistent:
+        if _should_persist_entity_field(entity, persistent=persistent):
             _persist_entity_field(
                 area=area,
                 persistence_runtime=persistence_runtime,
@@ -1242,7 +1262,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         persistence_runtime: Any | None,
         entity_id: str,
         set_payload: dict[str, Any],
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Apply one validated batch of entity field, variable, and visual mutations."""
         entity = _require_exact_entity(world, entity_id)
@@ -1299,7 +1319,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     entity,
                     operation_name,
                 )
-                if persistent:
+                if _should_persist_entity_field(entity, persistent=persistent):
                     if persisted_field_name == "visuals":
                         visuals_changed = True
                     else:
@@ -1315,7 +1335,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
             variables = _require_exact_entity_variables(world, entity.entity_id)
             variables[operation_name] = copy.deepcopy(operation_value)
-            if persistent:
+            if _should_persist_entity_variable(
+                entity,
+                name=str(operation_name),
+                persistent=persistent,
+            ):
                 _persist_exact_entity_variable_value(
                     world=world,
                     area=area,
@@ -1325,7 +1349,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     value=operation_value,
                 )
 
-        if persistent and visuals_changed:
+        if visuals_changed and _should_persist_entity_field(entity, persistent=persistent):
             _persist_entity_field(
                 area=area,
                 persistence_runtime=persistence_runtime,
@@ -1529,6 +1553,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None,
         speed_px_per_second: float | None,
         wait: bool,
+        persistent: bool | None = None,
     ) -> tuple[bool, list[str]]:
         """Try to push one blocking entity one cell in the requested direction."""
         delta_x, delta_y = DIRECTION_VECTORS[direction]  # type: ignore[index]
@@ -1565,6 +1590,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             grid_sync="immediate",
+            persistent=persistent,
         )
         if not moved_entity_ids:
             return False, []
@@ -1586,6 +1612,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         resolved_id = _require_exact_entity(world, entity_id).entity_id
@@ -1599,6 +1626,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             grid_sync=grid_sync,  # type: ignore[arg-type]
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            persistent=persistent,
         )
         if not moved_entity_ids:
             return ImmediateHandle()
@@ -1622,6 +1650,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         resolved_id = _require_exact_entity(world, entity_id).entity_id
@@ -1648,6 +1677,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 target_grid_x=target_grid_x,
                 target_grid_y=target_grid_y,
                 wait=wait,
+                persistent=persistent,
             )
 
         if space == "pixel" and mode == "relative":
@@ -1661,6 +1691,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 grid_sync=effective_grid_sync,  # type: ignore[arg-type]
                 target_grid_x=target_grid_x,
                 target_grid_y=target_grid_y,
+                persistent=persistent,
             )
             if not moved_entity_ids:
                 return ImmediateHandle()
@@ -1677,6 +1708,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 frames_needed=frames_needed,
                 speed_px_per_second=speed_px_per_second,
                 grid_sync=effective_grid_sync,  # type: ignore[arg-type]
+                persistent=persistent,
             )
             if not moved_entity_ids:
                 return ImmediateHandle()
@@ -1692,6 +1724,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             grid_sync=effective_grid_sync,  # type: ignore[arg-type]
+            persistent=persistent,
         )
         if not moved_entity_ids:
             return ImmediateHandle()
@@ -1710,6 +1743,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         mode: str = "absolute",
         target_grid_x: int | None = None,
         target_grid_y: int | None = None,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         entity = _require_exact_entity(world, entity_id)
@@ -1722,7 +1756,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if space == "grid":
             grid_x = int(x) if mode == "absolute" else entity.grid_x + int(x)
             grid_y = int(y) if mode == "absolute" else entity.grid_y + int(y)
-            movement_system.teleport_to_grid_position(resolved_id, grid_x, grid_y)
+            movement_system.teleport_to_grid_position(
+                resolved_id,
+                grid_x,
+                grid_y,
+                persistent=persistent,
+            )
             return ImmediateHandle()
 
         pixel_x = float(x) if mode == "absolute" else entity.pixel_x + float(x)
@@ -1733,6 +1772,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             pixel_y,
             target_grid_x=target_grid_x,
             target_grid_y=target_grid_y,
+            persistent=persistent,
         )
         return ImmediateHandle()
 
@@ -1783,6 +1823,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         x: int,
         y: int,
         mode: str = "absolute",
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         entity = _require_entity_space(
@@ -1795,7 +1836,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             raise ValueError(f"Unknown grid-position mode '{mode}'.")
         target_x = int(x) if mode == "absolute" else entity.grid_x + int(x)
         target_y = int(y) if mode == "absolute" else entity.grid_y + int(y)
-        movement_system.set_grid_position(entity.entity_id, target_x, target_y)
+        movement_system.set_grid_position(
+            entity.entity_id,
+            target_x,
+            target_y,
+            persistent=persistent,
+        )
         return ImmediateHandle()
 
     def _set_entity_pixel_position(
@@ -1808,6 +1854,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         mode: str = "absolute",
         expected_space: str,
         command_name: str,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         entity = _require_entity_space(
@@ -1820,7 +1867,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             raise ValueError(f"Unknown {expected_space}-position mode '{mode}'.")
         target_x = float(x) if mode == "absolute" else entity.pixel_x + float(x)
         target_y = float(y) if mode == "absolute" else entity.pixel_y + float(y)
-        movement_system.set_pixel_position(entity.entity_id, target_x, target_y)
+        movement_system.set_pixel_position(
+            entity.entity_id,
+            target_x,
+            target_y,
+            persistent=persistent,
+        )
         return ImmediateHandle()
 
     def _move_entity_pixel_position(
@@ -1837,6 +1889,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         entity = _require_entity_space(
@@ -1856,6 +1909,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 frames_needed=frames_needed,
                 speed_px_per_second=speed_px_per_second,
                 grid_sync="none",
+                persistent=persistent,
             )
         else:
             moved_entity_ids = movement_system.request_move_by_offset(
@@ -1866,6 +1920,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 frames_needed=frames_needed,
                 speed_px_per_second=speed_px_per_second,
                 grid_sync="none",
+                persistent=persistent,
             )
         if not moved_entity_ids or not wait:
             return ImmediateHandle()
@@ -1880,6 +1935,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         x: int,
         y: int,
         mode: str = "absolute",
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Instantly update a world-space entity's logical grid position."""
@@ -1890,6 +1946,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             x=x,
             y=y,
             mode=mode,
+            persistent=persistent,
         )
 
     @registry.register("set_entity_world_position")
@@ -1901,6 +1958,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         x: int | float,
         y: int | float,
         mode: str = "absolute",
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Instantly update a world-space entity's pixel position."""
@@ -1913,6 +1971,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             mode=mode,
             expected_space="world",
             command_name="set_entity_world_position",
+            persistent=persistent,
         )
 
     @registry.register("set_entity_screen_position")
@@ -1924,6 +1983,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         x: int | float,
         y: int | float,
         mode: str = "absolute",
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Instantly update a screen-space entity's pixel position."""
@@ -1936,6 +1996,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             mode=mode,
             expected_space="screen",
             command_name="set_entity_screen_position",
+            persistent=persistent,
         )
 
     @registry.register("move_entity_world_position")
@@ -1951,6 +2012,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Interpolate a world-space entity's pixel position."""
@@ -1967,6 +2029,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             wait=wait,
+            persistent=persistent,
         )
 
     @registry.register("move_entity_screen_position")
@@ -1982,6 +2045,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Interpolate a screen-space entity's pixel position."""
@@ -1998,6 +2062,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             wait=wait,
+            persistent=persistent,
         )
 
     @registry.register("move_in_direction")
@@ -2014,6 +2079,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         source_entity_id: str | None = None,
         **runtime_params: Any,
     ) -> CommandHandle:
@@ -2055,6 +2121,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 frames_needed=frames_needed,
                 speed_px_per_second=speed_px_per_second,
                 grid_sync="immediate",
+                persistent=persistent,
             )
             if not moved_entity_ids or not wait:
                 return ImmediateHandle()
@@ -2076,6 +2143,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 frames_needed=frames_needed,
                 speed_px_per_second=speed_px_per_second,
                 wait=wait,
+                persistent=persistent,
             )
             if pushed:
                 moved_entity_ids = movement_system.request_grid_step(
@@ -2085,6 +2153,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     frames_needed=frames_needed,
                     speed_px_per_second=speed_px_per_second,
                     grid_sync="immediate",
+                    persistent=persistent,
                 )
                 combined_entity_ids = list(dict.fromkeys([*pushed_entity_ids, *moved_entity_ids]))
                 if not combined_entity_ids or not wait:
@@ -2128,6 +2197,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         frames_needed: int | None = None,
         speed_px_per_second: float | None = None,
         wait: bool = True,
+        persistent: bool | None = None,
         source_entity_id: str | None = None,
         **runtime_params: Any,
     ) -> CommandHandle:
@@ -2166,6 +2236,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
             wait=wait,
+            persistent=persistent,
         )
         if pushed:
             if not moved_entity_ids or not wait:
@@ -2930,12 +3001,12 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         command_id: str,
         enabled: bool,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Enable or disable a named entity command on an entity."""
         entity = _require_exact_entity(world, entity_id)
         entity.set_entity_command_enabled(command_id, enabled)
-        if persistent:
+        if _should_persist_entity_field(entity, persistent=persistent):
             _persist_entity_command_enabled(
                 area=area,
                 persistence_runtime=persistence_runtime,
@@ -2954,7 +3025,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         enabled: bool,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Enable or disable all named entity commands on an entity at once."""
         return _set_exact_entity_field_handle(
@@ -2990,7 +3061,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         field_name: str,
         value: Any,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Change one supported runtime field on an entity."""
         return _set_exact_entity_field_handle(
@@ -3013,7 +3084,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         set: dict[str, Any],
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Change several supported runtime fields, variables, and visuals on one entity at once."""
         return _set_exact_entity_fields_handle(
@@ -3039,6 +3110,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         quantity_mode: str,
         result_var_name: str | None = None,
         source_entity_id: str | None = None,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Add item quantity to one entity-owned inventory."""
         resolved_entity_id = str(entity_id).strip()
@@ -3087,11 +3159,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             max_stack=int(item_definition.max_stack),
             quantity_mode=normalize_quantity_mode(quantity_mode),
         )
-        if entity.inventory is not None and int(result.get("changed_quantity", 0)) > 0:
+        if (
+            entity.inventory is not None
+            and int(result.get("changed_quantity", 0)) > 0
+            and _should_persist_entity_inventory(entity, persistent=persistent)
+        ):
             _persist_inventory_state(
                 area=area,
                 persistence_runtime=persistence_runtime,
                 entity=entity,
+                persistent=persistent,
             )
         _write_inventory_result_if_requested(
             world=world,
@@ -3113,6 +3190,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         quantity_mode: str,
         result_var_name: str | None = None,
         source_entity_id: str | None = None,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Remove item quantity from one entity-owned inventory."""
         resolved_entity_id = str(entity_id).strip()
@@ -3141,11 +3219,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             quantity=requested_quantity,
             quantity_mode=normalize_quantity_mode(quantity_mode),
         )
-        if entity.inventory is not None and int(result.get("changed_quantity", 0)) > 0:
+        if (
+            entity.inventory is not None
+            and int(result.get("changed_quantity", 0)) > 0
+            and _should_persist_entity_inventory(entity, persistent=persistent)
+        ):
             _persist_inventory_state(
                 area=area,
                 persistence_runtime=persistence_runtime,
                 entity=entity,
+                persistent=persistent,
             )
         _write_inventory_result_if_requested(
             world=world,
@@ -3169,6 +3252,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         result_var_name: str | None = None,
         source_entity_id: str | None = None,
         entity_refs: dict[str, str] | None = None,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Run one item's authored use-commands and consume it only on clean success."""
         resolved_entity_id = str(entity_id).strip()
@@ -3256,11 +3340,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     quantity=consume_total,
                     quantity_mode="atomic",
                 )
-                if entity.inventory is not None and int(consumption_result.get("changed_quantity", 0)) > 0:
+                if (
+                    entity.inventory is not None
+                    and int(consumption_result.get("changed_quantity", 0)) > 0
+                    and _should_persist_entity_inventory(entity, persistent=persistent)
+                ):
                     _persist_inventory_state(
                         area=area,
                         persistence_runtime=persistence_runtime,
                         entity=entity,
+                        persistent=persistent,
                     )
                 if int(consumption_result.get("changed_quantity", 0)) != consume_total:
                     logger.warning(
@@ -3298,6 +3387,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         max_stacks: int,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Create or resize one entity-owned inventory capacity without discarding items."""
         entity = _require_exact_entity(world, entity_id)
@@ -3308,11 +3398,13 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             if resolved_max_stacks < 0:
                 raise ValueError("set_inventory_max_stacks max_stacks must be zero or positive.")
             entity.inventory = InventoryState(max_stacks=resolved_max_stacks, stacks=[])
-            _persist_inventory_state(
-                area=area,
-                persistence_runtime=persistence_runtime,
-                entity=entity,
-            )
+            if _should_persist_entity_inventory(entity, persistent=persistent):
+                _persist_inventory_state(
+                    area=area,
+                    persistence_runtime=persistence_runtime,
+                    entity=entity,
+                    persistent=persistent,
+                )
             return ImmediateHandle()
         if not set_inventory_max_stacks_on_state(entity.inventory, max_stacks=resolved_max_stacks):
             logger.warning(
@@ -3320,11 +3412,13 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 entity.entity_id,
             )
             return ImmediateHandle()
-        _persist_inventory_state(
-            area=area,
-            persistence_runtime=persistence_runtime,
-            entity=entity,
-        )
+        if _should_persist_entity_inventory(entity, persistent=persistent):
+            _persist_inventory_state(
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity=entity,
+                persistent=persistent,
+            )
         return ImmediateHandle()
 
     @registry.register("route_inputs_to_entity")
@@ -3860,7 +3954,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         visible: bool,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Change whether an entity is rendered and targetable."""
         return _set_exact_entity_field_handle(
@@ -3883,7 +3977,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         present: bool,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Change whether an entity participates in the current scene."""
         return _set_exact_entity_field_handle(
@@ -3905,7 +3999,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         color: list[int],
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Change an entity's debug-render color."""
         return _set_exact_entity_field_handle(
@@ -3926,14 +4020,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         persistence_runtime: Any | None,
         *,
         entity_id: str,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Destroy an entity instance completely."""
         entity = _require_exact_entity(world, entity_id)
+        persist_destroy = _should_persist_entity_field(entity, persistent=persistent)
         previous_cell = _occupancy_cell_for(entity)
         if previous_cell is None:
             world.remove_entity(entity.entity_id)
-            if persistent and persistence_runtime is not None:
+            if persist_destroy and persistence_runtime is not None:
                 persistence_runtime.remove_entity(entity.entity_id, entity=entity)
             return ImmediateHandle()
 
@@ -3947,7 +4042,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
         def _finalize_destroy() -> None:
             world.remove_entity(entity.entity_id)
-            if persistent and persistence_runtime is not None:
+            if persist_destroy and persistence_runtime is not None:
                 persistence_runtime.remove_entity(entity.entity_id, entity=entity)
 
         if leave_handle.complete:
@@ -3970,7 +4065,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         y: int | None = None,
         parameters: dict[str, Any] | None = None,
         present: bool = True,
-        persistent: bool = False,
+        persistent: bool | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Create a new entity instance in the current world."""
@@ -4008,7 +4103,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             source_name=f"spawned entity '{new_entity_id}'",
         )
         world.add_entity(new_entity)
-        if persistent and persistence_runtime is not None:
+        if _should_persist_entity_field(new_entity, persistent=persistent) and persistence_runtime is not None:
             persistence_runtime.record_spawned_entity(
                 new_entity,
                 tile_size=area.tile_size,
@@ -4040,13 +4135,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         name: str,
         value: Any,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Set one explicit entity variable to a value."""
         persisted_value = copy.deepcopy(value)
-        variables = _require_exact_entity_variables(world, entity_id)
+        entity = _require_exact_entity(world, entity_id)
+        variables = entity.variables
         variables[name] = persisted_value
-        if persistent:
+        if _should_persist_entity_variable(entity, name=name, persistent=persistent):
             _persist_exact_entity_variable_value(
                 world=world,
                 area=area,
@@ -4082,13 +4178,14 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         name: str,
         amount: int | float = 1,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Add an amount to one explicit entity variable."""
-        variables = _require_exact_entity_variables(world, entity_id)
+        entity = _require_exact_entity(world, entity_id)
+        variables = entity.variables
         current_value = variables.get(name, 0) + amount
         variables[name] = current_value
-        if persistent:
+        if _should_persist_entity_variable(entity, name=name, persistent=persistent):
             _persist_exact_entity_variable_value(
                 world=world,
                 area=area,
@@ -4130,10 +4227,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         entity_id: str,
         name: str,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Flip one explicit entity variable between True and False."""
-        variables = _require_exact_entity_variables(world, entity_id)
+        entity = _require_exact_entity(world, entity_id)
+        variables = entity.variables
         current_value = variables.get(name, False)
         if current_value is None:
             current_value = False
@@ -4143,7 +4241,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             )
         next_value = not current_value
         variables[name] = next_value
-        if persistent:
+        if _should_persist_entity_variable(entity, name=name, persistent=persistent):
             _persist_exact_entity_variable_value(
                 world=world,
                 area=area,
@@ -4185,7 +4283,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         name: str,
         value: Any = None,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Store the length of a value into one explicit entity variable."""
         if value is None:
@@ -4195,9 +4293,10 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 length_value = len(value)
             except TypeError as exc:
                 raise TypeError("set_entity_var_length requires a sized value or null.") from exc
-        variables = _require_exact_entity_variables(world, entity_id)
+        entity = _require_exact_entity(world, entity_id)
+        variables = entity.variables
         variables[name] = length_value
-        if persistent:
+        if _should_persist_entity_variable(entity, name=name, persistent=persistent):
             _persist_exact_entity_variable_value(
                 world=world,
                 area=area,
@@ -4242,10 +4341,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         entity_id: str,
         name: str,
         value: Any,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Append one item to one explicit entity list variable."""
-        variables = _require_exact_entity_variables(world, entity_id)
+        entity = _require_exact_entity(world, entity_id)
+        variables = entity.variables
         current_value = variables.get(name)
         if current_value is None:
             current_items: list[Any] = []
@@ -4255,7 +4355,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             raise TypeError("append_entity_var requires the target variable to be a list or null.")
         current_items.append(copy.deepcopy(value))
         variables[name] = current_items
-        if persistent:
+        if _should_persist_entity_variable(entity, name=name, persistent=persistent):
             _persist_exact_entity_variable_value(
                 world=world,
                 area=area,
@@ -4308,10 +4408,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         name: str,
         store_var: str | None = None,
         default: Any = None,
-        persistent: bool = False,
+        persistent: bool | None = None,
     ) -> CommandHandle:
         """Pop the last item from one explicit entity list variable."""
-        variables = _require_exact_entity_variables(world, entity_id)
+        entity = _require_exact_entity(world, entity_id)
+        variables = entity.variables
         current_value = variables.get(name)
         if current_value is None:
             current_items: list[Any] = []
@@ -4327,7 +4428,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         if store_var:
             variables[store_var] = copy.deepcopy(popped_value)
 
-        if persistent:
+        if _should_persist_entity_variable(entity, name=name, persistent=persistent):
             _persist_exact_entity_variable_value(
                 world=world,
                 area=area,
@@ -4336,15 +4437,15 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                 name=name,
                 value=current_items,
             )
-            if store_var:
-                _persist_exact_entity_variable_value(
-                    world=world,
-                    area=area,
-                    persistence_runtime=persistence_runtime,
-                    entity_id=entity_id,
-                    name=store_var,
-                    value=popped_value,
-                )
+        if store_var and _should_persist_entity_variable(entity, name=store_var, persistent=persistent):
+            _persist_exact_entity_variable_value(
+                world=world,
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity_id=entity_id,
+                name=store_var,
+                value=popped_value,
+            )
         return ImmediateHandle()
 
     @registry.register("if", deferred_params={"then", "else"})
@@ -4504,6 +4605,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     def reset_transient_state(
         persistence_runtime: Any | None,
         *,
+        entity_id: str | None = None,
+        entity_ids: list[str] | None = None,
         include_tags: list[str] | None = None,
         exclude_tags: list[str] | None = None,
         apply: str = "immediate",
@@ -4512,9 +4615,13 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         """Reset the current room against authored data plus persistent overrides."""
         if persistence_runtime is None:
             return ImmediateHandle()
+        requested_entity_ids = list(entity_ids or [])
+        if entity_id not in (None, ""):
+            requested_entity_ids.append(str(entity_id))
         persistence_runtime.request_reset(
             kind="transient",
             apply=apply,
+            entity_ids=requested_entity_ids,
             include_tags=include_tags,
             exclude_tags=exclude_tags,
         )
