@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -25,6 +24,154 @@ from PySide6.QtWidgets import (
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 
 
+class _ItemArtObjectEditor(QWidget):
+    """Focused editor for one optional item art object."""
+
+    changed = Signal()
+
+    def __init__(
+        self,
+        label: str,
+        *,
+        browse_asset_callback: Callable[[], str | None] | None = None,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._label = label
+        self._browse_asset_callback = browse_asset_callback
+        self._editing_enabled = False
+        self._loading = False
+        self._editable = True
+        self._base_object: dict[str, Any] | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._warning_label = QLabel("")
+        self._warning_label.setWordWrap(True)
+        self._warning_label.setStyleSheet("color: #a25b00;")
+        self._warning_label.hide()
+        layout.addWidget(self._warning_label)
+
+        form = QFormLayout()
+        layout.addLayout(form)
+
+        path_row = QHBoxLayout()
+        self._path_edit = QLineEdit()
+        self._path_edit.textChanged.connect(self._on_changed)
+        path_row.addWidget(self._path_edit, 1)
+        self._browse_button = QPushButton("Browse...")
+        self._browse_button.clicked.connect(self._on_browse_clicked)
+        path_row.addWidget(self._browse_button)
+        path_widget = QWidget()
+        path_widget.setLayout(path_row)
+        form.addRow("path", path_widget)
+
+        self._frame_width_spin = QSpinBox()
+        self._frame_width_spin.setRange(1, 8192)
+        self._frame_width_spin.valueChanged.connect(self._on_changed)
+        form.addRow("frame_width", self._frame_width_spin)
+
+        self._frame_height_spin = QSpinBox()
+        self._frame_height_spin.setRange(1, 8192)
+        self._frame_height_spin.valueChanged.connect(self._on_changed)
+        form.addRow("frame_height", self._frame_height_spin)
+
+        self._frame_spin = QSpinBox()
+        self._frame_spin.setRange(0, 8192)
+        self._frame_spin.valueChanged.connect(self._on_changed)
+        form.addRow("frame", self._frame_spin)
+
+        self.set_editing_enabled(False)
+
+    def set_editing_enabled(self, enabled: bool) -> None:
+        self._editing_enabled = enabled
+        active = enabled and self._editable
+        self._path_edit.setReadOnly(not active)
+        self._browse_button.setEnabled(active and self._browse_asset_callback is not None)
+        self._frame_width_spin.setEnabled(active)
+        self._frame_height_spin.setEnabled(active)
+        self._frame_spin.setEnabled(active)
+
+    def load_object(self, raw_value: object) -> None:
+        warning: str | None = None
+        self._editable = True
+        self._base_object = None
+        path_value = ""
+        frame_width = 16
+        frame_height = 16
+        frame = 0
+
+        if raw_value not in (None, ""):
+            if not isinstance(raw_value, dict):
+                warning = (
+                    f"{self._label} is not using a supported object shape. "
+                    "Use the Raw JSON tab to edit it."
+                )
+                self._editable = False
+            else:
+                self._base_object = json.loads(json.dumps(raw_value))
+                path_value = str(raw_value.get("path", "") or "")
+                frame_width = self._coerce_positive_int(raw_value.get("frame_width", 16), 16)
+                frame_height = self._coerce_positive_int(raw_value.get("frame_height", 16), 16)
+                frame = self._coerce_non_negative_int(raw_value.get("frame", 0), 0)
+
+        self._loading = True
+        try:
+            self._path_edit.setText(path_value)
+            self._frame_width_spin.setValue(frame_width)
+            self._frame_height_spin.setValue(frame_height)
+            self._frame_spin.setValue(frame)
+        finally:
+            self._loading = False
+
+        if warning:
+            self._warning_label.setText(warning)
+            self._warning_label.show()
+        else:
+            self._warning_label.hide()
+        self.set_editing_enabled(self._editing_enabled)
+
+    def build_object(self) -> dict[str, Any] | None:
+        if not self._editable:
+            return json.loads(json.dumps(self._base_object)) if self._base_object is not None else None
+        path_value = self._path_edit.text().strip()
+        if not path_value:
+            return None
+        result = json.loads(json.dumps(self._base_object)) if self._base_object is not None else {}
+        result["path"] = path_value
+        result["frame_width"] = self._frame_width_spin.value()
+        result["frame_height"] = self._frame_height_spin.value()
+        result["frame"] = self._frame_spin.value()
+        return result
+
+    @staticmethod
+    def _coerce_positive_int(raw_value: object, default: int) -> int:
+        try:
+            return max(1, int(raw_value))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_non_negative_int(raw_value: object, default: int) -> int:
+        try:
+            return max(0, int(raw_value))
+        except (TypeError, ValueError):
+            return default
+
+    def _on_browse_clicked(self) -> None:
+        if not self._editing_enabled or self._browse_asset_callback is None:
+            return
+        selected = self._browse_asset_callback()
+        if selected:
+            self._path_edit.setText(selected)
+
+    def _on_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        self.changed.emit()
+
+
 class _ItemFieldsEditor(QWidget):
     """Focused editor for common item fields plus art blocks."""
 
@@ -32,7 +179,13 @@ class _ItemFieldsEditor(QWidget):
     revert_requested = Signal()
     dirty_changed = Signal(bool)
 
-    def __init__(self, item_id: str, parent=None) -> None:
+    def __init__(
+        self,
+        item_id: str,
+        *,
+        browse_asset_callback: Callable[[], str | None] | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._item_id = item_id
         self._dirty = False
@@ -67,23 +220,27 @@ class _ItemFieldsEditor(QWidget):
         self._consume_spin.valueChanged.connect(self._on_changed)
         form.addRow("consume_quantity_on_use", self._consume_spin)
 
-        self._icon_note = QLabel("Edit the optional `icon` object here. Use JSON object syntax.")
+        self._icon_note = QLabel("Optional `icon` art object.")
         self._icon_note.setWordWrap(True)
         self._icon_note.setStyleSheet("color: #666; font-style: italic;")
         form.addRow("Icon", self._icon_note)
-        self._icon_text = self._build_json_block()
-        self._icon_text.textChanged.connect(self._on_changed)
-        form.addRow(self._icon_text)
-
-        self._portrait_note = QLabel(
-            "Edit the optional `portrait` object here. Use JSON object syntax."
+        self._icon_editor = _ItemArtObjectEditor(
+            "Icon",
+            browse_asset_callback=browse_asset_callback,
         )
+        self._icon_editor.changed.connect(self._on_changed)
+        form.addRow(self._icon_editor)
+
+        self._portrait_note = QLabel("Optional `portrait` art object.")
         self._portrait_note.setWordWrap(True)
         self._portrait_note.setStyleSheet("color: #666; font-style: italic;")
         form.addRow("Portrait", self._portrait_note)
-        self._portrait_text = self._build_json_block()
-        self._portrait_text.textChanged.connect(self._on_changed)
-        form.addRow(self._portrait_text)
+        self._portrait_editor = _ItemArtObjectEditor(
+            "Portrait",
+            browse_asset_callback=browse_asset_callback,
+        )
+        self._portrait_editor.changed.connect(self._on_changed)
+        form.addRow(self._portrait_editor)
 
         buttons = QHBoxLayout()
         self._apply_button = QPushButton("Apply")
@@ -97,24 +254,6 @@ class _ItemFieldsEditor(QWidget):
 
         self.set_editing_enabled(False)
 
-    @staticmethod
-    def _build_json_block() -> QPlainTextEdit:
-        block = QPlainTextEdit()
-        block.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        block.setFixedHeight(120)
-        font = QFont("Consolas", 10)
-        font.setStyleHint(QFont.StyleHint.Monospace)
-        block.setFont(font)
-        block.setPlaceholderText(
-            '{\n'
-            '  "path": "assets/project/items/example.png",\n'
-            '  "frame_width": 16,\n'
-            '  "frame_height": 16,\n'
-            '  "frame": 0\n'
-            '}'
-        )
-        return block
-
     @property
     def is_dirty(self) -> bool:
         return self._dirty
@@ -125,8 +264,8 @@ class _ItemFieldsEditor(QWidget):
         self._description_edit.setReadOnly(not enabled)
         self._max_stack_spin.setEnabled(enabled)
         self._consume_spin.setEnabled(enabled)
-        self._icon_text.setReadOnly(not enabled)
-        self._portrait_text.setReadOnly(not enabled)
+        self._icon_editor.set_editing_enabled(enabled)
+        self._portrait_editor.set_editing_enabled(enabled)
         self._apply_button.setEnabled(enabled)
         self._revert_button.setEnabled(enabled)
 
@@ -137,16 +276,8 @@ class _ItemFieldsEditor(QWidget):
             self._description_edit.setPlainText(str(data.get("description", "")))
             self._max_stack_spin.setValue(int(data.get("max_stack", 1)))
             self._consume_spin.setValue(int(data.get("consume_quantity_on_use", 0)))
-            self._icon_text.setPlainText(
-                json.dumps(data["icon"], indent=2, ensure_ascii=False)
-                if "icon" in data
-                else ""
-            )
-            self._portrait_text.setPlainText(
-                json.dumps(data["portrait"], indent=2, ensure_ascii=False)
-                if "portrait" in data
-                else ""
-            )
+            self._icon_editor.load_object(data.get("icon"))
+            self._portrait_editor.load_object(data.get("portrait"))
         finally:
             self._loading = False
         self._set_dirty(False)
@@ -161,24 +292,16 @@ class _ItemFieldsEditor(QWidget):
             updated.pop("description", None)
         updated["max_stack"] = self._max_stack_spin.value()
         updated["consume_quantity_on_use"] = self._consume_spin.value()
-        self._apply_optional_object(updated, "icon", self._icon_text.toPlainText().strip())
-        self._apply_optional_object(
-            updated, "portrait", self._portrait_text.toPlainText().strip()
-        )
+        self._apply_optional_object(updated, "icon", self._icon_editor.build_object())
+        self._apply_optional_object(updated, "portrait", self._portrait_editor.build_object())
         return updated
 
     def _apply_optional_object(
-        self, target: dict[str, Any], key: str, raw_text: str
+        self, target: dict[str, Any], key: str, value: dict[str, Any] | None
     ) -> None:
-        if not raw_text:
+        if value is None:
             target.pop(key, None)
             return
-        try:
-            value = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"{key.capitalize()} must be valid JSON.\n{exc}") from exc
-        if not isinstance(value, dict):
-            raise ValueError(f"{key.capitalize()} must be a JSON object.")
         target[key] = value
 
     def _on_changed(self) -> None:
@@ -199,7 +322,14 @@ class ItemEditorWidget(QWidget):
     dirty_changed = Signal(bool)
     editing_enabled_changed = Signal(bool)
 
-    def __init__(self, content_id: str, file_path: Path, parent=None) -> None:
+    def __init__(
+        self,
+        content_id: str,
+        file_path: Path,
+        *,
+        browse_asset_callback: Callable[[], str | None] | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._content_id = content_id
         self._file_path = file_path
@@ -212,7 +342,10 @@ class ItemEditorWidget(QWidget):
         self._tabs = QTabWidget()
         layout.addWidget(self._tabs)
 
-        self._fields_editor = _ItemFieldsEditor(content_id)
+        self._fields_editor = _ItemFieldsEditor(
+            content_id,
+            browse_asset_callback=browse_asset_callback,
+        )
         self._raw_json = JsonViewerWidget(file_path)
         self._tabs.addTab(self._fields_editor, "Item Editor")
         self._tabs.addTab(self._raw_json, "Raw JSON")

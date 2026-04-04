@@ -20,6 +20,8 @@ from area_editor.widgets.entity_template_editor_widget import EntityTemplateEdit
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.project_manifest_editor_widget import ProjectManifestEditorWidget
+from area_editor.widgets.shared_variables_editor_widget import SharedVariablesEditorWidget
 
 _TEST_PROJECT = (
     Path(__file__).resolve().parent.parent.parent.parent / "projects" / "test_project"
@@ -603,6 +605,147 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         )
         return project / "project.json"
 
+    def _create_reference_rich_project(self, root: Path) -> Path:
+        project = root / "project"
+        assets = project / "assets"
+        areas = project / "areas"
+        items = project / "items"
+        dialogues = project / "dialogues" / "system"
+        commands = project / "commands" / "system"
+        assets.mkdir(parents=True)
+        areas.mkdir()
+        items.mkdir()
+        dialogues.mkdir(parents=True)
+        commands.mkdir(parents=True)
+
+        base = QPixmap(16, 16)
+        base.fill(QColor("blue"))
+        self.assertTrue(base.save(str(assets / "base.png")))
+
+        (project / "project.json").write_text(
+            (
+                '{\n'
+                '  "startup_area": "areas/demo",\n'
+                '  "item_paths": ["items/"],\n'
+                '  "dialogue_paths": ["dialogues/"],\n'
+                '  "command_paths": ["commands/"]\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (areas / "demo.json").write_text(
+            (
+                '{\n'
+                '  "name": "Demo",\n'
+                '  "tile_size": 16,\n'
+                '  "tilesets": [],\n'
+                '  "tile_layers": [],\n'
+                '  "entities": [\n'
+                '    {\n'
+                '      "id": "terminal",\n'
+                '      "grid_x": 0,\n'
+                '      "grid_y": 0,\n'
+                '      "item_id": "items/apple",\n'
+                '      "required_item_id": "items/apple",\n'
+                '      "dialogue_path": "dialogues/system/prompt",\n'
+                '      "success_dialogue_path": "dialogues/system/prompt",\n'
+                '      "command_id": "commands/system/do_thing"\n'
+                '    }\n'
+                '  ],\n'
+                '  "variables": {}\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (items / "apple.json").write_text(
+            '{\n  "name": "Apple",\n  "max_stack": 9\n}\n',
+            encoding="utf-8",
+        )
+        (dialogues / "prompt.json").write_text(
+            '{\n  "segments": []\n}\n',
+            encoding="utf-8",
+        )
+        (commands / "do_thing.json").write_text(
+            '{\n  "commands": []\n}\n',
+            encoding="utf-8",
+        )
+        return project / "project.json"
+
+    def _create_entity_reference_project(self, root: Path) -> Path:
+        project = root / "project"
+        assets = project / "assets"
+        areas = project / "areas"
+        assets.mkdir(parents=True)
+        areas.mkdir()
+
+        base = QPixmap(16, 16)
+        base.fill(QColor("darkGreen"))
+        self.assertTrue(base.save(str(assets / "base.png")))
+
+        (project / "project.json").write_text(
+            (
+                '{\n'
+                '  "startup_area": "areas/demo",\n'
+                '  "global_entities": [\n'
+                '    {\n'
+                '      "id": "dialogue_controller"\n'
+                '    }\n'
+                '  ],\n'
+                '  "input_targets": {\n'
+                '    "confirm": "switch_a"\n'
+                '  }\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        (areas / "demo.json").write_text(
+            (
+                '{\n'
+                '  "name": "Demo",\n'
+                '  "tile_size": 16,\n'
+                '  "tilesets": [],\n'
+                '  "tile_layers": [\n'
+                '    {\n'
+                '      "name": "ground",\n'
+                '      "render_order": 0,\n'
+                '      "y_sort": false,\n'
+                '      "stack_order": 0,\n'
+                '      "grid": [[0, 0]]\n'
+                '    }\n'
+                '  ],\n'
+                '  "camera": {\n'
+                '    "follow": {\n'
+                '      "mode": "entity",\n'
+                '      "entity_id": "switch_a"\n'
+                '    }\n'
+                '  },\n'
+                '  "input_targets": {\n'
+                '    "interact": "switch_a"\n'
+                '  },\n'
+                '  "entities": [\n'
+                '    {\n'
+                '      "id": "switch_a",\n'
+                '      "grid_x": 0,\n'
+                '      "grid_y": 0,\n'
+                '      "kind": "switch"\n'
+                '    },\n'
+                '    {\n'
+                '      "id": "relay",\n'
+                '      "grid_x": 1,\n'
+                '      "grid_y": 0,\n'
+                '      "kind": "relay",\n'
+                '      "target_id": "switch_a",\n'
+                '      "source_entity_id": "switch_a",\n'
+                '      "entity_ids": ["switch_a", "dialogue_controller"]\n'
+                '    }\n'
+                '  ],\n'
+                '  "variables": {}\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        return project / "project.json"
+
     def _panel_file_entries(self, panel) -> list[tuple[str, Path]]:
         entries: list[tuple[str, Path]] = []
         stack = [panel._tree.topLevelItem(i) for i in range(panel._tree.topLevelItemCount())]
@@ -789,9 +932,17 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 '}'
             )
             window._entity_instance_panel._editor.setPlainText(raw)
-            window._on_apply_entity_instance_json()
+            with patch.object(
+                window,
+                "_confirm_entity_rename_preview",
+                return_value=True,
+            ):
+                window._on_apply_entity_instance_json()
 
             doc = window._area_docs["areas/demo"]
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
             entity = next(entity for entity in doc.entities if entity.id == "npc_custom")
             self.assertEqual((entity.x, entity.y), (1, 1))
             self.assertEqual(entity.render_order, 12)
@@ -800,12 +951,11 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual(entity.stack_order, 9)
             self.assertEqual(canvas.selected_entity_id, "npc_custom")
             self.assertEqual(window._entity_instance_panel.entity_id, "npc_custom")
-            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            self.assertFalse(window._tab_widget.is_dirty("areas/demo"))
             self.assertTrue(window._enable_json_editing_action.isChecked())
 
             window._on_clear_selection()
             self.assertTrue(window._enable_json_editing_action.isChecked())
-            window._tab_widget.set_dirty("areas/demo", False)
 
     def test_entity_instance_fields_panel_applies_changes_without_reverting_render_properties(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -857,9 +1007,17 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             window._render_panel._render_order_spin.setValue(14)
             QApplication.processEvents()
 
-            window._on_apply_entity_instance_fields()
+            with patch.object(
+                window,
+                "_confirm_entity_rename_preview",
+                return_value=True,
+            ):
+                window._on_apply_entity_instance_fields()
 
             doc = window._area_docs["areas/demo"]
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
             entity = next(entity for entity in doc.entities if entity.id == "front_door")
             self.assertEqual(entity.x, 1)
             self.assertEqual(entity.parameters, {
@@ -1408,26 +1566,14 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             widget.fields_editor._description_edit.setPlainText("Fresh and tart.")
             widget.fields_editor._max_stack_spin.setValue(12)
             widget.fields_editor._consume_spin.setValue(1)
-            widget.fields_editor._icon_text.setPlainText(
-                (
-                    '{\n'
-                    '  "path": "assets/base.png",\n'
-                    '  "frame_width": 16,\n'
-                    '  "frame_height": 16,\n'
-                    '  "frame": 0\n'
-                    '}'
-                )
-            )
-            widget.fields_editor._portrait_text.setPlainText(
-                (
-                    '{\n'
-                    '  "path": "assets/base.png",\n'
-                    '  "frame_width": 32,\n'
-                    '  "frame_height": 32,\n'
-                    '  "frame": 0\n'
-                    '}'
-                )
-            )
+            widget.fields_editor._icon_editor._path_edit.setText("assets/base.png")
+            widget.fields_editor._icon_editor._frame_width_spin.setValue(16)
+            widget.fields_editor._icon_editor._frame_height_spin.setValue(16)
+            widget.fields_editor._icon_editor._frame_spin.setValue(0)
+            widget.fields_editor._portrait_editor._path_edit.setText("assets/base.png")
+            widget.fields_editor._portrait_editor._frame_width_spin.setValue(32)
+            widget.fields_editor._portrait_editor._frame_height_spin.setValue(32)
+            widget.fields_editor._portrait_editor._frame_spin.setValue(0)
             QApplication.processEvents()
 
             self.assertTrue(window._tab_widget.is_dirty("items/apple"))
@@ -1442,7 +1588,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"portrait"', saved)
             self.assertFalse(window._tab_widget.is_dirty("items/apple"))
 
-    def test_project_and_shared_variables_tabs_open_and_shared_variables_save(self):
+    def test_project_and_shared_variables_tabs_open_and_save_through_focused_surfaces(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project_content_project(Path(tmp))
             window = MainWindow()
@@ -1452,36 +1598,379 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
 
             window._open_project_manifest_tab()
             project_widget = window._tab_widget.active_widget()
-            self.assertIsInstance(project_widget, JsonViewerWidget)
-            assert isinstance(project_widget, JsonViewerWidget)
+            self.assertIsInstance(project_widget, ProjectManifestEditorWidget)
+            assert isinstance(project_widget, ProjectManifestEditorWidget)
             self.assertEqual(
                 window._tab_widget.active_info().content_type,
                 ContentType.PROJECT_MANIFEST,
             )
+            self.assertTrue(project_widget.raw_json_widget.isReadOnly())
 
             window._open_shared_variables_tab()
             shared_widget = window._tab_widget.active_widget()
-            self.assertIsInstance(shared_widget, JsonViewerWidget)
-            assert isinstance(shared_widget, JsonViewerWidget)
+            self.assertIsInstance(shared_widget, SharedVariablesEditorWidget)
+            assert isinstance(shared_widget, SharedVariablesEditorWidget)
             self.assertEqual(
                 window._tab_widget.active_info().content_type,
                 ContentType.SHARED_VARIABLES,
             )
-            self.assertTrue(shared_widget.isReadOnly())
+            self.assertTrue(shared_widget.raw_json_widget.isReadOnly())
 
+            window._open_project_manifest_tab()
             window._enable_json_editing_action.setChecked(True)
-            self.assertFalse(shared_widget.isReadOnly())
+            self.assertFalse(project_widget.raw_json_widget.isReadOnly())
 
-            updated_text = shared_widget.toPlainText().replace('"preset": "standard"', '"preset": "compact"')
-            shared_widget.setPlainText(updated_text)
+            project_widget.fields_editor._save_dir_edit.setText("slot_data")
+            startup_index = project_widget.fields_editor._startup_area_combo.findData("areas/demo")
+            self.assertGreaterEqual(startup_index, 0)
+            project_widget.fields_editor._startup_area_combo.setCurrentIndex(startup_index)
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("project/project"))
+            window._on_save_active()
+
+            saved_project = project_file.read_text(encoding="utf-8")
+            self.assertIn('"save_dir": "slot_data"', saved_project)
+            self.assertIn('"startup_area": "areas/demo"', saved_project)
+            self.assertFalse(window._tab_widget.is_dirty("project/project"))
+
+            window._open_shared_variables_tab()
+            self.assertFalse(shared_widget.raw_json_widget.isReadOnly())
+            shared_widget.fields_editor._width_spin.setValue(400)
+            shared_widget.fields_editor._height_spin.setValue(224)
+            shared_widget.fields_editor._ticks_spin.setValue(20)
             QApplication.processEvents()
 
             self.assertTrue(window._tab_widget.is_dirty("project/shared_variables"))
             window._on_save_active()
 
             saved = (project_file.parent / "shared_variables.json").read_text(encoding="utf-8")
-            self.assertIn('"preset": "compact"', saved)
+            self.assertIn('"internal_width": 400', saved)
+            self.assertIn('"internal_height": 224', saved)
+            self.assertIn('"ticks_per_tile": 20', saved)
             self.assertFalse(window._tab_widget.is_dirty("project/shared_variables"))
+
+    def test_area_rename_moves_file_and_updates_startup_area(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = project_file.parent / "areas" / "demo.json"
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="rooms/demo_renamed",
+            ), patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                window._on_rename_project_content(
+                    ContentType.AREA,
+                    "areas/demo",
+                    old_path,
+                )
+
+            new_path = project_file.parent / "areas" / "rooms" / "demo_renamed.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_project = project_file.read_text(encoding="utf-8")
+            self.assertIn('"startup_area": "areas/rooms/demo_renamed"', saved_project)
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "areas/rooms/demo_renamed",
+            )
+            entries = self._panel_file_entries(window._area_panel)
+            self.assertIn(("areas/rooms/demo_renamed", new_path), entries)
+
+    def test_template_rename_moves_file_and_updates_known_template_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            assets.mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("magenta"))
+            self.assertTrue(base.save(str(assets / "base.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "global_entities": [\n'
+                    '    {\n'
+                    '      "id": "pause_controller",\n'
+                    '      "template": "entity_templates/old_controller"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Demo",\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [\n'
+                    '    {\n'
+                    '      "id": "switch_a",\n'
+                    '      "template": "entity_templates/old_controller",\n'
+                    '      "grid_x": 0,\n'
+                    '      "grid_y": 0\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "old_controller.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "world",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/base.png",\n'
+                    '      "frame_width": 16,\n'
+                    '      "frame_height": 16\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+            old_path = templates / "old_controller.json"
+            window._open_content(
+                "entity_templates/old_controller",
+                old_path,
+                ContentType.ENTITY_TEMPLATE,
+            )
+
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="systems/new_controller",
+            ), patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                window._on_rename_project_content(
+                    ContentType.ENTITY_TEMPLATE,
+                    "entity_templates/old_controller",
+                    old_path,
+                )
+
+            new_path = templates / "systems" / "new_controller.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_project = project_file.read_text(encoding="utf-8")
+            self.assertIn(
+                '"template": "entity_templates/systems/new_controller"',
+                saved_project,
+            )
+            saved_area = (areas / "demo.json").read_text(encoding="utf-8")
+            self.assertIn(
+                '"template": "entity_templates/systems/new_controller"',
+                saved_area,
+            )
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "entity_templates/systems/new_controller",
+            )
+            entries = self._panel_file_entries(window._template_panel)
+            self.assertIn(
+                ("entity_templates/systems/new_controller", new_path),
+                entries,
+            )
+
+    def test_item_rename_moves_file_and_updates_known_item_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            items = project / "items"
+            areas = project / "areas"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = items / "apple.json"
+            window._open_content("items/apple", old_path, ContentType.ITEM)
+
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="keys/silver_apple",
+            ), patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                window._on_rename_project_content(
+                    ContentType.ITEM,
+                    "items/apple",
+                    old_path,
+                )
+
+            new_path = items / "keys" / "silver_apple.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_area = (areas / "demo.json").read_text(encoding="utf-8")
+            self.assertIn('"item_id": "items/keys/silver_apple"', saved_area)
+            self.assertIn('"required_item_id": "items/keys/silver_apple"', saved_area)
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "items/keys/silver_apple",
+            )
+            entries = self._panel_file_entries(window._item_panel)
+            self.assertIn(("items/keys/silver_apple", new_path), entries)
+
+    def test_dialogue_rename_moves_file_and_updates_known_dialogue_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            dialogues = project / "dialogues" / "system"
+            areas = project / "areas"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = dialogues / "prompt.json"
+            window._open_content(
+                "dialogues/system/prompt",
+                old_path,
+                ContentType.DIALOGUE,
+            )
+
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="system/prompt_v2",
+            ), patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                window._on_rename_project_content(
+                    ContentType.DIALOGUE,
+                    "dialogues/system/prompt",
+                    old_path,
+                )
+
+            new_path = dialogues / "prompt_v2.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_area = (areas / "demo.json").read_text(encoding="utf-8")
+            self.assertIn('"dialogue_path": "dialogues/system/prompt_v2"', saved_area)
+            self.assertIn(
+                '"success_dialogue_path": "dialogues/system/prompt_v2"',
+                saved_area,
+            )
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "dialogues/system/prompt_v2",
+            )
+            entries = self._panel_file_entries(window._dialogue_panel)
+            self.assertIn(("dialogues/system/prompt_v2", new_path), entries)
+
+    def test_command_rename_moves_file_and_updates_known_command_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            commands = project / "commands" / "system"
+            areas = project / "areas"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = commands / "do_thing.json"
+            window._open_content(
+                "commands/system/do_thing",
+                old_path,
+                ContentType.NAMED_COMMAND,
+            )
+
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="system/do_better_thing",
+            ), patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                window._on_rename_project_content(
+                    ContentType.NAMED_COMMAND,
+                    "commands/system/do_thing",
+                    old_path,
+                )
+
+            new_path = commands / "do_better_thing.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_area = (areas / "demo.json").read_text(encoding="utf-8")
+            self.assertIn(
+                '"command_id": "commands/system/do_better_thing"',
+                saved_area,
+            )
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "commands/system/do_better_thing",
+            )
+            entries = self._panel_file_entries(window._command_panel)
+            self.assertIn(("commands/system/do_better_thing", new_path), entries)
+
+    def test_entity_instance_rename_updates_known_entity_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            project = project_file.parent
+            area_path = project / "areas" / "demo.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._active_instance_entity_id = "switch_a"
+            window._refresh_entity_instance_panel()
+            fields = window._entity_instance_panel._fields_editor
+            fields._id_edit.setText("switch_b")
+
+            with patch.object(
+                window,
+                "_confirm_entity_rename_preview",
+                return_value=True,
+            ):
+                window._on_apply_entity_instance_fields()
+
+            saved_project = project_file.read_text(encoding="utf-8")
+            self.assertIn('"confirm": "switch_b"', saved_project)
+            saved_area = area_path.read_text(encoding="utf-8")
+            self.assertIn('"id": "switch_b"', saved_area)
+            self.assertIn('"entity_id": "switch_b"', saved_area)
+            self.assertIn('"interact": "switch_b"', saved_area)
+            self.assertIn('"target_id": "switch_b"', saved_area)
+            self.assertIn('"source_entity_id": "switch_b"', saved_area)
+            self.assertIn('"entity_ids": [\n        "switch_b",', saved_area)
+            self.assertEqual(window._active_instance_entity_id, "switch_b")
+            self.assertEqual(
+                window._entity_instance_panel.entity_id,
+                "switch_b",
+            )
 
     def test_global_entities_panel_opens_focused_editor_and_saves_back_to_project(self):
         with tempfile.TemporaryDirectory() as tmp:

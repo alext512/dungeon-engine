@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Callable
 
 from PySide6.QtCore import QSignalBlocker, Signal
 from PySide6.QtGui import QFont
@@ -51,6 +52,20 @@ _MANAGED_EXTRA_KEYS = {
     "variables",
     "visuals",
     "persistence",
+}
+
+_ENTITY_REFERENCE_PARAMETER_NAMES = {
+    "entity_id",
+    "source_entity_id",
+    "actor_id",
+    "caller_id",
+    "target_id",
+}
+_AREA_REFERENCE_PARAMETER_NAMES = {
+    "area_id",
+    "target_area",
+    "source_area_id",
+    "destination_area_id",
 }
 
 
@@ -158,6 +173,26 @@ def _build_persistence_policy(
     if variables:
         payload["variables"] = variables
     return payload
+
+
+def _parameter_reference_kind(name: str) -> str | None:
+    normalized = str(name).strip()
+    if not normalized:
+        return None
+    if normalized == "item_id" or normalized.endswith("_item_id"):
+        return "item"
+    if normalized == "dialogue_path" or normalized.endswith("_dialogue_path"):
+        return "dialogue"
+    if normalized == "command_id" or normalized.endswith("_command_id"):
+        return "command"
+    if normalized in _AREA_REFERENCE_PARAMETER_NAMES or normalized.endswith("_area_id"):
+        return "area"
+    if (
+        normalized in _ENTITY_REFERENCE_PARAMETER_NAMES
+        or normalized.endswith("_entity_id")
+    ):
+        return "entity"
+    return None
 
 
 class _EntityInstanceJsonEditor(QWidget):
@@ -544,6 +579,17 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._area_width = 0
         self._area_height = 0
         self._parameter_edits: dict[str, QLineEdit] = {}
+        self._parameter_browse_buttons: dict[str, QPushButton] = {}
+        self._reference_picker_callbacks: dict[
+            str,
+            Callable[[str], str | None] | None,
+        ] = {
+            "area": None,
+            "entity": None,
+            "item": None,
+            "dialogue": None,
+            "command": None,
+        }
         self._parameters_editable = True
         self._persistence_editable = True
 
@@ -583,6 +629,23 @@ class _EntityInstanceFieldsEditor(QWidget):
 
     def set_template_catalog(self, catalog: TemplateCatalog | None) -> None:
         self._template_catalog = catalog
+
+    def set_reference_picker_callbacks(
+        self,
+        *,
+        area_picker: Callable[[str], str | None] | None = None,
+        entity_picker: Callable[[str], str | None] | None = None,
+        item_picker: Callable[[str], str | None] | None = None,
+        dialogue_picker: Callable[[str], str | None] | None = None,
+        command_picker: Callable[[str], str | None] | None = None,
+    ) -> None:
+        self._reference_picker_callbacks = {
+            "area": area_picker,
+            "entity": entity_picker,
+            "item": item_picker,
+            "dialogue": dialogue_picker,
+            "command": command_picker,
+        }
 
     def set_area_bounds(self, width: int, height: int) -> None:
         self._area_width = max(0, width)
@@ -968,11 +1031,30 @@ class _EntityInstanceFieldsEditor(QWidget):
             else:
                 edit.setText(json.dumps(value, ensure_ascii=False))
             edit.textChanged.connect(self._on_field_changed)
-            self._parameters_layout.addRow(label, edit)
+            row_widget: QWidget = edit
+            picker_kind = _parameter_reference_kind(name)
+            picker_callback = (
+                None if picker_kind is None else self._reference_picker_callbacks.get(picker_kind)
+            )
+            if picker_callback is not None:
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.addWidget(edit, 1)
+                browse_button = QPushButton("Browse...")
+                browse_button.clicked.connect(
+                    lambda _checked=False, parameter_name=name: self._on_pick_parameter_value(
+                        parameter_name
+                    )
+                )
+                row_layout.addWidget(browse_button)
+                self._parameter_browse_buttons[name] = browse_button
+            self._parameters_layout.addRow(label, row_widget)
             self._parameter_edits[name] = edit
 
     def _clear_parameter_rows(self) -> None:
         self._parameter_edits.clear()
+        self._parameter_browse_buttons.clear()
         while self._parameters_layout.rowCount() > 0:
             self._parameters_layout.removeRow(0)
 
@@ -997,6 +1079,20 @@ class _EntityInstanceFieldsEditor(QWidget):
     def _set_persistence_controls_enabled(self, enabled: bool) -> None:
         self._persistence_entity_state_check.setEnabled(enabled)
         self._persistence_variables_text.setReadOnly(not enabled)
+
+    def _on_pick_parameter_value(self, name: str) -> None:
+        edit = self._parameter_edits.get(name)
+        if edit is None:
+            return
+        picker_kind = _parameter_reference_kind(name)
+        if picker_kind is None:
+            return
+        callback = self._reference_picker_callbacks.get(picker_kind)
+        if callback is None:
+            return
+        selected = callback(edit.text().strip())
+        if selected:
+            edit.setText(selected)
 
     def _on_pixel_check_toggled(self) -> None:
         if self._loading:
@@ -1104,6 +1200,23 @@ class EntityInstanceJsonPanel(QDockWidget):
 
     def set_template_catalog(self, catalog: TemplateCatalog | None) -> None:
         self._fields_editor.set_template_catalog(catalog)
+
+    def set_reference_picker_callbacks(
+        self,
+        *,
+        area_picker: Callable[[str], str | None] | None = None,
+        entity_picker: Callable[[str], str | None] | None = None,
+        item_picker: Callable[[str], str | None] | None = None,
+        dialogue_picker: Callable[[str], str | None] | None = None,
+        command_picker: Callable[[str], str | None] | None = None,
+    ) -> None:
+        self._fields_editor.set_reference_picker_callbacks(
+            area_picker=area_picker,
+            entity_picker=entity_picker,
+            item_picker=item_picker,
+            dialogue_picker=dialogue_picker,
+            command_picker=command_picker,
+        )
 
     def set_area_bounds(self, width: int, height: int) -> None:
         self._fields_editor.set_area_bounds(width, height)

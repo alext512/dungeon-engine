@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -44,7 +45,9 @@ from area_editor.project_io.manifest import (
     AREA_ID_PREFIX,
     ProjectManifest,
     discover_areas,
+    discover_entity_templates,
     discover_global_entities,
+    discover_items,
     load_manifest,
 )
 from area_editor.operations.areas import (
@@ -84,7 +87,9 @@ from area_editor.widgets.global_entities_panel import GlobalEntitiesPanel
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.layer_list_panel import LayerListPanel
+from area_editor.widgets.project_manifest_editor_widget import ProjectManifestEditorWidget
 from area_editor.widgets.render_properties_panel import RenderPropertiesPanel
+from area_editor.widgets.shared_variables_editor_widget import SharedVariablesEditorWidget
 from area_editor.widgets.template_list_panel import TemplateListPanel
 from area_editor.widgets.tile_canvas import BrushType, TileCanvas
 from area_editor.widgets.tileset_browser_panel import TilesetBrowserPanel
@@ -92,6 +97,8 @@ from area_editor.widgets.tileset_browser_panel import TilesetBrowserPanel
 _SETTINGS_KEY_LAST_PROJECT = "last_project_path"
 _SETTINGS_KEY_JSON_EDITING_ENABLED = "json_editing_enabled"
 _IMAGE_SUFFIXES = {".png", ".webp", ".bmp", ".jpg", ".jpeg"}
+_COMMAND_ID_PREFIX = "commands"
+_DIALOGUE_ID_PREFIX = "dialogues"
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +109,24 @@ class _EntityIdUsage:
     kind: str
     area_id: str | None = None
     file_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class _JsonReferenceFileUpdate:
+    file_path: Path
+    updated_text: str
+    changed_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _ReferenceKeyMatcher:
+    exact_keys: frozenset[str]
+    suffix_keys: frozenset[str] = frozenset()
+
+    def matches(self, key: str) -> bool:
+        return key in self.exact_keys or any(
+            key.endswith(suffix) for suffix in self.suffix_keys
+        )
 
 
 class _TilesetDetailsDialog(QDialog):
@@ -335,12 +360,16 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._global_entities_panel)
 
         self._dialogue_panel = FileTreePanel(
-            "Dialogues", object_name="DialoguePanel"
+            "Dialogues",
+            object_name="DialoguePanel",
+            content_prefix=_DIALOGUE_ID_PREFIX,
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._dialogue_panel)
 
         self._command_panel = FileTreePanel(
-            "Commands", object_name="CommandPanel"
+            "Commands",
+            object_name="CommandPanel",
+            content_prefix=_COMMAND_ID_PREFIX,
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._command_panel)
 
@@ -359,6 +388,13 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._render_panel)
 
         self._entity_instance_panel = EntityInstanceJsonPanel()
+        self._entity_instance_panel.set_reference_picker_callbacks(
+            area_picker=self._browse_project_area_id,
+            entity_picker=self._browse_project_entity_id,
+            item_picker=self._browse_project_item_id,
+            dialogue_picker=self._browse_project_dialogue_id,
+            command_picker=self._browse_project_command_id,
+        )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._entity_instance_panel)
 
         self._tileset_panel = TilesetBrowserPanel()
@@ -426,6 +462,11 @@ class MainWindow(QMainWindow):
         self._asset_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ASSET)
         )
+        self._area_panel.set_context_menu_builder(self._populate_area_context_menu)
+        self._template_panel.set_context_menu_builder(self._populate_template_context_menu)
+        self._item_panel.set_context_menu_builder(self._populate_item_context_menu)
+        self._dialogue_panel.set_context_menu_builder(self._populate_dialogue_context_menu)
+        self._command_panel.set_context_menu_builder(self._populate_command_context_menu)
         self._asset_panel.set_context_menu_builder(self._populate_asset_context_menu)
 
         # Tab widget signals
@@ -979,7 +1020,18 @@ class MainWindow(QMainWindow):
         if widget is None and content_type == ContentType.ENTITY_TEMPLATE:
             widget = EntityTemplateEditorWidget(content_id, file_path)
         if widget is None and content_type == ContentType.ITEM:
-            widget = ItemEditorWidget(content_id, file_path)
+            widget = ItemEditorWidget(
+                content_id,
+                file_path,
+                browse_asset_callback=self._browse_project_asset,
+            )
+        if widget is None and content_type == ContentType.PROJECT_MANIFEST:
+            area_ids: list[str] = []
+            if self._manifest is not None:
+                area_ids = [entry.area_id for entry in discover_areas(self._manifest)]
+            widget = ProjectManifestEditorWidget(file_path, area_ids=area_ids)
+        if widget is None and content_type == ContentType.SHARED_VARIABLES:
+            widget = SharedVariablesEditorWidget(file_path)
         opened_widget = self._tab_widget.open_tab(
             content_id,
             file_path,
@@ -994,6 +1046,8 @@ class MainWindow(QMainWindow):
                     GlobalEntitiesEditorWidget,
                     EntityTemplateEditorWidget,
                     ItemEditorWidget,
+                    ProjectManifestEditorWidget,
+                    SharedVariablesEditorWidget,
                 ),
             )
             and content_id not in self._json_dirty_bound
@@ -1225,6 +1279,185 @@ class MainWindow(QMainWindow):
                 self._catalog,
             )
 
+    def _populate_area_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_rename_content_action(menu, ContentType.AREA, content_id, file_path)
+
+    def _populate_template_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_rename_content_action(
+            menu,
+            ContentType.ENTITY_TEMPLATE,
+            content_id,
+            file_path,
+        )
+
+    def _populate_item_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_rename_content_action(menu, ContentType.ITEM, content_id, file_path)
+
+    def _populate_dialogue_context_menu(
+        self,
+        menu,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        self._add_rename_content_action(menu, ContentType.DIALOGUE, content_id, file_path)
+
+    def _populate_command_context_menu(
+        self,
+        menu,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        self._add_rename_content_action(
+            menu,
+            ContentType.NAMED_COMMAND,
+            content_id,
+            file_path,
+        )
+
+    def _add_rename_content_action(
+        self,
+        menu,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        menu.addSeparator()
+        rename_action = QAction("Rename/Move...", self)
+        rename_action.triggered.connect(
+            lambda: self._on_rename_project_content(
+                content_type,
+                content_id,
+                file_path,
+            )
+        )
+        menu.addAction(rename_action)
+
+    def _on_rename_project_content(
+        self,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        rename_config = self._rename_config_for_content(content_type)
+        if rename_config is None:
+            return
+        prefix, roots, reference_matcher, title = rename_config
+        relative_name = self._relative_content_name(content_id, prefix)
+        if relative_name is None:
+            QMessageBox.warning(
+                self,
+                "Rename Unsupported",
+                f"Cannot rename '{content_id}' through this workflow.",
+            )
+            return
+
+        new_relative_name = self._prompt_content_relative_name(
+            title=title,
+            current_relative_name=relative_name,
+        )
+        if new_relative_name is None:
+            return
+        if new_relative_name == relative_name:
+            return
+
+        root_dir = self._root_dir_for_content_file(file_path, roots)
+        if root_dir is None:
+            QMessageBox.warning(
+                self,
+                "Rename Unsupported",
+                f"Could not determine the content root for '{file_path.name}'.",
+            )
+            return
+
+        new_file_path = (root_dir / new_relative_name).with_suffix(file_path.suffix)
+        new_file_path = new_file_path.resolve()
+        try:
+            new_file_path.relative_to(root_dir.resolve())
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Destination",
+                "Renamed content must stay inside its configured project root.",
+            )
+            return
+        if new_file_path == file_path.resolve():
+            return
+        if new_file_path.exists():
+            QMessageBox.warning(
+                self,
+                "Destination Exists",
+                f"'{new_file_path}' already exists.",
+            )
+            return
+
+        normalized_relative_name = new_relative_name.replace("\\", "/").strip("/")
+        new_content_id = (
+            f"{prefix}/{normalized_relative_name}" if prefix else normalized_relative_name
+        )
+        try:
+            reference_updates = self._collect_reference_updates(
+                old_value=content_id,
+                new_value=new_content_id,
+                matcher=reference_matcher,
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Rename Failed",
+                f"Could not build the reference update preview:\n{exc}",
+            )
+            return
+
+        if not self._confirm_content_rename_preview(
+            title=title,
+            old_content_id=content_id,
+            new_content_id=new_content_id,
+            old_file_path=file_path,
+            new_file_path=new_file_path,
+            reference_updates=reference_updates,
+        ):
+            return
+
+        was_open = self._tab_widget.content_info(content_id) is not None
+        try:
+            for update in reference_updates:
+                update.file_path.write_text(update.updated_text, encoding="utf-8")
+            new_file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.rename(new_file_path)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Rename Failed",
+                f"Could not rename '{content_id}':\n{exc}",
+            )
+            return
+
+        self._tab_widget.close_all()
+        self._area_docs.clear()
+        self._json_dirty_bound.clear()
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+
+        if content_type == ContentType.AREA:
+            self._area_panel.highlight_area(new_content_id)
+            if was_open:
+                self._open_area(new_content_id, new_file_path)
+        else:
+            target_panel = self._panel_for_content_type(content_type)
+            if target_panel is not None:
+                target_panel.select_by_id(new_content_id)
+            if was_open:
+                self._open_content(new_content_id, new_file_path, content_type)
+
+        self.statusBar().showMessage(
+            f"Renamed {content_id} to {new_content_id}.",
+            3500,
+        )
+
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
             return
@@ -1233,6 +1466,468 @@ class MainWindow(QMainWindow):
     def _on_tab_closed(self, content_id: str) -> None:
         self._area_docs.pop(content_id, None)
         self._json_dirty_bound.discard(content_id)
+
+    def _rename_config_for_content(
+        self,
+        content_type: ContentType,
+    ) -> tuple[str, list[Path], _ReferenceKeyMatcher, str] | None:
+        if self._manifest is None:
+            return None
+        if content_type == ContentType.AREA:
+            return (
+                AREA_ID_PREFIX,
+                list(self._manifest.area_paths),
+                _ReferenceKeyMatcher(
+                    exact_keys=frozenset(
+                        {
+                            "startup_area",
+                            "area_id",
+                            "destination_area_id",
+                            "source_area_id",
+                        }
+                    ),
+                    suffix_keys=frozenset({"_area_id"}),
+                ),
+                "Rename/Move Area",
+            )
+        if content_type == ContentType.ENTITY_TEMPLATE:
+            return (
+                "entity_templates",
+                list(self._manifest.entity_template_paths),
+                _ReferenceKeyMatcher(
+                    exact_keys=frozenset({"template", "template_id"}),
+                ),
+                "Rename/Move Template",
+            )
+        if content_type == ContentType.ITEM:
+            return (
+                "items",
+                list(self._manifest.item_paths),
+                _ReferenceKeyMatcher(
+                    exact_keys=frozenset({"item_id"}),
+                    suffix_keys=frozenset({"_item_id"}),
+                ),
+                "Rename/Move Item",
+            )
+        if content_type == ContentType.DIALOGUE:
+            return (
+                _DIALOGUE_ID_PREFIX,
+                list(self._manifest.dialogue_paths),
+                _ReferenceKeyMatcher(
+                    exact_keys=frozenset({"dialogue_path"}),
+                    suffix_keys=frozenset({"_dialogue_path"}),
+                ),
+                "Rename/Move Dialogue",
+            )
+        if content_type == ContentType.NAMED_COMMAND:
+            return (
+                _COMMAND_ID_PREFIX,
+                list(self._manifest.command_paths),
+                _ReferenceKeyMatcher(
+                    exact_keys=frozenset({"command_id"}),
+                ),
+                "Rename/Move Command",
+            )
+        return None
+
+    @staticmethod
+    def _relative_content_name(content_id: str, prefix: str | None) -> str | None:
+        normalized = content_id.replace("\\", "/")
+        stripped_prefix = (prefix or "").strip("/")
+        if stripped_prefix:
+            expected_prefix = f"{stripped_prefix}/"
+            if not normalized.startswith(expected_prefix):
+                return None
+            relative_name = normalized[len(expected_prefix) :].strip("/")
+        else:
+            relative_name = normalized.strip("/")
+        return relative_name or None
+
+    def _prompt_content_relative_name(
+        self,
+        *,
+        title: str,
+        current_relative_name: str,
+    ) -> str | None:
+        new_value, accepted = QInputDialog.getText(
+            self,
+            title,
+            "New relative id/path",
+            text=current_relative_name,
+        )
+        if not accepted:
+            return None
+        normalized = new_value.strip().replace("\\", "/").strip("/")
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Name",
+                "The new relative id/path must not be blank.",
+            )
+            return None
+        return normalized
+
+    @staticmethod
+    def _root_dir_for_content_file(file_path: Path, roots: list[Path]) -> Path | None:
+        resolved = file_path.resolve()
+        for root_dir in roots:
+            try:
+                resolved.relative_to(root_dir.resolve())
+                return root_dir.resolve()
+            except ValueError:
+                continue
+        return None
+
+    def _panel_for_content_type(self, content_type: ContentType) -> FileTreePanel | None:
+        if content_type == ContentType.ENTITY_TEMPLATE:
+            return self._template_panel
+        if content_type == ContentType.ITEM:
+            return self._item_panel
+        if content_type == ContentType.DIALOGUE:
+            return self._dialogue_panel
+        if content_type == ContentType.NAMED_COMMAND:
+            return self._command_panel
+        return None
+
+    def _collect_reference_updates(
+        self,
+        *,
+        old_value: str,
+        new_value: str,
+        matcher: _ReferenceKeyMatcher,
+        skip_files: set[Path] | None = None,
+    ) -> list[_JsonReferenceFileUpdate]:
+        updates: list[_JsonReferenceFileUpdate] = []
+        skipped = {path.resolve() for path in (skip_files or set())}
+        for file_path in self._project_json_reference_scan_files():
+            if file_path.resolve() in skipped:
+                continue
+            data = json.loads(file_path.read_text(encoding="utf-8"))
+            updated, changed_paths = self._replace_reference_keys_in_json_value(
+                data,
+                old_value=old_value,
+                new_value=new_value,
+                matcher=matcher,
+            )
+            if not changed_paths:
+                continue
+            updates.append(
+                _JsonReferenceFileUpdate(
+                    file_path=file_path,
+                    updated_text=f"{json.dumps(updated, indent=2, ensure_ascii=False)}\n",
+                    changed_paths=tuple(changed_paths),
+                )
+            )
+        return updates
+
+    def _project_json_reference_scan_files(self) -> list[Path]:
+        if self._manifest is None:
+            return []
+        files: list[Path] = [self._manifest.project_file]
+        files.extend(entry.file_path.resolve() for entry in discover_areas(self._manifest))
+        files.extend(
+            entry.file_path.resolve()
+            for entry in discover_entity_templates(self._manifest)
+        )
+        for path_list in (
+            self._manifest.item_paths,
+            self._manifest.command_paths,
+            self._manifest.dialogue_paths,
+        ):
+            for root_dir in path_list:
+                if not root_dir.is_dir():
+                    continue
+                files.extend(path.resolve() for path in sorted(root_dir.rglob("*.json")))
+        unique: list[Path] = []
+        seen: set[Path] = set()
+        for file_path in files:
+            resolved = file_path.resolve()
+            if resolved in seen or not resolved.is_file():
+                continue
+            seen.add(resolved)
+            unique.append(resolved)
+        return unique
+
+    def _replace_reference_keys_in_json_value(
+        self,
+        value: Any,
+        *,
+        old_value: str,
+        new_value: str,
+        matcher: _ReferenceKeyMatcher,
+        path: str = "$",
+    ) -> tuple[Any, list[str]]:
+        changed_paths: list[str] = []
+        if isinstance(value, dict):
+            updated: dict[str, Any] = {}
+            for key, child in value.items():
+                child_path = f"{path}.{key}"
+                if matcher.matches(key):
+                    replaced_child, replaced_paths = self._replace_matched_reference_child(
+                        child,
+                        old_value=old_value,
+                        new_value=new_value,
+                        path=child_path,
+                    )
+                    if replaced_paths:
+                        updated[key] = replaced_child
+                        changed_paths.extend(replaced_paths)
+                        continue
+                updated_child, child_changes = self._replace_reference_keys_in_json_value(
+                    child,
+                    old_value=old_value,
+                    new_value=new_value,
+                    matcher=matcher,
+                    path=child_path,
+                )
+                updated[key] = updated_child
+                changed_paths.extend(child_changes)
+            return updated, changed_paths
+        if isinstance(value, list):
+            updated_list: list[Any] = []
+            for index, child in enumerate(value):
+                updated_child, child_changes = self._replace_reference_keys_in_json_value(
+                    child,
+                    old_value=old_value,
+                    new_value=new_value,
+                    matcher=matcher,
+                    path=f"{path}[{index}]",
+                )
+                updated_list.append(updated_child)
+                changed_paths.extend(child_changes)
+            return updated_list, changed_paths
+        return value, changed_paths
+
+    def _replace_matched_reference_child(
+        self,
+        child: Any,
+        *,
+        old_value: str,
+        new_value: str,
+        path: str,
+    ) -> tuple[Any, list[str]]:
+        if isinstance(child, str):
+            if child == old_value:
+                return new_value, [path]
+            return child, []
+        if isinstance(child, list):
+            changed_paths: list[str] = []
+            updated_list: list[Any] = []
+            for index, item in enumerate(child):
+                if isinstance(item, str) and item == old_value:
+                    updated_list.append(new_value)
+                    changed_paths.append(f"{path}[{index}]")
+                else:
+                    updated_list.append(item)
+            return updated_list, changed_paths
+        if isinstance(child, dict):
+            changed_paths: list[str] = []
+            updated_dict: dict[str, Any] = {}
+            for dict_key, dict_value in child.items():
+                if isinstance(dict_value, str) and dict_value == old_value:
+                    updated_dict[dict_key] = new_value
+                    changed_paths.append(f"{path}.{dict_key}")
+                else:
+                    updated_dict[dict_key] = dict_value
+            return updated_dict, changed_paths
+        return child, []
+
+    def _confirm_content_rename_preview(
+        self,
+        *,
+        title: str,
+        old_content_id: str,
+        new_content_id: str,
+        old_file_path: Path,
+        new_file_path: Path,
+        reference_updates: list[_JsonReferenceFileUpdate],
+    ) -> bool:
+        lines = [
+            f"Rename {old_content_id} -> {new_content_id}",
+            f"Move file: {old_file_path.name} -> {new_file_path.name}",
+            "",
+        ]
+        if reference_updates:
+            lines.append("Reference updates:")
+            for update in reference_updates:
+                display_path = update.file_path.name
+                joined_paths = ", ".join(update.changed_paths)
+                lines.append(f"- {display_path}: {joined_paths}")
+        else:
+            lines.append("No known reference updates were detected.")
+        detail_text = "\n".join(lines)
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(title)
+        dialog.setIcon(QMessageBox.Icon.Question)
+        dialog.setText("Apply this rename/move and the previewed reference updates?")
+        dialog.setDetailedText(detail_text)
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+        return dialog.exec() == int(QMessageBox.StandardButton.Ok)
+
+    def _area_entity_reference_matcher(self) -> _ReferenceKeyMatcher:
+        return _ReferenceKeyMatcher(
+            exact_keys=frozenset(
+                {
+                    "entity_id",
+                    "source_entity_id",
+                    "actor_id",
+                    "caller_id",
+                    "target_id",
+                    "follow_entity_id",
+                    "exclude_entity_id",
+                    "transfer_entity_id",
+                    "entity_ids",
+                    "transfer_entity_ids",
+                    "input_targets",
+                }
+            ),
+            suffix_keys=frozenset({"_entity_id", "_entity_ids"}),
+        )
+
+    def _build_area_entity_source_update(
+        self,
+        doc: AreaDocument,
+        *,
+        old_entity_id: str,
+        updated_entity: EntityDocument,
+    ) -> tuple[dict[str, Any], tuple[str, ...]]:
+        area_data = doc.to_dict()
+        raw_entities = area_data.get("entities", [])
+        if not isinstance(raw_entities, list):
+            raise ValueError("Area JSON must keep entities as an array.")
+        target_index: int | None = None
+        for index, raw_entity in enumerate(raw_entities):
+            if not isinstance(raw_entity, dict):
+                continue
+            if str(raw_entity.get("id", "")).strip() == old_entity_id:
+                raw_entities[index] = updated_entity.to_dict()
+                target_index = index
+                break
+        if target_index is None:
+            raise ValueError(f"Could not locate entity '{old_entity_id}' in the source area.")
+        return area_data, (f"$.entities[{target_index}]",)
+
+    def _confirm_entity_rename_preview(
+        self,
+        *,
+        area_id: str,
+        old_entity_id: str,
+        new_entity_id: str,
+        reference_updates: list[_JsonReferenceFileUpdate],
+    ) -> bool:
+        lines = [
+            f"Rename entity {old_entity_id} -> {new_entity_id}",
+            f"Source area: {area_id}",
+            "",
+        ]
+        if reference_updates:
+            lines.append("Reference updates:")
+            for update in reference_updates:
+                display_path = update.file_path.name
+                joined_paths = ", ".join(update.changed_paths)
+                lines.append(f"- {display_path}: {joined_paths}")
+        else:
+            lines.append("Only the source entity id will change.")
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Rename Area Entity")
+        dialog.setIcon(QMessageBox.Icon.Question)
+        dialog.setText("Apply this entity rename and the previewed reference updates?")
+        dialog.setDetailedText("\n".join(lines))
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+        return dialog.exec() == int(QMessageBox.StandardButton.Ok)
+
+    def _apply_area_entity_rename_refactor(
+        self,
+        *,
+        content_id: str,
+        doc: AreaDocument,
+        current: EntityDocument,
+        updated: EntityDocument,
+        status_message: str,
+    ) -> bool:
+        if self._manifest is None:
+            return False
+        info = self._tab_widget.content_info(content_id)
+        if info is None:
+            return False
+        source_file_path = info.file_path.resolve()
+        other_dirty_ids = [
+            dirty_id
+            for dirty_id in self._tab_widget.dirty_content_ids()
+            if dirty_id != content_id
+        ]
+        if not self._maybe_save_dirty_tabs(other_dirty_ids):
+            return False
+        source_data, base_paths = self._build_area_entity_source_update(
+            doc,
+            old_entity_id=current.id,
+            updated_entity=updated,
+        )
+        matcher = self._area_entity_reference_matcher()
+        source_updated_data, source_reference_paths = self._replace_reference_keys_in_json_value(
+            source_data,
+            old_value=current.id,
+            new_value=updated.id,
+            matcher=matcher,
+        )
+        source_update = _JsonReferenceFileUpdate(
+            file_path=source_file_path,
+            updated_text=f"{json.dumps(source_updated_data, indent=2, ensure_ascii=False)}\n",
+            changed_paths=tuple((*base_paths, *source_reference_paths)),
+        )
+        other_updates = self._collect_reference_updates(
+            old_value=current.id,
+            new_value=updated.id,
+            matcher=matcher,
+            skip_files={source_file_path},
+        )
+        reference_updates = [source_update, *other_updates]
+        if not self._confirm_entity_rename_preview(
+            area_id=content_id,
+            old_entity_id=current.id,
+            new_entity_id=updated.id,
+            reference_updates=reference_updates,
+        ):
+            return False
+        try:
+            for update in reference_updates:
+                update.file_path.write_text(update.updated_text, encoding="utf-8")
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Rename Failed",
+                f"Could not rename entity '{current.id}':\n{exc}",
+            )
+            return False
+        self._tab_widget.close_all()
+        self._area_docs.clear()
+        self._json_dirty_bound.clear()
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+        self._open_area(content_id, source_file_path)
+        self._area_panel.highlight_area(content_id)
+        self._active_instance_entity_id = updated.id
+        reopened_context = self._active_area_context()
+        if reopened_context is not None:
+            _area_id, _reloaded_doc, reloaded_canvas = reopened_context
+            reloaded_canvas.set_selected_entity(
+                updated.id,
+                cycle_position=1,
+                cycle_total=1,
+                emit=False,
+            )
+        self._refresh_render_properties_target()
+        self._refresh_entity_instance_panel()
+        self._sync_json_edit_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(status_message, 2500)
+        return True
 
     # ------------------------------------------------------------------
     # Slots — view menu
@@ -2170,7 +2865,7 @@ class MainWindow(QMainWindow):
             return None
         return authored_path, dialog.tile_width, dialog.tile_height
 
-    def _browse_project_asset(self) -> str | None:
+    def _browse_project_asset(self, title: str = "Choose Project Asset") -> str | None:
         if self._manifest is None:
             return None
         start_dir = str(self._manifest.asset_paths[0]) if self._manifest.asset_paths else str(
@@ -2178,13 +2873,121 @@ class MainWindow(QMainWindow):
         )
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Choose Tileset Image",
+            title,
             start_dir,
             "Image files (*.png *.webp *.bmp *.jpg *.jpeg);;All files (*)",
         )
         if not path:
             return None
         return self._authored_asset_path_for(Path(path))
+
+    def _browse_project_area_id(self, current_value: str = "") -> str | None:
+        if self._manifest is None:
+            return None
+        return self._browse_known_reference(
+            title="Choose Area",
+            label="Area",
+            values=[entry.area_id for entry in discover_areas(self._manifest)],
+            current_value=current_value,
+        )
+
+    def _browse_project_entity_id(self, current_value: str = "") -> str | None:
+        return self._browse_known_reference(
+            title="Choose Entity",
+            label="Entity",
+            values=sorted(self._project_used_entity_ids()),
+            current_value=current_value,
+        )
+
+    def _browse_project_item_id(self, current_value: str = "") -> str | None:
+        if self._manifest is None:
+            return None
+        return self._browse_known_reference(
+            title="Choose Item",
+            label="Item",
+            values=[entry.item_id for entry in discover_items(self._manifest)],
+            current_value=current_value,
+        )
+
+    def _browse_project_dialogue_id(self, current_value: str = "") -> str | None:
+        if self._manifest is None:
+            return None
+        return self._browse_known_reference(
+            title="Choose Dialogue",
+            label="Dialogue",
+            values=self._discover_prefixed_json_content_ids(
+                self._manifest.dialogue_paths,
+                prefix=_DIALOGUE_ID_PREFIX,
+            ),
+            current_value=current_value,
+        )
+
+    def _browse_project_command_id(self, current_value: str = "") -> str | None:
+        if self._manifest is None:
+            return None
+        return self._browse_known_reference(
+            title="Choose Command",
+            label="Command",
+            values=self._discover_prefixed_json_content_ids(
+                self._manifest.command_paths,
+                prefix=_COMMAND_ID_PREFIX,
+            ),
+            current_value=current_value,
+        )
+
+    def _browse_known_reference(
+        self,
+        *,
+        title: str,
+        label: str,
+        values: list[str],
+        current_value: str = "",
+    ) -> str | None:
+        options = [value for value in values if value]
+        current = current_value.strip()
+        if current and current not in options:
+            options.insert(0, current)
+        if not options:
+            QMessageBox.information(
+                self,
+                title,
+                f"No known {label.lower()} ids are available in this project.",
+            )
+            return None
+        current_index = 0
+        if current and current in options:
+            current_index = options.index(current)
+        selected, accepted = QInputDialog.getItem(
+            self,
+            title,
+            label,
+            options,
+            current_index,
+            False,
+        )
+        if not accepted:
+            return None
+        return str(selected).strip() or None
+
+    @staticmethod
+    def _discover_prefixed_json_content_ids(root_dirs: list[Path], *, prefix: str) -> list[str]:
+        entries: list[str] = []
+        seen: set[Path] = set()
+        for directory in root_dirs:
+            if not directory.is_dir():
+                continue
+            for file_path in sorted(directory.rglob("*.json")):
+                resolved = file_path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                try:
+                    relative = resolved.relative_to(directory.resolve())
+                except ValueError:
+                    relative = resolved.name
+                relative_name = str(Path(relative).with_suffix("")).replace("\\", "/")
+                entries.append(f"{prefix}/{relative_name}".strip("/"))
+        return sorted(entries)
 
     def _authored_asset_path_for(self, file_path: Path | None) -> str | None:
         if self._manifest is None or file_path is None:
@@ -2274,6 +3077,8 @@ class MainWindow(QMainWindow):
                 GlobalEntitiesEditorWidget,
                 EntityTemplateEditorWidget,
                 ItemEditorWidget,
+                ProjectManifestEditorWidget,
+                SharedVariablesEditorWidget,
             ),
         ):
             return True
@@ -2520,12 +3325,20 @@ class MainWindow(QMainWindow):
         updated: EntityDocument,
         *,
         status_message: str,
-    ) -> bool:
+        ) -> bool:
         error = self._validate_entity_update(content_id, doc, current, updated)
         if error is not None:
             title, message = error
             QMessageBox.warning(self, title, message)
             return False
+        if updated.id != current.id:
+            return self._apply_area_entity_rename_refactor(
+                content_id=content_id,
+                doc=doc,
+                current=current,
+                updated=updated,
+                status_message=status_message,
+            )
         index = doc.entities.index(current)
         was_selected = (
             canvas.selected_entity_id == current.id
@@ -2594,6 +3407,8 @@ class MainWindow(QMainWindow):
         | GlobalEntitiesEditorWidget
         | EntityTemplateEditorWidget
         | ItemEditorWidget
+        | ProjectManifestEditorWidget
+        | SharedVariablesEditorWidget
         | None
     ):
         widget = self._tab_widget.active_widget()
@@ -2604,6 +3419,8 @@ class MainWindow(QMainWindow):
                 GlobalEntitiesEditorWidget,
                 EntityTemplateEditorWidget,
                 ItemEditorWidget,
+                ProjectManifestEditorWidget,
+                SharedVariablesEditorWidget,
             ),
         ):
             return widget

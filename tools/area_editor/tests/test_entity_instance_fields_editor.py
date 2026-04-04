@@ -42,6 +42,23 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             "space": "screen",
             "visuals": [{"path": "$sprite_path"}],
         }
+        self.catalog._templates["entity_templates/reference_panel"] = {
+            "entity_commands": {
+                "interact": {
+                    "enabled": True,
+                    "commands": [
+                        {
+                            "type": "run_project_command",
+                            "command_id": "$command_id",
+                            "dialogue_path": "$dialogue_path",
+                            "item_id": "$item_id",
+                            "area_id": "$target_area",
+                            "entity_id": "$target_id",
+                        }
+                    ]
+                }
+            }
+        }
         self.panel.set_template_catalog(self.catalog)
 
     def test_build_entity_from_fields_parses_named_parameters(self):
@@ -260,6 +277,52 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                     "times_pushed": True,
                     "shake_timer": False,
                 },
+            },
+        )
+
+    def test_parameter_reference_picker_buttons_fill_known_reference_fields(self):
+        entity = EntityDocument(
+            id="terminal_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+        )
+        self.panel.set_reference_picker_callbacks(
+            area_picker=lambda current: "areas/vault",
+            entity_picker=lambda current: "gate_controller",
+            item_picker=lambda current: "items/copper_key",
+            dialogue_picker=lambda current: "dialogues/system/notice",
+            command_picker=lambda current: "commands/system/open_gate",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        for name in (
+            "target_area",
+            "target_id",
+            "item_id",
+            "dialogue_path",
+            "command_id",
+        ):
+            self.assertIn(name, fields._parameter_browse_buttons)
+
+        fields._parameter_browse_buttons["target_area"].click()
+        fields._parameter_browse_buttons["target_id"].click()
+        fields._parameter_browse_buttons["item_id"].click()
+        fields._parameter_browse_buttons["dialogue_path"].click()
+        fields._parameter_browse_buttons["command_id"].click()
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated.parameters,
+            {
+                "target_area": "areas/vault",
+                "target_id": "gate_controller",
+                "item_id": "items/copper_key",
+                "dialogue_path": "dialogues/system/notice",
+                "command_id": "commands/system/open_gate",
             },
         )
 
