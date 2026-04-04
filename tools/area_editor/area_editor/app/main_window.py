@@ -7,6 +7,7 @@ menus, status bar, and cross-widget signals.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import logging
 from pathlib import Path
@@ -93,6 +94,14 @@ _SETTINGS_KEY_JSON_EDITING_ENABLED = "json_editing_enabled"
 _IMAGE_SUFFIXES = {".png", ".webp", ".bmp", ".jpg", ".jpeg"}
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _EntityIdUsage:
+    entity_id: str
+    kind: str
+    area_id: str | None = None
+    file_path: Path | None = None
 
 
 class _TilesetDetailsDialog(QDialog):
@@ -1520,11 +1529,13 @@ class MainWindow(QMainWindow):
         if context is None or not self._entity_brush_supported:
             return
         content_id, doc, canvas = context
+        entity_id = self._generate_project_unique_entity_id(doc, template_id)
         created = place_entity(
             doc,
             template_id,
             col,
             row,
+            entity_id=entity_id,
             render_order=self._entity_render_order(template_id),
             y_sort=True,
         )
@@ -1545,11 +1556,13 @@ class MainWindow(QMainWindow):
         if context is None or not self._entity_brush_supported:
             return
         content_id, doc, canvas = context
+        entity_id = self._generate_project_unique_entity_id(doc, template_id)
         created = place_screen_entity(
             doc,
             template_id,
             pixel_x,
             pixel_y,
+            entity_id=entity_id,
             render_order=self._entity_render_order(template_id),
             y_sort=False,
         )
@@ -1886,6 +1899,107 @@ class MainWindow(QMainWindow):
             for entity in doc.entities
             if self._entity_effective_space(entity) == "screen"
         }
+
+    def _project_entity_id_usages(self) -> list[_EntityIdUsage]:
+        if self._manifest is None:
+            return []
+
+        usages: list[_EntityIdUsage] = []
+        area_entries = discover_areas(self._manifest)
+        seen_area_ids: set[str] = set()
+        for entry in area_entries:
+            seen_area_ids.add(entry.area_id)
+            document = self._area_docs.get(entry.area_id)
+            if document is None:
+                try:
+                    document = load_area_document(entry.file_path)
+                except Exception as exc:
+                    log.warning("Failed to scan area entity ids for %s: %s", entry.area_id, exc)
+                    continue
+            for entity in document.entities:
+                entity_id = str(entity.id).strip()
+                if not entity_id:
+                    continue
+                usages.append(
+                    _EntityIdUsage(
+                        entity_id=entity_id,
+                        kind="area_entity",
+                        area_id=entry.area_id,
+                        file_path=entry.file_path,
+                    )
+                )
+
+        for area_id, document in self._area_docs.items():
+            if area_id in seen_area_ids:
+                continue
+            info = self._tab_widget.content_info(area_id)
+            file_path = info.file_path if info is not None else None
+            for entity in document.entities:
+                entity_id = str(entity.id).strip()
+                if not entity_id:
+                    continue
+                usages.append(
+                    _EntityIdUsage(
+                        entity_id=entity_id,
+                        kind="area_entity",
+                        area_id=area_id,
+                        file_path=file_path,
+                    )
+                )
+
+        for entry in discover_global_entities(self._manifest):
+            entity_id = str(entry.entity_id).strip()
+            if not entity_id or entity_id.startswith("<unnamed #"):
+                continue
+            usages.append(_EntityIdUsage(entity_id=entity_id, kind="global_entity"))
+        return usages
+
+    def _project_used_entity_ids(self) -> set[str]:
+        return {usage.entity_id for usage in self._project_entity_id_usages()}
+
+    def _generate_project_unique_entity_id(
+        self,
+        doc: AreaDocument,
+        template_id: str,
+    ) -> str:
+        from area_editor.operations.entities import generate_entity_id
+
+        return generate_entity_id(
+            doc,
+            template_id,
+            existing_ids=self._project_used_entity_ids(),
+        )
+
+    def _find_project_entity_id_conflict(
+        self,
+        entity_id: str,
+        *,
+        current_area_id: str,
+        current_entity_id: str | None = None,
+    ) -> _EntityIdUsage | None:
+        resolved_entity_id = str(entity_id).strip()
+        if not resolved_entity_id:
+            return None
+        for usage in self._project_entity_id_usages():
+            if usage.entity_id != resolved_entity_id:
+                continue
+            if (
+                usage.kind == "area_entity"
+                and usage.area_id == current_area_id
+                and current_entity_id is not None
+                and resolved_entity_id == current_entity_id
+            ):
+                continue
+            return usage
+        return None
+
+    @staticmethod
+    def _describe_entity_id_usage(usage: _EntityIdUsage) -> str:
+        if usage.kind == "global_entity":
+            return "a project global entity"
+        if usage.area_id:
+            return f"area '{usage.area_id}'"
+        return "another area entity"
 
     def _delete_world_entity_at(self, doc: AreaDocument, col: int, row: int) -> str | None:
         """Delete the topmost effective world-space entity at one grid cell."""
@@ -2407,7 +2521,7 @@ class MainWindow(QMainWindow):
         *,
         status_message: str,
     ) -> bool:
-        error = self._validate_entity_update(doc, current, updated)
+        error = self._validate_entity_update(content_id, doc, current, updated)
         if error is not None:
             title, message = error
             QMessageBox.warning(self, title, message)
@@ -2437,6 +2551,7 @@ class MainWindow(QMainWindow):
 
     def _validate_entity_update(
         self,
+        content_id: str,
         doc: AreaDocument,
         current: EntityDocument,
         updated: EntityDocument,
@@ -2459,6 +2574,17 @@ class MainWindow(QMainWindow):
                     "Duplicate Entity ID",
                     f"Another entity already uses id '{updated.id}'.",
                 )
+        conflict = self._find_project_entity_id_conflict(
+            updated.id,
+            current_area_id=content_id,
+            current_entity_id=current.id,
+        )
+        if conflict is not None:
+            return (
+                "Duplicate Entity ID",
+                f"Entity id '{updated.id}' is already used by "
+                f"{self._describe_entity_id_usage(conflict)}.",
+            )
         return None
 
     def _active_json_widget(

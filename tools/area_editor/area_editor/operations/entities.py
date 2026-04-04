@@ -42,18 +42,26 @@ def topmost_entity_at(area: AreaDocument, col: int, row: int) -> EntityDocument 
     return matches[0] if matches else None
 
 
-def generate_entity_id(area: AreaDocument, template_id: str) -> str:
+def generate_entity_id(
+    area: AreaDocument,
+    template_id: str,
+    *,
+    existing_ids: set[str] | None = None,
+) -> str:
     """Generate a collision-safe entity id from the template basename."""
     base = (template_id.rsplit("/", 1)[-1] or "entity").replace(" ", "_")
+    used_ids = {entity.id for entity in area.entities}
+    if existing_ids is not None:
+        used_ids.update(str(entity_id).strip() for entity_id in existing_ids if str(entity_id).strip())
     highest = 0
-    for entity in area.entities:
-        if entity.id == base:
+    for entity_id in used_ids:
+        if entity_id == base:
             highest = max(highest, 1)
             continue
         prefix = f"{base}_"
-        if not entity.id.startswith(prefix):
+        if not entity_id.startswith(prefix):
             continue
-        suffix = entity.id[len(prefix):]
+        suffix = entity_id[len(prefix):]
         if suffix.isdigit():
             highest = max(highest, int(suffix))
     return f"{base}_{highest + 1}"
@@ -70,10 +78,11 @@ def place_entity(
     y_sort: bool = True,
     sort_y_offset: float = 0.0,
     stack_order: int = 0,
+    existing_ids: set[str] | None = None,
 ) -> EntityDocument:
     """Append one new world-space entity to the area document."""
     created = EntityDocument(
-        id=entity_id or generate_entity_id(area, template_id),
+        id=entity_id or generate_entity_id(area, template_id, existing_ids=existing_ids),
         grid_x=col,
         grid_y=row,
         template=template_id,
@@ -97,10 +106,11 @@ def place_screen_entity(
     y_sort: bool = False,
     sort_y_offset: float = 0.0,
     stack_order: int = 0,
+    existing_ids: set[str] | None = None,
 ) -> EntityDocument:
     """Append one new screen-space entity to the area document."""
     created = EntityDocument(
-        id=entity_id or generate_entity_id(area, template_id),
+        id=entity_id or generate_entity_id(area, template_id, existing_ids=existing_ids),
         pixel_x=pixel_x,
         pixel_y=pixel_y,
         space="screen",

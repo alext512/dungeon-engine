@@ -94,3 +94,100 @@ Remaining work:
 - rename/move with reference updating (see above)
 - richer asset preview (metadata display, animation preview)
 - drag-and-drop from template panel onto area canvas (Phase 4)
+
+---
+
+## Guided Command-Chain Builder For Custom Entities And Items
+
+### What
+
+Add a guided editor surface for building command chains visually without
+requiring users to hand-write the underlying JSON command arrays.
+
+This is aimed at a "custom enough" workflow rather than a full unrestricted
+visual scripting system. The editor would still produce the real engine JSON
+shapes:
+
+- sequences
+- parallels
+- spawns
+- ordinary built-in command payloads
+
+The user-facing goal is to make it practical to author reusable custom
+entities/items such as:
+
+- levers
+- doors
+- pressure plates
+- simple puzzle controllers
+- usable items with behavior
+
+without needing to expose the entire runtime surface at once.
+
+### Likely First Shape
+
+The first useful version should be narrow and explicit:
+
+- named command slots such as entity `interact` or custom named
+  `entity_commands`
+- item `use_commands`
+- a block-based stack editor for:
+  - `sequence`
+  - `parallel`
+  - `spawn`
+  - leaf commands from the command library
+
+This should feel like assembling known command blocks, not programming in a
+new language.
+
+### Why This Is Valuable
+
+This could become one of the strongest editor features for template-driven
+projects because it would let authors:
+
+- build reusable behavior-rich templates
+- expose only the intended tuning points
+- compose interactions without writing raw JSON for every variation
+
+Example direction:
+
+- a lever template contains an `interact` command chain
+- that chain can call a reusable "open door" behavior
+- the template exposes `door_id` as the parameter the user edits when placing
+  the lever
+
+### Architectural Direction
+
+This should build on the existing runtime model rather than inventing a second
+behavior system.
+
+The editor should:
+
+- edit the real command-chain JSON
+- use command-library metadata to present the available commands
+- use the existing parameter/exposed-parameter workflow where appropriate
+- keep full raw JSON available as the escape hatch
+
+Recommended constraints for an early version:
+
+- prefer a linear block-stack UI over a freeform node graph
+- support only known command schemas from the runtime registry
+- use pickers for entity/template/item/area references where possible
+- allow parameter exposure for curated templates/items rather than exposing
+  every command field equally
+
+### Non-Goals For The First Version
+
+- a fully general visual scripting graph language
+- solving every command in the runtime at once
+- removing raw JSON from advanced workflows
+- replacing the need for a curated template library
+
+### Relationship To Controller Entities
+
+This feature would complement, not replace, controller entities.
+
+Controller entities remain a practical current pattern for room-local reusable
+logic. A future command-chain builder would simply make authoring the
+controller's commands, or a lever/door/item's own commands, much more
+comfortable.

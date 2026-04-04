@@ -1029,6 +1029,37 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"path": "assets/base.png"', saved)
             self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
 
+    def test_template_fields_editor_updates_persistence_and_saves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._entity_state_check.setChecked(True)
+            widget.fields_editor._persistence_variables_text.setPlainText(
+                '{\n  "shake_timer": false,\n  "times_pushed": true\n}'
+            )
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"persistence"', saved)
+            self.assertIn('"entity_state": true', saved)
+            self.assertIn('"times_pushed": true', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
+
     def test_dialogue_json_tab_is_guarded_and_saveable(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_dialogue_project(Path(tmp))
@@ -1165,6 +1196,155 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual((created.pixel_x, created.pixel_y), (40, 28))
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             self.assertEqual(canvas.selected_entity_id, "display_sprite_1")
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_validation_rejects_duplicate_id_in_other_area(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            other_area = project_file.parent / "areas" / "other.json"
+            other_area.write_text(
+                (
+                    '{\n'
+                    '  "name": "Other",\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [],\n'
+                    '  "tile_layers": [\n'
+                    '    {\n'
+                    '      "name": "ground",\n'
+                    '      "render_order": 0,\n'
+                    '      "y_sort": false,\n'
+                    '      "stack_order": 0,\n'
+                    '      "grid": [[0]]\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "entities": [\n'
+                    '    {\n'
+                    '      "id": "shared_actor",\n'
+                    '      "grid_x": 0,\n'
+                    '      "grid_y": 0\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+            current = next(entity for entity in doc.entities if entity.id == "house_door")
+            updated = type(current).from_dict(current.to_dict())
+            updated.id = "shared_actor"
+
+            error = window._validate_entity_update("areas/demo", doc, current, updated)
+
+            self.assertIsNotNone(error)
+            assert error is not None
+            self.assertEqual(error[0], "Duplicate Entity ID")
+            self.assertIn("areas/other", error[1])
+
+    def test_entity_validation_rejects_duplicate_id_with_project_global(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            project_file.write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "shared_variables_path": "shared_variables.json",\n'
+                    '  "global_entities": [\n'
+                    '    {\n'
+                    '      "id": "pause_controller",\n'
+                    '      "template": "entity_templates/display_sprite"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+            current = next(entity for entity in doc.entities if entity.id == "house_door")
+            updated = type(current).from_dict(current.to_dict())
+            updated.id = "pause_controller"
+
+            error = window._validate_entity_update("areas/demo", doc, current, updated)
+
+            self.assertIsNotNone(error)
+            assert error is not None
+            self.assertEqual(error[0], "Duplicate Entity ID")
+            self.assertIn("project global entity", error[1])
+
+    def test_screen_space_template_brush_uses_project_wide_unique_id_generation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            project_file.write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "shared_variables_path": "shared_variables.json",\n'
+                    '  "global_entities": [\n'
+                    '    {\n'
+                    '      "id": "display_sprite_2",\n'
+                    '      "template": "entity_templates/display_sprite"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            other_area = project_file.parent / "areas" / "other.json"
+            other_area.write_text(
+                (
+                    '{\n'
+                    '  "name": "Other",\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [],\n'
+                    '  "tile_layers": [\n'
+                    '    {\n'
+                    '      "name": "ground",\n'
+                    '      "render_order": 0,\n'
+                    '      "y_sort": false,\n'
+                    '      "stack_order": 0,\n'
+                    '      "grid": [[0]]\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "entities": [\n'
+                    '    {\n'
+                    '      "id": "display_sprite_1",\n'
+                    '      "pixel_x": 0,\n'
+                    '      "pixel_y": 0,\n'
+                    '      "space": "screen"\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._on_template_brush_selected("entity_templates/display_sprite")
+            canvas.entity_screen_paint_requested.emit("entity_templates/display_sprite", 40, 28)
+
+            doc = window._area_docs["areas/demo"]
+            created = next(entity for entity in doc.entities if entity.id == "display_sprite_3")
+            self.assertEqual(created.template, "entity_templates/display_sprite")
             window._tab_widget.set_dirty("areas/demo", False)
 
     def test_open_project_populates_items_panel_and_project_actions(self):

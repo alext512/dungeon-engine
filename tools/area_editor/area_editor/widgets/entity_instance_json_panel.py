@@ -50,6 +50,7 @@ _MANAGED_EXTRA_KEYS = {
     *list(_ENTITY_INT_DEFAULTS.keys()),
     "variables",
     "visuals",
+    "persistence",
 }
 
 
@@ -93,6 +94,70 @@ def _filtered_unmanaged_extra(extra: dict[str, object]) -> dict[str, object]:
         for key, value in extra.items()
         if key not in _MANAGED_EXTRA_KEYS
     }
+
+
+def _parse_persistence_policy(
+    raw_persistence: object,
+) -> tuple[bool, dict[str, bool]]:
+    if raw_persistence is None:
+        return False, {}
+    if not isinstance(raw_persistence, dict):
+        raise ValueError("Persistence must be a JSON object.")
+
+    raw_entity_state = raw_persistence.get("entity_state", False)
+    if not isinstance(raw_entity_state, bool):
+        raise ValueError("Persistence 'entity_state' must be true or false.")
+
+    raw_variables = raw_persistence.get("variables", {})
+    if raw_variables is None:
+        raw_variables = {}
+    if not isinstance(raw_variables, dict):
+        raise ValueError("Persistence 'variables' must be a JSON object.")
+
+    variables: dict[str, bool] = {}
+    for raw_name, raw_value in raw_variables.items():
+        name = str(raw_name).strip()
+        if not name:
+            raise ValueError("Persistence variable overrides must not use blank names.")
+        if not isinstance(raw_value, bool):
+            raise ValueError(
+                f"Persistence variable '{name}' must be true or false."
+            )
+        variables[name] = raw_value
+    return bool(raw_entity_state), variables
+
+
+def _build_persistence_policy(
+    *,
+    entity_state: bool,
+    variables_text: str,
+) -> dict[str, object] | None:
+    raw_variables_text = variables_text.strip()
+    variables: dict[str, bool] = {}
+    if raw_variables_text:
+        try:
+            parsed = json.loads(raw_variables_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Persistence variables must be valid JSON.\n{exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Persistence variables must be a JSON object.")
+        for raw_name, raw_value in parsed.items():
+            name = str(raw_name).strip()
+            if not name:
+                raise ValueError("Persistence variables must not use blank names.")
+            if not isinstance(raw_value, bool):
+                raise ValueError(
+                    f"Persistence variable '{name}' must be true or false."
+                )
+            variables[name] = raw_value
+
+    if not entity_state and not variables:
+        return None
+
+    payload: dict[str, object] = {"entity_state": bool(entity_state)}
+    if variables:
+        payload["variables"] = variables
+    return payload
 
 
 class _EntityInstanceJsonEditor(QWidget):
@@ -414,6 +479,41 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._visuals_text.setFont(visuals_font)
         self._form.addRow(self._visuals_text)
 
+        self._form.addRow(_section_label("Persistence"))
+        self._persistence_warning = QLabel("")
+        self._persistence_warning.setWordWrap(True)
+        self._persistence_warning.setStyleSheet("color: #a25b00;")
+        self._persistence_warning.hide()
+        self._form.addRow(self._persistence_warning)
+
+        self._persistence_entity_state_label = QLabel("entity_state")
+        self._persistence_entity_state_check = QCheckBox("Persist entity state")
+        self._form.addRow(
+            self._persistence_entity_state_label,
+            self._persistence_entity_state_check,
+        )
+
+        self._persistence_variables_note = QLabel(
+            "Optional per-variable persistence overrides. Use JSON object syntax."
+        )
+        self._persistence_variables_note.setWordWrap(True)
+        self._persistence_variables_note.setStyleSheet("color: #666; font-style: italic;")
+        self._form.addRow("variables", self._persistence_variables_note)
+
+        self._persistence_variables_text = QPlainTextEdit()
+        self._persistence_variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._persistence_variables_text.setFixedHeight(120)
+        self._persistence_variables_text.setPlaceholderText(
+            '{\n'
+            '  "shake_timer": false,\n'
+            '  "times_pushed": true\n'
+            '}'
+        )
+        persistence_font = QFont("Consolas", 10)
+        persistence_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._persistence_variables_text.setFont(persistence_font)
+        self._form.addRow(self._persistence_variables_text)
+
         self._form.addRow(_section_label("Extra"))
         self._extra_label = QLabel("extra")
         self._extra_text = QPlainTextEdit()
@@ -445,6 +545,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._area_height = 0
         self._parameter_edits: dict[str, QLineEdit] = {}
         self._parameters_editable = True
+        self._persistence_editable = True
 
         self._id_edit.textChanged.connect(self._on_field_changed)
         self._kind_edit.textChanged.connect(self._on_field_changed)
@@ -468,6 +569,8 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity_commands_enabled_check.toggled.connect(self._on_field_changed)
         self._variables_text.textChanged.connect(self._on_field_changed)
         self._visuals_text.textChanged.connect(self._on_field_changed)
+        self._persistence_entity_state_check.toggled.connect(self._on_field_changed)
+        self._persistence_variables_text.textChanged.connect(self._on_field_changed)
 
         self._set_buttons_enabled(False)
         self._clear_parameter_rows()
@@ -519,6 +622,8 @@ class _EntityInstanceFieldsEditor(QWidget):
                 QSignalBlocker(self._entity_commands_enabled_check),
                 QSignalBlocker(self._variables_text),
                 QSignalBlocker(self._visuals_text),
+                QSignalBlocker(self._persistence_entity_state_check),
+                QSignalBlocker(self._persistence_variables_text),
             ]
             self._id_edit.clear()
             self._kind_edit.clear()
@@ -548,6 +653,8 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._entity_commands_enabled_check.setChecked(True)
             self._variables_text.clear()
             self._visuals_text.clear()
+            self._persistence_entity_state_check.setChecked(False)
+            self._persistence_variables_text.clear()
             del blockers
         finally:
             self._loading = False
@@ -556,6 +663,9 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._parameter_warning.hide()
         self._parameters_widget.show()
         self._parameters_editable = True
+        self._persistence_warning.hide()
+        self._persistence_editable = True
+        self._set_persistence_controls_enabled(True)
         self._set_extra_visible(False)
         self._apply_space_visibility(has_pixel_x=False, has_pixel_y=False)
         self._sync_pixel_spin_enabled()
@@ -572,6 +682,21 @@ class _EntityInstanceFieldsEditor(QWidget):
         raw_variables = entity._extra.get("variables", {})
         has_visuals_override = "visuals" in entity._extra
         raw_visuals = entity._extra.get("visuals", [])
+        raw_persistence = entity._extra.get("persistence")
+        persistence_warning: str | None = None
+        persistence_entity_state = False
+        persistence_variables: dict[str, bool] = {}
+        try:
+            persistence_entity_state, persistence_variables = _parse_persistence_policy(
+                raw_persistence
+            )
+            self._persistence_editable = True
+        except ValueError as exc:
+            persistence_warning = (
+                f"Persistence is not using the supported object shape. "
+                f"Use the JSON tab to edit it.\n{exc}"
+            )
+            self._persistence_editable = False
         self._loading = True
         try:
             blockers = [
@@ -597,6 +722,8 @@ class _EntityInstanceFieldsEditor(QWidget):
                 QSignalBlocker(self._entity_commands_enabled_check),
                 QSignalBlocker(self._variables_text),
                 QSignalBlocker(self._visuals_text),
+                QSignalBlocker(self._persistence_entity_state_check),
+                QSignalBlocker(self._persistence_variables_text),
             ]
             self._id_edit.setText(entity.id)
             self._kind_edit.setText(str(entity._extra.get("kind", "")))
@@ -635,6 +762,12 @@ class _EntityInstanceFieldsEditor(QWidget):
                 if has_visuals_override
                 else ""
             )
+            self._persistence_entity_state_check.setChecked(persistence_entity_state)
+            self._persistence_variables_text.setPlainText(
+                json.dumps(persistence_variables, indent=2, ensure_ascii=False)
+                if persistence_variables
+                else ""
+            )
             del blockers
         finally:
             self._loading = False
@@ -650,6 +783,12 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._set_extra_visible(True)
         else:
             self._set_extra_visible(False)
+        if persistence_warning:
+            self._persistence_warning.setText(persistence_warning)
+            self._persistence_warning.show()
+        else:
+            self._persistence_warning.hide()
+        self._set_persistence_controls_enabled(self._persistence_editable)
         self._set_dirty(False)
         self._set_buttons_enabled(True)
 
@@ -738,6 +877,16 @@ class _EntityInstanceFieldsEditor(QWidget):
             if not isinstance(visuals_value, list):
                 raise ValueError("Visuals must be a JSON array.")
             extra["visuals"] = visuals_value
+
+        if self._persistence_editable:
+            persistence_value = _build_persistence_policy(
+                entity_state=bool(self._persistence_entity_state_check.isChecked()),
+                variables_text=self._persistence_variables_text.toPlainText(),
+            )
+            if persistence_value is not None:
+                extra["persistence"] = persistence_value
+        elif "persistence" in self._entity._extra:
+            extra["persistence"] = self._entity._extra["persistence"]
 
         return EntityDocument(
             id=self._id_edit.text().strip(),
@@ -844,6 +993,10 @@ class _EntityInstanceFieldsEditor(QWidget):
         _set_row_visible(self._extra_label, self._extra_text, visible)
         if not visible:
             self._extra_text.clear()
+
+    def _set_persistence_controls_enabled(self, enabled: bool) -> None:
+        self._persistence_entity_state_check.setEnabled(enabled)
+        self._persistence_variables_text.setReadOnly(not enabled)
 
     def _on_pixel_check_toggled(self) -> None:
         if self._loading:

@@ -228,3 +228,55 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Visuals must be a JSON array."):
             self.panel.build_entity_from_fields()
+
+    def test_build_entity_from_fields_updates_persistence_policy(self):
+        entity = EntityDocument(
+            id="crate_1",
+            grid_x=2,
+            grid_y=3,
+            template="entity_templates/area_door",
+            _extra={
+                "persistence": {
+                    "entity_state": True,
+                    "variables": {"shake_timer": False},
+                }
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._persistence_entity_state_check.setChecked(False)
+        fields._persistence_variables_text.setPlainText(
+            '{\n  "times_pushed": true,\n  "shake_timer": false\n}'
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["persistence"],
+            {
+                "entity_state": False,
+                "variables": {
+                    "times_pushed": True,
+                    "shake_timer": False,
+                },
+            },
+        )
+
+    def test_build_entity_from_fields_rejects_invalid_persistence_variables(self):
+        entity = EntityDocument(
+            id="crate_1",
+            grid_x=2,
+            grid_y=3,
+            template="entity_templates/area_door",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._persistence_variables_text.setPlainText('{"times_pushed": 1}')
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Persistence variable 'times_pushed' must be true or false.",
+        ):
+            self.panel.build_entity_from_fields()

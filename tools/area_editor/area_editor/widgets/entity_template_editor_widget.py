@@ -9,6 +9,7 @@ from typing import Any
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -21,6 +22,66 @@ from PySide6.QtWidgets import (
 )
 
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+
+
+def _parse_persistence_policy(
+    raw_persistence: object,
+) -> tuple[bool, dict[str, bool]]:
+    if raw_persistence is None:
+        return False, {}
+    if not isinstance(raw_persistence, dict):
+        raise ValueError("Persistence must be a JSON object.")
+
+    raw_entity_state = raw_persistence.get("entity_state", False)
+    if not isinstance(raw_entity_state, bool):
+        raise ValueError("Persistence 'entity_state' must be true or false.")
+
+    raw_variables = raw_persistence.get("variables", {})
+    if raw_variables is None:
+        raw_variables = {}
+    if not isinstance(raw_variables, dict):
+        raise ValueError("Persistence 'variables' must be a JSON object.")
+
+    variables: dict[str, bool] = {}
+    for raw_name, raw_value in raw_variables.items():
+        name = str(raw_name).strip()
+        if not name:
+            raise ValueError("Persistence variable overrides must not use blank names.")
+        if not isinstance(raw_value, bool):
+            raise ValueError(f"Persistence variable '{name}' must be true or false.")
+        variables[name] = raw_value
+    return bool(raw_entity_state), variables
+
+
+def _build_persistence_policy(
+    *,
+    entity_state: bool,
+    variables_text: str,
+) -> dict[str, Any] | None:
+    raw_variables_text = variables_text.strip()
+    variables: dict[str, bool] = {}
+    if raw_variables_text:
+        try:
+            parsed = json.loads(raw_variables_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Persistence variables must be valid JSON.\n{exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Persistence variables must be a JSON object.")
+        for raw_name, raw_value in parsed.items():
+            name = str(raw_name).strip()
+            if not name:
+                raise ValueError("Persistence variables must not use blank names.")
+            if not isinstance(raw_value, bool):
+                raise ValueError(f"Persistence variable '{name}' must be true or false.")
+            variables[name] = raw_value
+
+    if not entity_state and not variables:
+        return None
+
+    payload: dict[str, Any] = {"entity_state": bool(entity_state)}
+    if variables:
+        payload["variables"] = variables
+    return payload
 
 
 class _TemplateVisualsEditor(QWidget):
@@ -37,6 +98,7 @@ class _TemplateVisualsEditor(QWidget):
         self._loading = False
         self._editing_enabled = False
         self._current_data: dict[str, Any] | None = None
+        self._persistence_editable = True
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -73,6 +135,38 @@ class _TemplateVisualsEditor(QWidget):
         self._visuals_text.textChanged.connect(self._on_text_changed)
         layout.addWidget(self._visuals_text, 1)
 
+        self._persistence_warning = QLabel("")
+        self._persistence_warning.setWordWrap(True)
+        self._persistence_warning.setStyleSheet("color: #a25b00;")
+        self._persistence_warning.hide()
+        layout.addWidget(self._persistence_warning)
+
+        persistence_form = QFormLayout()
+        self._entity_state_check = QCheckBox("Persist entity state")
+        self._entity_state_check.toggled.connect(self._on_text_changed)
+        persistence_form.addRow("persistence.entity_state", self._entity_state_check)
+        layout.addLayout(persistence_form)
+
+        persistence_note = QLabel(
+            "Optional per-variable persistence overrides. Use JSON object syntax."
+        )
+        persistence_note.setWordWrap(True)
+        persistence_note.setStyleSheet("color: #666; font-style: italic;")
+        layout.addWidget(persistence_note)
+
+        self._persistence_variables_text = QPlainTextEdit()
+        self._persistence_variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._persistence_variables_text.setFixedHeight(120)
+        self._persistence_variables_text.setPlaceholderText(
+            '{\n'
+            '  "shake_timer": false,\n'
+            '  "times_pushed": true\n'
+            '}'
+        )
+        self._persistence_variables_text.setFont(font)
+        self._persistence_variables_text.textChanged.connect(self._on_text_changed)
+        layout.addWidget(self._persistence_variables_text)
+
         buttons = QHBoxLayout()
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self.apply_requested.emit)
@@ -96,18 +190,51 @@ class _TemplateVisualsEditor(QWidget):
     def set_editing_enabled(self, enabled: bool) -> None:
         self._editing_enabled = enabled
         self._visuals_text.setReadOnly(not enabled)
+        self._entity_state_check.setEnabled(enabled and self._persistence_editable)
+        self._persistence_variables_text.setReadOnly(not (enabled and self._persistence_editable))
         self._apply_button.setEnabled(enabled)
         self._revert_button.setEnabled(enabled)
 
     def load_template_data(self, data: dict[str, Any]) -> None:
         self._current_data = json.loads(json.dumps(data))
+        raw_persistence = data.get("persistence")
+        persistence_warning: str | None = None
+        persistence_entity_state = False
+        persistence_variables: dict[str, bool] = {}
+        try:
+            persistence_entity_state, persistence_variables = _parse_persistence_policy(
+                raw_persistence
+            )
+            self._persistence_editable = True
+        except ValueError as exc:
+            persistence_warning = (
+                "Persistence is not using the supported object shape. "
+                "Use the Raw JSON tab to edit it.\n"
+                f"{exc}"
+            )
+            self._persistence_editable = False
         self._loading = True
         try:
             self._space_label.setText(str(data.get("space", "world")))
             visuals = data.get("visuals", [])
             self._visuals_text.setPlainText(json.dumps(visuals, indent=2, ensure_ascii=False))
+            self._entity_state_check.setChecked(persistence_entity_state)
+            self._persistence_variables_text.setPlainText(
+                json.dumps(persistence_variables, indent=2, ensure_ascii=False)
+                if persistence_variables
+                else ""
+            )
         finally:
             self._loading = False
+        if persistence_warning:
+            self._persistence_warning.setText(persistence_warning)
+            self._persistence_warning.show()
+        else:
+            self._persistence_warning.hide()
+        self._entity_state_check.setEnabled(self._editing_enabled and self._persistence_editable)
+        self._persistence_variables_text.setReadOnly(
+            not (self._editing_enabled and self._persistence_editable)
+        )
         self._set_dirty(False)
 
     def build_updated_template_data(self, base_data: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +247,15 @@ class _TemplateVisualsEditor(QWidget):
             raise ValueError("Visuals must be a JSON array.")
         updated = json.loads(json.dumps(base_data))
         updated["visuals"] = visuals_value
+        if self._persistence_editable:
+            persistence_value = _build_persistence_policy(
+                entity_state=bool(self._entity_state_check.isChecked()),
+                variables_text=self._persistence_variables_text.toPlainText(),
+            )
+            if persistence_value is None:
+                updated.pop("persistence", None)
+            else:
+                updated["persistence"] = persistence_value
         return updated
 
     def _on_text_changed(self) -> None:
