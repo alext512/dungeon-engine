@@ -40,10 +40,26 @@ from area_editor.documents.area_document import (
 )
 from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.project_io.manifest import (
+    AREA_ID_PREFIX,
     ProjectManifest,
     discover_areas,
     discover_global_entities,
     load_manifest,
+)
+from area_editor.operations.areas import (
+    add_columns_left,
+    add_columns_right,
+    add_rows_above,
+    add_rows_below,
+    can_remove_bottom_rows,
+    can_remove_left_columns,
+    can_remove_right_columns,
+    can_remove_top_rows,
+    make_empty_area_document,
+    remove_bottom_rows,
+    remove_left_columns,
+    remove_right_columns,
+    remove_top_rows,
 )
 from area_editor.operations.tilesets import (
     append_tileset,
@@ -55,6 +71,7 @@ from area_editor.operations.entities import (
     move_entity_by_id,
     move_entity_pixels,
     place_entity,
+    place_screen_entity,
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
@@ -150,6 +167,108 @@ class _TilesetDetailsDialog(QDialog):
     @property
     def tile_height(self) -> int:
         return self._tile_height.value()
+
+
+class _NewAreaDialog(QDialog):
+    """Small dialog for creating one new area file."""
+
+    def __init__(self, parent: QWidget | None, *, tile_size: int = 16) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("New Area")
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._area_id = QLineEdit()
+        form.addRow("Area ID", self._area_id)
+
+        self._display_name = QLineEdit()
+        form.addRow("Display Name", self._display_name)
+
+        self._width = QSpinBox()
+        self._width.setRange(1, 9999)
+        self._width.setValue(20)
+        form.addRow("Width", self._width)
+
+        self._height = QSpinBox()
+        self._height.setRange(1, 9999)
+        self._height.setValue(15)
+        form.addRow("Height", self._height)
+
+        self._tile_size = QSpinBox()
+        self._tile_size.setRange(1, 4096)
+        self._tile_size.setValue(max(1, int(tile_size)))
+        form.addRow("Tile Size", self._tile_size)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @property
+    def area_id(self) -> str:
+        return self._area_id.text().strip()
+
+    @property
+    def display_name(self) -> str:
+        return self._display_name.text().strip()
+
+    @property
+    def width(self) -> int:
+        return self._width.value()
+
+    @property
+    def height(self) -> int:
+        return self._height.value()
+
+    @property
+    def tile_size(self) -> int:
+        return self._tile_size.value()
+
+
+class _AreaCountDialog(QDialog):
+    """Simple count dialog for directional area geometry actions."""
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        *,
+        title: str,
+        label: str,
+        warning_text: str | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._count = QSpinBox()
+        self._count.setRange(1, 9999)
+        self._count.setValue(1)
+        form.addRow(label, self._count)
+        layout.addLayout(form)
+
+        if warning_text:
+            warning = QLabel(warning_text)
+            warning.setWordWrap(True)
+            warning.setStyleSheet("color: #666;")
+            layout.addWidget(warning)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @property
+    def count(self) -> int:
+        return self._count.value()
 
 
 class MainWindow(QMainWindow):
@@ -410,6 +529,13 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self._on_open_project)
         file_menu.addAction(open_action)
 
+        self._new_area_action = QAction("&New Area...", self)
+        self._new_area_action.setEnabled(False)
+        self._new_area_action.triggered.connect(self._on_new_area)
+        file_menu.addAction(self._new_area_action)
+
+        file_menu.addSeparator()
+
         self._save_action = QAction("&Save", self)
         self._save_action.setShortcut(QKeySequence.StandardKey.Save)
         self._save_action.setEnabled(False)
@@ -536,6 +662,66 @@ class MainWindow(QMainWindow):
         reset_zoom_action.triggered.connect(self._on_reset_zoom)
         view_menu.addAction(reset_zoom_action)
 
+        area_menu = self.menuBar().addMenu("&Area")
+
+        self._add_rows_above_action = QAction("Add Rows Above...", self)
+        self._add_rows_above_action.setEnabled(False)
+        self._add_rows_above_action.triggered.connect(
+            lambda: self._on_change_area_extent("add_rows_above")
+        )
+        area_menu.addAction(self._add_rows_above_action)
+
+        self._add_rows_below_action = QAction("Add Rows Below...", self)
+        self._add_rows_below_action.setEnabled(False)
+        self._add_rows_below_action.triggered.connect(
+            lambda: self._on_change_area_extent("add_rows_below")
+        )
+        area_menu.addAction(self._add_rows_below_action)
+
+        self._add_columns_left_action = QAction("Add Columns Left...", self)
+        self._add_columns_left_action.setEnabled(False)
+        self._add_columns_left_action.triggered.connect(
+            lambda: self._on_change_area_extent("add_columns_left")
+        )
+        area_menu.addAction(self._add_columns_left_action)
+
+        self._add_columns_right_action = QAction("Add Columns Right...", self)
+        self._add_columns_right_action.setEnabled(False)
+        self._add_columns_right_action.triggered.connect(
+            lambda: self._on_change_area_extent("add_columns_right")
+        )
+        area_menu.addAction(self._add_columns_right_action)
+
+        area_menu.addSeparator()
+
+        self._remove_top_rows_action = QAction("Remove Top Rows...", self)
+        self._remove_top_rows_action.setEnabled(False)
+        self._remove_top_rows_action.triggered.connect(
+            lambda: self._on_change_area_extent("remove_top_rows")
+        )
+        area_menu.addAction(self._remove_top_rows_action)
+
+        self._remove_bottom_rows_action = QAction("Remove Bottom Rows...", self)
+        self._remove_bottom_rows_action.setEnabled(False)
+        self._remove_bottom_rows_action.triggered.connect(
+            lambda: self._on_change_area_extent("remove_bottom_rows")
+        )
+        area_menu.addAction(self._remove_bottom_rows_action)
+
+        self._remove_left_columns_action = QAction("Remove Left Columns...", self)
+        self._remove_left_columns_action.setEnabled(False)
+        self._remove_left_columns_action.triggered.connect(
+            lambda: self._on_change_area_extent("remove_left_columns")
+        )
+        area_menu.addAction(self._remove_left_columns_action)
+
+        self._remove_right_columns_action = QAction("Remove Right Columns...", self)
+        self._remove_right_columns_action.setEnabled(False)
+        self._remove_right_columns_action.triggered.connect(
+            lambda: self._on_change_area_extent("remove_right_columns")
+        )
+        area_menu.addAction(self._remove_right_columns_action)
+
     # ------------------------------------------------------------------
     # Slots — file dialog
     # ------------------------------------------------------------------
@@ -561,6 +747,205 @@ class MainWindow(QMainWindow):
         )
         if path:
             self.open_project(Path(path))
+
+    def _on_new_area(self) -> None:
+        if self._manifest is None:
+            return
+        dialog = _NewAreaDialog(self, tile_size=16)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            area_id, file_path = self._create_new_area_file(
+                area_id=dialog.area_id,
+                display_name=dialog.display_name,
+                width=dialog.width,
+                height=dialog.height,
+                tile_size=dialog.tile_size,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "New Area", str(exc))
+            return
+        self._refresh_area_panel()
+        self._open_area(area_id, file_path)
+        self._area_panel.highlight_area(area_id)
+        self.statusBar().showMessage(f"Created area {area_id}.", 2500)
+
+    def _create_new_area_file(
+        self,
+        *,
+        area_id: str,
+        display_name: str,
+        width: int,
+        height: int,
+        tile_size: int,
+    ) -> tuple[str, Path]:
+        if self._manifest is None:
+            raise ValueError("Open a project before creating an area.")
+        normalized_id = area_id.strip().replace("\\", "/").strip("/")
+        if not normalized_id:
+            raise ValueError("Area ID must not be empty.")
+        if normalized_id.endswith(".json"):
+            normalized_id = normalized_id[:-5]
+        area_root = self._default_area_root()
+        file_path = (area_root / Path(normalized_id)).with_suffix(".json")
+        content_id = f"{AREA_ID_PREFIX}/{normalized_id}"
+        if file_path.exists():
+            raise ValueError(f"An area already exists at {content_id}.")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        if area_root not in self._manifest.area_paths:
+            self._manifest.area_paths.append(area_root)
+        document = make_empty_area_document(
+            name=display_name or normalized_id.rsplit("/", 1)[-1],
+            width=width,
+            height=height,
+            tile_size=tile_size,
+            include_default_ground_layer=True,
+        )
+        save_area_document(file_path, document)
+        return content_id, file_path
+
+    def _default_area_root(self) -> Path:
+        if self._manifest is None:
+            raise ValueError("No project is open.")
+        if self._manifest.area_paths:
+            return self._manifest.area_paths[0]
+        return (self._manifest.project_root / AREA_ID_PREFIX).resolve()
+
+    def _refresh_area_panel(self) -> None:
+        if self._manifest is None:
+            return
+        self._area_panel.set_areas(discover_areas(self._manifest))
+
+    def _on_change_area_extent(self, operation: str) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, canvas = context
+        config = self._area_extent_operation_config(operation)
+        dialog = _AreaCountDialog(
+            self,
+            title=config["title"],
+            label=config["label"],
+            warning_text=config["warning"],
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        count = dialog.count
+        screen_entity_ids = self._screen_space_entity_ids(doc)
+        succeeded, blocked = self._apply_area_extent_operation(
+            doc,
+            operation,
+            count,
+            screen_entity_ids=screen_entity_ids,
+        )
+        if blocked:
+            QMessageBox.warning(
+                self,
+                "Area Resize Blocked",
+                blocked,
+            )
+            return
+        if not succeeded:
+            return
+        canvas.refresh_scene_contents()
+        if canvas.selected_entity_id:
+            canvas.set_selected_entity(
+                canvas.selected_entity_id,
+                cycle_position=1,
+                cycle_total=1,
+                emit=False,
+            )
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_render_properties_target()
+        self._refresh_entity_instance_panel()
+        self._update_paint_status()
+        self.statusBar().showMessage(config["status"].format(count=count), 2500)
+
+    def _area_extent_operation_config(self, operation: str) -> dict[str, str]:
+        return {
+            "add_rows_above": {
+                "title": "Add Rows Above",
+                "label": "Rows to add",
+                "warning": "Empty rows will be inserted above the current area.",
+                "status": "Added {count} row(s) above.",
+            },
+            "add_rows_below": {
+                "title": "Add Rows Below",
+                "label": "Rows to add",
+                "warning": "Empty rows will be inserted below the current area.",
+                "status": "Added {count} row(s) below.",
+            },
+            "add_columns_left": {
+                "title": "Add Columns Left",
+                "label": "Columns to add",
+                "warning": "Empty columns will be inserted on the left side.",
+                "status": "Added {count} column(s) left.",
+            },
+            "add_columns_right": {
+                "title": "Add Columns Right",
+                "label": "Columns to add",
+                "warning": "Empty columns will be inserted on the right side.",
+                "status": "Added {count} column(s) right.",
+            },
+            "remove_top_rows": {
+                "title": "Remove Top Rows",
+                "label": "Rows to remove",
+                "warning": "Tiles on the top edge will be discarded.",
+                "status": "Removed {count} top row(s).",
+            },
+            "remove_bottom_rows": {
+                "title": "Remove Bottom Rows",
+                "label": "Rows to remove",
+                "warning": "Tiles on the bottom edge will be discarded.",
+                "status": "Removed {count} bottom row(s).",
+            },
+            "remove_left_columns": {
+                "title": "Remove Left Columns",
+                "label": "Columns to remove",
+                "warning": "Tiles on the left edge will be discarded.",
+                "status": "Removed {count} left column(s).",
+            },
+            "remove_right_columns": {
+                "title": "Remove Right Columns",
+                "label": "Columns to remove",
+                "warning": "Tiles on the right edge will be discarded.",
+                "status": "Removed {count} right column(s).",
+            },
+        }[operation]
+
+    def _apply_area_extent_operation(
+        self,
+        doc: AreaDocument,
+        operation: str,
+        count: int,
+        *,
+        screen_entity_ids: set[str],
+    ) -> tuple[bool, str | None]:
+        if operation == "add_rows_above":
+            return add_rows_above(doc, count, screen_entity_ids=screen_entity_ids), None
+        if operation == "add_rows_below":
+            return add_rows_below(doc, count), None
+        if operation == "add_columns_left":
+            return add_columns_left(doc, count, screen_entity_ids=screen_entity_ids), None
+        if operation == "add_columns_right":
+            return add_columns_right(doc, count), None
+        if operation == "remove_top_rows":
+            if not can_remove_top_rows(doc, count, screen_entity_ids=screen_entity_ids):
+                return False, "Cannot remove top rows because one or more world-space entities would fall outside the area bounds."
+            return remove_top_rows(doc, count, screen_entity_ids=screen_entity_ids), None
+        if operation == "remove_bottom_rows":
+            if not can_remove_bottom_rows(doc, count, screen_entity_ids=screen_entity_ids):
+                return False, "Cannot remove bottom rows because one or more world-space entities would fall outside the area bounds."
+            return remove_bottom_rows(doc, count, screen_entity_ids=screen_entity_ids), None
+        if operation == "remove_left_columns":
+            if not can_remove_left_columns(doc, count, screen_entity_ids=screen_entity_ids):
+                return False, "Cannot remove left columns because one or more world-space entities would fall outside the area bounds."
+            return remove_left_columns(doc, count, screen_entity_ids=screen_entity_ids), None
+        if operation == "remove_right_columns":
+            if not can_remove_right_columns(doc, count, screen_entity_ids=screen_entity_ids):
+                return False, "Cannot remove right columns because one or more world-space entities would fall outside the area bounds."
+            return remove_right_columns(doc, count, screen_entity_ids=screen_entity_ids), None
+        return False, None
 
     # ------------------------------------------------------------------
     # Slots — side panel open requests
@@ -664,6 +1049,7 @@ class MainWindow(QMainWindow):
             self._status_area.setText(doc.name or content_id)
             self._save_action.setEnabled(True)
             self._cell_flags_action.setEnabled(True)
+            self._set_area_actions_enabled(True)
 
             # Populate tileset browser for this area
             if self._catalog is not None:
@@ -712,6 +1098,7 @@ class MainWindow(QMainWindow):
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
+            self._set_area_actions_enabled(False)
             self._set_cell_flags_action_state(False)
             self._set_paint_tiles_action_state(False)
             self._set_select_action_state(False)
@@ -739,6 +1126,7 @@ class MainWindow(QMainWindow):
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
+            self._set_area_actions_enabled(False)
             self._set_cell_flags_action_state(False)
             self._set_paint_tiles_action_state(False)
             self._set_select_action_state(False)
@@ -765,9 +1153,23 @@ class MainWindow(QMainWindow):
             and self._manifest.shared_variables_path is not None
             and self._manifest.shared_variables_path.is_file()
         )
+        self._new_area_action.setEnabled(self._manifest is not None)
         self._open_project_manifest_action.setEnabled(has_manifest)
         self._open_shared_variables_action.setEnabled(has_shared_variables)
         self._open_global_entities_action.setEnabled(has_manifest)
+
+    def _set_area_actions_enabled(self, enabled: bool) -> None:
+        for action in (
+            self._add_rows_above_action,
+            self._add_rows_below_action,
+            self._add_columns_left_action,
+            self._add_columns_right_action,
+            self._remove_top_rows_action,
+            self._remove_bottom_rows_action,
+            self._remove_left_columns_action,
+            self._remove_right_columns_action,
+        ):
+            action.setEnabled(enabled)
 
     def _refresh_project_metadata_surfaces(self) -> None:
         """Reload manifest-backed non-area editor surfaces after project-level saves."""
@@ -929,7 +1331,7 @@ class MainWindow(QMainWindow):
     def _on_template_brush_selected(self, template_id: str) -> None:
         self._entity_brush_template_id = template_id
         self._active_brush_type = BrushType.ENTITY
-        self._entity_brush_supported = self._entity_template_is_world_space(template_id)
+        self._entity_brush_supported = True
         self._template_panel.set_brush_active(template_id)
         self._tileset_panel.set_brush_active(False)
 
@@ -940,11 +1342,6 @@ class MainWindow(QMainWindow):
 
         self._ensure_paint_mode()
         self._update_paint_status()
-        if not self._entity_brush_supported:
-            self.statusBar().showMessage(
-                "Screen-space entity placement is not supported yet.",
-                3000,
-            )
 
     def _on_active_layer_changed(self, index: int) -> None:
         canvas = self._active_canvas()
@@ -1135,6 +1532,36 @@ class MainWindow(QMainWindow):
         self._tab_widget.set_dirty(content_id, True)
         self.statusBar().showMessage(
             f"Placed {created.id} at ({col}, {row}).",
+            2500,
+        )
+
+    def _on_entity_screen_paint_requested(
+        self,
+        template_id: str,
+        pixel_x: int,
+        pixel_y: int,
+    ) -> None:
+        context = self._active_area_context()
+        if context is None or not self._entity_brush_supported:
+            return
+        content_id, doc, canvas = context
+        created = place_screen_entity(
+            doc,
+            template_id,
+            pixel_x,
+            pixel_y,
+            render_order=self._entity_render_order(template_id),
+            y_sort=False,
+        )
+        canvas.refresh_scene_contents()
+        canvas.set_selected_entity(created.id, cycle_position=1, cycle_total=1, emit=False)
+        self._active_instance_entity_id = created.id
+        self._set_render_target_entity(created.id)
+        self._refresh_entity_instance_panel()
+        self._tab_widget.set_dirty(content_id, True)
+        self._update_paint_status()
+        self.statusBar().showMessage(
+            f"Placed screen entity {created.id} at pixel ({pixel_x}, {pixel_y}).",
             2500,
         )
 
@@ -1392,6 +1819,12 @@ class MainWindow(QMainWindow):
                 except (RuntimeError, TypeError):
                     pass
                 try:
+                    self._connected_canvas.entity_screen_paint_requested.disconnect(
+                        self._on_entity_screen_paint_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
                     self._connected_canvas.entity_delete_requested.disconnect(
                         self._on_entity_delete_requested
                     )
@@ -1420,6 +1853,9 @@ class MainWindow(QMainWindow):
         canvas.tile_painted.connect(self._on_tile_painted)
         canvas.tile_eyedropped.connect(self._on_tile_eyedropped)
         canvas.entity_paint_requested.connect(self._on_entity_paint_requested)
+        canvas.entity_screen_paint_requested.connect(
+            self._on_entity_screen_paint_requested
+        )
         canvas.entity_delete_requested.connect(self._on_entity_delete_requested)
         canvas.entity_selection_changed.connect(self._on_entity_selection_changed)
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
@@ -1436,6 +1872,20 @@ class MainWindow(QMainWindow):
             if template_space is not None:
                 return template_space
         return entity.space
+
+    def _entity_template_space(self, template_id: str) -> str:
+        if self._templates is not None:
+            template_space = self._templates.get_template_space(template_id)
+            if template_space is not None:
+                return template_space
+        return "world"
+
+    def _screen_space_entity_ids(self, doc: AreaDocument) -> set[str]:
+        return {
+            entity.id
+            for entity in doc.entities
+            if self._entity_effective_space(entity) == "screen"
+        }
 
     def _delete_world_entity_at(self, doc: AreaDocument, col: int, row: int) -> str | None:
         """Delete the topmost effective world-space entity at one grid cell."""
@@ -1803,11 +2253,8 @@ class MainWindow(QMainWindow):
             if self._entity_brush_template_id is None:
                 self._status_gid.setText("(no brush)")
                 return
-            suffix = ""
-            if not self._entity_brush_supported:
-                suffix = " (screen - not supported)"
             self._status_gid.setText(
-                f"Paint: entity {self._entity_brush_template_id.rsplit('/', 1)[-1]}{suffix}"
+                f"Paint: entity {self._entity_brush_template_id.rsplit('/', 1)[-1]}"
             )
             return
 
@@ -2070,11 +2517,13 @@ class MainWindow(QMainWindow):
             canvas.clear_entity_brush()
             self._entity_brush_supported = False
             return
-        supported = self._entity_template_is_world_space(self._entity_brush_template_id)
+        target_space = self._entity_template_space(self._entity_brush_template_id)
+        supported = True
         canvas.set_entity_brush(
             self._entity_brush_template_id,
             self._entity_brush_preview(self._entity_brush_template_id),
             supported=supported,
+            target_space=target_space,
         )
         self._entity_brush_supported = supported
 

@@ -86,6 +86,34 @@ def place_entity(
     return created
 
 
+def place_screen_entity(
+    area: AreaDocument,
+    template_id: str,
+    pixel_x: int,
+    pixel_y: int,
+    *,
+    entity_id: str | None = None,
+    render_order: int = 0,
+    y_sort: bool = False,
+    sort_y_offset: float = 0.0,
+    stack_order: int = 0,
+) -> EntityDocument:
+    """Append one new screen-space entity to the area document."""
+    created = EntityDocument(
+        id=entity_id or generate_entity_id(area, template_id),
+        pixel_x=pixel_x,
+        pixel_y=pixel_y,
+        space="screen",
+        template=template_id,
+        render_order=render_order,
+        y_sort=y_sort,
+        sort_y_offset=sort_y_offset,
+        stack_order=stack_order,
+    )
+    area.entities.append(created)
+    return created
+
+
 def delete_entity_at(area: AreaDocument, col: int, row: int) -> str | None:
     """Delete the topmost world-space entity at one grid cell."""
     topmost = topmost_entity_at(area, col, row)

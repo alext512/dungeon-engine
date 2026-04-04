@@ -1058,6 +1058,115 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"text": "Updated hello"', saved)
             self.assertFalse(window._tab_widget.is_dirty("dialogues/intro"))
 
+    def test_create_new_area_file_refreshes_and_opens_cleanly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            area_id, file_path = window._create_new_area_file(
+                area_id="title_screen",
+                display_name="Title Screen",
+                width=6,
+                height=4,
+                tile_size=16,
+            )
+
+            self.assertEqual(area_id, "areas/title_screen")
+            self.assertTrue(file_path.is_file())
+
+            window._refresh_area_panel()
+            entries = [content_id for content_id, _path in self._panel_file_entries(window._area_panel)]
+            self.assertIn("areas/title_screen", entries)
+
+            window._open_area(area_id, file_path)
+            info = window._tab_widget.active_info()
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertEqual(info.content_id, "areas/title_screen")
+            self.assertEqual(info.content_type, ContentType.AREA)
+
+            doc = window._area_docs["areas/title_screen"]
+            self.assertEqual(doc.width, 6)
+            self.assertEqual(doc.height, 4)
+            self.assertEqual(doc.tile_size, 16)
+            self.assertEqual(doc.name, "Title Screen")
+
+    def test_area_extent_operation_shifts_world_entities_but_not_screen_entities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+            screen_ids = window._screen_space_entity_ids(doc)
+
+            succeeded, blocked = window._apply_area_extent_operation(
+                doc,
+                "add_columns_left",
+                2,
+                screen_entity_ids=screen_ids,
+            )
+
+            self.assertTrue(succeeded)
+            self.assertIsNone(blocked)
+            door = next(entity for entity in doc.entities if entity.id == "house_door")
+            backdrop = next(entity for entity in doc.entities if entity.id == "title_backdrop")
+            self.assertEqual(door.grid_x, 2)
+            self.assertEqual(backdrop.pixel_x, 12)
+
+    def test_area_extent_remove_blocks_when_world_entity_would_fall_out_of_bounds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+            screen_ids = window._screen_space_entity_ids(doc)
+
+            succeeded, blocked = window._apply_area_extent_operation(
+                doc,
+                "remove_left_columns",
+                1,
+                screen_entity_ids=screen_ids,
+            )
+
+            self.assertFalse(succeeded)
+            self.assertIsNotNone(blocked)
+            self.assertIn("outside the area bounds", blocked)
+
+    def test_screen_space_template_brush_places_entities_in_screen_pane(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._on_template_brush_selected("entity_templates/display_sprite")
+            self.assertTrue(window._paint_tiles_action.isChecked())
+            self.assertTrue(canvas.tile_paint_mode)
+            self.assertEqual(window._active_brush_type.value, "entity")
+            self.assertTrue(window._entity_brush_supported)
+            self.assertIn("Paint: entity display_sprite", window._status_gid.text())
+
+            canvas.entity_screen_paint_requested.emit("entity_templates/display_sprite", 40, 28)
+
+            doc = window._area_docs["areas/demo"]
+            created = next(entity for entity in doc.entities if entity.id == "display_sprite_1")
+            self.assertEqual(created.template, "entity_templates/display_sprite")
+            self.assertEqual(created.space, "screen")
+            self.assertEqual((created.pixel_x, created.pixel_y), (40, 28))
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            self.assertEqual(canvas.selected_entity_id, "display_sprite_1")
+            window._tab_widget.set_dirty("areas/demo", False)
+
     def test_open_project_populates_items_panel_and_project_actions(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project_content_project(Path(tmp))

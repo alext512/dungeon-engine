@@ -89,6 +89,7 @@ class TileCanvas(QGraphicsView):
     tile_painted = Signal(int, int, int, int)  # (layer_idx, col, row, gid)
     tile_eyedropped = Signal(int)              # gid picked from canvas
     entity_paint_requested = Signal(str, int, int)
+    entity_screen_paint_requested = Signal(str, int, int)
     entity_delete_requested = Signal(int, int)
     entity_selection_changed = Signal(str, int, int)  # entity_id, position, total
 
@@ -137,6 +138,7 @@ class TileCanvas(QGraphicsView):
         self._brush_erase_mode: bool = True
         self._entity_brush_template: str | None = None
         self._entity_brush_supported: bool = False
+        self._entity_brush_space: str = "world"
         self._entity_ghost_pixmap: QPixmap | None = None
         self._selected_entity_id: str | None = None
         self._selected_entity_cycle_position: int = 0
@@ -363,16 +365,19 @@ class TileCanvas(QGraphicsView):
         ghost_pixmap: QPixmap | None,
         *,
         supported: bool,
+        target_space: str = "world",
     ) -> None:
         self._entity_brush_template = template_id
         self._entity_ghost_pixmap = ghost_pixmap
         self._entity_brush_supported = supported
+        self._entity_brush_space = target_space
         self._update_ghost_pixmap()
 
     def clear_entity_brush(self) -> None:
         self._entity_brush_template = None
         self._entity_ghost_pixmap = None
         self._entity_brush_supported = False
+        self._entity_brush_space = "world"
         if self._active_brush_type == BrushType.ENTITY:
             self._active_brush_type = BrushType.ERASER if self._brush_erase_mode else BrushType.TILE
         self._update_ghost_pixmap()
@@ -521,12 +526,21 @@ class TileCanvas(QGraphicsView):
 
         # Update ghost preview position
         if self._tile_paint_mode and self._area is not None:
-            col = int(scene_pos.x() / self._tile_size) if self._tile_size > 0 else -1
-            row = int(scene_pos.y() / self._tile_size) if self._tile_size > 0 else -1
-            if 0 <= col < self._area.width and 0 <= row < self._area.height:
-                self._show_ghost(col, row)
+            if self._active_brush_type == BrushType.ENTITY and self._entity_brush_space == "screen":
+                if local_screen is not None:
+                    self._show_ghost_at_scene(
+                        self._screen_pane_origin[0] + local_screen[0],
+                        self._screen_pane_origin[1] + local_screen[1],
+                    )
+                else:
+                    self._hide_ghost()
             else:
-                self._hide_ghost()
+                col = int(scene_pos.x() / self._tile_size) if self._tile_size > 0 else -1
+                row = int(scene_pos.y() / self._tile_size) if self._tile_size > 0 else -1
+                if 0 <= col < self._area.width and 0 <= row < self._area.height:
+                    self._show_ghost(col, row)
+                else:
+                    self._hide_ghost()
 
         buttons = event.buttons()
         if buttons & Qt.MouseButton.LeftButton:
@@ -905,16 +919,30 @@ class TileCanvas(QGraphicsView):
         # --- Unified paint tool ---
         if self._tile_paint_mode:
             scene_pos = self.mapToScene(event.position().toPoint())
+            local_screen = self._screen_pixel_from_scene_pos(scene_pos.x(), scene_pos.y())
             col = int(scene_pos.x() / self._tile_size)
             row = int(scene_pos.y() / self._tile_size)
-            if not (0 <= col < self._area.width and 0 <= row < self._area.height):
-                if self._screen_pixel_from_scene_pos(scene_pos.x(), scene_pos.y()) is not None:
-                    return True
-                return False
 
             if self._active_brush_type == BrushType.ENTITY:
                 if self._entity_brush_template is None or not self._entity_brush_supported:
                     return True
+                if self._entity_brush_space == "screen":
+                    if local_screen is None:
+                        return True
+                    if button == Qt.MouseButton.LeftButton:
+                        self.entity_screen_paint_requested.emit(
+                            self._entity_brush_template,
+                            local_screen[0],
+                            local_screen[1],
+                        )
+                        return True
+                    return True
+            if not (0 <= col < self._area.width and 0 <= row < self._area.height):
+                if local_screen is not None:
+                    return True
+                return False
+
+            if self._active_brush_type == BrushType.ENTITY:
                 if button == Qt.MouseButton.LeftButton:
                     marker = (self._entity_brush_template, col, row)
                     if self._last_entity_painted == marker:
@@ -1099,6 +1127,16 @@ class TileCanvas(QGraphicsView):
             self._scene.addItem(self._ghost_item)
             self._update_ghost_pixmap()
 
+        self._ghost_item.setPos(px, py)
+        self._ghost_item.setVisible(not self._ghost_item.pixmap().isNull())
+
+    def _show_ghost_at_scene(self, px: int, py: int) -> None:
+        if self._ghost_item is None:
+            self._ghost_item = QGraphicsPixmapItem()
+            self._ghost_item.setZValue(float(len(self._scene.items()) + 100))
+            self._ghost_item.setOpacity(0.5)
+            self._scene.addItem(self._ghost_item)
+            self._update_ghost_pixmap()
         self._ghost_item.setPos(px, py)
         self._ghost_item.setVisible(not self._ghost_item.pixmap().isNull())
 
