@@ -27,6 +27,9 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
   clear/delete, `Ctrl+C`, `Ctrl+X`, and `Ctrl+V`
 - Added multi-tile tileset selection so dragged rectangles in the tileset
   browser now paint as stamp brushes on the active layer
+- Added `Duplicate Area...` with `Full Copy` and `Layout Copy` modes so authors
+  can clone a room either with remapped entity instances or as a stripped
+  tilemap/layering shell
 - Tightened startup validation so statically resolvable broken `dialogue_path`
   and asset-path references now fail before launch instead of slipping into play
   until first use

@@ -82,6 +82,7 @@ It now supports active authoring workflows such as:
   `Ctrl+C` / `Ctrl+X` / `Ctrl+V`
 - multi-tile tileset selection that paints as a stamp brush
 - tile-layer add/rename/delete/reorder
+- area duplication as either a full copy or a layout-only shell copy
 - entity placement, selection, deletion, and nudging
 - render-property editing
 - project manifest, shared-variables, item, and global-entity editing

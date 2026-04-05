@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1948,6 +1949,88 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             )
             entries = self._panel_file_entries(window._area_panel)
             self.assertIn(("areas/rooms/demo_renamed", new_path), entries)
+
+    def test_duplicate_area_action_creates_and_opens_full_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            source_path = project_file.parent / "areas" / "demo.json"
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="rooms/demo_copy",
+            ), patch.object(
+                window,
+                "_prompt_area_duplicate_mode",
+                return_value="Full Copy",
+            ):
+                window._on_duplicate_area("areas/demo", source_path)
+
+            new_path = project_file.parent / "areas" / "rooms" / "demo_copy.json"
+            self.assertTrue(new_path.is_file())
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "areas/rooms/demo_copy",
+            )
+            self.assertIn(
+                ("areas/rooms/demo_copy", new_path),
+                self._panel_file_entries(window._area_panel),
+            )
+
+    def test_duplicate_area_full_copy_remaps_entity_ids_and_intra_area_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            new_content_id, new_path = window._duplicate_area_file(
+                source_content_id="areas/demo",
+                source_file_path=project_file.parent / "areas" / "demo.json",
+                new_relative_name="copies/demo_full",
+                duplicate_mode="Full Copy",
+            )
+
+            self.assertEqual(new_content_id, "areas/copies/demo_full")
+            saved = json.loads(new_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(saved["entities"]), 2)
+            switch = next(entity for entity in saved["entities"] if entity.get("kind") == "switch")
+            relay = next(entity for entity in saved["entities"] if entity.get("kind") == "relay")
+            self.assertNotEqual(switch["id"], "switch_a")
+            self.assertNotEqual(relay["id"], "relay")
+            self.assertEqual(saved["camera"]["follow"]["entity_id"], switch["id"])
+            self.assertEqual(saved["input_targets"]["interact"], switch["id"])
+            self.assertEqual(relay["target_id"], switch["id"])
+            self.assertEqual(relay["source_entity_id"], switch["id"])
+            self.assertEqual(relay["entity_ids"], [switch["id"], "dialogue_controller"])
+
+    def test_duplicate_area_layout_copy_keeps_map_shell_and_strips_entity_logic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            new_content_id, new_path = window._duplicate_area_file(
+                source_content_id="areas/demo",
+                source_file_path=project_file.parent / "areas" / "demo.json",
+                new_relative_name="copies/demo_layout",
+                duplicate_mode="Layout Copy",
+            )
+
+            self.assertEqual(new_content_id, "areas/copies/demo_layout")
+            saved = json.loads(new_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["tile_size"], 16)
+            self.assertIn("tile_layers", saved)
+            self.assertEqual(saved["entities"], [])
+            self.assertEqual(saved.get("variables"), {})
+            self.assertNotIn("camera", saved)
+            self.assertNotIn("input_targets", saved)
+            self.assertNotIn("entry_points", saved)
+            self.assertNotIn("enter_commands", saved)
 
     def test_area_delete_removes_file_and_leaves_known_references_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:

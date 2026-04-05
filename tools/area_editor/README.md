@@ -43,6 +43,7 @@ The current editor can:
   layer, then clear/delete, copy, cut, or paste it
 - drag-select multiple tiles in the tileset browser and paint them as a stamp brush
 - add, rename, delete, and reorder real tile layers
+- duplicate areas either as a `Full Copy` or as a stripped `Layout Copy`
 - place and delete world-space entities with the template brush
 - select stacked world entities by cell and select screen-space entities from the screen pane
 - nudge selected world entities by tiles and selected screen-space entities by pixels

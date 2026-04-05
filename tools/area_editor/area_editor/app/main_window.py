@@ -7,6 +7,7 @@ menus, status bar, and cross-widget signals.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import json
 import logging
@@ -107,6 +108,8 @@ _SETTINGS_KEY_JSON_EDITING_ENABLED = "json_editing_enabled"
 _IMAGE_SUFFIXES = {".png", ".webp", ".bmp", ".jpg", ".jpeg"}
 _COMMAND_ID_PREFIX = "commands"
 _DIALOGUE_ID_PREFIX = "dialogues"
+_AREA_DUPLICATE_FULL = "Full Copy"
+_AREA_DUPLICATE_LAYOUT = "Layout Copy"
 
 log = logging.getLogger(__name__)
 
@@ -1557,8 +1560,17 @@ class MainWindow(QMainWindow):
             )
 
     def _populate_area_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_duplicate_area_action(menu, content_id, file_path)
         self._add_rename_content_action(menu, ContentType.AREA, content_id, file_path)
         self._add_delete_content_action(menu, ContentType.AREA, content_id, file_path)
+
+    def _add_duplicate_area_action(self, menu, content_id: str, file_path: Path) -> None:
+        menu.addSeparator()
+        duplicate_action = QAction("Duplicate Area...", self)
+        duplicate_action.triggered.connect(
+            lambda: self._on_duplicate_area(content_id, file_path)
+        )
+        menu.addAction(duplicate_action)
 
     def _populate_template_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_rename_content_action(
@@ -1857,6 +1869,175 @@ class MainWindow(QMainWindow):
             f"Renamed {content_id} to {new_content_id}.",
             3500,
         )
+
+    def _on_duplicate_area(self, content_id: str, file_path: Path) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        relative_name = self._relative_content_name(content_id, AREA_ID_PREFIX)
+        if relative_name is None:
+            QMessageBox.warning(
+                self,
+                "Duplicate Area",
+                f"Cannot duplicate '{content_id}' through this workflow.",
+            )
+            return
+        new_relative_name = self._prompt_content_relative_name(
+            title="Duplicate Area",
+            current_relative_name=self._suggest_duplicate_area_relative_name(relative_name),
+        )
+        if new_relative_name is None:
+            return
+        duplicate_mode = self._prompt_area_duplicate_mode()
+        if duplicate_mode is None:
+            return
+        try:
+            new_content_id, new_file_path = self._duplicate_area_file(
+                source_content_id=content_id,
+                source_file_path=file_path,
+                new_relative_name=new_relative_name,
+                duplicate_mode=duplicate_mode,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Duplicate Area", str(exc))
+            return
+        self._refresh_area_panel()
+        self._open_area(new_content_id, new_file_path)
+        self._area_panel.highlight_area(new_content_id)
+        self.statusBar().showMessage(f"Duplicated area to {new_content_id}.", 3000)
+
+    def _duplicate_area_file(
+        self,
+        *,
+        source_content_id: str,
+        source_file_path: Path,
+        new_relative_name: str,
+        duplicate_mode: str,
+    ) -> tuple[str, Path]:
+        if self._manifest is None:
+            raise ValueError("Open a project before duplicating an area.")
+        normalized_relative_name = new_relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized_relative_name:
+            raise ValueError("Area ID must not be empty.")
+        if normalized_relative_name.endswith(".json"):
+            normalized_relative_name = normalized_relative_name[:-5]
+        if not normalized_relative_name:
+            raise ValueError("Area ID must not be empty.")
+
+        area_roots = list(self._manifest.area_paths)
+        root_dir = self._root_dir_for_content_file(source_file_path, area_roots)
+        if root_dir is None:
+            root_dir = self._default_area_root()
+        new_file_path = (root_dir / Path(normalized_relative_name)).with_suffix(".json").resolve()
+        try:
+            new_file_path.relative_to(root_dir.resolve())
+        except ValueError as exc:
+            raise ValueError("Duplicated areas must stay inside their configured project root.") from exc
+        new_content_id = f"{AREA_ID_PREFIX}/{normalized_relative_name}"
+        if new_file_path.exists():
+            raise ValueError(f"An area already exists at {new_content_id}.")
+
+        source_document = self._area_docs.get(source_content_id)
+        if source_document is None:
+            source_document = load_area_document(source_file_path)
+        duplicated = self._build_duplicated_area_document(
+            source_document,
+            duplicate_mode=duplicate_mode,
+        )
+        new_file_path.parent.mkdir(parents=True, exist_ok=True)
+        save_area_document(new_file_path, duplicated)
+        return new_content_id, new_file_path
+
+    def _build_duplicated_area_document(
+        self,
+        source_document: AreaDocument,
+        *,
+        duplicate_mode: str,
+    ) -> AreaDocument:
+        if duplicate_mode == _AREA_DUPLICATE_LAYOUT:
+            layout_data: dict[str, object] = {
+                "tile_size": source_document.tile_size,
+                "tilesets": [copy.deepcopy(tileset.to_dict()) for tileset in source_document.tilesets],
+                "tile_layers": [copy.deepcopy(layer.to_dict()) for layer in source_document.tile_layers],
+            }
+            if source_document.cell_flags:
+                layout_data["cell_flags"] = copy.deepcopy(source_document.cell_flags)
+            return AreaDocument.from_dict(layout_data)
+
+        duplicated_data = copy.deepcopy(source_document.to_dict())
+        raw_entities = duplicated_data.get("entities", [])
+        if not isinstance(raw_entities, list):
+            raise ValueError("Area JSON must keep entities as an array.")
+        used_ids = self._project_used_entity_ids()
+        id_remap: dict[str, str] = {}
+        for raw_entity in raw_entities:
+            if not isinstance(raw_entity, dict):
+                continue
+            old_entity_id = str(raw_entity.get("id", "")).strip()
+            if not old_entity_id:
+                continue
+            new_entity_id = self._generate_duplicate_entity_id(
+                old_entity_id,
+                used_ids=used_ids,
+            )
+            raw_entity["id"] = new_entity_id
+            id_remap[old_entity_id] = new_entity_id
+            used_ids.add(new_entity_id)
+        matcher = self._area_entity_reference_matcher()
+        updated_data = duplicated_data
+        for old_entity_id, new_entity_id in id_remap.items():
+            updated_data, _changed_paths = self._replace_reference_keys_in_json_value(
+                updated_data,
+                old_value=old_entity_id,
+                new_value=new_entity_id,
+                matcher=matcher,
+            )
+        return AreaDocument.from_dict(updated_data)
+
+    @staticmethod
+    def _suggest_duplicate_area_relative_name(relative_name: str) -> str:
+        normalized = relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized:
+            return "copy"
+        return f"{normalized}_copy"
+
+    def _prompt_area_duplicate_mode(self) -> str | None:
+        selected, accepted = QInputDialog.getItem(
+            self,
+            "Duplicate Area",
+            "Duplicate mode",
+            [_AREA_DUPLICATE_FULL, _AREA_DUPLICATE_LAYOUT],
+            0,
+            False,
+        )
+        if not accepted:
+            return None
+        normalized = str(selected).strip()
+        if normalized not in {_AREA_DUPLICATE_FULL, _AREA_DUPLICATE_LAYOUT}:
+            return None
+        return normalized
+
+    @staticmethod
+    def _generate_duplicate_entity_id(base_entity_id: str, *, used_ids: set[str]) -> str:
+        normalized_base = base_entity_id.strip().replace(" ", "_")
+        if not normalized_base:
+            normalized_base = "entity"
+        highest = 0
+        base_taken = False
+        prefix = f"{normalized_base}_"
+        for used_id in used_ids:
+            if used_id == normalized_base:
+                base_taken = True
+                continue
+            if not used_id.startswith(prefix):
+                continue
+            suffix = used_id[len(prefix) :]
+            if suffix.isdigit():
+                highest = max(highest, int(suffix))
+        if not base_taken and highest == 0:
+            return normalized_base
+        return f"{normalized_base}_{highest + 1}"
 
     def _on_delete_project_content(
         self,
