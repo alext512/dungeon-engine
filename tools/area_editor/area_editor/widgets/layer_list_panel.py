@@ -1,28 +1,25 @@
-"""Dock panel listing tile layers and entity visibility toggles.
+"""Dock panel listing tile layers plus lightweight management actions.
 
-Each row has a checkbox that shows/hides the corresponding
-``QGraphicsItemGroup`` on the canvas.  Clicking a layer row (not the
-checkbox) selects it as the active paint target.  A virtual *Entities*
-row at the bottom controls entity-marker visibility but cannot be
-selected as a paint target.
+Each row has a checkbox that shows or hides the corresponding tile-layer
+items on the canvas. Clicking a row selects it as the active paint
+target. Context-menu actions provide small layer-management workflows.
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (
     QDockWidget,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QVBoxLayout,
     QWidget,
 )
 
 from area_editor.documents.area_document import TileLayerDocument
 
-# Special sentinel index for the virtual "Entities" row.
-_ENTITIES_INDEX = -1
 _LAYER_NAME_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
@@ -30,8 +27,12 @@ class LayerListPanel(QDockWidget):
     """Right dock: per-layer visibility checkboxes and active-layer selection."""
 
     layer_visibility_changed = Signal(int, bool)       # (layer_index, visible)
-    entities_visibility_changed = Signal(bool)          # (visible)
     active_layer_changed = Signal(int)                  # layer_index
+    add_layer_requested = Signal()
+    rename_layer_requested = Signal(int)
+    delete_layer_requested = Signal(int)
+    move_layer_up_requested = Signal(int)
+    move_layer_down_requested = Signal(int)
 
     def __init__(self, parent=None) -> None:
         super().__init__("Layers", parent)
@@ -48,6 +49,8 @@ class LayerListPanel(QDockWidget):
         self._list = QListWidget()
         self._list.itemChanged.connect(self._on_item_changed)
         self._list.currentItemChanged.connect(self._on_current_item_changed)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._list)
 
         self.setWidget(container)
@@ -77,13 +80,6 @@ class LayerListPanel(QDockWidget):
             item.setData(_LAYER_NAME_ROLE, layer.name)
             self._list.addItem(item)
 
-        # Virtual "Entities" row
-        ent_item = QListWidgetItem("Entities")
-        ent_item.setFlags(ent_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        ent_item.setCheckState(Qt.CheckState.Checked)
-        ent_item.setData(Qt.ItemDataRole.UserRole, _ENTITIES_INDEX)
-        self._list.addItem(ent_item)
-
         # Select first layer as active by default
         if layers:
             self._active_layer = 0
@@ -91,6 +87,8 @@ class LayerListPanel(QDockWidget):
             first = self._list.item(0)
             if first is not None:
                 first.setFont(self._bold_font)
+        else:
+            self._active_layer = 0
 
         self._list.blockSignals(False)
 
@@ -116,9 +114,6 @@ class LayerListPanel(QDockWidget):
             return
         item = self._list.item(index)
         if item is None:
-            return
-        row_index = item.data(Qt.ItemDataRole.UserRole)
-        if row_index == _ENTITIES_INDEX:
             return
 
         previous = self._list.item(self._active_layer)
@@ -149,10 +144,7 @@ class LayerListPanel(QDockWidget):
     def _on_item_changed(self, item: QListWidgetItem) -> None:
         index = item.data(Qt.ItemDataRole.UserRole)
         visible = item.checkState() == Qt.CheckState.Checked
-        if index == _ENTITIES_INDEX:
-            self.entities_visibility_changed.emit(visible)
-        else:
-            self.layer_visibility_changed.emit(index, visible)
+        self.layer_visibility_changed.emit(index, visible)
 
     def _on_current_item_changed(
         self, current: QListWidgetItem | None, previous: QListWidgetItem | None
@@ -160,14 +152,6 @@ class LayerListPanel(QDockWidget):
         if current is None:
             return
         index = current.data(Qt.ItemDataRole.UserRole)
-        if index == _ENTITIES_INDEX:
-            # Don't allow selecting the entities row as paint target;
-            # revert to the previous selection.
-            if previous is not None:
-                self._list.blockSignals(True)
-                self._list.setCurrentItem(previous)
-                self._list.blockSignals(False)
-            return
 
         # Update bold styling
         if previous is not None:
@@ -176,6 +160,42 @@ class LayerListPanel(QDockWidget):
 
         self._active_layer = index
         self.active_layer_changed.emit(index)
+
+    def _on_context_menu(self, pos) -> None:
+        menu = QMenu(self)
+        clicked_item = self._list.itemAt(pos)
+        index = None
+        if clicked_item is not None:
+            index = int(clicked_item.data(Qt.ItemDataRole.UserRole))
+
+        add_action = QAction("Add Layer...", self)
+        add_action.triggered.connect(lambda _checked=False: self.add_layer_requested.emit())
+        menu.addAction(add_action)
+
+        if index is not None:
+            menu.addSeparator()
+
+            rename_action = QAction("Rename Layer...", self)
+            rename_action.triggered.connect(lambda _checked=False, idx=index: self.rename_layer_requested.emit(idx))
+            menu.addAction(rename_action)
+
+            delete_action = QAction("Delete Layer...", self)
+            delete_action.triggered.connect(lambda _checked=False, idx=index: self.delete_layer_requested.emit(idx))
+            menu.addAction(delete_action)
+
+            menu.addSeparator()
+
+            move_up_action = QAction("Move Layer Up", self)
+            move_up_action.setEnabled(index > 0)
+            move_up_action.triggered.connect(lambda _checked=False, idx=index: self.move_layer_up_requested.emit(idx))
+            menu.addAction(move_up_action)
+
+            move_down_action = QAction("Move Layer Down", self)
+            move_down_action.setEnabled(index < (len(self._layers) - 1))
+            move_down_action.triggered.connect(lambda _checked=False, idx=index: self.move_layer_down_requested.emit(idx))
+            menu.addAction(move_down_action)
+
+        menu.exec(self._list.viewport().mapToGlobal(pos))
 
     def _format_layer_label(self, layer: TileLayerDocument) -> str:
         """Return one compact layer-list label for the unified render model."""

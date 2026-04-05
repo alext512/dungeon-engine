@@ -222,6 +222,7 @@ class TileCanvas(QGraphicsView):
         """Redraw the current area without reinitialising editor state."""
         if self._area is None or self._catalog is None:
             return
+        self._sync_layer_visibility_state()
         self._recompute_scene_layout()
         self._rebuild_scene_contents()
 
@@ -239,6 +240,17 @@ class TileCanvas(QGraphicsView):
         scene_h = max(height_px, self._display_height, 1)
         pad = float(_SCENE_EDGE_PADDING)
         self._scene.setSceneRect(QRectF(-pad, -pad, scene_w + (pad * 2.0), scene_h + (pad * 2.0)))
+
+    def _sync_layer_visibility_state(self) -> None:
+        """Keep cached layer visibility aligned with the current area layer count."""
+        if self._area is None:
+            self._layer_visibility = []
+            return
+        expected = len(self._area.tile_layers)
+        current = list(self._layer_visibility[:expected])
+        if len(current) < expected:
+            current.extend(True for _ in range(expected - len(current)))
+        self._layer_visibility = current
 
     # -- Layer visibility ------------------------------------------------
 

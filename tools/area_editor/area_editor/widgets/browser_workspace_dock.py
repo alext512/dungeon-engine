@@ -28,7 +28,7 @@ class _VisualTabBar(QTabBar):
         self.setDrawBase(True)
         self.setMovable(False)
         self._visual_current_index = -1
-        self.currentChanged.connect(self._on_current_changed)
+        self.tabBarClicked.connect(self._on_tab_clicked)
 
     def set_visual_current_index(self, index: int) -> None:
         self._visual_current_index = index
@@ -52,7 +52,7 @@ class _VisualTabBar(QTabBar):
             base_option.rect = QRect(0, 0, self.width(), self.height())
             painter.drawPrimitive(QStyle.PrimitiveElement.PE_FrameTabBarBase, base_option)
 
-    def _on_current_changed(self, index: int) -> None:
+    def _on_tab_clicked(self, index: int) -> None:
         if index >= 0:
             self.tab_requested.emit(index)
 

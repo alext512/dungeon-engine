@@ -57,15 +57,20 @@ from area_editor.operations.areas import (
     add_columns_right,
     add_rows_above,
     add_rows_below,
+    add_tile_layer,
     can_remove_bottom_rows,
     can_remove_left_columns,
     can_remove_right_columns,
     can_remove_top_rows,
+    layer_dimensions,
     make_empty_area_document,
+    move_tile_layer,
     remove_bottom_rows,
     remove_left_columns,
     remove_right_columns,
     remove_top_rows,
+    remove_tile_layer,
+    rename_tile_layer,
 )
 from area_editor.operations.tilesets import (
     append_tileset,
@@ -119,6 +124,12 @@ class _JsonReferenceFileUpdate:
     file_path: Path
     updated_text: str
     changed_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _JsonReferenceUsage:
+    file_path: Path
+    matched_paths: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -340,6 +351,7 @@ class MainWindow(QMainWindow):
         self._json_dirty_bound: set[str] = set()
         self._display_width: int = 320
         self._display_height: int = 240
+        self._entities_visible: bool = True
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -495,14 +507,128 @@ class MainWindow(QMainWindow):
             lambda cid, fp: self._open_content(cid, fp, ContentType.ASSET)
         )
         self._area_panel.set_context_menu_builder(self._populate_area_context_menu)
+        self._area_panel.set_folder_context_menu_builder(
+            lambda menu, rel, path, root: self._populate_folder_context_menu(
+                menu,
+                ContentType.AREA,
+                rel,
+                path,
+                root,
+            )
+        )
+        self._area_panel.set_empty_space_context_menu_builder(
+            lambda menu, roots, current_rel, current_path, current_root: self._populate_empty_space_context_menu(
+                menu,
+                ContentType.AREA,
+                roots,
+                current_rel,
+                current_path,
+                current_root,
+            )
+        )
         self._template_panel.set_context_menu_builder(self._populate_template_context_menu)
+        self._template_panel.set_folder_context_menu_builder(
+            lambda menu, rel, path, root: self._populate_folder_context_menu(
+                menu,
+                ContentType.ENTITY_TEMPLATE,
+                rel,
+                path,
+                root,
+            )
+        )
+        self._template_panel.set_empty_space_context_menu_builder(
+            lambda menu, roots, current_rel, current_path, current_root: self._populate_empty_space_context_menu(
+                menu,
+                ContentType.ENTITY_TEMPLATE,
+                roots,
+                current_rel,
+                current_path,
+                current_root,
+            )
+        )
         self._item_panel.set_context_menu_builder(self._populate_item_context_menu)
+        self._item_panel.set_folder_context_menu_builder(
+            lambda menu, rel, path, root: self._populate_folder_context_menu(
+                menu,
+                ContentType.ITEM,
+                rel,
+                path,
+                root,
+            )
+        )
+        self._item_panel.set_empty_space_context_menu_builder(
+            lambda menu, roots, current_rel, current_path, current_root: self._populate_empty_space_context_menu(
+                menu,
+                ContentType.ITEM,
+                roots,
+                current_rel,
+                current_path,
+                current_root,
+            )
+        )
         self._global_entities_panel.set_context_menu_builder(
             self._populate_global_entity_context_menu
         )
         self._dialogue_panel.set_context_menu_builder(self._populate_dialogue_context_menu)
+        self._dialogue_panel.set_folder_context_menu_builder(
+            lambda menu, rel, path, root: self._populate_folder_context_menu(
+                menu,
+                ContentType.DIALOGUE,
+                rel,
+                path,
+                root,
+            )
+        )
+        self._dialogue_panel.set_empty_space_context_menu_builder(
+            lambda menu, roots, current_rel, current_path, current_root: self._populate_empty_space_context_menu(
+                menu,
+                ContentType.DIALOGUE,
+                roots,
+                current_rel,
+                current_path,
+                current_root,
+            )
+        )
         self._command_panel.set_context_menu_builder(self._populate_command_context_menu)
+        self._command_panel.set_folder_context_menu_builder(
+            lambda menu, rel, path, root: self._populate_folder_context_menu(
+                menu,
+                ContentType.NAMED_COMMAND,
+                rel,
+                path,
+                root,
+            )
+        )
+        self._command_panel.set_empty_space_context_menu_builder(
+            lambda menu, roots, current_rel, current_path, current_root: self._populate_empty_space_context_menu(
+                menu,
+                ContentType.NAMED_COMMAND,
+                roots,
+                current_rel,
+                current_path,
+                current_root,
+            )
+        )
         self._asset_panel.set_context_menu_builder(self._populate_asset_context_menu)
+        self._asset_panel.set_folder_context_menu_builder(
+            lambda menu, rel, path, root: self._populate_folder_context_menu(
+                menu,
+                ContentType.ASSET,
+                rel,
+                path,
+                root,
+            )
+        )
+        self._asset_panel.set_empty_space_context_menu_builder(
+            lambda menu, roots, current_rel, current_path, current_root: self._populate_empty_space_context_menu(
+                menu,
+                ContentType.ASSET,
+                roots,
+                current_rel,
+                current_path,
+                current_root,
+            )
+        )
 
         # Tab widget signals
         self._tab_widget.active_tab_changed.connect(self._on_active_tab_changed)
@@ -517,6 +643,15 @@ class MainWindow(QMainWindow):
             self._on_template_brush_selected
         )
         self._layer_panel.active_layer_changed.connect(self._on_active_layer_changed)
+        self._layer_panel.add_layer_requested.connect(self._on_add_tile_layer_requested)
+        self._layer_panel.rename_layer_requested.connect(self._on_rename_tile_layer_requested)
+        self._layer_panel.delete_layer_requested.connect(self._on_delete_tile_layer_requested)
+        self._layer_panel.move_layer_up_requested.connect(
+            lambda index: self._on_move_tile_layer_requested(index, -1)
+        )
+        self._layer_panel.move_layer_down_requested.connect(
+            lambda index: self._on_move_tile_layer_requested(index, 1)
+        )
         self._render_panel.properties_changed.connect(self._on_render_properties_changed)
         self._entity_instance_panel.apply_requested.connect(self._on_apply_entity_instance_json)
         self._entity_instance_panel.revert_requested.connect(self._on_revert_entity_instance_json)
@@ -584,10 +719,13 @@ class MainWindow(QMainWindow):
         self._entity_instance_panel.clear_entity()
         self._template_panel.set_brush_active(None)
         self._tileset_panel.clear_tilesets()
+        self._entities_visibility_action.blockSignals(True)
+        self._entities_visibility_action.setChecked(self._entities_visible)
+        self._entities_visibility_action.blockSignals(False)
         self._sync_json_edit_actions()
 
         areas = discover_areas(self._manifest)
-        self._area_panel.set_areas(areas)
+        self._area_panel.set_areas(areas, list(self._manifest.area_paths))
         self._template_panel.set_templates(
             self._manifest, self._templates, self._catalog
         )
@@ -750,6 +888,12 @@ class MainWindow(QMainWindow):
         self._grid_action.toggled.connect(self._on_grid_toggled)
         view_menu.addAction(self._grid_action)
 
+        self._entities_visibility_action = QAction("Show &Entities", self)
+        self._entities_visibility_action.setCheckable(True)
+        self._entities_visibility_action.setChecked(True)
+        self._entities_visibility_action.toggled.connect(self._on_entities_visibility_toggled)
+        view_menu.addAction(self._entities_visibility_action)
+
         reset_zoom_action = QAction("Reset &Zoom", self)
         reset_zoom_action.setShortcut(QKeySequence("Ctrl+0"))
         reset_zoom_action.triggered.connect(self._on_reset_zoom)
@@ -784,6 +928,41 @@ class MainWindow(QMainWindow):
             lambda: self._on_change_area_extent("add_columns_right")
         )
         area_menu.addAction(self._add_columns_right_action)
+
+        area_menu.addSeparator()
+
+        self._add_tile_layer_action = QAction("Add Tile Layer...", self)
+        self._add_tile_layer_action.setEnabled(False)
+        self._add_tile_layer_action.triggered.connect(self._on_add_tile_layer_requested)
+        area_menu.addAction(self._add_tile_layer_action)
+
+        self._rename_tile_layer_action = QAction("Rename Current Layer...", self)
+        self._rename_tile_layer_action.setEnabled(False)
+        self._rename_tile_layer_action.triggered.connect(
+            lambda: self._on_rename_tile_layer_requested(self._layer_panel.active_layer)
+        )
+        area_menu.addAction(self._rename_tile_layer_action)
+
+        self._delete_tile_layer_action = QAction("Delete Current Layer...", self)
+        self._delete_tile_layer_action.setEnabled(False)
+        self._delete_tile_layer_action.triggered.connect(
+            lambda: self._on_delete_tile_layer_requested(self._layer_panel.active_layer)
+        )
+        area_menu.addAction(self._delete_tile_layer_action)
+
+        self._move_tile_layer_up_action = QAction("Move Current Layer Up", self)
+        self._move_tile_layer_up_action.setEnabled(False)
+        self._move_tile_layer_up_action.triggered.connect(
+            lambda: self._on_move_tile_layer_requested(self._layer_panel.active_layer, -1)
+        )
+        area_menu.addAction(self._move_tile_layer_up_action)
+
+        self._move_tile_layer_down_action = QAction("Move Current Layer Down", self)
+        self._move_tile_layer_down_action.setEnabled(False)
+        self._move_tile_layer_down_action.triggered.connect(
+            lambda: self._on_move_tile_layer_requested(self._layer_panel.active_layer, 1)
+        )
+        area_menu.addAction(self._move_tile_layer_down_action)
 
         area_menu.addSeparator()
 
@@ -907,7 +1086,10 @@ class MainWindow(QMainWindow):
     def _refresh_area_panel(self) -> None:
         if self._manifest is None:
             return
-        self._area_panel.set_areas(discover_areas(self._manifest))
+        self._area_panel.set_areas(
+            discover_areas(self._manifest),
+            list(self._manifest.area_paths),
+        )
 
     def _on_change_area_extent(self, operation: str) -> None:
         context = self._active_area_context()
@@ -1182,11 +1364,15 @@ class MainWindow(QMainWindow):
                 self._set_cell_flags_action_state(canvas.cell_flags_edit_mode)
                 self._set_paint_tiles_action_state(canvas.tile_paint_mode)
                 self._set_select_action_state(canvas.select_mode)
+                self._entities_visibility_action.blockSignals(True)
+                self._entities_visibility_action.setChecked(self._entities_visible)
+                self._entities_visibility_action.blockSignals(False)
                 self._apply_active_brush_to_canvas(canvas)
                 self._status_zoom.setText(f"{canvas.zoom_level:.0%}")
                 self._refresh_render_properties_target()
                 self._refresh_entity_instance_panel()
                 self._sync_json_edit_actions()
+                self._refresh_layer_action_state()
                 if can_paint or canvas.select_mode:
                     self._update_paint_status()
                 else:
@@ -1214,6 +1400,7 @@ class MainWindow(QMainWindow):
             self._active_instance_entity_id = None
             self._entity_instance_panel.clear_entity()
             self._sync_json_edit_actions()
+            self._refresh_layer_action_state()
         else:
             # No tabs open
             self._layer_panel.clear_layers()
@@ -1242,6 +1429,7 @@ class MainWindow(QMainWindow):
             self._active_instance_entity_id = None
             self._entity_instance_panel.clear_entity()
             self._sync_json_edit_actions()
+            self._refresh_layer_action_state()
 
     def _status_label_for_content(self, content_id: str, content_type: object) -> str:
         if content_type == ContentType.PROJECT_MANIFEST:
@@ -1274,8 +1462,14 @@ class MainWindow(QMainWindow):
             self._remove_bottom_rows_action,
             self._remove_left_columns_action,
             self._remove_right_columns_action,
+            self._add_tile_layer_action,
         ):
             action.setEnabled(enabled)
+        if not enabled:
+            self._rename_tile_layer_action.setEnabled(False)
+            self._delete_tile_layer_action.setEnabled(False)
+            self._move_tile_layer_up_action.setEnabled(False)
+            self._move_tile_layer_down_action.setEnabled(False)
 
     def _refresh_project_metadata_surfaces(self) -> None:
         """Reload manifest-backed non-area editor surfaces after project-level saves."""
@@ -1324,6 +1518,7 @@ class MainWindow(QMainWindow):
 
     def _populate_area_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_rename_content_action(menu, ContentType.AREA, content_id, file_path)
+        self._add_delete_content_action(menu, ContentType.AREA, content_id, file_path)
 
     def _populate_template_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_rename_content_action(
@@ -1332,9 +1527,16 @@ class MainWindow(QMainWindow):
             content_id,
             file_path,
         )
+        self._add_delete_content_action(
+            menu,
+            ContentType.ENTITY_TEMPLATE,
+            content_id,
+            file_path,
+        )
 
     def _populate_item_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_rename_content_action(menu, ContentType.ITEM, content_id, file_path)
+        self._add_delete_content_action(menu, ContentType.ITEM, content_id, file_path)
 
     def _populate_global_entity_context_menu(self, menu, entity_id: str) -> None:
         menu.addSeparator()
@@ -1343,6 +1545,72 @@ class MainWindow(QMainWindow):
             lambda: self._on_rename_global_entity_id(entity_id)
         )
         menu.addAction(rename_action)
+        delete_action = QAction("Delete Global Entity...", self)
+        delete_action.triggered.connect(
+            lambda: self._on_delete_global_entity(entity_id)
+        )
+        menu.addAction(delete_action)
+
+    def _populate_folder_context_menu(
+        self,
+        menu,
+        content_type: ContentType,
+        relative_path: str,
+        folder_path: Path,
+        root_dir: Path,
+    ) -> None:
+        menu.addSeparator()
+        new_folder_action = QAction("New Folder...", self)
+        new_folder_action.triggered.connect(
+            lambda: self._on_new_content_folder(
+                root_dir=root_dir,
+                parent_relative_path=relative_path,
+            )
+        )
+        menu.addAction(new_folder_action)
+
+        rename_action = QAction("Rename/Move Folder...", self)
+        rename_action.triggered.connect(
+            lambda: self._on_rename_content_folder(
+                content_type=content_type,
+                root_dir=root_dir,
+                relative_path=relative_path,
+                folder_path=folder_path,
+            )
+        )
+        menu.addAction(rename_action)
+
+        delete_action = QAction("Delete Folder...", self)
+        delete_action.setEnabled(folder_path.is_dir() and not any(folder_path.iterdir()))
+        delete_action.triggered.connect(
+            lambda: self._on_delete_empty_content_folder(
+                folder_path=folder_path,
+                relative_path=relative_path,
+            )
+        )
+        menu.addAction(delete_action)
+
+    def _populate_empty_space_context_menu(
+        self,
+        menu,
+        _content_type: ContentType,
+        root_dirs: list[Path],
+        current_relative_path: str | None,
+        _current_folder_path: Path | None,
+        current_root_dir: Path | None,
+    ) -> None:
+        root_dir = current_root_dir or (root_dirs[0] if root_dirs else None)
+        if root_dir is None:
+            return
+        menu.addSeparator()
+        new_folder_action = QAction("New Folder...", self)
+        new_folder_action.triggered.connect(
+            lambda: self._on_new_content_folder(
+                root_dir=root_dir,
+                parent_relative_path=current_relative_path,
+            )
+        )
+        menu.addAction(new_folder_action)
 
     def _populate_dialogue_context_menu(
         self,
@@ -1351,6 +1619,7 @@ class MainWindow(QMainWindow):
         file_path: Path,
     ) -> None:
         self._add_rename_content_action(menu, ContentType.DIALOGUE, content_id, file_path)
+        self._add_delete_content_action(menu, ContentType.DIALOGUE, content_id, file_path)
 
     def _populate_command_context_menu(
         self,
@@ -1359,6 +1628,12 @@ class MainWindow(QMainWindow):
         file_path: Path,
     ) -> None:
         self._add_rename_content_action(
+            menu,
+            ContentType.NAMED_COMMAND,
+            content_id,
+            file_path,
+        )
+        self._add_delete_content_action(
             menu,
             ContentType.NAMED_COMMAND,
             content_id,
@@ -1382,6 +1657,23 @@ class MainWindow(QMainWindow):
             )
         )
         menu.addAction(rename_action)
+
+    def _add_delete_content_action(
+        self,
+        menu,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        delete_action = QAction("Delete...", self)
+        delete_action.triggered.connect(
+            lambda: self._on_delete_project_content(
+                content_type,
+                content_id,
+                file_path,
+            )
+        )
+        menu.addAction(delete_action)
 
     def _on_rename_project_content(
         self,
@@ -1526,6 +1818,62 @@ class MainWindow(QMainWindow):
             3500,
         )
 
+    def _on_delete_project_content(
+        self,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        rename_config = self._rename_config_for_content(content_type)
+        if rename_config is None:
+            return
+        _prefix, _roots, matcher, title = rename_config
+        reference_value = content_id
+        if content_type == ContentType.ASSET:
+            reference_value = self._authored_asset_path_for(file_path) or content_id
+        try:
+            reference_usages = self._collect_reference_usages(
+                value=reference_value,
+                matcher=matcher,
+                skip_files={file_path.resolve()},
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Delete Failed",
+                f"Could not build the usage preview:\n{exc}",
+            )
+            return
+
+        if not self._confirm_content_delete_preview(
+            title=title.replace("Rename/Move", "Delete"),
+            content_id=content_id,
+            file_path=file_path,
+            reference_usages=reference_usages,
+        ):
+            return
+
+        try:
+            file_path.unlink()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Delete Failed",
+                f"Could not delete '{content_id}':\n{exc}",
+            )
+            return
+
+        self._tab_widget.close_content(content_id)
+        self._area_docs.pop(content_id, None)
+        self._json_dirty_bound.discard(content_id)
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+        self.statusBar().showMessage(f"Deleted {content_id}.", 3500)
+
     def _on_rename_global_entity_id(self, entity_id: str) -> None:
         if self._manifest is None:
             return
@@ -1664,6 +2012,85 @@ class MainWindow(QMainWindow):
             3500,
         )
 
+    def _on_delete_global_entity(self, entity_id: str) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+
+        project_file = self._manifest.project_file.resolve()
+        try:
+            reference_usages = self._collect_reference_usages(
+                value=entity_id,
+                matcher=self._area_entity_reference_matcher(),
+                skip_files=set(),
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Delete Failed",
+                f"Could not build the usage preview:\n{exc}",
+            )
+            return
+
+        if not self._confirm_global_entity_delete_preview(
+            entity_id=entity_id,
+            reference_usages=reference_usages,
+        ):
+            return
+
+        try:
+            project_data = json.loads(project_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Delete Failed",
+                f"Could not read project.json:\n{exc}",
+            )
+            return
+        raw_entities = project_data.get("global_entities", [])
+        if not isinstance(raw_entities, list):
+            QMessageBox.warning(
+                self,
+                "Delete Failed",
+                "project.json global_entities must be a JSON array.",
+            )
+            return
+
+        updated_entities = [
+            raw_entity
+            for raw_entity in raw_entities
+            if not (
+                isinstance(raw_entity, dict)
+                and str(raw_entity.get("id", "")).strip() == entity_id
+            )
+        ]
+        if len(updated_entities) == len(raw_entities):
+            QMessageBox.warning(
+                self,
+                "Delete Failed",
+                f"Could not find global entity '{entity_id}' in project.json.",
+            )
+            return
+        project_data["global_entities"] = updated_entities
+        try:
+            project_file.write_text(
+                f"{format_json_for_editor(project_data)}\n",
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Delete Failed",
+                f"Could not update project.json:\n{exc}",
+            )
+            return
+
+        self._refresh_project_metadata_surfaces()
+        if self._tab_widget.content_info("project/global_entities") is not None:
+            self._open_global_entities_tab(None)
+        self.statusBar().showMessage(f"Deleted global entity {entity_id}.", 3500)
+
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
         if not self._maybe_save_dirty_tabs([content_id]):
             return
@@ -1783,6 +2210,233 @@ class MainWindow(QMainWindow):
             return None
         return normalized
 
+    def _prompt_folder_relative_path(
+        self,
+        *,
+        title: str,
+        current_relative_path: str,
+    ) -> str | None:
+        new_value, accepted = QInputDialog.getText(
+            self,
+            title,
+            "Folder relative path",
+            text=current_relative_path,
+        )
+        if not accepted:
+            return None
+        normalized = new_value.strip().replace("\\", "/").strip("/")
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Folder",
+                "The folder path must not be blank.",
+            )
+            return None
+        return normalized
+
+    def _on_new_content_folder(
+        self,
+        *,
+        root_dir: Path,
+        parent_relative_path: str | None,
+    ) -> None:
+        initial_value = f"{parent_relative_path}/" if parent_relative_path else ""
+        relative_path = self._prompt_folder_relative_path(
+            title="New Folder",
+            current_relative_path=initial_value,
+        )
+        if relative_path is None:
+            return
+        self._apply_new_content_folder(root_dir=root_dir, relative_path=relative_path)
+
+    def _apply_new_content_folder(self, *, root_dir: Path, relative_path: str) -> None:
+        folder_path = (root_dir / relative_path).resolve()
+        try:
+            folder_path.relative_to(root_dir.resolve())
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Folder",
+                "Folders must stay inside their configured project root.",
+            )
+            return
+        if folder_path.exists():
+            QMessageBox.warning(
+                self,
+                "Folder Exists",
+                f"'{folder_path}' already exists.",
+            )
+            return
+        folder_path.mkdir(parents=True, exist_ok=False)
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+        self.statusBar().showMessage(f"Created folder {relative_path}.", 2500)
+
+    def _on_delete_empty_content_folder(
+        self,
+        *,
+        folder_path: Path,
+        relative_path: str,
+    ) -> None:
+        if not folder_path.is_dir():
+            return
+        if any(folder_path.iterdir()):
+            QMessageBox.information(
+                self,
+                "Folder Not Empty",
+                "Only completely empty folders can be deleted.",
+            )
+            return
+        folder_path.rmdir()
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+        self.statusBar().showMessage(f"Deleted folder {relative_path}.", 2500)
+
+    def _on_rename_content_folder(
+        self,
+        *,
+        content_type: ContentType,
+        root_dir: Path,
+        relative_path: str,
+        folder_path: Path,
+    ) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        new_relative_path = self._prompt_folder_relative_path(
+            title="Rename/Move Folder",
+            current_relative_path=relative_path,
+        )
+        if new_relative_path is None or new_relative_path == relative_path:
+            return
+        self._apply_content_folder_move(
+            content_type=content_type,
+            root_dir=root_dir,
+            relative_path=relative_path,
+            folder_path=folder_path,
+            new_relative_path=new_relative_path,
+        )
+
+    def _apply_content_folder_move(
+        self,
+        *,
+        content_type: ContentType,
+        root_dir: Path,
+        relative_path: str,
+        folder_path: Path,
+        new_relative_path: str,
+    ) -> None:
+        rename_config = self._rename_config_for_content(content_type)
+        if rename_config is None:
+            return
+        _prefix, _roots, matcher, title = rename_config
+        new_folder_path = (root_dir / new_relative_path).resolve()
+        try:
+            new_folder_path.relative_to(root_dir.resolve())
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Destination",
+                "Moved folders must stay inside their configured project root.",
+            )
+            return
+        if new_folder_path == folder_path.resolve():
+            return
+        if new_folder_path.exists():
+            QMessageBox.warning(
+                self,
+                "Destination Exists",
+                f"'{new_folder_path}' already exists.",
+            )
+            return
+        moved_files = self._folder_files_for_content_type(content_type, folder_path)
+        replacements: list[tuple[str, str]] = []
+        for file_path in moved_files:
+            old_value = self._reference_value_for_content_file(content_type, file_path, root_dir)
+            if old_value is None:
+                continue
+            relative_child = file_path.resolve().relative_to(folder_path.resolve())
+            target_file_path = new_folder_path / relative_child
+            new_value = self._reference_value_for_content_file(
+                content_type,
+                target_file_path,
+                root_dir,
+            )
+            if new_value is None or new_value == old_value:
+                continue
+            replacements.append((old_value, new_value))
+        try:
+            reference_updates = self._collect_reference_updates_for_replacements(
+                replacements=replacements,
+                matcher=matcher,
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Folder Move Failed",
+                f"Could not build the reference update preview:\n{exc}",
+            )
+            return
+        if not self._confirm_folder_move_preview(
+            title=title,
+            old_relative_path=relative_path,
+            new_relative_path=new_relative_path,
+            moved_files=moved_files,
+            reference_updates=reference_updates,
+        ):
+            return
+        try:
+            for update in reference_updates:
+                update.file_path.write_text(update.updated_text, encoding="utf-8")
+            new_folder_path.parent.mkdir(parents=True, exist_ok=True)
+            folder_path.rename(new_folder_path)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Folder Move Failed",
+                f"Could not move folder '{relative_path}':\n{exc}",
+            )
+            return
+        self._tab_widget.close_all()
+        self._area_docs.clear()
+        self._json_dirty_bound.clear()
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+        self.statusBar().showMessage(
+            f"Moved folder {relative_path} to {new_relative_path}.",
+            3500,
+        )
+
+    def _folder_files_for_content_type(
+        self,
+        content_type: ContentType,
+        folder_path: Path,
+    ) -> list[Path]:
+        if content_type == ContentType.ASSET:
+            return sorted(path for path in folder_path.rglob("*") if path.is_file())
+        return sorted(folder_path.rglob("*.json"))
+
+    def _reference_value_for_content_file(
+        self,
+        content_type: ContentType,
+        file_path: Path,
+        root_dir: Path,
+    ) -> str | None:
+        resolved = file_path.resolve()
+        if content_type == ContentType.ASSET:
+            return self._authored_asset_path_for(resolved)
+        rename_config = self._rename_config_for_content(content_type)
+        if rename_config is None:
+            return None
+        prefix, _roots, _matcher, _title = rename_config
+        try:
+            relative = resolved.relative_to(root_dir.resolve())
+        except ValueError:
+            return None
+        relative_name = str(relative.with_suffix("")).replace("\\", "/").strip("/")
+        return f"{prefix}/{relative_name}".strip("/") if prefix else relative_name
+
     @staticmethod
     def _root_dir_for_content_file(file_path: Path, roots: list[Path]) -> Path | None:
         resolved = file_path.resolve()
@@ -1827,6 +2481,70 @@ class MainWindow(QMainWindow):
                 new_value=new_value,
                 matcher=matcher,
             )
+            if not changed_paths:
+                continue
+            updates.append(
+                _JsonReferenceFileUpdate(
+                    file_path=file_path,
+                    updated_text=f"{format_json_for_editor(updated)}\n",
+                    changed_paths=tuple(changed_paths),
+                )
+            )
+        return updates
+
+    def _collect_reference_usages(
+        self,
+        *,
+        value: str,
+        matcher: _ReferenceKeyMatcher,
+        skip_files: set[Path] | None = None,
+    ) -> list[_JsonReferenceUsage]:
+        usages: list[_JsonReferenceUsage] = []
+        skipped = {path.resolve() for path in (skip_files or set())}
+        for file_path in self._project_json_reference_scan_files():
+            if file_path.resolve() in skipped:
+                continue
+            data = json.loads(file_path.read_text(encoding="utf-8"))
+            matched_paths = self._find_reference_paths_in_json_value(
+                data,
+                target_value=value,
+                matcher=matcher,
+            )
+            if not matched_paths:
+                continue
+            usages.append(
+                _JsonReferenceUsage(
+                    file_path=file_path,
+                    matched_paths=tuple(matched_paths),
+                )
+            )
+        return usages
+
+    def _collect_reference_updates_for_replacements(
+        self,
+        *,
+        replacements: list[tuple[str, str]],
+        matcher: _ReferenceKeyMatcher,
+        skip_files: set[Path] | None = None,
+    ) -> list[_JsonReferenceFileUpdate]:
+        if not replacements:
+            return []
+        updates: list[_JsonReferenceFileUpdate] = []
+        skipped = {path.resolve() for path in (skip_files or set())}
+        for file_path in self._project_json_reference_scan_files():
+            if file_path.resolve() in skipped:
+                continue
+            data = json.loads(file_path.read_text(encoding="utf-8"))
+            updated = data
+            changed_paths: list[str] = []
+            for old_value, new_value in replacements:
+                updated, child_paths = self._replace_reference_keys_in_json_value(
+                    updated,
+                    old_value=old_value,
+                    new_value=new_value,
+                    matcher=matcher,
+                )
+                changed_paths.extend(child_paths)
             if not changed_paths:
                 continue
             updates.append(
@@ -1959,6 +2677,70 @@ class MainWindow(QMainWindow):
             return updated_dict, changed_paths
         return child, []
 
+    def _find_reference_paths_in_json_value(
+        self,
+        node: Any,
+        *,
+        matcher: _ReferenceKeyMatcher,
+        target_value: str,
+        path: str = "$",
+    ) -> list[str]:
+        matched_paths: list[str] = []
+        if isinstance(node, dict):
+            for key, child in node.items():
+                child_path = f"{path}.{key}"
+                if matcher.matches(key):
+                    matched_paths.extend(
+                        self._find_matched_reference_paths(
+                            child,
+                            value_to_match=target_value,
+                            path=child_path,
+                        )
+                    )
+                matched_paths.extend(
+                    self._find_reference_paths_in_json_value(
+                        child,
+                        matcher=matcher,
+                        target_value=target_value,
+                        path=child_path,
+                    )
+                )
+            return matched_paths
+        if isinstance(node, list):
+            for index, child in enumerate(node):
+                matched_paths.extend(
+                    self._find_reference_paths_in_json_value(
+                        child,
+                        matcher=matcher,
+                        target_value=target_value,
+                        path=f"{path}[{index}]",
+                    )
+                )
+        return matched_paths
+
+    def _find_matched_reference_paths(
+        self,
+        child: Any,
+        *,
+        value_to_match: str,
+        path: str,
+    ) -> list[str]:
+        matched_paths: list[str] = []
+        if isinstance(child, str):
+            if child == value_to_match:
+                matched_paths.append(path)
+            return matched_paths
+        if isinstance(child, list):
+            for index, item in enumerate(child):
+                if isinstance(item, str) and item == value_to_match:
+                    matched_paths.append(f"{path}[{index}]")
+            return matched_paths
+        if isinstance(child, dict):
+            for dict_key, dict_value in child.items():
+                if isinstance(dict_value, str) and dict_value == value_to_match:
+                    matched_paths.append(f"{path}.{dict_key}")
+        return matched_paths
+
     def _confirm_content_rename_preview(
         self,
         *,
@@ -1994,6 +2776,72 @@ class MainWindow(QMainWindow):
         dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
         return dialog.exec() == int(QMessageBox.StandardButton.Ok)
 
+    def _confirm_content_delete_preview(
+        self,
+        *,
+        title: str,
+        content_id: str,
+        file_path: Path,
+        reference_usages: list[_JsonReferenceUsage],
+    ) -> bool:
+        lines = [
+            f"Delete {content_id}",
+            f"Delete file: {file_path.name}",
+            "",
+        ]
+        if reference_usages:
+            lines.append("Known references/usages will be left broken:")
+            for usage in reference_usages:
+                display_path = usage.file_path.name
+                joined_paths = ", ".join(usage.matched_paths)
+                lines.append(f"- {display_path}: {joined_paths}")
+        else:
+            lines.append("No known references/usages were detected.")
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(title)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setText("Delete this content file and leave any known references unchanged?")
+        dialog.setInformativeText("The project may fail startup validation or break later until those references are fixed.")
+        dialog.setDetailedText("\n".join(lines))
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        return dialog.exec() == int(QMessageBox.StandardButton.Ok)
+
+    def _confirm_folder_move_preview(
+        self,
+        *,
+        title: str,
+        old_relative_path: str,
+        new_relative_path: str,
+        moved_files: list[Path],
+        reference_updates: list[_JsonReferenceFileUpdate],
+    ) -> bool:
+        lines = [
+            f"Move folder {old_relative_path} -> {new_relative_path}",
+            f"Move {len(moved_files)} file(s).",
+            "",
+        ]
+        if reference_updates:
+            lines.append("Reference updates:")
+            for update in reference_updates:
+                display_path = update.file_path.name
+                joined_paths = ", ".join(update.changed_paths)
+                lines.append(f"- {display_path}: {joined_paths}")
+        else:
+            lines.append("No known reference updates were detected.")
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(title)
+        dialog.setIcon(QMessageBox.Icon.Question)
+        dialog.setText("Apply this folder move and the previewed reference updates?")
+        dialog.setDetailedText("\n".join(lines))
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+        return dialog.exec() == int(QMessageBox.StandardButton.Ok)
+
     def _confirm_global_entity_rename_preview(
         self,
         *,
@@ -2022,6 +2870,36 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
         )
         dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+        return dialog.exec() == int(QMessageBox.StandardButton.Ok)
+
+    def _confirm_global_entity_delete_preview(
+        self,
+        *,
+        entity_id: str,
+        reference_usages: list[_JsonReferenceUsage],
+    ) -> bool:
+        lines = [
+            f"Delete global entity id {entity_id}",
+            "",
+        ]
+        if reference_usages:
+            lines.append("Known references/usages will be left broken:")
+            for usage in reference_usages:
+                display_path = usage.file_path.name
+                joined_paths = ", ".join(usage.matched_paths)
+                lines.append(f"- {display_path}: {joined_paths}")
+        else:
+            lines.append("No known references/usages were detected.")
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Delete Global Entity")
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setText("Delete this global entity and leave any known references unchanged?")
+        dialog.setInformativeText("The project may fail startup validation or break later until those references are fixed.")
+        dialog.setDetailedText("\n".join(lines))
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
         return dialog.exec() == int(QMessageBox.StandardButton.Ok)
 
     def _area_entity_reference_matcher(self) -> _ReferenceKeyMatcher:
@@ -2195,6 +3073,12 @@ class MainWindow(QMainWindow):
         if canvas is not None:
             canvas.set_grid_visible(visible)
 
+    def _on_entities_visibility_toggled(self, visible: bool) -> None:
+        self._entities_visible = visible
+        canvas = self._active_canvas()
+        if canvas is not None:
+            canvas.set_entities_visible(visible)
+
     def _on_reset_zoom(self) -> None:
         canvas = self._active_canvas()
         if canvas is not None:
@@ -2309,7 +3193,108 @@ class MainWindow(QMainWindow):
         if canvas is not None:
             canvas.set_active_layer(index)
         self._set_render_target_layer(index)
+        self._refresh_layer_action_state()
         self._update_paint_status()
+
+    def _on_add_tile_layer_requested(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, canvas = context
+        width, height = layer_dimensions(doc)
+        if width <= 0 or height <= 0:
+            QMessageBox.warning(
+                self,
+                "Add Tile Layer",
+                "This area has no known tile-layer dimensions yet, so the editor cannot create a new layer safely.",
+            )
+            return
+        layer_name = self._prompt_tile_layer_name("Add Tile Layer")
+        if not layer_name:
+            return
+        index = add_tile_layer(doc, name=layer_name, width=width, height=height)
+        canvas.refresh_scene_contents()
+        self._layer_panel.set_layers(doc.tile_layers)
+        self._layer_panel.set_active_layer(index)
+        canvas.set_active_layer(index)
+        self._set_render_target_layer(index)
+        self._tab_widget.set_dirty(content_id, True)
+        self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
+        self._refresh_layer_action_state()
+        self._update_paint_status()
+        self.statusBar().showMessage(f"Added layer {layer_name}.", 2500)
+
+    def _on_rename_tile_layer_requested(self, index: int) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, _canvas = context
+        if not (0 <= index < len(doc.tile_layers)):
+            return
+        current = doc.tile_layers[index]
+        name = self._prompt_tile_layer_name("Rename Tile Layer", current.name)
+        if not name or name == current.name:
+            return
+        rename_tile_layer(doc, index, name)
+        self._layer_panel.update_layer(index, doc.tile_layers[index])
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_render_properties_target()
+        self._refresh_layer_action_state()
+        self._update_paint_status()
+        self.statusBar().showMessage(f"Renamed layer to {name}.", 2500)
+
+    def _on_delete_tile_layer_requested(self, index: int) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, canvas = context
+        if not (0 <= index < len(doc.tile_layers)):
+            return
+        layer_name = doc.tile_layers[index].name
+        if not self._confirm_tile_layer_delete(layer_name):
+            return
+        removed = remove_tile_layer(doc, index)
+        if removed is None:
+            return
+        canvas.refresh_scene_contents()
+        self._layer_panel.set_layers(doc.tile_layers)
+        if doc.tile_layers:
+            new_index = min(index, len(doc.tile_layers) - 1)
+            self._layer_panel.set_active_layer(new_index)
+            canvas.set_active_layer(new_index)
+            self._set_render_target_layer(new_index)
+        else:
+            self._render_target_kind = None
+            self._render_target_ref = None
+            self._render_panel.clear_target()
+            self._status_layer.setText("")
+        self._tab_widget.set_dirty(content_id, True)
+        self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
+        self._refresh_layer_action_state()
+        self._update_paint_status()
+        self.statusBar().showMessage(f"Deleted layer {layer_name}.", 2500)
+
+    def _on_move_tile_layer_requested(self, index: int, delta: int) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, canvas = context
+        target = index + delta
+        if not (0 <= index < len(doc.tile_layers)) or not (0 <= target < len(doc.tile_layers)):
+            return
+        final_index = move_tile_layer(doc, index, target)
+        if final_index is None:
+            return
+        moved_name = doc.tile_layers[final_index].name
+        canvas.refresh_scene_contents()
+        self._layer_panel.set_layers(doc.tile_layers)
+        self._layer_panel.set_active_layer(final_index)
+        canvas.set_active_layer(final_index)
+        self._set_render_target_layer(final_index)
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_layer_action_state()
+        self._update_paint_status()
+        self.statusBar().showMessage(f"Moved layer {moved_name}.", 2500)
 
     def _on_add_tileset_requested(self) -> None:
         self._add_tileset_to_active_area()
@@ -2379,6 +3364,47 @@ class MainWindow(QMainWindow):
             f"Updated render properties for layer {layer.name}.",
             2500,
         )
+
+    def _refresh_layer_action_state(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            self._rename_tile_layer_action.setEnabled(False)
+            self._delete_tile_layer_action.setEnabled(False)
+            self._move_tile_layer_up_action.setEnabled(False)
+            self._move_tile_layer_down_action.setEnabled(False)
+            return
+        _content_id, doc, _canvas = context
+        index = self._layer_panel.active_layer
+        has_layers = bool(doc.tile_layers)
+        self._rename_tile_layer_action.setEnabled(has_layers and 0 <= index < len(doc.tile_layers))
+        self._delete_tile_layer_action.setEnabled(has_layers and 0 <= index < len(doc.tile_layers))
+        self._move_tile_layer_up_action.setEnabled(has_layers and index > 0)
+        self._move_tile_layer_down_action.setEnabled(has_layers and 0 <= index < (len(doc.tile_layers) - 1))
+
+    def _prompt_tile_layer_name(self, title: str, initial_value: str = "") -> str | None:
+        name, ok = QInputDialog.getText(
+            self,
+            title,
+            "Layer name:",
+            text=initial_value,
+        )
+        if not ok:
+            return None
+        trimmed = name.strip()
+        if not trimmed:
+            QMessageBox.warning(self, title, "Layer name must not be empty.")
+            return None
+        return trimmed
+
+    def _confirm_tile_layer_delete(self, layer_name: str) -> bool:
+        choice = QMessageBox.question(
+            self,
+            "Delete Tile Layer",
+            f"Delete tile layer '{layer_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return choice == QMessageBox.StandardButton.Yes
 
     def _on_save_active(self) -> None:
         info = self._tab_widget.active_info()
@@ -2805,10 +3831,6 @@ class MainWindow(QMainWindow):
                 self._layer_panel.layer_visibility_changed.disconnect()
             except (RuntimeError, TypeError):
                 pass
-            try:
-                self._layer_panel.entities_visibility_changed.disconnect()
-            except (RuntimeError, TypeError):
-                pass
 
         self._connected_canvas = canvas
         canvas.cell_hovered.connect(self._on_cell_hovered)
@@ -2824,9 +3846,7 @@ class MainWindow(QMainWindow):
         canvas.entity_delete_requested.connect(self._on_entity_delete_requested)
         canvas.entity_selection_changed.connect(self._on_entity_selection_changed)
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
-        self._layer_panel.entities_visibility_changed.connect(
-            canvas.set_entities_visible
-        )
+        canvas.set_entities_visible(self._entities_visible)
 
     def _entity_effective_space(self, entity: EntityDocument) -> str:
         """Return one entity's effective space using template fallback."""
@@ -2985,6 +4005,7 @@ class MainWindow(QMainWindow):
         file_path: Path,
     ) -> None:
         self._add_rename_content_action(menu, ContentType.ASSET, content_id, file_path)
+        self._add_delete_content_action(menu, ContentType.ASSET, content_id, file_path)
         if file_path.suffix.lower() not in _IMAGE_SUFFIXES:
             return
         menu.addSeparator()

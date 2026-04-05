@@ -12,7 +12,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtWidgets import QApplication, QTabBar
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QMessageBox, QTabBar
 
 from area_editor.app.main_window import MainWindow
 from area_editor.widgets.document_tab_widget import ContentType
@@ -762,6 +763,34 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 stack.append(item.child(index))
         return sorted(entries, key=lambda pair: pair[0])
 
+    def _panel_folder_entries(self, panel) -> list[tuple[str, Path]]:
+        entries: list[tuple[str, Path]] = []
+        stack = [panel._tree.topLevelItem(i) for i in range(panel._tree.topLevelItemCount())]
+        while stack:
+            item = stack.pop()
+            if item is None:
+                continue
+            data = item.data(0, 257)
+            if data is not None:
+                relative_path, folder_path, _root_dir = data
+                entries.append((str(relative_path), Path(folder_path)))
+            for index in range(item.childCount()):
+                stack.append(item.child(index))
+        return sorted(entries, key=lambda pair: pair[0])
+
+    def _find_tree_item_by_folder_path(self, panel, relative_path: str):
+        stack = [panel._tree.topLevelItem(i) for i in range(panel._tree.topLevelItemCount())]
+        while stack:
+            item = stack.pop()
+            if item is None:
+                continue
+            data = item.data(0, 257)
+            if data is not None and str(data[0]) == relative_path:
+                return item
+            for index in range(item.childCount()):
+                stack.append(item.child(index))
+        return None
+
     def test_add_tileset_appends_safe_firstgid(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project(Path(tmp))
@@ -843,6 +872,88 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             )
             window._tab_widget.set_dirty("areas/demo", False)
 
+    def test_layer_panel_lists_only_real_tile_layers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_layering_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            labels = [
+                window._layer_panel._list.item(index).text()
+                for index in range(window._layer_panel._list.count())
+            ]
+
+            self.assertEqual(window._layer_panel._list.count(), 1)
+            self.assertTrue(labels[0].startswith("ground"))
+            self.assertFalse(any(label == "Entities" for label in labels))
+
+    def test_entities_visibility_action_toggles_canvas_entities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_layering_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            self.assertTrue(window._entities_visibility_action.isChecked())
+            self.assertTrue(canvas._entities_visible)
+            self.assertTrue(all(item.isVisible() for item in canvas._entity_items))
+
+            window._entities_visibility_action.setChecked(False)
+            QApplication.processEvents()
+
+            self.assertFalse(canvas._entities_visible)
+            self.assertTrue(all(not item.isVisible() for item in canvas._entity_items))
+
+    def test_tile_layer_management_adds_renames_moves_and_deletes_layers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_layering_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+
+            with patch.object(
+                window,
+                "_prompt_tile_layer_name",
+                return_value="overlay",
+            ):
+                window._on_add_tile_layer_requested()
+
+            self.assertEqual([layer.name for layer in doc.tile_layers], ["ground", "overlay"])
+            self.assertEqual(doc.tile_layers[1].grid, [[0]])
+            self.assertEqual(window._layer_panel.active_layer_name(), "overlay")
+
+            window._on_move_tile_layer_requested(1, -1)
+            self.assertEqual([layer.name for layer in doc.tile_layers], ["overlay", "ground"])
+            self.assertEqual(window._layer_panel.active_layer_name(), "overlay")
+
+            with patch.object(
+                window,
+                "_prompt_tile_layer_name",
+                return_value="decor",
+            ):
+                window._on_rename_tile_layer_requested(0)
+
+            self.assertEqual([layer.name for layer in doc.tile_layers], ["decor", "ground"])
+            self.assertEqual(window._layer_panel.active_layer_name(), "decor")
+
+            with patch.object(
+                window,
+                "_confirm_tile_layer_delete",
+                return_value=True,
+            ):
+                window._on_delete_tile_layer_requested(0)
+
+            self.assertEqual([layer.name for layer in doc.tile_layers], ["ground"])
+            self.assertEqual(window._layer_panel._list.count(), 1)
+            self.assertEqual(window._layer_panel.active_layer_name(), "ground")
+            window._tab_widget.set_dirty("areas/demo", False)
+
     def test_render_properties_panel_updates_selected_entity(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_select_project(Path(tmp))
@@ -912,6 +1023,38 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 window._browser_workspace.row_titles(2),
                 ["Dialogues", "Commands", "Assets"],
             )
+            self.assertEqual(window._browser_workspace.active_key(), "areas")
+            self.assertEqual(window._browser_workspace.row_visual_current_index(1), 0)
+            self.assertEqual(window._browser_workspace.row_visual_current_index(2), -1)
+
+    def test_browser_workspace_tabs_remain_clickable_when_switching_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            row1 = window._browser_workspace._row1
+            row2 = window._browser_workspace._row2
+
+            commands_rect = row2.tabRect(1)
+            QTest.mouseClick(
+                row2,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+                commands_rect.center(),
+            )
+            QApplication.processEvents()
+            self.assertEqual(window._browser_workspace.active_key(), "commands")
+
+            areas_rect = row1.tabRect(0)
+            QTest.mouseClick(
+                row1,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+                areas_rect.center(),
+            )
+            QApplication.processEvents()
             self.assertEqual(window._browser_workspace.active_key(), "areas")
             self.assertEqual(window._browser_workspace.row_visual_current_index(1), 0)
             self.assertEqual(window._browser_workspace.row_visual_current_index(2), -1)
@@ -1716,6 +1859,110 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             entries = self._panel_file_entries(window._area_panel)
             self.assertIn(("areas/rooms/demo_renamed", new_path), entries)
 
+    def test_area_delete_removes_file_and_leaves_known_references_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = project_file.parent / "areas" / "demo.json"
+            with patch.object(
+                window,
+                "_confirm_content_delete_preview",
+                return_value=True,
+            ) as confirm_delete:
+                window._on_delete_project_content(
+                    ContentType.AREA,
+                    "areas/demo",
+                    old_path,
+                )
+
+            self.assertFalse(old_path.exists())
+            self.assertIn('"startup_area": "areas/demo"', project_file.read_text(encoding="utf-8"))
+            self.assertNotIn(("areas/demo", old_path), self._panel_file_entries(window._area_panel))
+            usages = confirm_delete.call_args.kwargs["reference_usages"]
+            self.assertTrue(any(usage.file_path == project_file for usage in usages))
+
+    def test_empty_folders_are_visible_in_file_backed_panels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            (project / "assets" / "empty_assets").mkdir()
+            (project / "areas" / "rooms").mkdir()
+            (project / "items" / "empty_items").mkdir()
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            self.assertIn(
+                ("empty_assets", project / "assets" / "empty_assets"),
+                self._panel_folder_entries(window._asset_panel),
+            )
+            self.assertIn(
+                ("rooms", project / "areas" / "rooms"),
+                self._panel_folder_entries(window._area_panel),
+            )
+            self.assertIn(
+                ("empty_items", project / "items" / "empty_items"),
+                self._panel_folder_entries(window._item_panel),
+            )
+
+    def test_new_and_delete_empty_folder_refreshes_browser(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            root_dir = project / "assets"
+            window._apply_new_content_folder(
+                root_dir=root_dir,
+                relative_path="project/new_empty",
+            )
+            created_path = root_dir / "project" / "new_empty"
+            self.assertTrue(created_path.is_dir())
+            self.assertIn(
+                ("project/new_empty", created_path),
+                self._panel_folder_entries(window._asset_panel),
+            )
+
+            window._on_delete_empty_content_folder(
+                folder_path=created_path,
+                relative_path="project/new_empty",
+            )
+            self.assertFalse(created_path.exists())
+            self.assertNotIn(
+                ("project/new_empty", created_path),
+                self._panel_folder_entries(window._asset_panel),
+            )
+
+    def test_file_tree_folders_start_collapsed_and_remember_manual_expansion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            (project / "assets" / "ui" / "title").mkdir(parents=True)
+            (project / "assets" / "ui" / "title" / "panel.png").write_bytes(b"png")
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            ui_item = self._find_tree_item_by_folder_path(window._asset_panel, "ui")
+            self.assertIsNotNone(ui_item)
+            assert ui_item is not None
+            self.assertFalse(ui_item.isExpanded())
+
+            ui_item.setExpanded(True)
+            QApplication.processEvents()
+            self.assertTrue(ui_item.isExpanded())
+
+            window._refresh_project_metadata_surfaces()
+            refreshed_item = self._find_tree_item_by_folder_path(window._asset_panel, "ui")
+            self.assertIsNotNone(refreshed_item)
+            assert refreshed_item is not None
+            self.assertTrue(refreshed_item.isExpanded())
+
     def test_template_rename_moves_file_and_updates_known_template_references(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"
@@ -2004,6 +2251,219 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             entries = self._panel_file_entries(window._asset_panel)
             self.assertIn(("ui/renamed.png", new_path), entries)
 
+    def test_asset_delete_removes_file_and_leaves_known_references_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            items = project / "items"
+            assets.mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+            items.mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("cyan"))
+            self.assertTrue(base.save(str(assets / "base.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "item_paths": ["items/"],\n'
+                    '  "shared_variables_path": "shared_variables.json"\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (project / "shared_variables.json").write_text(
+                (
+                    '{\n'
+                    '  "dialogue_ui": {\n'
+                    '    "panel_path": "assets/base.png"\n'
+                    '  }\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Demo",\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [\n'
+                    '    {\n'
+                    '      "firstgid": 1,\n'
+                    '      "path": "assets/base.png",\n'
+                    '      "tile_width": 16,\n'
+                    '      "tile_height": 16\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "display.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "screen",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/base.png"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (items / "apple.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Apple",\n'
+                    '  "icon": {\n'
+                    '    "path": "assets/base.png"\n'
+                    '  }\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = assets / "base.png"
+            window._open_content("base.png", old_path, ContentType.ASSET)
+
+            with patch.object(
+                window,
+                "_confirm_content_delete_preview",
+                return_value=True,
+            ) as confirm_delete:
+                window._on_delete_project_content(
+                    ContentType.ASSET,
+                    "base.png",
+                    old_path,
+                )
+
+            self.assertFalse(old_path.exists())
+            self.assertIn('"path": "assets/base.png"', (areas / "demo.json").read_text(encoding="utf-8"))
+            self.assertNotIn(("base.png", old_path), self._panel_file_entries(window._asset_panel))
+            usages = confirm_delete.call_args.kwargs["reference_usages"]
+            self.assertTrue(any(usage.file_path.name == "demo.json" for usage in usages))
+
+    def test_asset_folder_move_updates_known_asset_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            assets.mkdir(parents=True)
+            (assets / "ui" / "old").mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("cyan"))
+            self.assertTrue(base.save(str(assets / "ui" / "old" / "panel.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "shared_variables_path": "shared_variables.json"\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (project / "shared_variables.json").write_text(
+                (
+                    '{\n'
+                    '  "dialogue_ui": {\n'
+                    '    "panel_path": "assets/ui/old/panel.png"\n'
+                    '  }\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Demo",\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [\n'
+                    '    {\n'
+                    '      "firstgid": 1,\n'
+                    '      "path": "assets/ui/old/panel.png",\n'
+                    '      "tile_width": 16,\n'
+                    '      "tile_height": 16\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "dialogue_panel.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "screen",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/ui/old/panel.png"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_folder = assets / "ui" / "old"
+            with patch.object(
+                window,
+                "_confirm_folder_move_preview",
+                return_value=True,
+            ):
+                window._apply_content_folder_move(
+                    content_type=ContentType.ASSET,
+                    root_dir=assets,
+                    relative_path="ui/old",
+                    folder_path=old_folder,
+                    new_relative_path="ui/menu",
+                )
+
+            new_folder = assets / "ui" / "menu"
+            self.assertFalse(old_folder.exists())
+            self.assertTrue(new_folder.is_dir())
+            self.assertIn(
+                '"path": "assets/ui/menu/panel.png"',
+                (areas / "demo.json").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                '"path": "assets/ui/menu/panel.png"',
+                (templates / "dialogue_panel.json").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                '"panel_path": "assets/ui/menu/panel.png"',
+                (project / "shared_variables.json").read_text(encoding="utf-8"),
+            )
+
     def test_dialogue_rename_moves_file_and_updates_known_dialogue_references(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_reference_rich_project(Path(tmp))
@@ -2084,6 +2544,29 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIsInstance(widget, GlobalEntitiesEditorWidget)
             assert isinstance(widget, GlobalEntitiesEditorWidget)
             self.assertIn("dialogue_controller_v2", widget._target_label.text())
+
+    def test_global_entity_delete_removes_project_entry_and_leaves_known_references_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            project = project_file.parent
+            area_path = project / "areas" / "demo.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            with patch.object(
+                window,
+                "_confirm_global_entity_delete_preview",
+                return_value=True,
+            ) as confirm_delete:
+                window._on_delete_global_entity("dialogue_controller")
+
+            saved_project = project_file.read_text(encoding="utf-8")
+            self.assertNotIn('"id": "dialogue_controller"', saved_project)
+            saved_area = area_path.read_text(encoding="utf-8")
+            self.assertIn('"entity_ids": ["switch_a", "dialogue_controller"]', saved_area)
+            usages = confirm_delete.call_args.kwargs["reference_usages"]
+            self.assertTrue(any(usage.file_path == area_path for usage in usages))
 
     def test_command_rename_moves_file_and_updates_known_command_references(self):
         with tempfile.TemporaryDirectory() as tmp:

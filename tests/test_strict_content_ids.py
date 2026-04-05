@@ -41,6 +41,10 @@ from dungeon_engine.world.entity import (
 )
 from dungeon_engine.world.world import World
 from dungeon_engine.project import load_project
+from dungeon_engine.startup_validation import (
+    StaticReferenceValidationError,
+    validate_project_startup,
+)
 from dungeon_engine.world.loader import (
     AreaValidationError,
     EntityTemplateValidationError,
@@ -1050,6 +1054,140 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(
             any("startup_area 'areas/missing_room'" in issue for issue in raised.exception.issues)
         )
+
+    def test_startup_validation_rejects_missing_literal_dialogue_reference(self) -> None:
+        project_root, project = self._make_project(
+            startup_area="areas/test_room",
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "open_dialogue_session",
+                            "dialogue_path": "dialogues/system/missing_title.json",
+                        }
+                    ],
+                }
+            },
+        )
+        asset_path = project_root / "assets" / "project" / "tiles" / "test.png"
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        asset_path.write_bytes(b"fake")
+        project = load_project(project_root / "project.json")
+
+        error = validate_project_startup(
+            project,
+            ui_title="Test",
+            show_dialog=False,
+        )
+
+        self.assertIsInstance(error, StaticReferenceValidationError)
+        assert isinstance(error, StaticReferenceValidationError)
+        self.assertTrue(any("missing dialogue 'dialogues/system/missing_title.json'" in issue for issue in error.issues))
+
+    def test_startup_validation_rejects_missing_literal_asset_reference(self) -> None:
+        project_root, project = self._make_project(
+            startup_area="areas/test_room",
+            areas={"test_room.json": _minimal_area()},
+            shared_variables={
+                "dialogue_ui": {
+                    "panel_path": "assets/project/ui/missing_panel.png",
+                }
+            },
+        )
+        tileset_path = project_root / "assets" / "project" / "tiles" / "test.png"
+        tileset_path.parent.mkdir(parents=True, exist_ok=True)
+        tileset_path.write_bytes(b"fake")
+        (project_root / "assets" / "project" / "ui").mkdir(parents=True, exist_ok=True)
+        project = load_project(project_root / "project.json")
+
+        error = validate_project_startup(
+            project,
+            ui_title="Test",
+            show_dialog=False,
+        )
+
+        self.assertIsInstance(error, StaticReferenceValidationError)
+        assert isinstance(error, StaticReferenceValidationError)
+        self.assertTrue(any("missing asset 'assets/project/ui/missing_panel.png'" in issue for issue in error.issues))
+
+    def test_startup_validation_allows_runtime_dynamic_references(self) -> None:
+        project_root, project = self._make_project(
+            startup_area="areas/test_room",
+            entity_templates={
+                "display_sprite.json": {
+                    "space": "screen",
+                    "kind": "display",
+                    "visuals": [
+                        {
+                            "id": "main",
+                            "path": "$sprite_path",
+                        }
+                    ],
+                }
+            },
+            areas={"test_room.json": _minimal_area()},
+        )
+        asset_path = project_root / "assets" / "project" / "tiles" / "test.png"
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        asset_path.write_bytes(b"fake")
+        project = load_project(project_root / "project.json")
+
+        error = validate_project_startup(
+            project,
+            ui_title="Test",
+            show_dialog=False,
+        )
+
+        self.assertIsNone(error)
+
+    def test_startup_validation_rejects_statically_resolved_template_asset_reference(self) -> None:
+        project_root, project = self._make_project(
+            startup_area="areas/test_room",
+            entity_templates={
+                "display_sprite.json": {
+                    "space": "screen",
+                    "kind": "display",
+                    "visuals": [
+                        {
+                            "id": "main",
+                            "path": "$sprite_path",
+                        }
+                    ],
+                }
+            },
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "entities": [
+                        {
+                            "id": "screen_sprite",
+                            "template": "entity_templates/display_sprite",
+                            "parameters": {
+                                "sprite_path": "assets/project/ui/missing_panel.png",
+                            },
+                            "pixel_x": 0,
+                            "pixel_y": 0,
+                        }
+                    ],
+                }
+            },
+        )
+        tileset_path = project_root / "assets" / "project" / "tiles" / "test.png"
+        tileset_path.parent.mkdir(parents=True, exist_ok=True)
+        tileset_path.write_bytes(b"fake")
+        (project_root / "assets" / "project" / "ui").mkdir(parents=True, exist_ok=True)
+        project = load_project(project_root / "project.json")
+
+        error = validate_project_startup(
+            project,
+            ui_title="Test",
+            show_dialog=False,
+        )
+
+        self.assertIsInstance(error, StaticReferenceValidationError)
+        assert isinstance(error, StaticReferenceValidationError)
+        self.assertTrue(any("missing asset 'assets/project/ui/missing_panel.png'" in issue for issue in error.issues))
 
     def test_area_loader_preserves_enter_commands(self) -> None:
         _, project = self._make_project()

@@ -1,8 +1,8 @@
-"""Area geometry helpers for editor workflows."""
+"""Area geometry and tile-layer helpers for editor workflows."""
 
 from __future__ import annotations
 
-from area_editor.documents.area_document import AreaDocument
+from area_editor.documents.area_document import AreaDocument, TileLayerDocument
 
 
 def make_empty_area_document(
@@ -40,6 +40,72 @@ def make_empty_area_document(
             "variables": {},
         }
     )
+
+
+def add_tile_layer(
+    area: AreaDocument,
+    *,
+    name: str,
+    insert_index: int | None = None,
+    width: int | None = None,
+    height: int | None = None,
+) -> int:
+    """Insert one empty tile layer and return its final index."""
+    layer_width, layer_height = layer_dimensions(area)
+    if width is not None:
+        layer_width = max(0, int(width))
+    if height is not None:
+        layer_height = max(0, int(height))
+    if layer_width <= 0 or layer_height <= 0:
+        raise ValueError("Tile layer dimensions must be positive.")
+
+    new_layer = TileLayerDocument(
+        name=name.strip() or "layer",
+        render_order=0,
+        y_sort=False,
+        sort_y_offset=0.0,
+        stack_order=0,
+        grid=[[0 for _ in range(layer_width)] for _ in range(layer_height)],
+    )
+    index = len(area.tile_layers) if insert_index is None else max(0, min(int(insert_index), len(area.tile_layers)))
+    area.tile_layers.insert(index, new_layer)
+    return index
+
+
+def remove_tile_layer(area: AreaDocument, index: int) -> TileLayerDocument | None:
+    """Remove and return one tile layer by index."""
+    if not (0 <= index < len(area.tile_layers)):
+        return None
+    return area.tile_layers.pop(index)
+
+
+def move_tile_layer(area: AreaDocument, index: int, new_index: int) -> int | None:
+    """Move one tile layer to a new list position and return the final index."""
+    if not (0 <= index < len(area.tile_layers)):
+        return None
+    layer = area.tile_layers.pop(index)
+    bounded = max(0, min(int(new_index), len(area.tile_layers)))
+    area.tile_layers.insert(bounded, layer)
+    return bounded
+
+
+def rename_tile_layer(area: AreaDocument, index: int, new_name: str) -> bool:
+    """Rename one tile layer."""
+    if not (0 <= index < len(area.tile_layers)):
+        return False
+    area.tile_layers[index].name = new_name.strip() or area.tile_layers[index].name
+    return True
+
+
+def layer_dimensions(area: AreaDocument) -> tuple[int, int]:
+    """Return the best-known tile-layer dimensions for an area."""
+    width = area.width
+    height = area.height
+    if width > 0 and height > 0:
+        return width, height
+    if area.cell_flags and area.cell_flags[0]:
+        return len(area.cell_flags[0]), len(area.cell_flags)
+    return 0, 0
 
 
 def add_rows_above(
