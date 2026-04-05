@@ -2363,8 +2363,8 @@ class StrictContentIdTests(unittest.TestCase):
         assert option_1 is not None
         assert option_2 is not None
         self.assertEqual(option_0.text, ">One")
-        self.assertEqual(option_1.text, " Two")
-        self.assertEqual(option_2.text, " Three")
+        self.assertEqual(option_1.text, "Two")
+        self.assertEqual(option_2.text, "Three")
 
         dialogue_runtime.handle_action("move_down")
         dialogue_runtime.handle_action("move_down")
@@ -2381,8 +2381,8 @@ class StrictContentIdTests(unittest.TestCase):
         assert option_0 is not None
         assert option_1 is not None
         assert option_2 is not None
-        self.assertEqual(option_0.text, " Two")
-        self.assertEqual(option_1.text, " Three")
+        self.assertEqual(option_0.text, "Two")
+        self.assertEqual(option_1.text, "Three")
         self.assertEqual(option_2.text, ">Four")
 
     def test_dialogue_runtime_can_render_choices_in_a_separate_panel(self) -> None:
@@ -6192,8 +6192,8 @@ class StrictContentIdTests(unittest.TestCase):
         assert option_1 is not None
         assert option_2 is not None
         self.assertEqual(option_0.text, ">One")
-        self.assertEqual(option_1.text, " Two")
-        self.assertEqual(option_2.text, " Three")
+        self.assertEqual(option_1.text, "Two")
+        self.assertEqual(option_2.text, "Three")
 
         _run_named("commands/dialogue/move_selection", delta=1)
         _run_named("commands/dialogue/move_selection", delta=1)
@@ -6208,8 +6208,8 @@ class StrictContentIdTests(unittest.TestCase):
         assert option_0 is not None
         assert option_1 is not None
         assert option_2 is not None
-        self.assertEqual(option_0.text, " Two")
-        self.assertEqual(option_1.text, " Three")
+        self.assertEqual(option_0.text, "Two")
+        self.assertEqual(option_1.text, "Three")
         self.assertEqual(option_2.text, ">Four")
         self.assertIsNone(context.screen_manager.get_element("dialogue_cursor"))
 

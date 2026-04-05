@@ -810,7 +810,7 @@ class DialogueRuntime:
         font_id: str,
     ) -> tuple[str, int | None]:
         """Return one rendered choice row text plus the screen-element max_width policy."""
-        prefix = ">" if selected else " "
+        prefix = ">" if selected else ""
         if overflow == "wrap":
             return f"{prefix}{option_text}", max_width
         if selected and overflow == "marquee" and self._text_overflows(prefix, option_text, max_width, font_id):

@@ -1,0 +1,98 @@
+{
+  "name": "Title Screen",
+  "tile_size": 16,
+  "variables": {},
+  "tilesets": [],
+  "tile_layers": [
+    {
+      "name": "background",
+      "render_order": 0,
+      "grid": [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ]
+    }
+  ],
+  "cell_flags": [
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+  ],
+  "enter_commands": [
+    {
+      "type": "spawn_flow",
+      "commands": [
+        {
+          "type": "move_entity_screen_position",
+          "entity_id": "title_logo",
+          "x": 0,
+          "y": 0,
+          "duration": 1.1,
+          "wait": false,
+          "persistent": false
+        }
+      ]
+    },
+    {
+      "type": "open_dialogue_session",
+      "dialogue_path": "dialogues/system/title_menu.json",
+      "allow_cancel": false
+    }
+  ],
+  "entities": [
+    {
+      "id": "title_backdrop",
+      "pixel_x": 0,
+      "pixel_y": 0,
+      "render_order": 0,
+      "template": "entity_templates/screen_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/backdrop.png",
+        "frame_width": 256,
+        "frame_height": 128,
+        "frames": [
+          0
+        ],
+        "animation_fps": 0
+      }
+    },
+    {
+      "id": "title_logo",
+      "pixel_x": 0,
+      "pixel_y": -48,
+      "render_order": 10,
+      "persistence": {
+        "entity_state": false
+      },
+      "template": "entity_templates/screen_sprite",
+      "parameters": {
+        "sprite_path": "assets/project/ui/title/dungeon_engine_logo.png",
+        "frame_width": 256,
+        "frame_height": 192,
+        "frames": [
+          0
+        ],
+        "animation_fps": 0
+      }
+    }
+  ]
+}

@@ -1431,6 +1431,10 @@ Current engine-owned dialogue runtime behavior:
   same segment/option scope, caller hooks win and inline commands act as the
   default fallback
 
+Practical note:
+- inline option `commands` are appropriate for simple direct actions, including queued built-ins such as `new_game`, `load_game`, and `quit_game`
+- `dialogue_on_end` is better when you need one shared post-close branch or cleanup after the session is fully closed
+
 Older controller-owned dialogue flows are still valid authored content, but
 they are no longer the only dialogue path.
 
@@ -1820,7 +1824,26 @@ Current fields:
 - `space_width`: pixel width of the space character
 - `minimum_advance`: minimum pixel advance per character
 - `fallback_character`: character to render for unknown glyphs
+- `advance_overrides`: optional object mapping specific characters to explicit pixel advances
 - `glyph_order`: string listing each glyph in atlas order (left to right, top to bottom)
+
+Current runtime behavior:
+
+- The atlas is sliced into fixed `cell_width x cell_height` cells.
+- Each glyph cell is trimmed to its non-transparent pixel bounds.
+- By default, each glyph's advance width is the trimmed pixel width, clamped to at least `minimum_advance`.
+- If `advance_overrides` contains a character, that override wins over the auto-measured width.
+- The space character does not use atlas bounds; it always advances by `space_width`.
+- Unknown characters fall back to `fallback_character` if that glyph exists.
+
+Current defaults when optional fields are omitted:
+
+- `columns` defaults to `len(glyph_order)`
+- `line_height` defaults to `cell_height`
+- `letter_spacing` defaults to `1`
+- `space_width` defaults to `cell_width // 2`
+- `fallback_character` defaults to `"?"`
+- `minimum_advance` defaults to `1`
 
 Example:
 
@@ -1836,11 +1859,16 @@ Example:
   "space_width": 4,
   "minimum_advance": 1,
   "fallback_character": "?",
+  "advance_overrides": {
+    "I": 4,
+    "l": 3,
+    ".": 2
+  },
   "glyph_order": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.!?\":1234567890,'-/+()=;_[]%#><"
 }
 ```
 
-Font ids are the JSON filename without extension. The engine looks for `{font_id}.json` under `fonts/` in the project's asset paths. For example, `assets/project/fonts/pixelbet.json` has font id `pixelbet`. Commands reference fonts through `font_id` parameters.
+Font ids are the JSON filename without extension. The engine looks for `{font_id}.json` under `fonts/` in the project's asset paths, and also finds matching files recursively under those asset roots. For example, `assets/project/fonts/pixelbet.json` has font id `pixelbet`. Commands reference fonts through `font_id` parameters.
 
 ## Suggested Use
 

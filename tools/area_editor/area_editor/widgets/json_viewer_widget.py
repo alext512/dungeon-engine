@@ -9,6 +9,8 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QPlainTextEdit
 
+from area_editor.json_format import format_json_for_editor
+
 
 class JsonViewerWidget(QPlainTextEdit):
     """Monospace text viewer with opt-in editing and save support."""
@@ -53,7 +55,7 @@ class JsonViewerWidget(QPlainTextEdit):
         text = self.toPlainText()
         if self._file_path.suffix.lower() == ".json":
             data = json.loads(text)
-            text = json.dumps(data, indent=2, ensure_ascii=False)
+            text = format_json_for_editor(data)
         self._file_path.write_text(f"{text}\n", encoding="utf-8")
         self._load()
 
@@ -73,7 +75,7 @@ class JsonViewerWidget(QPlainTextEdit):
             if self._file_path.suffix.lower() == ".json":
                 try:
                     data = json.loads(text)
-                    text = json.dumps(data, indent=2, ensure_ascii=False)
+                    text = format_json_for_editor(data)
                 except json.JSONDecodeError:
                     pass  # show raw text if JSON is malformed
             self._loading = True

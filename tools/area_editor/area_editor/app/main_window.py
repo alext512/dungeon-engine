@@ -40,6 +40,7 @@ from area_editor.documents.area_document import (
     load_area_document,
     save_area_document,
 )
+from area_editor.json_format import format_json_for_editor
 from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.project_io.manifest import (
     AREA_ID_PREFIX,
@@ -1614,7 +1615,7 @@ class MainWindow(QMainWindow):
             updates.append(
                 _JsonReferenceFileUpdate(
                     file_path=file_path,
-                    updated_text=f"{json.dumps(updated, indent=2, ensure_ascii=False)}\n",
+                    updated_text=f"{format_json_for_editor(updated)}\n",
                     changed_paths=tuple(changed_paths),
                 )
             )
@@ -1878,7 +1879,7 @@ class MainWindow(QMainWindow):
         )
         source_update = _JsonReferenceFileUpdate(
             file_path=source_file_path,
-            updated_text=f"{json.dumps(source_updated_data, indent=2, ensure_ascii=False)}\n",
+            updated_text=f"{format_json_for_editor(source_updated_data)}\n",
             changed_paths=tuple((*base_paths, *source_reference_paths)),
         )
         other_updates = self._collect_reference_updates(

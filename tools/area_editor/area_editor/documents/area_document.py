@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from area_editor.json_format import format_json_for_editor
+
 # ---------------------------------------------------------------------------
 # Leaf documents
 # ---------------------------------------------------------------------------
@@ -275,9 +277,5 @@ def load_area_document(file_path: Path) -> AreaDocument:
 
 def save_area_document(file_path: Path, document: AreaDocument) -> None:
     """Write an area document back to JSON with preserved unknown fields."""
-    text = json.dumps(
-        document.to_dict(),
-        indent=2,
-        ensure_ascii=False,
-    )
+    text = format_json_for_editor(document.to_dict())
     file_path.write_text(f"{text}\n", encoding="utf-8")

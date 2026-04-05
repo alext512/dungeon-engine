@@ -15,6 +15,7 @@ from area_editor.documents.area_document import (
     load_area_document,
     save_area_document,
 )
+from area_editor.json_format import format_json_for_editor
 
 _TEST_PROJECT = Path(__file__).resolve().parent.parent.parent.parent / "projects" / "test_project"
 _VILLAGE_SQUARE = _TEST_PROJECT / "areas" / "village_square.json"
@@ -152,6 +153,58 @@ class TestSaveAreaDocument(unittest.TestCase):
             loaded = load_area_document(path)
 
         self.assertEqual(loaded._extra["unknown_root"], {"kept": True})
+
+    def test_save_formats_known_matrix_fields_compactly(self):
+        raw = {
+            "name": "save-test",
+            "tile_size": 16,
+            "tile_layers": [
+                {
+                    "name": "ground",
+                    "render_order": 0,
+                    "y_sort": False,
+                    "stack_order": 0,
+                    "grid": [[0, 1, 2], [3, 4, 5]],
+                }
+            ],
+            "cell_flags": [[None, {"solid": True}], [False, None]],
+        }
+        doc = AreaDocument.from_dict(raw)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "area.json"
+            save_area_document(path, doc)
+            saved = path.read_text(encoding="utf-8")
+
+        self.assertIn('"grid": [\n        [0, 1, 2],\n        [3, 4, 5]\n      ]', saved)
+        self.assertIn(
+            '"cell_flags": [\n    [null, {"solid": true}],\n    [false, null]\n  ]',
+            saved,
+        )
+
+
+class TestEditorJsonFormatting(unittest.TestCase):
+    def test_known_matrix_fields_render_compact_rows(self):
+        text = format_json_for_editor(
+            {
+                "tile_layers": [
+                    {
+                        "name": "ground",
+                        "render_order": 0,
+                        "y_sort": False,
+                        "stack_order": 0,
+                        "grid": [[1, 2], [3, 4]],
+                    }
+                ],
+                "cell_flags": [[None, True], [False, {"solid": True}]],
+            }
+        )
+
+        self.assertIn('"grid": [\n        [1, 2],\n        [3, 4]\n      ]', text)
+        self.assertIn(
+            '"cell_flags": [\n    [null, true],\n    [false, {"solid": true}]\n  ]',
+            text,
+        )
 
 
 if __name__ == "__main__":

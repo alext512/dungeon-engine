@@ -1,0 +1,38 @@
+{
+  "segments": [
+    {
+      "type": "choice",
+      "options": [
+        {
+          "text": "New Game",
+          "option_id": "new_game",
+          "commands": [
+            {
+              "type": "new_game",
+              "area_id": "areas/first_room",
+              "entry_id": "startup"
+            }
+          ]
+        },
+        {
+          "text": "Load Game",
+          "option_id": "load_game",
+          "commands": [
+            {
+              "type": "load_game"
+            }
+          ]
+        },
+        {
+          "text": "Exit",
+          "option_id": "exit",
+          "commands": [
+            {
+              "type": "quit_game"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

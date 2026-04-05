@@ -923,6 +923,46 @@ Example:
 - `text_color`
   Optional RGB color override.
 
+### Bitmap font notes
+
+Dialogue `font_id` values refer to bitmap font definition JSON files under the
+project's asset roots, typically somewhere under `assets/.../fonts/`.
+
+Important behavior:
+
+- the atlas is sliced into fixed cells using `cell_width` / `cell_height`
+- each glyph is auto-trimmed to its visible non-transparent pixels
+- the default glyph advance width comes from that trimmed width
+- `minimum_advance` clamps how narrow a glyph can become
+- `space_width` controls the width of `" "` explicitly
+- `advance_overrides` can force specific characters to use custom widths
+
+So if a narrow glyph such as `I`, `l`, or `.` feels too tight or too loose,
+you can override it in the font definition instead of redrawing the atlas.
+
+Example:
+
+```json
+{
+  "kind": "bitmap",
+  "atlas": "project/fonts/pixelbet.png",
+  "cell_width": 6,
+  "cell_height": 16,
+  "columns": 83,
+  "line_height": 10,
+  "letter_spacing": 1,
+  "space_width": 4,
+  "minimum_advance": 1,
+  "fallback_character": "?",
+  "advance_overrides": {
+    "I": 4,
+    "l": 3,
+    ".": 2
+  },
+  "glyph_order": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.!?\":1234567890,'-/+()=;_[]%#><"
+}
+```
+
 ### Participant fields
 
 Each entry in `participants` supports:
@@ -1150,6 +1190,12 @@ A hook object can define:
 - `option_commands`
 
 Use `option_commands_by_id` when your choice options have stable `option_id` values.
+
+Practical note:
+
+- inline option `commands` are often the simplest choice when one menu option should immediately queue a built-in action like `new_game`, `load_game`, or `quit_game`
+- use `dialogue_on_end` when you specifically need one shared post-close path or cleanup that should only run after the dialogue session fully closes
+- use `option_commands_by_id` / `option_commands` when the caller needs to override or augment the option behavior from outside the dialogue JSON
 
 If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. When you need to preserve cross-entity context, pass named `entity_refs` explicitly at the call site.
 

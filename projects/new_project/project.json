@@ -1,0 +1,19 @@
+{
+  "entity_template_paths": [
+    "entity_templates/"
+  ],
+  "asset_paths": [
+    "assets/"
+  ],
+  "area_paths": [
+    "areas/"
+  ],
+  "command_paths": [
+    "commands/"
+  ],
+  "shared_variables_path": "shared_variables.json",
+  "global_entities": [],
+  "startup_area": "areas/title_screen",
+  "input_targets": {},
+  "debug_inspection_enabled": true
+}

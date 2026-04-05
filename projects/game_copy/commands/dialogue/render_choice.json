@@ -63,7 +63,7 @@
           "type": "set_entity_var",
           "name": "dialogue_render_option_prefix",
           "entity_id": "$self_id",
-          "value": " "
+          "value": ""
         },
         {
           "type": "if",
