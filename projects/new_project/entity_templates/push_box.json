@@ -1,0 +1,88 @@
+{
+  "kind": "push_box",
+  "solid": true,
+  "pushable": true,
+  "weight": 1,
+  "render_order": 10,
+  "y_sort": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/Box_Dissapearing.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0],
+      "visible": true
+    },
+    {
+      "id": "fall",
+      "path": "assets/Box_Dissapearing.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [1, 2, 3, 4],
+      "visible": false
+    }
+  ],
+  "variables": {
+    "falling": false
+  },
+  "entity_commands": {
+    "fall_into_square_hole": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.falling",
+          "op": "eq",
+          "right": false,
+          "then": [
+            {
+              "type": "set_entity_fields",
+              "entity_id": "$self_id",
+              "set": {
+                "fields": {
+                  "solid": false,
+                  "pushable": false
+                },
+                "variables": {
+                  "falling": true
+                },
+                "visuals": {
+                  "main": {
+                    "visible": false
+                  },
+                  "fall": {
+                    "visible": true,
+                    "current_frame": 1
+                  }
+                }
+              }
+            },
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "visual_id": "fall",
+              "frame_sequence": [1, 2, 3, 4],
+              "hold_last_frame": true,
+              "wait": false
+            },
+            {
+              "type": "wait_for_animation",
+              "entity_id": "$self_id",
+              "visual_id": "fall"
+            },
+            {
+              "type": "run_entity_command",
+              "entity_id": "$hole_id",
+              "command_id": "fill_now"
+            },
+            {
+              "type": "destroy_entity",
+              "entity_id": "$self_id"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

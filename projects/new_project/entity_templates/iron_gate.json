@@ -1,0 +1,209 @@
+{
+  "kind": "iron_gate",
+  "solid": true,
+  "interactable": false,
+  "render_order": 20,
+  "y_sort": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/Iron_Gate.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0, 1, 2, 3, 4, 5],
+      "visible": true
+    }
+  ],
+  "variables": {
+    "required_count": 1,
+    "current_count": 0,
+    "open": false,
+    "reversible": true
+  },
+  "entity_commands": {
+    "contribute_on": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "add_entity_var",
+          "entity_id": "$self_id",
+          "name": "current_count",
+          "amount": 1
+        },
+        {
+          "type": "run_entity_command",
+          "entity_id": "$self_id",
+          "command_id": "try_open"
+        }
+      ]
+    },
+    "contribute_off": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.reversible",
+          "op": "eq",
+          "right": true,
+          "then": [
+            {
+              "type": "if",
+              "left": "$self.current_count",
+              "op": "gt",
+              "right": 0,
+              "then": [
+                {
+                  "type": "add_entity_var",
+                  "entity_id": "$self_id",
+                  "name": "current_count",
+                  "amount": -1
+                }
+              ]
+            },
+            {
+              "type": "run_entity_command",
+              "entity_id": "$self_id",
+              "command_id": "try_close"
+            }
+          ]
+        }
+      ]
+    },
+    "try_open": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.open",
+          "op": "eq",
+          "right": false,
+          "then": [
+            {
+              "type": "if",
+              "left": "$self.current_count",
+              "op": "gte",
+              "right": "$self.required_count",
+              "then": [
+                {
+                  "type": "run_entity_command",
+                  "entity_id": "$self_id",
+                  "command_id": "open_now"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "try_close": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.reversible",
+          "op": "eq",
+          "right": true,
+          "then": [
+            {
+              "type": "if",
+              "left": "$self.open",
+              "op": "eq",
+              "right": true,
+              "then": [
+                {
+                  "type": "if",
+                  "left": "$self.current_count",
+                  "op": "lt",
+                  "right": "$self.required_count",
+                  "then": [
+                    {
+                      "type": "run_entity_command",
+                      "entity_id": "$self_id",
+                      "command_id": "close_now"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "open_now": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.open",
+          "op": "eq",
+          "right": false,
+          "then": [
+            {
+              "type": "set_entity_fields",
+              "entity_id": "$self_id",
+              "set": {
+                "fields": {
+                  "solid": false
+                },
+                "variables": {
+                  "open": true
+                },
+                "visuals": {
+                  "main": {
+                    "current_frame": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "visual_id": "main",
+              "frame_sequence": [0, 1, 2, 3, 4, 5],
+              "hold_last_frame": true,
+              "wait": false
+            }
+          ]
+        }
+      ]
+    },
+    "close_now": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.open",
+          "op": "eq",
+          "right": true,
+          "then": [
+            {
+              "type": "set_entity_fields",
+              "entity_id": "$self_id",
+              "set": {
+                "fields": {
+                  "solid": true
+                },
+                "variables": {
+                  "open": false
+                },
+                "visuals": {
+                  "main": {
+                    "current_frame": 5
+                  }
+                }
+              }
+            },
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "visual_id": "main",
+              "frame_sequence": [5, 4, 3, 2, 1, 0],
+              "hold_last_frame": true,
+              "wait": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

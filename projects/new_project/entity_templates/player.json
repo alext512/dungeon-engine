@@ -2,6 +2,7 @@
   "kind": "player",
   "facing": "down",
   "solid": true,
+  "push_strength": 1,
   "input_map": {
     "move_up": "move_up",
     "move_down": "move_down",

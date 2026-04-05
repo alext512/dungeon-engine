@@ -1,0 +1,104 @@
+{
+  "kind": "lever",
+  "solid": false,
+  "interactable": true,
+  "interaction_priority": 10,
+  "render_order": 10,
+  "y_sort": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/Lever.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [0, 1, 2, 3],
+      "visible": true
+    }
+  ],
+  "variables": {
+    "active": false,
+    "toggleable": true,
+    "target_entity_id": "",
+    "target_activate_command_id": "contribute_on",
+    "target_deactivate_command_id": "contribute_off"
+  },
+  "entity_commands": {
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "if",
+          "left": "$self.active",
+          "op": "eq",
+          "right": false,
+          "then": [
+            {
+              "type": "set_entity_fields",
+              "entity_id": "$self_id",
+              "set": {
+                "variables": {
+                  "active": true
+                },
+                "visuals": {
+                  "main": {
+                    "current_frame": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "play_animation",
+              "entity_id": "$self_id",
+              "visual_id": "main",
+              "frame_sequence": [0, 1, 2, 3],
+              "hold_last_frame": true,
+              "wait": false
+            },
+            {
+              "type": "run_entity_command",
+              "entity_id": "$self.target_entity_id",
+              "command_id": "$self.target_activate_command_id"
+            }
+          ],
+          "else": [
+            {
+              "type": "if",
+              "left": "$self.toggleable",
+              "op": "eq",
+              "right": true,
+              "then": [
+                {
+                  "type": "set_entity_fields",
+                  "entity_id": "$self_id",
+                  "set": {
+                    "variables": {
+                      "active": false
+                    },
+                    "visuals": {
+                      "main": {
+                        "current_frame": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "play_animation",
+                  "entity_id": "$self_id",
+                  "visual_id": "main",
+                  "frame_sequence": [3, 2, 1, 0],
+                  "hold_last_frame": true,
+                  "wait": false
+                },
+                {
+                  "type": "run_entity_command",
+                  "entity_id": "$self.target_entity_id",
+                  "command_id": "$self.target_deactivate_command_id"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
