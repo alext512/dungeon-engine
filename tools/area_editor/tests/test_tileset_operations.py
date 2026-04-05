@@ -15,7 +15,6 @@ from area_editor.operations.tilesets import (
 
 def _area_with_tilesets(*tilesets: TilesetRef) -> AreaDocument:
     return AreaDocument(
-        name="test",
         tile_size=16,
         tilesets=list(tilesets),
         tile_layers=[

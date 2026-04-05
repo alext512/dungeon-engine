@@ -262,7 +262,6 @@ Example structure:
 
 ```json
 {
-  "name": "Village Square",
   "tile_size": 16,
   "entry_points": {
     "startup": {
@@ -295,8 +294,6 @@ Example structure:
 
 ### Important fields
 
-- `name`
-  Human-readable area name.
 - `tile_size`
   Tile size in pixels.
 - `entry_points`
@@ -322,6 +319,7 @@ Important notes:
 
 - area ids are derived from file path
 - do not author an `id` or `area_id` field inside area JSON
+- do not author a top-level area `name`; use the path-derived area id everywhere
 - do not author `player_id`; the engine now uses explicit input routing, transition payloads, and camera defaults instead
 - project-level global entities belong in `project.json`, not inside `entities`
 - area `camera` defaults are just initial runtime state; commands can replace them later
@@ -861,7 +859,7 @@ The command runner also resolves tokens such as:
 
 `$current_area...` reads the live current-area/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_current_area_var`, `add_current_area_var`, and generic `if` checks over current-area values operate on.
 
-`$area...` exposes the current area's `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `name`.
+`$area...` exposes the current area's `area_id`, `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `camera`.
 
 `$camera...` exposes `x`, `y`, `follow`, `bounds`, `has_bounds`, `deadzone`, and `has_deadzone`.
 Use nested follow fields such as `$camera.follow.mode`, `$camera.follow.entity_id`, `$camera.follow.action`, `$camera.follow.offset_x`, and `$camera.follow.offset_y`.

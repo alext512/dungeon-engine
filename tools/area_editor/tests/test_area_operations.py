@@ -19,14 +19,12 @@ from area_editor.operations.areas import (
 class TestAreaOperations(unittest.TestCase):
     def test_make_empty_area_document_creates_expected_defaults(self):
         area = make_empty_area_document(
-            name="Demo",
             width=4,
             height=3,
             tile_size=16,
             include_default_ground_layer=True,
         )
 
-        self.assertEqual(area.name, "Demo")
         self.assertEqual(area.tile_size, 16)
         self.assertEqual(area.width, 4)
         self.assertEqual(area.height, 3)
@@ -92,7 +90,6 @@ class TestAreaOperations(unittest.TestCase):
     def _make_area_with_entities(self) -> AreaDocument:
         area = AreaDocument.from_dict(
             {
-                "name": "Demo",
                 "tile_size": 16,
                 "tilesets": [],
                 "tile_layers": [

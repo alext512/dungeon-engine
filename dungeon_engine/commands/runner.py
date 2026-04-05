@@ -1286,7 +1286,6 @@ def _resolve_runtime_token(
             raise KeyError("No active area context for $area lookup.")
         area_state = {
             "area_id": context.area.area_id,
-            "name": context.area.name,
             "tile_size": context.area.tile_size,
             "width": context.area.width,
             "height": context.area.height,

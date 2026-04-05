@@ -10,7 +10,6 @@ from area_editor.operations.cell_flags import cell_is_walkable, set_cell_walkabl
 
 def _make_area(*, cell_flags=None) -> AreaDocument:
     return AreaDocument(
-        name="test",
         tile_size=16,
         tilesets=[],
         tile_layers=[

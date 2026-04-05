@@ -186,7 +186,6 @@ class EntityDocument:
 
 @dataclass
 class AreaDocument:
-    name: str
     tile_size: int
     tilesets: list[TilesetRef]
     tile_layers: list[TileLayerDocument]
@@ -222,11 +221,12 @@ class AreaDocument:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> AreaDocument:
         d = dict(d)
+        if "name" in d:
+            raise ValueError("Area JSON must not declare 'name'; areas no longer support a display-name field.")
         tilesets = [TilesetRef.from_dict(t) for t in d.pop("tilesets", [])]
         tile_layers = [TileLayerDocument.from_dict(l) for l in d.pop("tile_layers", [])]
         entities = [EntityDocument.from_dict(e) for e in d.pop("entities", [])]
         return cls(
-            name=d.pop("name", ""),
             tile_size=d.pop("tile_size", 16),
             tilesets=tilesets,
             tile_layers=tile_layers,
@@ -242,7 +242,6 @@ class AreaDocument:
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "name": self.name,
             "tile_size": self.tile_size,
             "tilesets": [t.to_dict() for t in self.tilesets],
             "tile_layers": [l.to_dict() for l in self.tile_layers],

@@ -133,8 +133,11 @@ def load_area_from_data(
         raise ValueError(
             f"Area '{source_name}' must not declare 'area_id'; area ids are path-derived."
         )
+    if "name" in raw_data:
+        raise ValueError(
+            f"Area '{source_name}' must not declare 'name'; areas no longer support a separate display-name field."
+        )
 
-    area_name = _optional_string(raw_data.get("name"), field_name="name", source_name=source_name)
     tile_size = _coerce_int(
         raw_data.get("tile_size", config.DEFAULT_TILE_SIZE),
         field_name="tile_size",
@@ -170,8 +173,7 @@ def load_area_from_data(
     camera_defaults = _parse_camera_defaults(raw_data.get("camera"), source_name=source_name)
 
     area = Area(
-        area_id=_derive_area_id(source_name=source_name, project=project, area_name=area_name),
-        name=area_name or "untitled_area",
+        area_id=_derive_area_id(source_name=source_name, project=project),
         tile_size=tile_size,
         tilesets=tilesets,
         tile_layers=tile_layers,
@@ -1100,22 +1102,12 @@ def _derive_area_id(
     *,
     source_name: str,
     project: ProjectContext,
-    area_name: str | None,
 ) -> str:
     """Return a stable area id from the source path when available."""
     if source_name not in {"", "<memory>"}:
         source_path = Path(source_name)
         return project.area_id(source_path)
-
-    name = (area_name or "untitled_area").strip().lower()
-    slug_chars = [
-        char if char.isalnum() else "_"
-        for char in name
-    ]
-    slug = "".join(slug_chars).strip("_")
-    while "__" in slug:
-        slug = slug.replace("__", "_")
-    return f"areas/{slug or 'untitled_area'}"
+    return "areas/untitled_area"
 
 
 def _optional_string(value: Any, *, field_name: str, source_name: str) -> str | None:

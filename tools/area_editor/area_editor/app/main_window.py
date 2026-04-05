@@ -133,6 +133,13 @@ class _JsonReferenceUsage:
 
 
 @dataclass(frozen=True)
+class _TileClipboard:
+    width: int
+    height: int
+    grid: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
 class _ReferenceKeyMatcher:
     exact_keys: frozenset[str]
     suffix_keys: frozenset[str] = frozenset()
@@ -230,9 +237,6 @@ class _NewAreaDialog(QDialog):
         self._area_id = QLineEdit()
         form.addRow("Area ID", self._area_id)
 
-        self._display_name = QLineEdit()
-        form.addRow("Display Name", self._display_name)
-
         self._width = QSpinBox()
         self._width.setRange(1, 9999)
         self._width.setValue(20)
@@ -260,10 +264,6 @@ class _NewAreaDialog(QDialog):
     @property
     def area_id(self) -> str:
         return self._area_id.text().strip()
-
-    @property
-    def display_name(self) -> str:
-        return self._display_name.text().strip()
 
     @property
     def width(self) -> int:
@@ -352,6 +352,7 @@ class MainWindow(QMainWindow):
         self._display_width: int = 320
         self._display_height: int = 240
         self._entities_visible: bool = True
+        self._tile_clipboard: _TileClipboard | None = None
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -714,6 +715,7 @@ class MainWindow(QMainWindow):
         self._render_target_ref = None
         self._active_instance_entity_id = None
         self._json_dirty_bound.clear()
+        self._tile_clipboard = None
         self._layer_panel.clear_layers()
         self._render_panel.clear_target()
         self._entity_instance_panel.clear_entity()
@@ -815,6 +817,13 @@ class MainWindow(QMainWindow):
         self._select_action.toggled.connect(self._on_select_toggled)
         edit_menu.addAction(self._select_action)
 
+        self._tile_select_action = QAction("Tile &Select", self)
+        self._tile_select_action.setCheckable(True)
+        self._tile_select_action.setEnabled(False)
+        self._tile_select_action.setShortcut(QKeySequence("T"))
+        self._tile_select_action.toggled.connect(self._on_tile_select_toggled)
+        edit_menu.addAction(self._tile_select_action)
+
         self._enable_json_editing_action = QAction("Enable JSON Editing", self)
         self._enable_json_editing_action.setCheckable(True)
         self._enable_json_editing_action.setChecked(self._json_editing_enabled)
@@ -827,16 +836,37 @@ class MainWindow(QMainWindow):
         self._cell_flags_action.toggled.connect(self._on_cell_flags_toggled)
         edit_menu.addAction(self._cell_flags_action)
 
+        edit_menu.addSeparator()
+
+        self._copy_tiles_action = QAction("Copy Tiles", self)
+        self._copy_tiles_action.setShortcut(QKeySequence.StandardKey.Copy)
+        self._copy_tiles_action.setEnabled(False)
+        self._copy_tiles_action.triggered.connect(self._on_copy_tiles)
+        self.addAction(self._copy_tiles_action)
+        edit_menu.addAction(self._copy_tiles_action)
+
+        self._cut_tiles_action = QAction("Cut Tiles", self)
+        self._cut_tiles_action.setShortcut(QKeySequence.StandardKey.Cut)
+        self._cut_tiles_action.setEnabled(False)
+        self._cut_tiles_action.triggered.connect(self._on_cut_tiles)
+        self.addAction(self._cut_tiles_action)
+        edit_menu.addAction(self._cut_tiles_action)
+
+        self._paste_tiles_action = QAction("Paste Tiles", self)
+        self._paste_tiles_action.setShortcut(QKeySequence.StandardKey.Paste)
+        self._paste_tiles_action.setEnabled(False)
+        self._paste_tiles_action.triggered.connect(self._on_paste_tiles)
+        self.addAction(self._paste_tiles_action)
+        edit_menu.addAction(self._paste_tiles_action)
+
         self._delete_selected_entity_action = QAction(self)
         self._delete_selected_entity_action.setShortcut(QKeySequence(Qt.Key.Key_Delete))
-        self._delete_selected_entity_action.triggered.connect(
-            self._on_delete_selected_entity
-        )
+        self._delete_selected_entity_action.triggered.connect(self._on_delete_active_selection)
         self.addAction(self._delete_selected_entity_action)
 
         self._clear_selection_action = QAction(self)
         self._clear_selection_action.setShortcut(QKeySequence(Qt.Key.Key_Escape))
-        self._clear_selection_action.triggered.connect(self._on_clear_selection)
+        self._clear_selection_action.triggered.connect(self._on_clear_active_selection)
         self.addAction(self._clear_selection_action)
 
         self._nudge_left_action = QAction(self)
@@ -1010,6 +1040,8 @@ class MainWindow(QMainWindow):
                 start_dir = str(last_path)
             elif last_path.parent.is_dir():
                 start_dir = str(last_path.parent)
+        if not start_dir and self._manifest is not None:
+            start_dir = str(self._manifest.project_root)
 
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1029,7 +1061,6 @@ class MainWindow(QMainWindow):
         try:
             area_id, file_path = self._create_new_area_file(
                 area_id=dialog.area_id,
-                display_name=dialog.display_name,
                 width=dialog.width,
                 height=dialog.height,
                 tile_size=dialog.tile_size,
@@ -1046,7 +1077,6 @@ class MainWindow(QMainWindow):
         self,
         *,
         area_id: str,
-        display_name: str,
         width: int,
         height: int,
         tile_size: int,
@@ -1067,7 +1097,6 @@ class MainWindow(QMainWindow):
         if area_root not in self._manifest.area_paths:
             self._manifest.area_paths.append(area_root)
         document = make_empty_area_document(
-            name=display_name or normalized_id.rsplit("/", 1)[-1],
             width=width,
             height=height,
             tile_size=tile_size,
@@ -1334,7 +1363,7 @@ class MainWindow(QMainWindow):
         if content_type == ContentType.AREA and content_id in self._area_docs:
             doc = self._area_docs[content_id]
             self._layer_panel.set_layers(doc.tile_layers)
-            self._status_area.setText(doc.name or content_id)
+            self._status_area.setText(content_id)
             self._save_action.setEnabled(True)
             self._cell_flags_action.setEnabled(True)
             self._set_area_actions_enabled(True)
@@ -1344,12 +1373,14 @@ class MainWindow(QMainWindow):
                 canvas = self._active_canvas()
                 current_index = canvas.tileset_index_hint if canvas is not None else 0
                 selected_gid = canvas.selected_gid if canvas is not None else 0
+                selected_block = canvas.selected_gid_block if canvas is not None else None
                 erase_mode = canvas.brush_erase_mode if canvas is not None else True
                 self._tileset_panel.set_tilesets(
                     doc.tilesets,
                     self._catalog,
                     current_index=current_index,
                     selected_gid=selected_gid,
+                    selected_block=selected_block,
                     erase_mode=erase_mode,
                 )
 
@@ -1359,11 +1390,13 @@ class MainWindow(QMainWindow):
                 self._layer_panel.set_active_layer(canvas.active_layer)
                 self._connect_canvas(canvas)
                 can_paint = bool(doc.tile_layers)
-                self._paint_tiles_action.setEnabled(can_paint)
+                self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
                 self._select_action.setEnabled(True)
+                self._tile_select_action.setEnabled(can_paint)
                 self._set_cell_flags_action_state(canvas.cell_flags_edit_mode)
                 self._set_paint_tiles_action_state(canvas.tile_paint_mode)
                 self._set_select_action_state(canvas.select_mode)
+                self._set_tile_select_action_state(canvas.tile_select_mode)
                 self._entities_visibility_action.blockSignals(True)
                 self._entities_visibility_action.setChecked(self._entities_visible)
                 self._entities_visibility_action.blockSignals(False)
@@ -1373,7 +1406,8 @@ class MainWindow(QMainWindow):
                 self._refresh_entity_instance_panel()
                 self._sync_json_edit_actions()
                 self._refresh_layer_action_state()
-                if can_paint or canvas.select_mode:
+                self._refresh_tile_selection_actions()
+                if can_paint or canvas.select_mode or canvas.tile_select_mode:
                     self._update_paint_status()
                 else:
                     self._status_layer.setText("")
@@ -1390,10 +1424,12 @@ class MainWindow(QMainWindow):
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
+            self._tile_select_action.setEnabled(False)
             self._set_area_actions_enabled(False)
             self._set_cell_flags_action_state(False)
             self._set_paint_tiles_action_state(False)
             self._set_select_action_state(False)
+            self._set_tile_select_action_state(False)
             self._render_target_kind = None
             self._render_target_ref = None
             self._render_panel.clear_target()
@@ -1401,6 +1437,7 @@ class MainWindow(QMainWindow):
             self._entity_instance_panel.clear_entity()
             self._sync_json_edit_actions()
             self._refresh_layer_action_state()
+            self._refresh_tile_selection_actions()
         else:
             # No tabs open
             self._layer_panel.clear_layers()
@@ -1419,10 +1456,12 @@ class MainWindow(QMainWindow):
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
+            self._tile_select_action.setEnabled(False)
             self._set_area_actions_enabled(False)
             self._set_cell_flags_action_state(False)
             self._set_paint_tiles_action_state(False)
             self._set_select_action_state(False)
+            self._set_tile_select_action_state(False)
             self._render_target_kind = None
             self._render_target_ref = None
             self._render_panel.clear_target()
@@ -1430,6 +1469,7 @@ class MainWindow(QMainWindow):
             self._entity_instance_panel.clear_entity()
             self._sync_json_edit_actions()
             self._refresh_layer_action_state()
+            self._refresh_tile_selection_actions()
 
     def _status_label_for_content(self, content_id: str, content_type: object) -> str:
         if content_type == ContentType.PROJECT_MANIFEST:
@@ -3093,6 +3133,9 @@ class MainWindow(QMainWindow):
         if enabled and self._select_action.isChecked():
             self._set_select_action_state(False)
             canvas.set_select_mode(False)
+        if enabled and self._tile_select_action.isChecked():
+            self._set_tile_select_action_state(False)
+            canvas.set_tile_select_mode(False)
         if enabled and self._cell_flags_action.isChecked():
             self._set_cell_flags_action_state(False)
             canvas.set_cell_flags_edit_mode(False)
@@ -3107,6 +3150,7 @@ class MainWindow(QMainWindow):
             )
         else:
             self._update_paint_status()
+        self._refresh_tile_selection_actions()
 
     def _on_select_toggled(self, enabled: bool) -> None:
         canvas = self._active_canvas()
@@ -3116,6 +3160,9 @@ class MainWindow(QMainWindow):
         if enabled and self._paint_tiles_action.isChecked():
             self._set_paint_tiles_action_state(False)
             canvas.set_tile_paint_mode(False)
+        if enabled and self._tile_select_action.isChecked():
+            self._set_tile_select_action_state(False)
+            canvas.set_tile_select_mode(False)
         if enabled and self._cell_flags_action.isChecked():
             self._set_cell_flags_action_state(False)
             canvas.set_cell_flags_edit_mode(False)
@@ -3128,6 +3175,32 @@ class MainWindow(QMainWindow):
             )
         else:
             self._update_paint_status()
+        self._refresh_tile_selection_actions()
+
+    def _on_tile_select_toggled(self, enabled: bool) -> None:
+        canvas = self._active_canvas()
+        if canvas is None:
+            self._set_tile_select_action_state(False)
+            return
+        if enabled and self._paint_tiles_action.isChecked():
+            self._set_paint_tiles_action_state(False)
+            canvas.set_tile_paint_mode(False)
+        if enabled and self._select_action.isChecked():
+            self._set_select_action_state(False)
+            canvas.set_select_mode(False)
+        if enabled and self._cell_flags_action.isChecked():
+            self._set_cell_flags_action_state(False)
+            canvas.set_cell_flags_edit_mode(False)
+        canvas.set_tile_select_mode(enabled)
+        if enabled:
+            self._update_paint_status()
+            self.statusBar().showMessage(
+                "Tile Select mode: drag to select tiles on the active layer, Delete clears, Ctrl+C/X/V copy cut and paste.",
+                4000,
+            )
+        else:
+            self._update_paint_status()
+        self._refresh_tile_selection_actions()
 
     def _on_toggle_json_editing(self, enabled: bool) -> None:
         self._json_editing_enabled = enabled
@@ -3145,6 +3218,9 @@ class MainWindow(QMainWindow):
         if enabled and self._select_action.isChecked():
             self._set_select_action_state(False)
             canvas.set_select_mode(False)
+        if enabled and self._tile_select_action.isChecked():
+            self._set_tile_select_action_state(False)
+            canvas.set_tile_select_mode(False)
         if enabled and self._paint_tiles_action.isChecked():
             self._set_paint_tiles_action_state(False)
             canvas.set_tile_paint_mode(False)
@@ -3155,11 +3231,12 @@ class MainWindow(QMainWindow):
                 "Cell flag edit mode: left-click walkable, right-click blocked.",
                 4000,
             )
+        self._refresh_tile_selection_actions()
 
     def _on_tile_selected(self, gid: int) -> None:
         canvas = self._active_canvas()
         if canvas is not None:
-            canvas.set_selected_gid(gid)
+            canvas.set_selected_gid_block(self._tileset_panel.selected_brush_block)
             canvas.set_tileset_index_hint(self._tileset_panel.current_tileset_index)
             canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
             canvas.set_active_brush_type(
@@ -3220,7 +3297,9 @@ class MainWindow(QMainWindow):
         self._set_render_target_layer(index)
         self._tab_widget.set_dirty(content_id, True)
         self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
+        self._tile_select_action.setEnabled(bool(doc.tile_layers))
         self._refresh_layer_action_state()
+        self._refresh_tile_selection_actions()
         self._update_paint_status()
         self.statusBar().showMessage(f"Added layer {layer_name}.", 2500)
 
@@ -3270,7 +3349,9 @@ class MainWindow(QMainWindow):
             self._status_layer.setText("")
         self._tab_widget.set_dirty(content_id, True)
         self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
+        self._tile_select_action.setEnabled(bool(doc.tile_layers))
         self._refresh_layer_action_state()
+        self._refresh_tile_selection_actions()
         self._update_paint_status()
         self.statusBar().showMessage(f"Deleted layer {layer_name}.", 2500)
 
@@ -3492,6 +3573,10 @@ class MainWindow(QMainWindow):
             2500,
         )
 
+    def _on_tile_selection_changed(self, _has_selection: bool) -> None:
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+
     def _on_entity_instance_json_dirty_changed(self, dirty: bool) -> None:
         if not dirty:
             return
@@ -3593,6 +3678,24 @@ class MainWindow(QMainWindow):
         self._update_paint_status()
         self.statusBar().showMessage(f"Deleted {deleted_id}.", 2500)
 
+    def _on_delete_active_selection(self) -> None:
+        canvas = self._active_canvas()
+        if canvas is None:
+            return
+        if self._tile_select_action.isChecked():
+            self._on_delete_selected_tiles()
+            return
+        self._on_delete_selected_entity()
+
+    def _on_clear_active_selection(self) -> None:
+        canvas = self._active_canvas()
+        if canvas is None:
+            return
+        if self._tile_select_action.isChecked():
+            self._on_clear_tile_selection()
+            return
+        self._on_clear_selection()
+
     def _on_clear_selection(self) -> None:
         canvas = self._active_canvas()
         if canvas is None or not self._select_action.isChecked():
@@ -3600,6 +3703,96 @@ class MainWindow(QMainWindow):
         if not canvas.selected_entity_id:
             return
         canvas.clear_selected_entity()
+        self._refresh_tile_selection_actions()
+
+    def _on_clear_tile_selection(self) -> None:
+        canvas = self._active_canvas()
+        if canvas is None or not self._tile_select_action.isChecked():
+            return
+        if not canvas.clear_tile_selection():
+            return
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage("Cleared tile selection.", 2000)
+
+    def _on_delete_selected_tiles(self) -> None:
+        context = self._active_area_context()
+        if context is None or not self._tile_select_action.isChecked():
+            return
+        content_id, _doc, canvas = context
+        if not canvas.has_tile_selection:
+            return
+        if not canvas.clear_selected_tiles():
+            return
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage("Cleared selected tiles.", 2500)
+
+    def _on_copy_tiles(self) -> None:
+        canvas = self._active_canvas()
+        if canvas is None or not self._tile_select_action.isChecked():
+            return
+        block = canvas.selected_tile_block()
+        if block is None:
+            return
+        self._tile_clipboard = _TileClipboard(
+            width=len(block[0]),
+            height=len(block),
+            grid=tuple(tuple(int(gid) for gid in row) for row in block),
+        )
+        self._refresh_tile_selection_actions()
+        self.statusBar().showMessage(
+            f"Copied {self._tile_clipboard.width}x{self._tile_clipboard.height} tile selection.",
+            2500,
+        )
+
+    def _on_cut_tiles(self) -> None:
+        context = self._active_area_context()
+        if context is None or not self._tile_select_action.isChecked():
+            return
+        content_id, _doc, canvas = context
+        block = canvas.selected_tile_block()
+        if block is None:
+            return
+        self._tile_clipboard = _TileClipboard(
+            width=len(block[0]),
+            height=len(block),
+            grid=tuple(tuple(int(gid) for gid in row) for row in block),
+        )
+        if not canvas.clear_selected_tiles():
+            return
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(
+            f"Cut {self._tile_clipboard.width}x{self._tile_clipboard.height} tile selection.",
+            2500,
+        )
+
+    def _on_paste_tiles(self) -> None:
+        context = self._active_area_context()
+        if context is None or not self._tile_select_action.isChecked() or self._tile_clipboard is None:
+            return
+        content_id, _doc, canvas = context
+        anchor = canvas.preferred_paste_anchor()
+        if anchor is None:
+            self.statusBar().showMessage("Paste needs a hovered or selected tile anchor.", 2500)
+            return
+        pasted = canvas.paste_tile_block(
+            anchor[0],
+            anchor[1],
+            [list(row) for row in self._tile_clipboard.grid],
+        )
+        if pasted is None:
+            return
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(
+            f"Pasted {self._tile_clipboard.width}x{self._tile_clipboard.height} tiles.",
+            2500,
+        )
 
     def _on_nudge_selected_entity(self, dx: int, dy: int) -> None:
         self._nudge_selected_entity_impl(dx, dy, screen_only=False)
@@ -3827,6 +4020,12 @@ class MainWindow(QMainWindow):
                     )
                 except (RuntimeError, TypeError):
                     pass
+                try:
+                    self._connected_canvas.tile_selection_changed.disconnect(
+                        self._on_tile_selection_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
             try:
                 self._layer_panel.layer_visibility_changed.disconnect()
             except (RuntimeError, TypeError):
@@ -3845,6 +4044,7 @@ class MainWindow(QMainWindow):
         )
         canvas.entity_delete_requested.connect(self._on_entity_delete_requested)
         canvas.entity_selection_changed.connect(self._on_entity_selection_changed)
+        canvas.tile_selection_changed.connect(self._on_tile_selection_changed)
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
         canvas.set_entities_visible(self._entities_visible)
 
@@ -4442,6 +4642,20 @@ class MainWindow(QMainWindow):
             self._status_gid.setText(self._selection_status_text())
             return
 
+        if self._tile_select_action.isChecked():
+            self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
+            canvas = self._active_canvas()
+            if canvas is not None and canvas.has_tile_selection:
+                bounds = canvas.tile_selection_bounds()
+                if bounds is not None:
+                    left, top, right, bottom = bounds
+                    self._status_gid.setText(
+                        f"Tile Select: ({left}, {top}) to ({right}, {bottom})"
+                    )
+                    return
+            self._status_gid.setText("Tile Select")
+            return
+
         if self._active_brush_type in {BrushType.TILE, BrushType.ERASER}:
             self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
         else:
@@ -4478,10 +4692,24 @@ class MainWindow(QMainWindow):
         self._select_action.setChecked(enabled)
         self._select_action.blockSignals(False)
 
+    def _set_tile_select_action_state(self, enabled: bool) -> None:
+        self._tile_select_action.blockSignals(True)
+        self._tile_select_action.setChecked(enabled)
+        self._tile_select_action.blockSignals(False)
+
     def _set_json_editing_action_state(self, enabled: bool) -> None:
         self._enable_json_editing_action.blockSignals(True)
         self._enable_json_editing_action.setChecked(enabled)
         self._enable_json_editing_action.blockSignals(False)
+
+    def _refresh_tile_selection_actions(self) -> None:
+        canvas = self._active_canvas()
+        tile_select_active = canvas is not None and self._tile_select_action.isChecked()
+        has_selection = canvas is not None and canvas.has_tile_selection
+        has_clipboard = self._tile_clipboard is not None
+        self._copy_tiles_action.setEnabled(tile_select_active and has_selection)
+        self._cut_tiles_action.setEnabled(tile_select_active and has_selection)
+        self._paste_tiles_action.setEnabled(tile_select_active and has_clipboard)
 
     def _ensure_paint_mode(self) -> None:
         """Turn on the shared Paint tool after an explicit brush selection."""
@@ -4495,7 +4723,7 @@ class MainWindow(QMainWindow):
 
     def _apply_active_brush_to_canvas(self, canvas: TileCanvas) -> None:
         self._apply_entity_brush_to_canvas(canvas)
-        canvas.set_selected_gid(self._tileset_panel.selected_gid)
+        canvas.set_selected_gid_block(self._tileset_panel.selected_brush_block)
         canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
         canvas.set_active_brush_type(self._active_brush_type)
         self._tileset_panel.set_brush_active(self._active_brush_type != BrushType.ENTITY)

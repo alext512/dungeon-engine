@@ -10,7 +10,6 @@ from area_editor.operations.entities import move_entity_by_id, move_entity_pixel
 
 def _make_area() -> AreaDocument:
     return AreaDocument(
-        name="test",
         tile_size=16,
         tilesets=[],
         tile_layers=[

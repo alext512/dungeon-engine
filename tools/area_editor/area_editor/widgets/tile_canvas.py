@@ -60,6 +60,8 @@ _SCREEN_PANE_LABEL = QColor(240, 220, 240)
 _GRID_COLOR = QColor(255, 255, 255, 40)
 _CELL_FLAG_BLOCKED_FILL = QColor(220, 40, 40, 90)
 _CELL_FLAG_BLOCKED_BORDER = QColor(220, 40, 40, 180)
+_TILE_SELECTION_FILL = QColor(80, 160, 255, 45)
+_TILE_SELECTION_BORDER = QColor(80, 160, 255, 220)
 
 # Scene background
 _BG_COLOR = QColor(30, 30, 30)
@@ -93,6 +95,7 @@ class TileCanvas(QGraphicsView):
     entity_screen_paint_requested = Signal(str, int, int)
     entity_delete_requested = Signal(int, int)
     entity_selection_changed = Signal(str, int, int)  # entity_id, position, total
+    tile_selection_changed = Signal(bool)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -132,9 +135,11 @@ class TileCanvas(QGraphicsView):
         self._cell_flags_edit_mode: bool = False
         self._tile_paint_mode: bool = False
         self._select_mode: bool = False
+        self._tile_select_mode: bool = False
         self._active_brush_type: BrushType = BrushType.ERASER
         self._active_layer: int = 0
         self._selected_gid: int = 0
+        self._selected_gid_block: tuple[tuple[int, ...], ...] | None = None
         self._tileset_index_hint: int = 0
         self._brush_erase_mode: bool = True
         self._entity_brush_template: str | None = None
@@ -153,9 +158,13 @@ class TileCanvas(QGraphicsView):
         self._last_entity_deleted: tuple[int, int] | None = None
         self._entity_item_by_id: dict[str, QGraphicsItem] = {}
         self._selection_item: QGraphicsRectItem | None = None
+        self._tile_selection_item: QGraphicsRectItem | None = None
         self._middle_pan_pos = None
         self._screen_pane_origin: tuple[int, int] = (16, 0)
         self._screen_pane_size: tuple[int, int] = (self._display_width, self._display_height)
+        self._tile_selection_anchor: tuple[int, int] | None = None
+        self._tile_selection_bounds: tuple[int, int, int, int] | None = None
+        self._hover_tile_cell: tuple[int, int] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -188,8 +197,10 @@ class TileCanvas(QGraphicsView):
         self._grid_group = None
         self._ghost_item = None
         self._selection_item = None
+        self._tile_selection_item = None
         self._tileset_index_hint = 0
         self._brush_erase_mode = True
+        self._selected_gid_block = None
         self._last_entity_painted = None
         self._last_entity_deleted = None
         self._tile_size = area.tile_size or 16
@@ -216,7 +227,12 @@ class TileCanvas(QGraphicsView):
         self._screen_pane_group = None
         self._ghost_item = None
         self._selection_item = None
+        self._tile_selection_item = None
         self._screen_selection_cycle_ids = ()
+        self._tile_selection_anchor = None
+        self._tile_selection_bounds = None
+        self._hover_tile_cell = None
+        self._selected_gid_block = None
 
     def refresh_scene_contents(self) -> None:
         """Redraw the current area without reinitialising editor state."""
@@ -314,6 +330,133 @@ class TileCanvas(QGraphicsView):
     def select_mode(self) -> bool:
         return self._select_mode
 
+    def set_tile_select_mode(self, enabled: bool) -> None:
+        self._tile_select_mode = enabled
+        self._apply_cursor()
+        self._update_drag_mode()
+        if enabled:
+            self._hide_ghost()
+        else:
+            self._tile_selection_anchor = None
+
+    @property
+    def tile_select_mode(self) -> bool:
+        return self._tile_select_mode
+
+    @property
+    def has_tile_selection(self) -> bool:
+        return self._tile_selection_bounds is not None
+
+    def tile_selection_bounds(self) -> tuple[int, int, int, int] | None:
+        return self._tile_selection_bounds
+
+    def set_tile_selection(
+        self,
+        start_col: int,
+        start_row: int,
+        end_col: int,
+        end_row: int,
+    ) -> bool:
+        if self._area is None:
+            return False
+        normalized = self._normalize_tile_selection(start_col, start_row, end_col, end_row)
+        if normalized is None:
+            return False
+        changed = normalized != self._tile_selection_bounds
+        self._tile_selection_bounds = normalized
+        self._update_tile_selection_overlay()
+        if changed:
+            self.tile_selection_changed.emit(True)
+        return True
+
+    def clear_tile_selection(self) -> bool:
+        had_selection = self._tile_selection_bounds is not None
+        self._tile_selection_anchor = None
+        self._tile_selection_bounds = None
+        self._update_tile_selection_overlay()
+        if had_selection:
+            self.tile_selection_changed.emit(False)
+        return had_selection
+
+    def selected_tile_block(self) -> list[list[int]] | None:
+        if self._area is None or self._tile_selection_bounds is None:
+            return None
+        if not (0 <= self._active_layer < len(self._area.tile_layers)):
+            return None
+        left, top, right, bottom = self._tile_selection_bounds
+        layer = self._area.tile_layers[self._active_layer]
+        return [
+            [int(layer.grid[row][col]) for col in range(left, right + 1)]
+            for row in range(top, bottom + 1)
+        ]
+
+    def clear_selected_tiles(self) -> bool:
+        if self._area is None or self._tile_selection_bounds is None:
+            return False
+        if not (0 <= self._active_layer < len(self._area.tile_layers)):
+            return False
+        left, top, right, bottom = self._tile_selection_bounds
+        layer = self._area.tile_layers[self._active_layer]
+        changed = False
+        for row in range(top, bottom + 1):
+            for col in range(left, right + 1):
+                if layer.grid[row][col] != 0:
+                    layer.grid[row][col] = 0
+                    changed = True
+        if changed:
+            self.refresh_scene_contents()
+        return changed
+
+    def paste_tile_block(
+        self,
+        anchor_col: int,
+        anchor_row: int,
+        block: list[list[int]],
+    ) -> tuple[int, int, int, int] | None:
+        if self._area is None or not block or not block[0]:
+            return None
+        if not (0 <= self._active_layer < len(self._area.tile_layers)):
+            return None
+        layer = self._area.tile_layers[self._active_layer]
+        changed = False
+        pasted_left: int | None = None
+        pasted_top: int | None = None
+        pasted_right: int | None = None
+        pasted_bottom: int | None = None
+        for row_offset, row_values in enumerate(block):
+            target_row = anchor_row + row_offset
+            if not (0 <= target_row < self._area.height):
+                continue
+            for col_offset, gid in enumerate(row_values):
+                target_col = anchor_col + col_offset
+                if not (0 <= target_col < self._area.width):
+                    continue
+                if layer.grid[target_row][target_col] != gid:
+                    layer.grid[target_row][target_col] = int(gid)
+                    changed = True
+                if pasted_left is None or target_col < pasted_left:
+                    pasted_left = target_col
+                if pasted_top is None or target_row < pasted_top:
+                    pasted_top = target_row
+                if pasted_right is None or target_col > pasted_right:
+                    pasted_right = target_col
+                if pasted_bottom is None or target_row > pasted_bottom:
+                    pasted_bottom = target_row
+        if pasted_left is None or pasted_top is None or pasted_right is None or pasted_bottom is None:
+            return None
+        if changed:
+            self.refresh_scene_contents()
+        self.set_tile_selection(pasted_left, pasted_top, pasted_right, pasted_bottom)
+        return (pasted_left, pasted_top, pasted_right, pasted_bottom)
+
+    def preferred_paste_anchor(self) -> tuple[int, int] | None:
+        if self._hover_tile_cell is not None:
+            return self._hover_tile_cell
+        if self._tile_selection_bounds is not None:
+            left, top, _right, _bottom = self._tile_selection_bounds
+            return (left, top)
+        return None
+
     @property
     def active_layer(self) -> int:
         return self._active_layer
@@ -325,9 +468,24 @@ class TileCanvas(QGraphicsView):
     def selected_gid(self) -> int:
         return self._selected_gid
 
+    @property
+    def selected_gid_block(self) -> tuple[tuple[int, ...], ...] | None:
+        return self._selected_gid_block
+
     def set_selected_gid(self, gid: int) -> None:
         self._selected_gid = gid
+        self._selected_gid_block = ((gid,),) if gid != 0 else None
         if gid != 0:
+            self._brush_erase_mode = False
+        self._update_ghost_pixmap()
+
+    def set_selected_gid_block(self, block: tuple[tuple[int, ...], ...] | None) -> None:
+        normalized = self._normalize_gid_block(block)
+        self._selected_gid_block = normalized
+        if normalized is None:
+            self._selected_gid = 0
+        else:
+            self._selected_gid = int(normalized[0][0])
             self._brush_erase_mode = False
         self._update_ghost_pixmap()
 
@@ -512,7 +670,7 @@ class TileCanvas(QGraphicsView):
         if self._handle_edit_pointer_event(event, event.button()):
             event.accept()
             return
-        if self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode:
+        if self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode or self._tile_select_mode:
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):
                 event.accept()
                 return
@@ -531,6 +689,10 @@ class TileCanvas(QGraphicsView):
                 col = int(scene_pos.x() / self._tile_size)
                 row = int(scene_pos.y() / self._tile_size)
             self.cell_hovered.emit(col, row)
+            if self._area is not None and 0 <= col < self._area.width and 0 <= row < self._area.height:
+                self._hover_tile_cell = (col, row)
+            else:
+                self._hover_tile_cell = None
 
         if self._middle_pan_pos is not None:
             delta = event.position() - self._middle_pan_pos
@@ -571,7 +733,7 @@ class TileCanvas(QGraphicsView):
             if self._handle_edit_pointer_event(event, Qt.MouseButton.RightButton):
                 event.accept()
                 return
-        if self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode:
+        if self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode or self._tile_select_mode:
             if buttons & (Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton):
                 event.accept()
                 return
@@ -581,6 +743,7 @@ class TileCanvas(QGraphicsView):
         self._hide_ghost()
         self.cell_hovered.emit(-1, -1)
         self.screen_pixel_hovered.emit(-1, -1)
+        self._hover_tile_cell = None
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -593,6 +756,8 @@ class TileCanvas(QGraphicsView):
         self._last_tile_painted = None
         self._last_entity_painted = None
         self._last_entity_deleted = None
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._tile_selection_anchor = None
         super().mouseReleaseEvent(event)
 
     # ------------------------------------------------------------------
@@ -866,6 +1031,7 @@ class TileCanvas(QGraphicsView):
         self._grid_group.setVisible(self._grid_visible)
         self._scene.addItem(self._grid_group)
         self._update_selection_highlight()
+        self._update_tile_selection_overlay()
 
     def _clear_scene_contents(self) -> None:
         """Remove tracked render items without resetting the whole scene object."""
@@ -882,6 +1048,7 @@ class TileCanvas(QGraphicsView):
             self._screen_pane_group,
             self._ghost_item,
             self._selection_item,
+            self._tile_selection_item,
         ):
             if overlay is not None and overlay.scene() is self._scene:
                 self._scene.removeItem(overlay)
@@ -935,6 +1102,34 @@ class TileCanvas(QGraphicsView):
                 self.clear_selected_entity()
                 return True
             return self.select_entities_at_cell(col, row)
+
+        # --- Tile rectangle selection ---
+        if self._tile_select_mode:
+            if button != Qt.MouseButton.LeftButton:
+                return False
+            scene_pos = self.mapToScene(event.position().toPoint())
+            if event.type() == QMouseEvent.Type.MouseButtonPress:
+                tile_cell = self._tile_cell_from_scene_pos(scene_pos.x(), scene_pos.y(), clamp=False)
+                if tile_cell is None:
+                    self.clear_tile_selection()
+                    return True
+                self._tile_selection_anchor = tile_cell
+                self.set_tile_selection(tile_cell[0], tile_cell[1], tile_cell[0], tile_cell[1])
+                return True
+            if event.type() == QMouseEvent.Type.MouseMove:
+                if self._tile_selection_anchor is None:
+                    return False
+                tile_cell = self._tile_cell_from_scene_pos(scene_pos.x(), scene_pos.y(), clamp=True)
+                if tile_cell is None:
+                    return False
+                self.set_tile_selection(
+                    self._tile_selection_anchor[0],
+                    self._tile_selection_anchor[1],
+                    tile_cell[0],
+                    tile_cell[1],
+                )
+                return True
+            return False
 
         # --- Unified paint tool ---
         if self._tile_paint_mode:
@@ -990,26 +1185,34 @@ class TileCanvas(QGraphicsView):
                 return True
 
             if button == Qt.MouseButton.LeftButton:
-                gid = self._selected_gid
+                block = self._selected_gid_block
+                if block is None:
+                    return True
             elif button == Qt.MouseButton.RightButton:
-                gid = 0  # erase
+                block = ((0,),)
             else:
                 return False
 
-            marker = (col, row, gid)
+            marker = (col, row, block)
             if self._last_tile_painted == marker:
                 return True
             self._last_tile_painted = marker
 
-            if paint_tile(self._area, self._active_layer, col, row, gid):
+            painted = self._paint_tile_block(col, row, block)
+            if painted:
                 self._rebuild_scene_contents()
-                self.tile_painted.emit(self._active_layer, col, row, gid)
+                self.tile_painted.emit(self._active_layer, col, row, int(block[0][0]))
             return True
 
         return False
 
     def _update_drag_mode(self) -> None:
-        editing = self._cell_flags_edit_mode or self._tile_paint_mode or self._select_mode
+        editing = (
+            self._cell_flags_edit_mode
+            or self._tile_paint_mode
+            or self._select_mode
+            or self._tile_select_mode
+        )
         self.setDragMode(
             QGraphicsView.DragMode.NoDrag
             if editing
@@ -1019,7 +1222,7 @@ class TileCanvas(QGraphicsView):
     def _apply_cursor(self) -> None:
         cursor = (
             Qt.CursorShape.CrossCursor
-            if self._cell_flags_edit_mode or self._tile_paint_mode
+            if self._cell_flags_edit_mode or self._tile_paint_mode or self._tile_select_mode
             else Qt.CursorShape.ArrowCursor
         )
         self.setCursor(cursor)
@@ -1047,6 +1250,65 @@ class TileCanvas(QGraphicsView):
         highlight.setZValue(float(len(self._scene.items()) + 300))
         self._selection_item = highlight
         self._scene.addItem(highlight)
+
+    def _update_tile_selection_overlay(self) -> None:
+        if self._tile_selection_item is not None and self._tile_selection_item.scene() is self._scene:
+            self._scene.removeItem(self._tile_selection_item)
+        self._tile_selection_item = None
+
+        if self._tile_selection_bounds is None or self._area is None:
+            return
+
+        left, top, right, bottom = self._tile_selection_bounds
+        rect = QRectF(
+            float(left * self._tile_size),
+            float(top * self._tile_size),
+            float((right - left + 1) * self._tile_size),
+            float((bottom - top + 1) * self._tile_size),
+        )
+        highlight = QGraphicsRectItem(rect)
+        highlight.setPen(QPen(_TILE_SELECTION_BORDER, 2))
+        highlight.setBrush(_TILE_SELECTION_FILL)
+        highlight.setZValue(float(len(self._scene.items()) + 400))
+        self._tile_selection_item = highlight
+        self._scene.addItem(highlight)
+
+    def _normalize_tile_selection(
+        self,
+        start_col: int,
+        start_row: int,
+        end_col: int,
+        end_row: int,
+    ) -> tuple[int, int, int, int] | None:
+        if self._area is None or self._area.width <= 0 or self._area.height <= 0:
+            return None
+        left = max(0, min(int(start_col), int(end_col)))
+        top = max(0, min(int(start_row), int(end_row)))
+        right = min(self._area.width - 1, max(int(start_col), int(end_col)))
+        bottom = min(self._area.height - 1, max(int(start_row), int(end_row)))
+        if left > right or top > bottom:
+            return None
+        return (left, top, right, bottom)
+
+    def _tile_cell_from_scene_pos(
+        self,
+        sx: float,
+        sy: float,
+        *,
+        clamp: bool,
+    ) -> tuple[int, int] | None:
+        if self._area is None or self._tile_size <= 0 or self._area.width <= 0 or self._area.height <= 0:
+            return None
+        col = int(sx / self._tile_size)
+        row = int(sy / self._tile_size)
+        if clamp:
+            return (
+                max(0, min(col, self._area.width - 1)),
+                max(0, min(row, self._area.height - 1)),
+            )
+        if 0 <= col < self._area.width and 0 <= row < self._area.height:
+            return (col, row)
+        return None
 
     def _effective_space(self, entity: EntityDocument) -> str:
         """Resolve one entity's effective space with template fallback."""
@@ -1195,11 +1457,77 @@ class TileCanvas(QGraphicsView):
         if self._catalog is None or self._selected_gid == 0:
             self._ghost_item.setVisible(False)
             return
-
-        pm = self._catalog.get_tile_pixmap(
-            self._selected_gid, self._area.tilesets, fallback_size=self._tile_size
-        )
-        if pm is not None:
+        block = self._selected_gid_block
+        if block is None:
+            self._ghost_item.setVisible(False)
+            return
+        pm = self._build_tile_block_pixmap(block)
+        if pm is not None and not pm.isNull():
             self._ghost_item.setPixmap(pm)
         else:
             self._ghost_item.setVisible(False)
+
+    def _normalize_gid_block(
+        self,
+        block: tuple[tuple[int, ...], ...] | None,
+    ) -> tuple[tuple[int, ...], ...] | None:
+        if block is None:
+            return None
+        if not block or not block[0]:
+            return None
+        width = len(block[0])
+        rows: list[tuple[int, ...]] = []
+        for row in block:
+            if len(row) != width:
+                return None
+            rows.append(tuple(int(gid) for gid in row))
+        return tuple(rows) if rows else None
+
+    def _paint_tile_block(
+        self,
+        anchor_col: int,
+        anchor_row: int,
+        block: tuple[tuple[int, ...], ...],
+    ) -> bool:
+        if self._area is None:
+            return False
+        if not (0 <= self._active_layer < len(self._area.tile_layers)):
+            return False
+        changed = False
+        for row_offset, row_values in enumerate(block):
+            target_row = anchor_row + row_offset
+            if not (0 <= target_row < self._area.height):
+                continue
+            for col_offset, gid in enumerate(row_values):
+                target_col = anchor_col + col_offset
+                if not (0 <= target_col < self._area.width):
+                    continue
+                if paint_tile(self._area, self._active_layer, target_col, target_row, int(gid)):
+                    changed = True
+        return changed
+
+    def _build_tile_block_pixmap(
+        self,
+        block: tuple[tuple[int, ...], ...],
+    ) -> QPixmap | None:
+        if self._catalog is None or self._area is None or not block or not block[0]:
+            return None
+        width = len(block[0]) * self._tile_size
+        height = len(block) * self._tile_size
+        pixmap = QPixmap(width, height)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        for row_offset, row_values in enumerate(block):
+            for col_offset, gid in enumerate(row_values):
+                if gid == 0:
+                    continue
+                tile_pm = self._catalog.get_tile_pixmap(
+                    int(gid),
+                    self._area.tilesets,
+                    fallback_size=self._tile_size,
+                )
+                if tile_pm is None or tile_pm.isNull():
+                    continue
+                painter.drawPixmap(col_offset * self._tile_size, row_offset * self._tile_size, tile_pm)
+        painter.end()
+        return pixmap

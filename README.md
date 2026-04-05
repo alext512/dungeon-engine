@@ -75,14 +75,24 @@ The current engine already supports:
 - save slots layered on top of authored room data
 
 There is also a new external area editor under [tools/area_editor](./tools/area_editor/).
-It now supports active area-editing workflows such as tile painting, cell-flag editing,
-entity placement and nudging, render-property editing, and guarded JSON editing.
+It now supports active authoring workflows such as:
 
-Be aware that the runtime has recently grown faster than the editor. The current tool is
-still useful for area-centric work, but it has not yet caught up to newer authoring
-surfaces such as first-class item browsing/editing, shared UI preset workflows,
-`global_entities`, and some newer engine-owned entity fields. A follow-up editor
-catch-up pass is planned.
+- tile painting and `cell_flags` editing
+- rectangular tile selection on the active layer, including clear/delete plus
+  `Ctrl+C` / `Ctrl+X` / `Ctrl+V`
+- multi-tile tileset selection that paints as a stamp brush
+- tile-layer add/rename/delete/reorder
+- entity placement, selection, deletion, and nudging
+- render-property editing
+- project manifest, shared-variables, item, and global-entity editing
+- reference-aware `Rename/Move...` for file-backed project content
+- guarded raw JSON editing for the supported document types
+
+The editor is still not fully caught up with every newer runtime-facing workflow,
+but it has moved well beyond the earlier area-only slice. The main remaining gaps
+are things like runtime handoff/launch integration, richer visual screen-space
+placement, drag-to-move entity manipulation, and broader structured editing for
+newer engine-owned fields.
 
 The older built-in editor is archived under [archived_editor](./archived_editor/)
 for reference only.
@@ -330,7 +340,7 @@ cd tools/area_editor
 
 - save/load UX works, but is still basic
 - external PNG import workflow is not finished
-- the external area editor is currently behind the runtime on several newer authoring workflows, especially items, shared project config/UI presets, `global_entities`, screen-space placement, richer reference pickers, and runtime handoff
+- the external area editor still has a few important gaps, especially runtime handoff, visual screen-space placement, drag-to-move entity manipulation, and broader structured editing for some newer engine-owned fields
 - movement/render feel should still be checked periodically on real hardware as
   the project grows
 
@@ -338,7 +348,7 @@ cd tools/area_editor
 
 - build more real project content and let that pressure guide engine changes
 - expand dialogue/menu authoring support
-- continue turning the external editor into a full authoring tool, starting with a catch-up pass for newer runtime-facing content such as items, shared project config, and `global_entities`
+- continue turning the external editor into a fuller authoring tool, especially around runtime handoff, visual screen-space placement, drag manipulation, and broader structured editing of newer engine-owned fields
 - keep improving movement/render quality
 
 ## License

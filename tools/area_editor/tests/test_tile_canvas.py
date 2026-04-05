@@ -21,7 +21,6 @@ from area_editor.widgets.tile_canvas import BrushType, TileCanvas, _SCENE_EDGE_P
 
 def _make_area() -> AreaDocument:
     return AreaDocument(
-        name="test",
         tile_size=16,
         tilesets=[],
         tile_layers=[
@@ -70,7 +69,6 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
 
     def test_unified_render_order_interleaves_y_sorted_layer_and_entities(self):
         area = AreaDocument(
-            name="render-order",
             tile_size=16,
             tilesets=[],
             tile_layers=[
@@ -193,6 +191,69 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
             selections,
             [("npc_2", 1, 2), ("npc_1", 2, 2), ("", 0, 0)],
         )
+
+    def test_tile_select_mode_drag_creates_rectangle_selection(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_tile_select_mode(True)
+
+        press_event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(1, 1),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        move_event = QMouseEvent(
+            QMouseEvent.Type.MouseMove,
+            QPointF(31, 31),
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(1, 1)):
+            self.assertTrue(canvas._handle_edit_pointer_event(press_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=QPointF(31, 31)):
+            self.assertTrue(canvas._handle_edit_pointer_event(move_event, Qt.MouseButton.LeftButton))
+
+        self.assertEqual(canvas.tile_selection_bounds(), (0, 0, 1, 1))
+        self.assertTrue(canvas.has_tile_selection)
+        self.assertIsNotNone(canvas._tile_selection_item)
+
+    def test_tile_selection_clear_and_paste_block(self):
+        area = _make_area()
+        area.tile_layers[0].grid = [[1, 2], [3, 4]]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_tile_select_mode(True)
+
+        self.assertTrue(canvas.set_tile_selection(0, 0, 1, 0))
+        self.assertEqual(canvas.selected_tile_block(), [[1, 2]])
+        self.assertTrue(canvas.clear_selected_tiles())
+        self.assertEqual(area.tile_layers[0].grid, [[0, 0], [3, 4]])
+
+        pasted = canvas.paste_tile_block(0, 1, [[5, 6]])
+        self.assertEqual(pasted, (0, 1, 1, 1))
+        self.assertEqual(area.tile_layers[0].grid, [[0, 0], [5, 6]])
+        self.assertEqual(canvas.tile_selection_bounds(), (0, 1, 1, 1))
+
+    def test_tile_brush_block_paints_multi_tile_stamp(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_tile_paint_mode(True)
+        canvas.set_selected_gid_block(((1, 2), (3, 4)))
+        canvas.set_active_brush_type(BrushType.TILE)
+
+        changed = canvas._paint_tile_block(0, 0, canvas.selected_gid_block or ())
+
+        self.assertTrue(changed)
+        self.assertEqual(area.tile_layers[0].grid, [[1, 2], [3, 4]])
 
     def test_paint_mode_forces_no_drag_and_cross_cursor(self):
         area = _make_area()

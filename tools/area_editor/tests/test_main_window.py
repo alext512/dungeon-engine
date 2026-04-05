@@ -139,7 +139,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -173,7 +172,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         assets.mkdir(parents=True)
         areas.mkdir()
 
-        base = QPixmap(16, 16)
+        base = QPixmap(32, 32)
         base.fill(QColor("cyan"))
         self.assertTrue(base.save(str(assets / "base.png")))
 
@@ -184,7 +183,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -220,6 +218,50 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         )
         return project / "project.json"
 
+    def _create_tile_selection_project(self, root: Path) -> Path:
+        project = root / "project"
+        assets = project / "assets"
+        areas = project / "areas"
+        assets.mkdir(parents=True)
+        areas.mkdir()
+
+        base = QPixmap(32, 32)
+        base.fill(QColor("cyan"))
+        self.assertTrue(base.save(str(assets / "base.png")))
+
+        (project / "project.json").write_text(
+            '{\n  "startup_area": "areas/demo"\n}\n',
+            encoding="utf-8",
+        )
+        (areas / "demo.json").write_text(
+            (
+                '{\n'
+                '  "tile_size": 16,\n'
+                '  "tilesets": [\n'
+                '    {\n'
+                '      "firstgid": 1,\n'
+                '      "path": "assets/base.png",\n'
+                '      "tile_width": 16,\n'
+                '      "tile_height": 16\n'
+                '    }\n'
+                '  ],\n'
+                '  "tile_layers": [\n'
+                '    {\n'
+                '      "name": "ground",\n'
+                '      "render_order": 0,\n'
+                '      "y_sort": false,\n'
+                '      "stack_order": 0,\n'
+                '      "grid": [[1, 2, 0], [3, 4, 0], [0, 0, 0]]\n'
+                '    }\n'
+                '  ],\n'
+                '  "entities": [],\n'
+                '  "variables": {}\n'
+                '}\n'
+            ),
+            encoding="utf-8",
+        )
+        return project / "project.json"
+
     def _create_entity_paint_project(self, root: Path) -> Path:
         project = root / "project"
         assets = project / "assets"
@@ -245,7 +287,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -300,7 +341,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -381,7 +421,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -494,7 +533,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -573,7 +611,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [\n'
                 '    {\n'
@@ -639,7 +676,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [],\n'
                 '  "tile_layers": [],\n'
@@ -704,7 +740,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         (areas / "demo.json").write_text(
             (
                 '{\n'
-                '  "name": "Demo",\n'
                 '  "tile_size": 16,\n'
                 '  "tilesets": [],\n'
                 '  "tile_layers": [\n'
@@ -952,6 +987,65 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual([layer.name for layer in doc.tile_layers], ["ground"])
             self.assertEqual(window._layer_panel._list.count(), 1)
             self.assertEqual(window._layer_panel.active_layer_name(), "ground")
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_tile_select_copy_delete_paste_and_clear_selection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_tile_selection_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            doc = window._area_docs["areas/demo"]
+
+            window._tile_select_action.setChecked(True)
+            self.assertTrue(canvas.tile_select_mode)
+
+            canvas.set_tile_selection(0, 0, 1, 1)
+            window._on_copy_tiles()
+            self.assertIsNotNone(window._tile_clipboard)
+            assert window._tile_clipboard is not None
+            self.assertEqual(window._tile_clipboard.grid, ((1, 2), (3, 4)))
+
+            window._on_delete_active_selection()
+            self.assertEqual(doc.tile_layers[0].grid, [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+
+            canvas.set_tile_selection(1, 1, 1, 1)
+            window._on_paste_tiles()
+            self.assertEqual(doc.tile_layers[0].grid, [[0, 0, 0], [0, 1, 2], [0, 3, 4]])
+            self.assertEqual(canvas.tile_selection_bounds(), (1, 1, 2, 2))
+
+            window._on_clear_active_selection()
+            self.assertFalse(canvas.has_tile_selection)
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_tileset_stamp_selection_paints_multi_tile_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_tile_selection_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            doc = window._area_docs["areas/demo"]
+
+            doc.tile_layers[0].grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+            canvas.refresh_scene_contents()
+
+            window._tileset_panel._on_tile_selected(1, ((1, 2), (3, 4)))
+            self.assertEqual(window._tileset_panel.selected_brush_block, ((1, 2), (3, 4)))
+            self.assertEqual(canvas.selected_gid_block, ((1, 2), (3, 4)))
+            self.assertTrue(window._paint_tiles_action.isChecked())
+
+            canvas._paint_tile_block(1, 1, canvas.selected_gid_block or ())
+            canvas.refresh_scene_contents()
+
+            self.assertEqual(doc.tile_layers[0].grid, [[0, 0, 0], [0, 1, 2], [0, 3, 4]])
             window._tab_widget.set_dirty("areas/demo", False)
 
     def test_render_properties_panel_updates_selected_entity(self):
@@ -1413,7 +1507,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
 
             area_id, file_path = window._create_new_area_file(
                 area_id="title_screen",
-                display_name="Title Screen",
                 width=6,
                 height=4,
                 tile_size=16,
@@ -1437,7 +1530,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual(doc.width, 6)
             self.assertEqual(doc.height, 4)
             self.assertEqual(doc.tile_size, 16)
-            self.assertEqual(doc.name, "Title Screen")
 
     def test_area_extent_operation_shifts_world_entities_but_not_screen_entities(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1520,7 +1612,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             other_area.write_text(
                 (
                     '{\n'
-                    '  "name": "Other",\n'
                     '  "tile_size": 16,\n'
                     '  "tilesets": [],\n'
                     '  "tile_layers": [\n'
@@ -1620,7 +1711,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             other_area.write_text(
                 (
                     '{\n'
-                    '  "name": "Other",\n'
                     '  "tile_size": 16,\n'
                     '  "tilesets": [],\n'
                     '  "tile_layers": [\n'
@@ -1995,7 +2085,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             (areas / "demo.json").write_text(
                 (
                     '{\n'
-                    '  "name": "Demo",\n'
                     '  "tile_size": 16,\n'
                     '  "tilesets": [],\n'
                     '  "tile_layers": [],\n'
@@ -2161,7 +2250,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             (areas / "demo.json").write_text(
                 (
                     '{\n'
-                    '  "name": "Demo",\n'
                     '  "tile_size": 16,\n'
                     '  "tilesets": [\n'
                     '    {\n'
@@ -2291,7 +2379,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             (areas / "demo.json").write_text(
                 (
                     '{\n'
-                    '  "name": "Demo",\n'
                     '  "tile_size": 16,\n'
                     '  "tilesets": [\n'
                     '    {\n'
@@ -2397,7 +2484,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             (areas / "demo.json").write_text(
                 (
                     '{\n'
-                    '  "name": "Demo",\n'
                     '  "tile_size": 16,\n'
                     '  "tilesets": [\n'
                     '    {\n'

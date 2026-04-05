@@ -4,6 +4,36 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Editor Workflow Catch-Up
+
+- Expanded the external editor beyond the earlier area-only slice with
+  structured project-level tabs for `project.json`, `shared_variables.json`,
+  items, and `global_entities`, while keeping guarded raw JSON fallbacks
+- Added project-wide id validation and safer id generation so editor-authored
+  entity ids match the runtime's stricter uniqueness rules
+- Added reference-aware `Rename/Move...` workflows for areas, templates, items,
+  dialogues, commands, assets, and global-entity ids
+- Added delete workflows with usage previews for the same file-backed content
+  plus global entities, while intentionally leaving broken references unchanged
+  after confirmed deletion
+- Added visible folder management in the browser tabs, including `New Folder...`,
+  `Rename/Move Folder...`, and deletion of completely empty folders
+- Reworked the left browser into a custom two-row workspace tab surface and
+  improved tab overflow behavior for the editor's focused tab widgets
+- Removed the fake `Entities` row from the Layers panel, moved entity visibility
+  to `View > Show Entities`, and added real tile-layer add/rename/delete/reorder
+  workflows
+- Added a dedicated `Tile Select` tool for active-layer rectangle selection plus
+  clear/delete, `Ctrl+C`, `Ctrl+X`, and `Ctrl+V`
+- Added multi-tile tileset selection so dragged rectangles in the tileset
+  browser now paint as stamp brushes on the active layer
+- Tightened startup validation so statically resolvable broken `dialogue_path`
+  and asset-path references now fail before launch instead of slipping into play
+  until first use
+- Removed the top-level area `name` field from the active contract; area identity
+  is now file/id-only, `$area.name` is gone, and the runtime/editor now reject
+  authored area files that still try to declare a separate display-name field
+
 ## Inventory UI V1
 
 - Added the first engine-owned inventory session runtime with modal browsing,

@@ -27,9 +27,6 @@ class TestVillageSquareLoading(unittest.TestCase):
     def setUp(self):
         self.doc = load_area_document(_VILLAGE_SQUARE)
 
-    def test_name(self):
-        self.assertTrue(len(self.doc.name) > 0)
-
     def test_tile_size(self):
         self.assertGreater(self.doc.tile_size, 0)
 
@@ -67,8 +64,14 @@ class TestTitleScreenLoading(unittest.TestCase):
 class TestUnknownFieldPreservation(unittest.TestCase):
     """Unknown keys must survive a from_dict -> to_dict round-trip."""
 
+    def test_area_name_field_is_rejected(self):
+        raw = {"name": "legacy", "tile_size": 16}
+        with self.assertRaises(ValueError) as raised:
+            AreaDocument.from_dict(raw)
+        self.assertIn("must not declare 'name'", str(raised.exception))
+
     def test_area_extra_fields(self):
-        raw = {"name": "test", "tile_size": 16, "unknown_thing": [1, 2, 3]}
+        raw = {"tile_size": 16, "unknown_thing": [1, 2, 3]}
         doc = AreaDocument.from_dict(raw)
         out = doc.to_dict()
         self.assertEqual(out["unknown_thing"], [1, 2, 3])
@@ -132,7 +135,6 @@ class TestRoundTrip(unittest.TestCase):
 class TestSaveAreaDocument(unittest.TestCase):
     def test_save_and_reload_preserves_unknown_fields(self):
         raw = {
-            "name": "save-test",
             "tile_size": 16,
             "tile_layers": [
                 {
@@ -156,7 +158,6 @@ class TestSaveAreaDocument(unittest.TestCase):
 
     def test_save_formats_known_matrix_fields_compactly(self):
         raw = {
-            "name": "save-test",
             "tile_size": 16,
             "tile_layers": [
                 {

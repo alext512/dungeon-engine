@@ -1,5 +1,4 @@
 {
-  "name": "Village House",
   "tile_size": 16,
   "entry_points": {
     "from_square": {

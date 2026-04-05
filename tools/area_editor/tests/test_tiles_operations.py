@@ -10,7 +10,6 @@ from area_editor.operations.tiles import eyedrop_tile, paint_tile
 
 def _make_area() -> AreaDocument:
     return AreaDocument(
-        name="test",
         tile_size=16,
         tilesets=[],
         tile_layers=[

@@ -7,7 +7,6 @@ from area_editor.documents.area_document import AreaDocument, TileLayerDocument
 
 def make_empty_area_document(
     *,
-    name: str,
     width: int,
     height: int,
     tile_size: int,
@@ -32,7 +31,6 @@ def make_empty_area_document(
 
     return AreaDocument.from_dict(
         {
-            "name": name,
             "tile_size": tile_size,
             "tilesets": [],
             "tile_layers": tile_layers,

@@ -28,7 +28,6 @@ def serialize_area(
 ) -> dict[str, Any]:
     """Convert the editable area and world state into JSON-serializable data."""
     data = {
-        "name": area.name,
         "tile_size": area.tile_size,
         "variables": copy.deepcopy(world.variables),
         "tilesets": [

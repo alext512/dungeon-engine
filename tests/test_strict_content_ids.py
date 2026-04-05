@@ -83,9 +83,8 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _minimal_area(*, name: str = "Test Room") -> dict[str, object]:
+def _minimal_area() -> dict[str, object]:
     return {
-        "name": name,
         "tile_size": 16,
         "input_targets": {
             "move_up": "player",
@@ -260,7 +259,6 @@ def _inventory_shared_variables() -> dict[str, object]:
 def _minimal_runtime_area() -> Area:
     return Area(
         area_id="areas/test_room",
-        name="Test Room",
         tile_size=16,
         tilesets=[],
         tile_layers=[],
@@ -1042,6 +1040,24 @@ class StrictContentIdTests(unittest.TestCase):
             any("must not declare 'area_id'" in issue for issue in raised.exception.issues)
         )
 
+    def test_area_validation_rejects_authored_name_field(self) -> None:
+        _, project = self._make_project(
+            startup_area="areas/test_room",
+            areas={
+                "test_room.json": {
+                    "name": "Legacy Room",
+                    **_minimal_area(),
+                }
+            },
+        )
+
+        with self.assertRaises(AreaValidationError) as raised:
+            validate_project_areas(project)
+
+        self.assertTrue(
+            any("must not declare 'name'" in issue for issue in raised.exception.issues)
+        )
+
     def test_area_validation_rejects_missing_startup_area_id(self) -> None:
         _, project = self._make_project(
             startup_area="areas/missing_room",
@@ -1438,7 +1454,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_collision_system_uses_blocked_cells_and_solid_entities(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
@@ -1493,7 +1508,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_move_in_direction_steps_actor_and_updates_facing(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
@@ -1531,7 +1545,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_move_in_direction_runs_on_blocked_hook_with_context(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
@@ -1599,7 +1612,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_move_in_direction_pushes_one_blocker_using_entity_push_strength(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
@@ -1648,7 +1660,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_push_facing_moves_only_the_blocker(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
@@ -1694,7 +1705,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_interact_facing_dispatches_target_interact_with_instigator(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
@@ -1744,7 +1754,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_move_in_direction_runs_occupant_enter_and_leave_hooks(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
@@ -1823,7 +1832,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_set_present_false_runs_occupant_leave_hook(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0)],
@@ -1872,7 +1880,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_set_present_true_runs_occupant_enter_hook(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0)],
@@ -1922,7 +1929,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_destroy_entity_runs_occupant_leave_hook_before_removal(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0)],
@@ -1972,7 +1978,6 @@ class StrictContentIdTests(unittest.TestCase):
 
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[
@@ -3042,7 +3047,6 @@ class StrictContentIdTests(unittest.TestCase):
     def test_explicit_movement_query_value_sources_resolve_cell_flags_and_blockers(self) -> None:
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[],
@@ -4580,7 +4584,6 @@ class StrictContentIdTests(unittest.TestCase):
         _, project = self._make_project()
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
@@ -4621,7 +4624,6 @@ class StrictContentIdTests(unittest.TestCase):
         _, project = self._make_project()
         area = Area(
             area_id="areas/test_room",
-            name="Test Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
@@ -4714,7 +4716,6 @@ class StrictContentIdTests(unittest.TestCase):
             startup_area="areas/room_a",
             areas={
                 "room_a.json": {
-                    "name": "Room A",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -4732,7 +4733,6 @@ class StrictContentIdTests(unittest.TestCase):
                     ],
                 },
                 "room_b.json": {
-                    "name": "Room B",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -4781,7 +4781,6 @@ class StrictContentIdTests(unittest.TestCase):
             startup_area="areas/room_a",
             areas={
                 "room_a.json": {
-                    "name": "Room A",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -4799,7 +4798,6 @@ class StrictContentIdTests(unittest.TestCase):
                     ],
                 },
                 "room_b.json": {
-                    "name": "Room B",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -4809,7 +4807,6 @@ class StrictContentIdTests(unittest.TestCase):
                     "entities": [],
                 },
                 "room_c.json": {
-                    "name": "Room C",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -4886,7 +4883,7 @@ class StrictContentIdTests(unittest.TestCase):
         _, project = self._make_project(
             areas={
                 "current_room.json": {
-                    **_minimal_area(name="Current Room"),
+                    **_minimal_area(),
                     "entities": [
                         {
                             "id": "switch_1",
@@ -4898,7 +4895,7 @@ class StrictContentIdTests(unittest.TestCase):
                     ],
                 },
                 "other_room.json": {
-                    **_minimal_area(name="Other Room"),
+                    **_minimal_area(),
                     "entities": [
                         {
                             "id": "gate_1",
@@ -4918,7 +4915,6 @@ class StrictContentIdTests(unittest.TestCase):
         world.add_entity(switch)
         current_area = Area(
             area_id="areas/current_room",
-            name="Current Room",
             tile_size=16,
             tilesets=[],
             tile_layers=[],
@@ -5021,7 +5017,7 @@ class StrictContentIdTests(unittest.TestCase):
         _, project = self._make_project(
             areas={
                 "other_room.json": {
-                    **_minimal_area(name="Other Room"),
+                    **_minimal_area(),
                     "entities": [
                         {
                             "id": "gate_1",
@@ -5384,7 +5380,7 @@ class StrictContentIdTests(unittest.TestCase):
         _, project = self._make_project(
             areas={
                 "room_a.json": {
-                    **_minimal_area(name="Room A"),
+                    **_minimal_area(),
                     "entities": [
                         {
                             "id": "gate_1",
@@ -5395,7 +5391,7 @@ class StrictContentIdTests(unittest.TestCase):
                     ],
                 },
                 "room_b.json": {
-                    **_minimal_area(name="Room B"),
+                    **_minimal_area(),
                     "entities": [
                         {
                             "id": "gate_1",
@@ -5547,7 +5543,7 @@ class StrictContentIdTests(unittest.TestCase):
     def test_game_launcher_resolves_startup_area_and_cli_ids(self) -> None:
         _, project = self._make_project(
             startup_area="areas/intro/title_screen",
-            areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
+            areas={"intro/title_screen.json": _minimal_area()},
         )
 
         self.assertEqual(run_game._resolve_project_startup_area(project), "areas/intro/title_screen")
@@ -5559,7 +5555,7 @@ class StrictContentIdTests(unittest.TestCase):
     def test_game_launcher_rejects_area_paths_as_cli_arguments(self) -> None:
         _, project = self._make_project(
             startup_area="areas/intro/title_screen",
-            areas={"intro/title_screen.json": _minimal_area(name="Title Screen")},
+            areas={"intro/title_screen.json": _minimal_area()},
         )
 
         with self.assertRaises(FileNotFoundError):
@@ -5771,7 +5767,6 @@ class StrictContentIdTests(unittest.TestCase):
             startup_area="areas/title_screen",
             areas={
                 "title_screen.json": {
-                    "name": "Title",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -5793,7 +5788,6 @@ class StrictContentIdTests(unittest.TestCase):
                     ],
                 },
                 "village_square.json": {
-                    "name": "Village Square",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -6570,7 +6564,6 @@ class StrictContentIdTests(unittest.TestCase):
             ],
             areas={
                 "room_a.json": {
-                    "name": "Room A",
                     "tile_size": 16,
                     "input_targets": {
                         "move_up": "player",
@@ -6669,7 +6662,6 @@ class StrictContentIdTests(unittest.TestCase):
             ],
             areas={
                 "room_a.json": {
-                    "name": "Room A",
                     "tile_size": 16,
                     "input_targets": {
                         "move_up": "player",
@@ -6812,7 +6804,6 @@ class StrictContentIdTests(unittest.TestCase):
         context = CommandContext(
             area=Area(
                 area_id="areas/test_room",
-                name="Test Room",
                 tile_size=16,
                 tilesets=[],
                 tile_layers=[],
@@ -8054,7 +8045,6 @@ class StrictContentIdTests(unittest.TestCase):
         _, project = self._make_project()
         area_a = Area(
             area_id="areas/room_a",
-            name="Room A",
             tile_size=16,
             tilesets=[],
             tile_layers=[],
@@ -8062,7 +8052,6 @@ class StrictContentIdTests(unittest.TestCase):
         )
         area_b = Area(
             area_id="areas/room_b",
-            name="Room B",
             tile_size=16,
             tilesets=[],
             tile_layers=[],
@@ -8146,7 +8135,6 @@ class StrictContentIdTests(unittest.TestCase):
             startup_area="areas/room_a",
             areas={
                 "room_a.json": {
-                    "name": "Room A",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -8174,7 +8162,6 @@ class StrictContentIdTests(unittest.TestCase):
                     ],
                 },
                 "room_b.json": {
-                    "name": "Room B",
                     "tile_size": 16,
                     "variables": {},
                     "tilesets": [],
@@ -8905,4 +8892,5 @@ class StrictContentIdTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -35,7 +35,7 @@ _INACTIVE_SELECTED_PEN = QPen(QColor(110, 140, 150), 1)
 class _TilesetSheetWidget(QWidget):
     """Scrollable sheet viewer with tile picking, pan, and wheel zoom."""
 
-    tile_clicked = Signal(int)
+    tile_selection_changed = Signal(int, object)
     zoom_changed = Signal(float)
 
     def __init__(self, parent=None) -> None:
@@ -48,11 +48,13 @@ class _TilesetSheetWidget(QWidget):
         self._tile_height = 16
         self._firstgid = 1
         self._selected_gid = 0
+        self._selected_rect: tuple[int, int, int, int] | None = None
         self._hovered_gid = 0
         self._zoom = 1.0
         self._panning = False
         self._pan_pos = QPoint()
         self._brush_active = True
+        self._selection_anchor: tuple[int, int] | None = None
 
     @property
     def zoom_factor(self) -> float:
@@ -61,8 +63,10 @@ class _TilesetSheetWidget(QWidget):
     def clear_sheet(self) -> None:
         self._sheet = None
         self._selected_gid = 0
+        self._selected_rect = None
         self._hovered_gid = 0
         self._zoom = 1.0
+        self._selection_anchor = None
         self.resize(1, 1)
         self.update()
         self.zoom_changed.emit(self._zoom)
@@ -84,15 +88,61 @@ class _TilesetSheetWidget(QWidget):
         self._tile_width = max(tile_width, 1)
         self._tile_height = max(tile_height, 1)
         self._selected_gid = 0
+        self._selected_rect = None
         self._hovered_gid = 0
         self._zoom = 1.0
+        self._selection_anchor = None
         self._update_size()
         self.update()
         self.zoom_changed.emit(self._zoom)
 
     def select_gid(self, gid: int) -> None:
-        self._selected_gid = gid if self.owns_gid(gid) else 0
+        if not self.owns_gid(gid):
+            self._selected_gid = 0
+            self._selected_rect = None
+            self.update()
+            return
+        self._selected_gid = gid
+        local_index = gid - self._firstgid
+        cols = max(self._sheet.width() // self._tile_width, 1) if self._sheet else 1
+        col = local_index % cols
+        row = local_index // cols
+        self._selected_rect = (col, row, 1, 1)
         self.update()
+
+    def select_gid_block(self, gid: int, width: int, height: int) -> bool:
+        if not self.owns_gid(gid) or width <= 0 or height <= 0 or self._sheet is None:
+            self._selected_gid = 0
+            self._selected_rect = None
+            self.update()
+            return False
+        local_index = gid - self._firstgid
+        cols = max(self._sheet.width() // self._tile_width, 1)
+        rows = max(self._sheet.height() // self._tile_height, 1)
+        col = local_index % cols
+        row = local_index // cols
+        if col + width > cols or row + height > rows:
+            self._selected_gid = 0
+            self._selected_rect = None
+            self.update()
+            return False
+        self._selected_gid = gid
+        self._selected_rect = (col, row, width, height)
+        self.update()
+        return True
+
+    def selected_block_gids(self) -> tuple[tuple[int, ...], ...] | None:
+        if self._selected_rect is None or self._sheet is None:
+            return None
+        col, row, width, height = self._selected_rect
+        cols = max(self._sheet.width() // self._tile_width, 1)
+        return tuple(
+            tuple(
+                self._firstgid + (row + row_offset) * cols + (col + col_offset)
+                for col_offset in range(width)
+            )
+            for row_offset in range(height)
+        )
 
     def owns_gid(self, gid: int) -> bool:
         if gid <= 0 or self._sheet is None:
@@ -148,11 +198,14 @@ class _TilesetSheetWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             gid = self._gid_at_position(event.position().toPoint())
             if gid > 0:
-                self._selected_gid = gid
-                self.tile_clicked.emit(gid)
-                self.update()
-                event.accept()
-                return
+                local = self._local_cell_at_position(event.position().toPoint())
+                if local is not None:
+                    self._selection_anchor = local
+                    self._selected_gid = gid
+                    self._selected_rect = (local[0], local[1], 1, 1)
+                    self.update()
+                    event.accept()
+                    return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -175,12 +228,29 @@ class _TilesetSheetWidget(QWidget):
         if gid != self._hovered_gid:
             self._hovered_gid = gid
             self.update()
+        if (
+            self._selection_anchor is not None
+            and event.buttons() & Qt.MouseButton.LeftButton
+        ):
+            local = self._local_cell_at_position(event.position().toPoint(), clamp=True)
+            if local is not None:
+                self._set_selection_rect_from_cells(self._selection_anchor, local)
+                self.update()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.MiddleButton and self._panning:
             self._panning = False
             self.unsetCursor()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self._selection_anchor is not None:
+            local = self._local_cell_at_position(event.position().toPoint(), clamp=True)
+            if local is not None:
+                self._set_selection_rect_from_cells(self._selection_anchor, local)
+            self._selection_anchor = None
+            self._emit_selection()
+            self.update()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -218,7 +288,7 @@ class _TilesetSheetWidget(QWidget):
         self._draw_grid(painter)
         self._draw_gid_outline(painter, self._hovered_gid, _HOVER_PEN)
         selected_pen = _SELECTED_PEN if self._brush_active else _INACTIVE_SELECTED_PEN
-        self._draw_gid_outline(painter, self._selected_gid, selected_pen)
+        self._draw_selected_outline(painter, selected_pen)
         painter.end()
 
     def _draw_grid(self, painter: QPainter) -> None:
@@ -259,6 +329,20 @@ class _TilesetSheetWidget(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
 
+    def _draw_selected_outline(self, painter: QPainter, pen: QPen) -> None:
+        if self._selected_rect is None:
+            return
+        col, row, width, height = self._selected_rect
+        rect = QRect(
+            round(col * self._tile_width * self._zoom),
+            round(row * self._tile_height * self._zoom),
+            max(1, round(width * self._tile_width * self._zoom)),
+            max(1, round(height * self._tile_height * self._zoom)),
+        )
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+
     def _gid_at_position(self, pos: QPoint) -> int:
         if self._sheet is None or self._zoom <= 0:
             return 0
@@ -278,6 +362,48 @@ class _TilesetSheetWidget(QWidget):
         if local_index < 0 or local_index >= self.frame_count():
             return 0
         return self._firstgid + local_index
+
+    def _local_cell_at_position(
+        self,
+        pos: QPoint,
+        *,
+        clamp: bool = False,
+    ) -> tuple[int, int] | None:
+        if self._sheet is None or self._zoom <= 0:
+            return None
+        cols = max(self._sheet.width() // self._tile_width, 1)
+        rows = max(self._sheet.height() // self._tile_height, 1)
+        image_x = int(pos.x() / self._zoom)
+        image_y = int(pos.y() / self._zoom)
+        col = image_x // self._tile_width
+        row = image_y // self._tile_height
+        if clamp:
+            return (max(0, min(col, cols - 1)), max(0, min(row, rows - 1)))
+        if 0 <= col < cols and 0 <= row < rows:
+            return (col, row)
+        return None
+
+    def _set_selection_rect_from_cells(
+        self,
+        start: tuple[int, int],
+        end: tuple[int, int],
+    ) -> None:
+        left = min(start[0], end[0])
+        top = min(start[1], end[1])
+        right = max(start[0], end[0])
+        bottom = max(start[1], end[1])
+        self._selected_rect = (left, top, right - left + 1, bottom - top + 1)
+        if self._sheet is None:
+            self._selected_gid = 0
+            return
+        cols = max(self._sheet.width() // self._tile_width, 1)
+        self._selected_gid = self._firstgid + top * cols + left
+
+    def _emit_selection(self) -> None:
+        block = self.selected_block_gids()
+        if self._selected_gid <= 0 or block is None:
+            return
+        self.tile_selection_changed.emit(self._selected_gid, block)
 
     def _update_size(self) -> None:
         hint = self.sizeHint()
@@ -346,7 +472,7 @@ class TilesetBrowserPanel(QDockWidget):
         layout.addLayout(tools)
 
         self._sheet_widget = _TilesetSheetWidget()
-        self._sheet_widget.tile_clicked.connect(self._on_tile_clicked)
+        self._sheet_widget.tile_selection_changed.connect(self._on_tile_selected)
         self._sheet_widget.zoom_changed.connect(self._on_zoom_changed)
 
         self._scroll = QScrollArea()
@@ -364,6 +490,7 @@ class TilesetBrowserPanel(QDockWidget):
         self._catalog: TilesetCatalog | None = None
         self._current_tileset_index = -1
         self._remembered_gid = 0
+        self._remembered_block: tuple[tuple[int, ...], ...] | None = None
         self._erase_mode = True
         self._zoom_factor = 1.0
         self._brush_active = True
@@ -372,6 +499,12 @@ class TilesetBrowserPanel(QDockWidget):
     @property
     def selected_gid(self) -> int:
         return 0 if self._erase_mode else self._remembered_gid
+
+    @property
+    def selected_brush_block(self) -> tuple[tuple[int, ...], ...] | None:
+        if self._erase_mode:
+            return None
+        return self._remembered_block
 
     @property
     def current_tileset_index(self) -> int:
@@ -396,6 +529,7 @@ class TilesetBrowserPanel(QDockWidget):
         *,
         current_index: int = 0,
         selected_gid: int = 0,
+        selected_block: tuple[tuple[int, ...], ...] | None = None,
         erase_mode: bool = True,
     ) -> None:
         """Populate from an area's tileset list and restore browser state."""
@@ -416,13 +550,19 @@ class TilesetBrowserPanel(QDockWidget):
         self._combo.blockSignals(True)
         self._combo.setCurrentIndex(index)
         self._combo.blockSignals(False)
-        self._load_tileset(index, selected_gid=selected_gid, erase_mode=erase_mode)
+        self._load_tileset(
+            index,
+            selected_gid=selected_gid,
+            selected_block=selected_block,
+            erase_mode=erase_mode,
+        )
 
     def clear_tilesets(self) -> None:
         self._tilesets.clear()
         self._catalog = None
         self._current_tileset_index = -1
         self._remembered_gid = 0
+        self._remembered_block = None
         self._erase_mode = True
         self._zoom_factor = 1.0
         self._brush_active = True
@@ -450,7 +590,7 @@ class TilesetBrowserPanel(QDockWidget):
             self._combo.blockSignals(True)
             self._combo.setCurrentIndex(index)
             self._combo.blockSignals(False)
-            self._load_tileset(index, selected_gid=0, erase_mode=True)
+            self._load_tileset(index, selected_gid=0, selected_block=None, erase_mode=True)
             self.tile_selected.emit(self.selected_gid)
             return
 
@@ -460,7 +600,12 @@ class TilesetBrowserPanel(QDockWidget):
         self._combo.blockSignals(True)
         self._combo.setCurrentIndex(owner)
         self._combo.blockSignals(False)
-        self._load_tileset(owner, selected_gid=gid, erase_mode=False)
+        self._load_tileset(
+            owner,
+            selected_gid=gid,
+            selected_block=((gid,),),
+            erase_mode=False,
+        )
         self.tile_selected.emit(self.selected_gid)
 
     def _emit_edit_request(self) -> None:
@@ -469,12 +614,21 @@ class TilesetBrowserPanel(QDockWidget):
 
     def _on_tileset_changed(self, index: int) -> None:
         if 0 <= index < len(self._tilesets):
-            self._load_tileset(index, selected_gid=0, erase_mode=True)
+            self._load_tileset(index, selected_gid=0, selected_block=None, erase_mode=True)
             self.tile_selected.emit(0)
 
-    def _on_tile_clicked(self, gid: int) -> None:
+    def _on_tile_selected(self, gid: int, block: object) -> None:
         self._remembered_gid = gid
-        self._sheet_widget.select_gid(gid)
+        normalized_block = self._normalize_block(block)
+        self._remembered_block = normalized_block
+        if normalized_block is not None:
+            self._sheet_widget.select_gid_block(
+                gid,
+                len(normalized_block[0]),
+                len(normalized_block),
+            )
+        else:
+            self._sheet_widget.select_gid(gid)
         self._apply_brush_state(erase_mode=False, emit=True)
 
     def _on_paint_toggled(self, checked: bool) -> None:
@@ -493,7 +647,14 @@ class TilesetBrowserPanel(QDockWidget):
         self._zoom_factor = zoom
         self._update_status()
 
-    def _load_tileset(self, index: int, *, selected_gid: int, erase_mode: bool) -> None:
+    def _load_tileset(
+        self,
+        index: int,
+        *,
+        selected_gid: int,
+        selected_block: tuple[tuple[int, ...], ...] | None,
+        erase_mode: bool,
+    ) -> None:
         if self._catalog is None or index < 0 or index >= len(self._tilesets):
             return
 
@@ -515,12 +676,21 @@ class TilesetBrowserPanel(QDockWidget):
         )
         self._zoom_factor = self._sheet_widget.zoom_factor
 
+        normalized_block = self._normalize_block(selected_block)
         if self._sheet_widget.owns_gid(selected_gid):
             self._remembered_gid = selected_gid
-            self._sheet_widget.select_gid(selected_gid)
+            self._remembered_block = normalized_block or ((selected_gid,),)
+            if self._remembered_block is not None and not self._sheet_widget.select_gid_block(
+                selected_gid,
+                len(self._remembered_block[0]),
+                len(self._remembered_block),
+            ):
+                self._remembered_block = ((selected_gid,),)
+                self._sheet_widget.select_gid(selected_gid)
             self._apply_brush_state(erase_mode=erase_mode, emit=False)
         else:
             self._remembered_gid = 0
+            self._remembered_block = None
             self._sheet_widget.select_gid(0)
             self._apply_brush_state(erase_mode=True, emit=False)
         self._update_status()
@@ -546,7 +716,17 @@ class TilesetBrowserPanel(QDockWidget):
         if self._erase_mode:
             brush = "Erase"
         elif self._remembered_gid > 0:
-            brush = f"{'Paint' if self._brush_active else 'Remembered'} GID {self._remembered_gid}"
+            prefix = "Paint" if self._brush_active else "Remembered"
+            if self._remembered_block is not None:
+                if len(self._remembered_block) == 1 and len(self._remembered_block[0]) == 1:
+                    brush = f"{prefix} GID {self._remembered_gid}"
+                else:
+                    brush = (
+                        f"{prefix} {len(self._remembered_block[0])}x{len(self._remembered_block)} "
+                        f"stamp (GID {self._remembered_gid})"
+                    )
+            else:
+                brush = f"{prefix} GID {self._remembered_gid}"
         else:
             brush = "No tile selected"
         self._status.setText(
@@ -562,3 +742,19 @@ class TilesetBrowserPanel(QDockWidget):
                 best_index = index
                 best_firstgid = tileset.firstgid
         return best_index
+
+    def _normalize_block(self, block: object) -> tuple[tuple[int, ...], ...] | None:
+        if not isinstance(block, (list, tuple)) or not block:
+            return None
+        rows: list[tuple[int, ...]] = []
+        width: int | None = None
+        for row in block:
+            if not isinstance(row, (list, tuple)) or not row:
+                return None
+            normalized_row = tuple(int(gid) for gid in row)
+            if width is None:
+                width = len(normalized_row)
+            elif len(normalized_row) != width:
+                return None
+            rows.append(normalized_row)
+        return tuple(rows) if rows else None

@@ -1,5 +1,4 @@
 {
-  "name": "Title Screen",
   "tile_size": 16,
   "input_targets": {
     "move_up": "dialogue_controller",

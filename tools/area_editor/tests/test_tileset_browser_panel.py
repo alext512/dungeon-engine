@@ -134,3 +134,26 @@ class TestTilesetBrowserPanel(unittest.TestCase):
             self.assertFalse(panel.brush_active)
             self.assertEqual(panel.selected_gid, 1)
             self.assertIn("Remembered GID 1", panel._status.text())
+
+    def test_multi_tile_selection_becomes_stamp_brush(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            assets = root / "assets"
+            assets.mkdir()
+
+            sheet = QPixmap(32, 32)
+            sheet.fill(QColor("yellow"))
+            self.assertTrue(sheet.save(str(assets / "sheet.png")))
+
+            catalog = TilesetCatalog(AssetResolver([assets]))
+            panel = TilesetBrowserPanel()
+            panel.set_tilesets(
+                [TilesetRef(1, "assets/sheet.png", 16, 16)],
+                catalog,
+            )
+
+            panel._on_tile_selected(1, ((1, 2), (3, 4)))
+
+            self.assertEqual(panel.selected_gid, 1)
+            self.assertEqual(panel.selected_brush_block, ((1, 2), (3, 4)))
+            self.assertIn("2x2 stamp", panel._status.text())

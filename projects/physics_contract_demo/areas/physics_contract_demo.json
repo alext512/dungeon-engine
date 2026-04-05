@@ -1,5 +1,4 @@
 {
-  "name": "Physics Contract Demo",
   "tile_size": 16,
   "input_targets": {
     "move_up": "player",

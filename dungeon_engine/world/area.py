@@ -81,7 +81,6 @@ class Area:
     """
 
     area_id: str
-    name: str
     tile_size: int
     tilesets: list[Tileset]
     tile_layers: list[TileLayer]

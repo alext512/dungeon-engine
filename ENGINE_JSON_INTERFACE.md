@@ -202,7 +202,6 @@ Example:
 
 Current area file fields:
 
-- `name: string`
 - `tile_size: number`
 - `variables: object`
 - `tilesets: object[]`
@@ -219,6 +218,7 @@ Current engine behavior:
 - `cell_flags` falls back to all-unblocked cells if omitted.
 - `input_targets` is merged on top of project-level `input_targets`.
 - `enter_commands` runs when the area is entered.
+- area files must not declare a top-level `name`.
 - `camera` is stored as area camera defaults.
 - authored entity ids must be unique across the whole project, including across different areas and `project.json` globals.
 
@@ -688,7 +688,6 @@ Important limitation:
 
 Current area token state exposes:
 - `area_id`
-- `name`
 - `tile_size`
 - `width`
 - `height`
