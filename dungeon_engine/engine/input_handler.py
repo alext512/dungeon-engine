@@ -217,6 +217,12 @@ class InputHandler:
         target_entity = self.world.get_input_target(action_name)
         if target_entity is None:
             return False
+        if (
+            action_name.startswith("move_")
+            and target_entity.is_world_space()
+            and target_entity.movement_state.active
+        ):
+            return False
         command_name = self._resolve_input_target_command_name(action_name, target_entity)
         if not command_name:
             return False

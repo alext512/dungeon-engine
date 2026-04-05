@@ -1,0 +1,25 @@
+{
+  "kind": "area_transition",
+  "solid": false,
+  "visible": false,
+  "interactable": false,
+  "variables": {
+    "target_area": "areas/start",
+    "destination_entity_id": "spawn_marker"
+  },
+  "entity_commands": {
+    "on_occupant_enter": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "change_area",
+          "area_id": "$self.target_area",
+          "destination_entity_id": "$self.destination_entity_id",
+          "transfer_entity_ids": [
+            "$ref_ids.instigator"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -281,6 +281,9 @@ Each entry point object currently uses:
 - `pixel_y`
 
 Notes:
+- `entry_points` remain supported for compatibility, but newer authored
+  projects should prefer destination marker entities plus
+  `destination_entity_id` on `change_area` / `new_game`.
 - `facing` on an area entry point remains supported.
 - On arrival, the runtime maps that value into the traveler's top-level `facing`.
 
@@ -1590,8 +1593,8 @@ Notes:
 
 ### Area / Save / Game Flow
 
-- `change_area(area_id?, entry_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
-- `new_game(area_id?, entry_id?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
+- `change_area(area_id?, entry_id?, destination_entity_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
+- `new_game(area_id?, entry_id?, destination_entity_id?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
 - `load_game(save_path?)`
 - `save_game(save_path?)`
 - `quit_game()`
@@ -1599,6 +1602,10 @@ Notes:
 Notes:
 - `camera_follow` uses the same structured follow object as `set_camera_follow`
 - in `change_area` / `new_game`, `camera_follow.entity_id` must be an explicit id
+- `destination_entity_id` lets transferred entities land on a world-space entity
+  in the destination area instead of only using an authored `entry_id`
+- if both `destination_entity_id` and `entry_id` are provided,
+  `destination_entity_id` wins
 
 ### Debug Runtime
 

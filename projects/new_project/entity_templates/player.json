@@ -1,0 +1,216 @@
+{
+  "kind": "player",
+  "facing": "down",
+  "solid": true,
+  "input_map": {
+    "move_up": "move_up",
+    "move_down": "move_down",
+    "move_left": "move_left",
+    "move_right": "move_right",
+    "interact": "interact",
+    "inventory": "inventory"
+  },
+  "inventory": {
+    "max_stacks": 8,
+    "stacks": []
+  },
+  "visuals": [
+    {
+      "id": "down",
+      "path": "assets/used_tilesets_sprites/main_character.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0,
+        3,
+        6
+      ],
+      "animation_fps": 12,
+      "animate_when_moving": true,
+      "visible": true
+    },
+    {
+      "id": "up",
+      "path": "assets/used_tilesets_sprites/main_character.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        1,
+        4,
+        7
+      ],
+      "animation_fps": 12,
+      "animate_when_moving": true,
+      "visible": false
+    },
+    {
+      "id": "side",
+      "path": "assets/used_tilesets_sprites/main_character.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        2,
+        5,
+        8
+      ],
+      "animation_fps": 12,
+      "animate_when_moving": true,
+      "visible": false,
+      "flip_x": false
+    }
+  ],
+  "entity_commands": {
+    "move_up": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_fields",
+          "entity_id": "$self_id",
+          "set": {
+            "visuals": {
+              "down": {
+                "visible": false,
+                "current_frame": 0
+              },
+              "up": {
+                "visible": true,
+                "current_frame": 1
+              },
+              "side": {
+                "visible": false,
+                "current_frame": 2,
+                "flip_x": false
+              }
+            }
+          }
+        },
+        {
+          "type": "move_in_direction",
+          "entity_id": "$self_id",
+          "direction": "up",
+          "frames_needed": "$project.movement.ticks_per_tile",
+          "wait": false
+        }
+      ]
+    },
+    "move_down": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_fields",
+          "entity_id": "$self_id",
+          "set": {
+            "visuals": {
+              "down": {
+                "visible": true,
+                "current_frame": 0
+              },
+              "up": {
+                "visible": false,
+                "current_frame": 1
+              },
+              "side": {
+                "visible": false,
+                "current_frame": 2,
+                "flip_x": false
+              }
+            }
+          }
+        },
+        {
+          "type": "move_in_direction",
+          "entity_id": "$self_id",
+          "direction": "down",
+          "frames_needed": "$project.movement.ticks_per_tile",
+          "wait": false
+        }
+      ]
+    },
+    "move_left": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_fields",
+          "entity_id": "$self_id",
+          "set": {
+            "visuals": {
+              "down": {
+                "visible": false,
+                "current_frame": 0
+              },
+              "up": {
+                "visible": false,
+                "current_frame": 1
+              },
+              "side": {
+                "visible": true,
+                "current_frame": 2,
+                "flip_x": true
+              }
+            }
+          }
+        },
+        {
+          "type": "move_in_direction",
+          "entity_id": "$self_id",
+          "direction": "left",
+          "frames_needed": "$project.movement.ticks_per_tile",
+          "wait": false
+        }
+      ]
+    },
+    "move_right": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "set_entity_fields",
+          "entity_id": "$self_id",
+          "set": {
+            "visuals": {
+              "down": {
+                "visible": false,
+                "current_frame": 0
+              },
+              "up": {
+                "visible": false,
+                "current_frame": 1
+              },
+              "side": {
+                "visible": true,
+                "current_frame": 2,
+                "flip_x": false
+              }
+            }
+          }
+        },
+        {
+          "type": "move_in_direction",
+          "entity_id": "$self_id",
+          "direction": "right",
+          "frames_needed": "$project.movement.ticks_per_tile",
+          "wait": false
+        }
+      ]
+    },
+    "interact": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "interact_facing",
+          "entity_id": "$self_id"
+        }
+      ]
+    },
+    "inventory": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "open_inventory_session",
+          "entity_id": "$self_id",
+          "wait": false
+        }
+      ]
+    }
+  },
+  "render_order": 10
+}

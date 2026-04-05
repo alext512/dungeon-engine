@@ -419,6 +419,9 @@ class Game:
             world,
             transferred_entities or [],
             entry_id=None if transition_request is None else transition_request.entry_id,
+            destination_entity_id=(
+                None if transition_request is None else transition_request.destination_entity_id
+            ),
         )
 
         self.area_path = resolved_area_path
@@ -905,11 +908,19 @@ class Game:
         transferred_entities: list,
         *,
         entry_id: str | None,
+        destination_entity_id: str | None = None,
     ) -> None:
         """Place transferred entities into the loaded destination area before runtime rebuild."""
         if not transferred_entities:
             return
         entry_point = None
+        destination_entity = None
+        if destination_entity_id:
+            destination_entity = world.get_entity(destination_entity_id)
+            if destination_entity is None:
+                raise KeyError(
+                    f"Area '{area.area_id}' does not define destination entity '{destination_entity_id}'."
+                )
         if entry_id:
             entry_point = area.entry_points.get(entry_id)
             if entry_point is None:
@@ -918,12 +929,29 @@ class Game:
                 )
 
         for entity in transferred_entities:
-            self._place_transferred_entity(area, entity, entry_point=entry_point)
+            self._place_transferred_entity(
+                area,
+                entity,
+                entry_point=entry_point,
+                destination_entity=destination_entity,
+            )
             world.add_entity(entity)
 
-    def _place_transferred_entity(self, area, entity, *, entry_point) -> None:
+    def _place_transferred_entity(self, area, entity, *, entry_point, destination_entity) -> None:
         """Move one transferred entity onto the destination entry marker when provided."""
         if entity.space != "world":
+            return
+        if destination_entity is not None:
+            if destination_entity.space != "world":
+                raise ValueError(
+                    f"Destination entity '{destination_entity.entity_id}' must be world-space."
+                )
+            entity.grid_x = int(destination_entity.grid_x)
+            entity.grid_y = int(destination_entity.grid_y)
+            if destination_entity.facing:
+                entity.set_facing_value(str(destination_entity.facing))
+            entity.pixel_x = float(destination_entity.pixel_x)
+            entity.pixel_y = float(destination_entity.pixel_y)
             return
         if entry_point is None:
             entity.sync_pixel_position(area.tile_size)

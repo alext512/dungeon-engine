@@ -49,6 +49,8 @@ _ENTITY_FILL = QColor(0, 200, 220, 100)
 _ENTITY_BORDER = QColor(0, 200, 220, 200)
 _ENTITY_SCREEN_FILL = QColor(220, 140, 0, 100)
 _ENTITY_SCREEN_BORDER = QColor(220, 140, 0, 200)
+_ENTITY_HIDDEN_FILL = QColor(180, 180, 180, 70)
+_ENTITY_HIDDEN_BORDER = QColor(220, 220, 220, 180)
 _ENTITY_GHOST_FILL = QColor(0, 200, 220, 100)
 _ENTITY_GHOST_BORDER = QColor(0, 200, 220, 180)
 _ENTITY_SELECT_BORDER = QColor(255, 220, 40, 230)
@@ -824,10 +826,25 @@ class TileCanvas(QGraphicsView):
             tooltip = entity.id
             if entity.template:
                 tooltip += f"  ({entity.template})"
+            entity_visible = bool(entity._extra.get("visible", True))
+            if not entity_visible:
+                tooltip += "  [hidden]"
+
+            group = QGraphicsItemGroup()
+
+            marker = QGraphicsRectItem(0, 0, ts, ts)
+            marker.setPos(px, py)
+            marker.setBrush(fill if entity_visible else _ENTITY_HIDDEN_FILL)
+            marker_pen = QPen(border if entity_visible else _ENTITY_HIDDEN_BORDER, 1)
+            if not entity_visible:
+                marker_pen.setStyle(Qt.PenStyle.DashLine)
+            marker.setPen(marker_pen)
+            marker.setToolTip(tooltip)
+            group.addToGroup(marker)
 
             # Try to render the actual sprite from the template visual
             sprite_rendered = False
-            if templates and entity.template:
+            if entity_visible and templates and entity.template:
                 visual = templates.get_first_visual(
                     entity.template,
                     entity.parameters or {},
@@ -847,29 +864,18 @@ class TileCanvas(QGraphicsView):
                             py + visual.offset_y,
                         )
                         sprite_item.setToolTip(tooltip)
-                        items.append(
-                            _CanvasRenderEntry(
-                                self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
-                                sprite_item,
-                                entity.id,
-                            )
-                        )
+                        group.addToGroup(sprite_item)
                         sprite_rendered = True
 
-            # Fallback: coloured rectangle marker when no sprite available
-            if not sprite_rendered:
-                rect = QGraphicsRectItem(0, 0, ts, ts)
-                rect.setPos(px, py)
-                rect.setBrush(fill)
-                rect.setPen(QPen(border, 1))
-                rect.setToolTip(tooltip)
-                items.append(
-                    _CanvasRenderEntry(
-                        self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
-                        rect,
-                        entity.id,
-                    )
+            # Keep an editor marker even when a sprite exists so placement remains obvious.
+            _ = sprite_rendered
+            items.append(
+                _CanvasRenderEntry(
+                    self._entity_sort_key(entity, px=px, py=py, tile_size=ts),
+                    group,
+                    entity.id,
                 )
+            )
 
         return items
 

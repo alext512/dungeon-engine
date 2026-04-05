@@ -6,6 +6,13 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ## Editor Workflow Catch-Up
 
+- Added destination-marker-based area transitions through
+  `destination_entity_id` on `change_area` / `new_game`, so transferred entities
+  can now land on authored marker entities instead of only named `entry_points`
+- Added `new_project` sample transition templates and marker entities
+  (`area_transition` and `area_transition_target`) to demonstrate the newer flow
+- Added a deprecation-planning note for eventually phasing out `entry_points` as
+  the preferred authoring model while keeping compatibility for existing content
 - Expanded the external editor beyond the earlier area-only slice with
   structured project-level tabs for `project.json`, `shared_variables.json`,
   items, and `global_entities`, while keeping guarded raw JSON fallbacks

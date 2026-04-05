@@ -3464,6 +3464,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         area_id: str = "",
         entry_id: str | None = None,
+        destination_entity_id: str | None = None,
         transfer_entity_id: str | None = None,
         transfer_entity_ids: list[str] | None = None,
         camera_follow: dict[str, Any] | None = None,
@@ -3525,6 +3526,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             AreaTransitionRequest(
                 area_id=resolved_reference,
                 entry_id=str(entry_id).strip() or None,
+                destination_entity_id=str(destination_entity_id).strip() or None,
                 transfer_entity_ids=resolved_transfer_ids,
                 camera_follow=camera_follow_request,
             )
@@ -3537,6 +3539,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         *,
         area_id: str = "",
         entry_id: str | None = None,
+        destination_entity_id: str | None = None,
         camera_follow: dict[str, Any] | None = None,
         source_entity_id: str | None = None,
         **_: Any,
@@ -3577,6 +3580,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             AreaTransitionRequest(
                 area_id=resolved_reference,
                 entry_id=str(entry_id).strip() or None,
+                destination_entity_id=str(destination_entity_id).strip() or None,
                 camera_follow=camera_follow_request,
             )
         )

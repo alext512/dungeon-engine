@@ -56,7 +56,7 @@ items
 
 areas
 |-- place entity instances
-|-- define entry_points and camera defaults
+|-- define transfer destinations and camera defaults
 |-- call commands from enter hooks
 `-- override input-target defaults
 
@@ -263,13 +263,6 @@ Example structure:
 ```json
 {
   "tile_size": 16,
-  "entry_points": {
-    "startup": {
-      "grid_x": 8,
-      "grid_y": 8,
-      "facing": "down"
-    }
-  },
   "camera": {
     "follow": {
       "mode": "entity",
@@ -297,7 +290,7 @@ Example structure:
 - `tile_size`
   Tile size in pixels.
 - `entry_points`
-  Named destinations for `change_area` and `new_game`.
+  Optional named destinations kept for compatibility with older transfer flows.
 - `camera`
   Optional authored camera defaults for this area.
 - `input_targets`
@@ -323,7 +316,8 @@ Important notes:
 - do not author `player_id`; the engine now uses explicit input routing, transition payloads, and camera defaults instead
 - project-level global entities belong in `project.json`, not inside `entities`
 - area `camera` defaults are just initial runtime state; commands can replace them later
-- area `entry_points` are the intended targets for transfers instead of hardcoded spawn assumptions
+- newer projects should prefer destination marker entities plus `destination_entity_id`
+  instead of relying on authored `entry_points`
 
 ### Tilesets and layers
 
@@ -1636,17 +1630,18 @@ Common fields:
 
 - `area_id`
 - `entry_id`
+- `destination_entity_id`
 - `transfer_entity_id`
 - `transfer_entity_ids`
 - `camera_follow`
 
-Typical door example:
+Preferred current example using a destination marker entity:
 
 ```json
 {
   "type": "change_area",
   "area_id": "$target_area",
-  "entry_id": "$target_entry",
+  "destination_entity_id": "$target_marker",
   "transfer_entity_ids": ["actor"],
   "camera_follow": {
     "mode": "entity",
@@ -1657,7 +1652,9 @@ Typical door example:
 
 Rules:
 
-- use `entry_id` to land on an authored area entry point
+- use `destination_entity_id` to land on a destination marker entity in the
+  target area
+- `entry_id` remains supported for older authored content
 - use `transfer_entity_ids` when the live entity itself should travel to the new area
 - `camera_follow.mode` can be `entity`, `input_target`, or `none`
 - `camera_follow.entity_id` supports symbolic `self` / `actor` / `caller` in these high-level transition commands
@@ -1670,6 +1667,54 @@ Rules:
 A note on travelers: "traveler" is runtime state, not an authored entity type. There is no `"traveler": true` field in JSON. Any live area-scoped entity can become a traveler when it is named in `transfer_entity_ids` during a `change_area`. The engine then tracks that entity's current area for the rest of the session. Only `scope: "area"` entities can be transferred — global entities are already present everywhere and cannot be moved this way.
 
 This is different from global entities. Global entities are project-level and always present in the active world — they don't physically move between areas. A traveler is an entity that was in one area and has been relocated to another; it exists in exactly one area at a time. If you don't include an entity in `transfer_entity_ids`, it simply stays behind in the area it was in.
+
+Recommended marker pattern:
+
+- create one invisible destination marker entity in the destination area
+- give that marker a stable authored entity id
+- have the transition trigger use `destination_entity_id` to target it
+
+Marker template example:
+
+```json
+{
+  "kind": "area_transition_target",
+  "solid": false,
+  "visible": false,
+  "interactable": false,
+  "facing": "down"
+}
+```
+
+Transition trigger example:
+
+```json
+{
+  "kind": "area_transition",
+  "solid": false,
+  "visible": false,
+  "interactable": false,
+  "variables": {
+    "target_area": "areas/start",
+    "destination_entity_id": "spawn_marker"
+  },
+  "entity_commands": {
+    "on_occupant_enter": {
+      "enabled": true,
+      "commands": [
+        {
+          "type": "change_area",
+          "area_id": "$self.target_area",
+          "destination_entity_id": "$self.destination_entity_id",
+          "transfer_entity_ids": [
+            "$ref_ids.instigator"
+          ]
+        }
+      ]
+    }
+  }
+}
+```
 
 ## Camera Control
 

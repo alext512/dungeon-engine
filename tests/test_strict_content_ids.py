@@ -2087,6 +2087,23 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(runner.dispatched, [("player", "open_inventory")])
 
+    def test_input_handler_blocks_immediate_direction_press_while_world_move_is_active(self) -> None:
+        import pygame
+
+        world = World(default_input_targets={"move_right": "player"})
+        player = _make_runtime_entity("player", kind="player")
+        player.input_map["move_right"] = "walk_right"
+        player.movement_state.active = True
+        world.add_entity(player)
+        runner = _RecordingInputDispatchRunner()
+        input_handler = InputHandler(runner, world)
+
+        input_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RIGHT})]
+        )
+
+        self.assertEqual(runner.dispatched, [])
+
     def test_input_handler_blocks_world_routing_when_inventory_modal_is_active(self) -> None:
         import pygame
 
@@ -4846,6 +4863,63 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual((restored_crate.grid_x, restored_crate.grid_y), (2, 0))
         self.assertNotIn("temporary", restored_crate.variables)
 
+    def test_area_change_can_place_transferred_entity_at_destination_marker_entity(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        _, project = self._make_project(
+            startup_area="areas/room_a",
+            areas={
+                "room_a.json": {
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
+                    "cell_flags": [[True, True, True]],
+                    "entities": [
+                        {"id": "crate", "kind": "crate", "grid_x": 0, "grid_y": 0, "facing": "down"},
+                    ],
+                },
+                "room_b.json": {
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0], [0, 0, 0]]}],
+                    "cell_flags": [[True, True, True], [True, True, True]],
+                    "entities": [
+                        {
+                            "id": "spawn_marker",
+                            "kind": "transition_target",
+                            "grid_x": 2,
+                            "grid_y": 1,
+                            "facing": "left",
+                            "visible": False,
+                        }
+                    ],
+                },
+            },
+        )
+
+        area_a_path = project.resolve_area_reference("areas/room_a")
+        assert area_a_path is not None
+        game = Game(area_path=area_a_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        game.request_area_change(
+            AreaTransitionRequest(
+                area_id="areas/room_b",
+                destination_entity_id="spawn_marker",
+                transfer_entity_ids=["crate"],
+            )
+        )
+        game._apply_pending_area_change_if_idle()
+
+        crate = game.world.get_entity("crate")
+        assert crate is not None
+        self.assertEqual((crate.grid_x, crate.grid_y), (2, 1))
+        self.assertEqual(crate.facing, "left")
+
     def test_current_area_runtime_token_replaces_world_token(self) -> None:
         world = World()
         world.variables["phase"] = "opening"
@@ -5582,6 +5656,7 @@ class StrictContentIdTests(unittest.TestCase):
             {
                 "area_id": "areas/village_square",
                 "entry_id": "startup",
+                "destination_entity_id": "spawn_player",
             },
         )
         handle.update(0.0)
@@ -5589,6 +5664,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(len(recorded_requests), 1)
         self.assertEqual(recorded_requests[0].area_id, "areas/village_square")
         self.assertEqual(recorded_requests[0].entry_id, "startup")
+        self.assertEqual(recorded_requests[0].destination_entity_id, "spawn_player")
 
     def test_change_area_command_queues_transfer_and_camera_request(self) -> None:
         recorded_requests: list[AreaTransitionRequest] = []
@@ -5613,6 +5689,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "type": "change_area",
                 "area_id": "areas/village_house",
                 "entry_id": "from_square",
+                "destination_entity_id": "village_house_spawn",
                 "transfer_entity_ids": ["$ref_ids.instigator"],
                 "camera_follow": {
                     "mode": "entity",
@@ -5629,6 +5706,7 @@ class StrictContentIdTests(unittest.TestCase):
         request = recorded_requests[0]
         self.assertEqual(request.area_id, "areas/village_house")
         self.assertEqual(request.entry_id, "from_square")
+        self.assertEqual(request.destination_entity_id, "village_house_spawn")
         self.assertEqual(request.transfer_entity_ids, ["player"])
         self.assertIsNotNone(request.camera_follow)
         assert request.camera_follow is not None

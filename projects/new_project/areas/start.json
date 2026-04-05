@@ -1,0 +1,111 @@
+{
+  "tile_size": 16,
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/used_tilesets_sprites/overworld_expanded.png",
+      "tile_width": 16,
+      "tile_height": 16
+    },
+    {
+      "firstgid": 541,
+      "path": "assets/used_tilesets_sprites/tiles.png",
+      "tile_width": 16,
+      "tile_height": 16
+    }
+  ],
+  "tile_layers": [
+    {
+      "name": "ground",
+      "render_order": 0,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [685, 655, 654, 655, 852, 852, 852, 852],
+        [701, 671, 670, 671, 852, 852, 852, 852],
+        [640, 852, 852, 852, 852, 852, 852, 852],
+        [656, 852, 852, 852, 852, 852, 852, 852],
+        [672, 852, 852, 852, 852, 688, 689, 689],
+        [689, 689, 689, 689, 689, 674, 705, 705],
+        [705, 705, 705, 705, 705, 705, 705, 562]
+      ]
+    },
+    {
+      "name": "ground5",
+      "render_order": 5,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [0, 0, 0, 0, 656, 886, 887, 817],
+        [0, 0, 687, 0, 672, 902, 903, 0],
+        [0, 0, 0, 0, 0, 0, 0, 886],
+        [0, 0, 0, 0, 819, 820, 821, 902],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0]
+      ],
+      "sort_y_offset": 1.0
+    },
+    {
+      "name": "ground10",
+      "render_order": 10,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 827, 0],
+        [0, 0, 0, 0, 0, 0, 843, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0]
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "player_1",
+      "grid_x": 2,
+      "grid_y": 4,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/player",
+      "facing": "up"
+    },
+    {
+      "id": "from_first_area_marker",
+      "grid_x": 2,
+      "grid_y": 4,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/area_transition_target"
+    },
+    {
+      "id": "to_first_area_1",
+      "grid_x": 2,
+      "grid_y": 1,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/area_transition",
+      "variables": {
+        "target_area": "areas/levels/first_area",
+        "destination_entity_id": "from_start_marker"
+      }
+    }
+  ],
+  "input_targets": {
+    "move_up": "player_1",
+    "move_down": "player_1",
+    "move_left": "player_1",
+    "move_right": "player_1",
+    "interact": "player_1",
+    "inventory": "player_1"
+  },
+  "variables": {}
+}

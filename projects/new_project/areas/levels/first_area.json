@@ -3,7 +3,7 @@
   "tilesets": [
     {
       "firstgid": 1,
-      "path": "assets/used_tilesets/overworld_expanded.png",
+      "path": "assets/used_tilesets_sprites/overworld_expanded.png",
       "tile_width": 16,
       "tile_height": 16
     }
@@ -166,14 +166,32 @@
       ]
     }
   ],
-  "entry_points": {
-    "startup": {
-      "grid_x": 0,
-      "grid_y": 0,
-      "facing": "down"
+  "entities": [
+    {
+      "id": "from_start_marker",
+      "grid_x": 15,
+      "grid_y": 19,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/area_transition_target"
+    },
+    {
+      "id": "to_start_1",
+      "grid_x": 15,
+      "grid_y": 20,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/area_transition",
+      "variables": {
+        "target_area": "areas/start",
+        "destination_entity_id": "from_first_area_marker"
+      }
     }
-  },
-  "entities": [],
+  ],
   "variables": {},
   "enter_commands": [
     {

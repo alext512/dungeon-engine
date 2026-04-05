@@ -9,8 +9,7 @@
           "commands": [
             {
               "type": "new_game",
-              "area_id": "areas/first_room",
-              "entry_id": "startup"
+              "area_id": "areas/start"
             }
           ]
         },

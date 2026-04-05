@@ -9,9 +9,10 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QPixmap
 from PySide6.QtWidgets import QApplication
 
+from area_editor.catalogs.template_catalog import VisualInfo
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
 from area_editor.documents.area_document import AreaDocument, EntityDocument, TileLayerDocument
@@ -117,6 +118,61 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         self.assertEqual(len(canvas._layer_items[1]), 1)
         self.assertEqual(len(canvas._entity_items), 1)
         self.assertLess(canvas._layer_items[1][0].zValue(), canvas._entity_items[0].zValue())
+
+    def test_entity_with_sprite_still_gets_editor_marker_box(self):
+        class _StubTemplates:
+            def get_template_space(self, template_id):
+                _ = template_id
+                return None
+
+            def get_first_visual(self, template_id, parameters=None):
+                _ = template_id, parameters
+                return VisualInfo(
+                    path="assets/project/sprites/test.png",
+                    frame_width=16,
+                    frame_height=16,
+                    frames=[0],
+                    offset_x=0.0,
+                    offset_y=0.0,
+                )
+
+        area = _make_area()
+        area.entities = [
+            EntityDocument(
+                id="player",
+                grid_x=0,
+                grid_y=0,
+                render_order=10,
+                y_sort=True,
+                stack_order=0,
+                template="entity_templates/player",
+            )
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        with patch.object(catalog, "get_sprite_frame", return_value=QPixmap(16, 16)):
+            canvas.set_area(area, catalog, _StubTemplates())
+
+        self.assertEqual(len(canvas._entity_items[0].childItems()), 2)
+
+    def test_hidden_entity_still_gets_editor_marker_box(self):
+        area = _make_area()
+        hidden = EntityDocument(
+            id="trigger",
+            grid_x=0,
+            grid_y=0,
+            render_order=10,
+            y_sort=True,
+            stack_order=0,
+        )
+        hidden._extra["visible"] = False
+        area.entities = [hidden]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+
+        self.assertTrue(canvas._entity_items[0].isVisible())
+        self.assertEqual(len(canvas._entity_items[0].childItems()), 1)
 
     def test_entity_brush_emits_place_and_delete_requests(self):
         area = _make_area()
@@ -288,8 +344,9 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
 
         item = canvas._entity_item_by_id["title_backdrop"]
         screen_x, screen_y = canvas._screen_pane_origin
-        self.assertEqual(item.pos().x(), screen_x + 12)
-        self.assertEqual(item.pos().y(), screen_y + 18)
+        rect = item.sceneBoundingRect()
+        self.assertAlmostEqual(rect.x(), float(screen_x + 12) - 0.5)
+        self.assertAlmostEqual(rect.y(), float(screen_y + 18) - 0.5)
         self.assertEqual(canvas._screen_pane_size, (256, 192))
 
     def test_refresh_scene_contents_recomputes_screen_pane_after_area_width_changes(self):

@@ -137,6 +137,7 @@ class AreaTransitionRequest:
 
     area_id: str
     entry_id: str | None = None
+    destination_entity_id: str | None = None
     transfer_entity_ids: list[str] = field(default_factory=list)
     camera_follow: CameraFollowRequest | None = None
 
