@@ -110,6 +110,7 @@ _COMMAND_ID_PREFIX = "commands"
 _DIALOGUE_ID_PREFIX = "dialogues"
 _AREA_DUPLICATE_FULL = "Full Copy"
 _AREA_DUPLICATE_LAYOUT = "Layout Copy"
+_AREA_JSON_TAB_SUFFIX = " [Raw JSON]"
 
 log = logging.getLogger(__name__)
 
@@ -509,6 +510,18 @@ class MainWindow(QMainWindow):
         )
         self._asset_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ASSET)
+        )
+        self._area_panel.set_open_action_label_provider(
+            lambda _cid, _fp: "Open Area"
+        )
+        self._dialogue_panel.set_open_action_label_provider(
+            lambda _cid, _fp: "Open Raw JSON"
+        )
+        self._command_panel.set_open_action_label_provider(
+            lambda _cid, _fp: "Open Raw JSON"
+        )
+        self._asset_panel.set_open_action_label_provider(
+            lambda _cid, fp: "Open Raw JSON" if fp.suffix.lower() == ".json" else "Open"
         )
         self._area_panel.set_context_menu_builder(self._populate_area_context_menu)
         self._area_panel.set_folder_context_menu_builder(
@@ -1481,6 +1494,8 @@ class MainWindow(QMainWindow):
             return "Shared Variables"
         if content_type == ContentType.GLOBAL_ENTITIES:
             return "Global Entities"
+        if content_type == ContentType.AREA_JSON:
+            return content_id
         return content_id
 
     def _update_project_content_actions(self) -> None:
@@ -1560,9 +1575,17 @@ class MainWindow(QMainWindow):
             )
 
     def _populate_area_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_open_area_raw_json_action(menu, content_id, file_path)
         self._add_duplicate_area_action(menu, content_id, file_path)
         self._add_rename_content_action(menu, ContentType.AREA, content_id, file_path)
         self._add_delete_content_action(menu, ContentType.AREA, content_id, file_path)
+
+    def _add_open_area_raw_json_action(self, menu, content_id: str, file_path: Path) -> None:
+        open_json_action = QAction("Open Raw JSON", self)
+        open_json_action.triggered.connect(
+            lambda: self._open_area_raw_json(content_id, file_path)
+        )
+        menu.addAction(open_json_action)
 
     def _add_duplicate_area_action(self, menu, content_id: str, file_path: Path) -> None:
         menu.addSeparator()
@@ -2089,8 +2112,12 @@ class MainWindow(QMainWindow):
             return
 
         self._tab_widget.close_content(content_id)
+        if content_type == ContentType.AREA:
+            self._tab_widget.close_content(self._area_json_content_id(content_id))
         self._area_docs.pop(content_id, None)
         self._json_dirty_bound.discard(content_id)
+        if content_type == ContentType.AREA:
+            self._json_dirty_bound.discard(self._area_json_content_id(content_id))
         self._refresh_project_metadata_surfaces()
         self._refresh_area_panel()
         self.statusBar().showMessage(f"Deleted {content_id}.", 3500)
@@ -4125,6 +4152,48 @@ class MainWindow(QMainWindow):
         self._connect_canvas(canvas)
         self._area_panel.highlight_area(area_id)
 
+    def _open_area_raw_json(self, area_id: str, file_path: Path) -> None:
+        self._open_content(
+            self._area_json_content_id(area_id),
+            file_path,
+            ContentType.AREA_JSON,
+        )
+
+    def _area_json_content_id(self, area_id: str) -> str:
+        return f"{area_id}{_AREA_JSON_TAB_SUFFIX}"
+
+    def _area_id_for_json_content_id(self, content_id: str) -> str | None:
+        if not content_id.endswith(_AREA_JSON_TAB_SUFFIX):
+            return None
+        return content_id[: -len(_AREA_JSON_TAB_SUFFIX)]
+
+    def _reload_open_area_from_file(self, area_id: str) -> None:
+        info = self._tab_widget.content_info(area_id)
+        canvas = self._tab_widget.widget_for_content(area_id)
+        if info is None or not isinstance(canvas, TileCanvas) or self._catalog is None:
+            return
+        try:
+            document = load_area_document(info.file_path)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Reload Failed",
+                f"Failed to reload {area_id} after saving Raw JSON:\n{exc}",
+            )
+            return
+        self._area_docs[area_id] = document
+        canvas.set_area(
+            document,
+            self._catalog,
+            self._templates,
+            display_size=(self._display_width, self._display_height),
+        )
+        canvas.set_grid_visible(self._grid_action.isChecked())
+        canvas.set_entities_visible(self._entities_visibility_action.isChecked())
+        self._tab_widget.set_dirty(area_id, False)
+        if self._tab_widget.active_content_id() == area_id:
+            self._on_active_tab_changed(area_id, ContentType.AREA)
+
     def _active_canvas(self) -> TileCanvas | None:
         """Return the TileCanvas of the active tab, if it's an area tab."""
         widget = self._tab_widget.active_widget()
@@ -4728,6 +4797,15 @@ class MainWindow(QMainWindow):
             return True
         if info.content_type == ContentType.AREA:
             return self._save_area(content_id)
+        if info.content_type == ContentType.AREA_JSON:
+            area_id = self._area_id_for_json_content_id(content_id)
+            if area_id is not None and self._tab_widget.is_dirty(area_id):
+                QMessageBox.warning(
+                    self,
+                    "Unsaved Area Changes",
+                    "Save or discard the open area tab before saving its Raw JSON tab.",
+                )
+                return False
 
         widget = self._tab_widget.widget_for_content(content_id)
         if not isinstance(
@@ -4751,6 +4829,10 @@ class MainWindow(QMainWindow):
                 f"Failed to save {content_id}:\n{exc}",
             )
             return False
+        if info.content_type == ContentType.AREA_JSON:
+            area_id = self._area_id_for_json_content_id(content_id)
+            if area_id is not None:
+                self._reload_open_area_from_file(area_id)
         self._tab_widget.set_dirty(content_id, False)
         if info.content_type in {
             ContentType.PROJECT_MANIFEST,

@@ -1980,6 +1980,70 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 self._panel_file_entries(window._area_panel),
             )
 
+    def test_area_context_menu_can_open_raw_json_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            area_path = project_file.parent / "areas" / "demo.json"
+            window._open_area_raw_json("areas/demo", area_path)
+
+            info = window._tab_widget.active_info()
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertEqual(info.content_type, ContentType.AREA_JSON)
+            self.assertEqual(info.file_path, area_path)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, JsonViewerWidget)
+            assert isinstance(widget, JsonViewerWidget)
+            self.assertIn('"tile_layers"', widget.toPlainText())
+
+    def test_file_tree_open_labels_match_surface_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            area_path = project_file.parent / "areas" / "demo.json"
+            asset_png = project_file.parent / "assets" / "base.png"
+            asset_json = project_file.parent / "assets" / "base.json"
+            dialogue_path = project_file.parent / "dialogues" / "system" / "prompt.json"
+            command_path = project_file.parent / "commands" / "system" / "do_thing.json"
+
+            self.assertEqual(window._area_panel._open_action_label_provider("areas/demo", area_path), "Open Area")
+            self.assertEqual(window._dialogue_panel._open_action_label_provider("dialogues/system/prompt", dialogue_path), "Open Raw JSON")
+            self.assertEqual(window._command_panel._open_action_label_provider("commands/system/do_thing", command_path), "Open Raw JSON")
+            self.assertEqual(window._asset_panel._open_action_label_provider("base.png", asset_png), "Open")
+            self.assertEqual(window._asset_panel._open_action_label_provider("base.json", asset_json), "Open Raw JSON")
+
+    def test_saving_area_raw_json_reload_updates_open_area_document(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(True)
+            window.open_project(project_file)
+
+            area_path = project_file.parent / "areas" / "demo.json"
+            window._open_area("areas/demo", area_path)
+            window._open_area_raw_json("areas/demo", area_path)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, JsonViewerWidget)
+            assert isinstance(widget, JsonViewerWidget)
+            data = json.loads(widget.toPlainText())
+            data["tile_layers"][0]["grid"] = [[0]]
+            widget.setPlainText(json.dumps(data))
+            QApplication.processEvents()
+
+            window._on_save_active()
+
+            self.assertEqual(window._area_docs["areas/demo"].tile_layers[0].grid, [[0]])
+
     def test_duplicate_area_full_copy_remaps_entity_ids_and_intra_area_references(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_reference_project(Path(tmp))

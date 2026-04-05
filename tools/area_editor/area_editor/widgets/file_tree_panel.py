@@ -57,6 +57,7 @@ class FileTreePanel(QDockWidget):
         )
         self._preserve_file_extensions = preserve_file_extensions
         self._context_menu_builder: Callable[[QMenu, str, Path], None] | None = None
+        self._open_action_label_provider: Callable[[str, Path], str] | None = None
         self._folder_context_menu_builder: (
             Callable[[QMenu, str, Path, Path], None] | None
         ) = None
@@ -174,6 +175,13 @@ class FileTreePanel(QDockWidget):
         """Install an optional callback that can add file-specific actions."""
         self._context_menu_builder = builder
 
+    def set_open_action_label_provider(
+        self,
+        provider: Callable[[str, Path], str] | None,
+    ) -> None:
+        """Customize the file-item open action label."""
+        self._open_action_label_provider = provider
+
     def set_folder_context_menu_builder(
         self,
         builder: Callable[[QMenu, str, Path, Path], None] | None,
@@ -240,7 +248,12 @@ class FileTreePanel(QDockWidget):
             data = item.data(0, self._FILE_ROLE)
             if data is not None:
                 content_id, file_path = data
-                open_action = QAction("Open", self)
+                open_label = (
+                    self._open_action_label_provider(content_id, file_path)
+                    if self._open_action_label_provider is not None
+                    else "Open"
+                )
+                open_action = QAction(open_label, self)
                 open_action.triggered.connect(
                     lambda: self.file_open_requested.emit(content_id, file_path)
                 )

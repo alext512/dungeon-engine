@@ -34,6 +34,7 @@ _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
 
 class ContentType(Enum):
     AREA = auto()
+    AREA_JSON = auto()
     ENTITY_TEMPLATE = auto()
     ITEM = auto()
     DIALOGUE = auto()
@@ -262,7 +263,9 @@ class DocumentTabWidget(QStackedWidget):
 
     @staticmethod
     def _tab_label(info: _TabInfo) -> str:
-        if info.content_type == ContentType.PROJECT_MANIFEST:
+        if info.content_type == ContentType.AREA_JSON:
+            base = info.file_path.name
+        elif info.content_type == ContentType.PROJECT_MANIFEST:
             base = info.file_path.stem
         elif info.content_type == ContentType.SHARED_VARIABLES:
             base = info.file_path.stem
