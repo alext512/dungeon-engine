@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from typing import Callable
+
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QDockWidget,
+    QMenu,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -36,10 +40,13 @@ class GlobalEntitiesPanel(QDockWidget):
         self._tree.setHeaderHidden(True)
         self._tree.currentItemChanged.connect(self._on_item_changed)
         self._tree.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._tree.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._tree)
 
         self.setWidget(container)
         self.setMinimumWidth(140)
+        self._context_menu_builder: Callable[[QMenu, str], None] | None = None
 
     def populate(self, entries: list[GlobalEntityEntry]) -> None:
         self._tree.blockSignals(True)
@@ -55,6 +62,12 @@ class GlobalEntitiesPanel(QDockWidget):
 
     def clear_entities(self) -> None:
         self._tree.clear()
+
+    def set_context_menu_builder(
+        self,
+        builder: Callable[[QMenu, str], None] | None,
+    ) -> None:
+        self._context_menu_builder = builder
 
     def select_entity(self, entity_id: str) -> None:
         self._tree.blockSignals(True)
@@ -76,3 +89,21 @@ class GlobalEntitiesPanel(QDockWidget):
         entity_id = item.data(0, Qt.ItemDataRole.UserRole)
         if entity_id:
             self.global_entity_open_requested.emit(str(entity_id))
+
+    def _on_context_menu(self, position) -> None:
+        item = self._tree.itemAt(position)
+        if item is None:
+            return
+        entity_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if not entity_id:
+            return
+        menu = QMenu(self)
+        open_action = QAction("Open", self)
+        open_action.triggered.connect(
+            lambda: self.global_entity_open_requested.emit(str(entity_id))
+        )
+        menu.addAction(open_action)
+        if self._context_menu_builder is not None:
+            self._context_menu_builder(menu, str(entity_id))
+        if menu.actions():
+            menu.exec(self._tree.viewport().mapToGlobal(position))

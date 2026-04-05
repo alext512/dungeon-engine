@@ -63,6 +63,7 @@ _CELL_FLAG_BLOCKED_BORDER = QColor(220, 40, 40, 180)
 
 # Scene background
 _BG_COLOR = QColor(30, 30, 30)
+_SCENE_EDGE_PADDING = 32
 
 
 @dataclass(slots=True)
@@ -195,16 +196,7 @@ class TileCanvas(QGraphicsView):
         if display_size is not None:
             self._display_width = max(1, int(display_size[0]))
             self._display_height = max(1, int(display_size[1]))
-
-        width_px = area.width * self._tile_size
-        height_px = area.height * self._tile_size
-        gap = self._tile_size
-        screen_x = max(width_px, 0) + gap
-        self._screen_pane_origin = (screen_x, 0)
-        self._screen_pane_size = (self._display_width, self._display_height)
-        scene_w = max(screen_x + self._display_width, 1)
-        scene_h = max(height_px, self._display_height, 1)
-        self._scene.setSceneRect(QRectF(0, 0, scene_w, scene_h))
+        self._recompute_scene_layout()
         self._rebuild_scene_contents()
         self._update_drag_mode()
 
@@ -230,7 +222,23 @@ class TileCanvas(QGraphicsView):
         """Redraw the current area without reinitialising editor state."""
         if self._area is None or self._catalog is None:
             return
+        self._recompute_scene_layout()
         self._rebuild_scene_contents()
+
+    def _recompute_scene_layout(self) -> None:
+        """Recalculate scene extents and screen-pane placement from current area size."""
+        if self._area is None:
+            return
+        width_px = self._area.width * self._tile_size
+        height_px = self._area.height * self._tile_size
+        gap = self._tile_size
+        screen_x = max(width_px, 0) + gap
+        self._screen_pane_origin = (screen_x, 0)
+        self._screen_pane_size = (self._display_width, self._display_height)
+        scene_w = max(screen_x + self._display_width, 1)
+        scene_h = max(height_px, self._display_height, 1)
+        pad = float(_SCENE_EDGE_PADDING)
+        self._scene.setSceneRect(QRectF(-pad, -pad, scene_w + (pad * 2.0), scene_h + (pad * 2.0)))
 
     # -- Layer visibility ------------------------------------------------
 

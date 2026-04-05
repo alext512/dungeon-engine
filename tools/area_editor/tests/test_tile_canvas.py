@@ -16,7 +16,7 @@ from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
 from area_editor.documents.area_document import AreaDocument, EntityDocument, TileLayerDocument
 from area_editor.project_io.asset_resolver import AssetResolver
-from area_editor.widgets.tile_canvas import BrushType, TileCanvas
+from area_editor.widgets.tile_canvas import BrushType, TileCanvas, _SCENE_EDGE_PADDING
 
 
 def _make_area() -> AreaDocument:
@@ -230,6 +230,36 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         self.assertEqual(item.pos().x(), screen_x + 12)
         self.assertEqual(item.pos().y(), screen_y + 18)
         self.assertEqual(canvas._screen_pane_size, (256, 192))
+
+    def test_refresh_scene_contents_recomputes_screen_pane_after_area_width_changes(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(256, 192))
+
+        original_screen_x, _screen_y = canvas._screen_pane_origin
+        self.assertEqual(original_screen_x, area.width * area.tile_size + area.tile_size)
+
+        area.tile_layers[0].grid[0].insert(0, 0)
+        area.tile_layers[0].grid[1].insert(0, 0)
+
+        canvas.refresh_scene_contents()
+
+        updated_screen_x, _screen_y = canvas._screen_pane_origin
+        self.assertEqual(updated_screen_x, area.width * area.tile_size + area.tile_size)
+        self.assertGreater(updated_screen_x, original_screen_x)
+
+    def test_scene_rect_includes_visual_edge_padding(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(256, 192))
+
+        rect = canvas.sceneRect()
+        self.assertEqual(rect.x(), float(-_SCENE_EDGE_PADDING))
+        self.assertEqual(rect.y(), float(-_SCENE_EDGE_PADDING))
+        self.assertGreater(rect.width(), float(area.width * area.tile_size + 256))
+        self.assertGreater(rect.height(), float(max(area.height * area.tile_size, 192)))
 
     def test_select_mode_can_pick_screen_entities_with_template_fallback(self):
         area = _make_area()

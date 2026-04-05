@@ -39,6 +39,7 @@ class FileTreePanel(QDockWidget):
         icon_size: int = 0,
         file_extensions: tuple[str, ...] = (".json",),
         content_prefix: str | None = None,
+        preserve_file_extensions: bool = False,
         parent=None,
     ) -> None:
         super().__init__(title, parent)
@@ -51,6 +52,7 @@ class FileTreePanel(QDockWidget):
         self._content_prefix = (
             content_prefix.strip("/").replace("\\", "/") if content_prefix else None
         )
+        self._preserve_file_extensions = preserve_file_extensions
         self._context_menu_builder: Callable[[QMenu, str, Path], None] | None = None
 
         container = QWidget()
@@ -199,9 +201,12 @@ class FileTreePanel(QDockWidget):
                 # Derive content id from relative path
                 try:
                     relative = resolved.relative_to(directory.resolve())
-                    content_id = str(relative.with_suffix("")).replace("\\", "/")
+                    if self._preserve_file_extensions:
+                        content_id = str(relative).replace("\\", "/")
+                    else:
+                        content_id = str(relative.with_suffix("")).replace("\\", "/")
                 except ValueError:
-                    content_id = f.stem
+                    content_id = f.name if self._preserve_file_extensions else f.stem
                 if self._content_prefix:
                     content_id = f"{self._content_prefix}/{content_id}"
                 entries.append((content_id, f))

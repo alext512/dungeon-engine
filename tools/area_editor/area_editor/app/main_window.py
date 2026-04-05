@@ -371,6 +371,7 @@ class MainWindow(QMainWindow):
             "Assets",
             object_name="AssetPanel",
             file_extensions=(),  # show all file types
+            preserve_file_extensions=True,
         )
         self._browser_workspace = BrowserWorkspaceDock()
         self._browser_workspace.add_page(
@@ -496,6 +497,9 @@ class MainWindow(QMainWindow):
         self._area_panel.set_context_menu_builder(self._populate_area_context_menu)
         self._template_panel.set_context_menu_builder(self._populate_template_context_menu)
         self._item_panel.set_context_menu_builder(self._populate_item_context_menu)
+        self._global_entities_panel.set_context_menu_builder(
+            self._populate_global_entity_context_menu
+        )
         self._dialogue_panel.set_context_menu_builder(self._populate_dialogue_context_menu)
         self._command_panel.set_context_menu_builder(self._populate_command_context_menu)
         self._asset_panel.set_context_menu_builder(self._populate_asset_context_menu)
@@ -1332,6 +1336,14 @@ class MainWindow(QMainWindow):
     def _populate_item_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_rename_content_action(menu, ContentType.ITEM, content_id, file_path)
 
+    def _populate_global_entity_context_menu(self, menu, entity_id: str) -> None:
+        menu.addSeparator()
+        rename_action = QAction("Rename ID...", self)
+        rename_action.triggered.connect(
+            lambda: self._on_rename_global_entity_id(entity_id)
+        )
+        menu.addAction(rename_action)
+
     def _populate_dialogue_context_menu(
         self,
         menu,
@@ -1412,7 +1424,10 @@ class MainWindow(QMainWindow):
             )
             return
 
-        new_file_path = (root_dir / new_relative_name).with_suffix(file_path.suffix)
+        candidate_path = root_dir / new_relative_name
+        if content_type == ContentType.ASSET or candidate_path.suffix != file_path.suffix:
+            candidate_path = candidate_path.with_suffix(file_path.suffix)
+        new_file_path = candidate_path
         new_file_path = new_file_path.resolve()
         try:
             new_file_path.relative_to(root_dir.resolve())
@@ -1433,14 +1448,28 @@ class MainWindow(QMainWindow):
             )
             return
 
-        normalized_relative_name = new_relative_name.replace("\\", "/").strip("/")
+        if content_type == ContentType.ASSET:
+            normalized_relative_name = (
+                str(new_file_path.relative_to(root_dir.resolve()))
+                .replace("\\", "/")
+                .strip("/")
+            )
+        else:
+            normalized_relative_name = new_relative_name.replace("\\", "/").strip("/")
         new_content_id = (
             f"{prefix}/{normalized_relative_name}" if prefix else normalized_relative_name
         )
+        old_reference_value = content_id
+        new_reference_value = new_content_id
+        if content_type == ContentType.ASSET:
+            old_reference_value = self._authored_asset_path_for(file_path) or content_id
+            new_reference_value = (
+                self._authored_asset_path_for(new_file_path) or new_content_id
+            )
         try:
             reference_updates = self._collect_reference_updates(
-                old_value=content_id,
-                new_value=new_content_id,
+                old_value=old_reference_value,
+                new_value=new_reference_value,
                 matcher=reference_matcher,
             )
         except Exception as exc:
@@ -1494,6 +1523,144 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage(
             f"Renamed {content_id} to {new_content_id}.",
+            3500,
+        )
+
+    def _on_rename_global_entity_id(self, entity_id: str) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        new_entity_id, accepted = QInputDialog.getText(
+            self,
+            "Rename Global Entity ID",
+            "New entity id",
+            text=entity_id,
+        )
+        if not accepted:
+            return
+        normalized = new_entity_id.strip()
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Entity ID",
+                "The new entity id must not be blank.",
+            )
+            return
+        if normalized == entity_id:
+            return
+        self._apply_global_entity_id_rename(entity_id, normalized)
+
+    def _apply_global_entity_id_rename(
+        self,
+        entity_id: str,
+        normalized: str,
+    ) -> None:
+        if self._manifest is None:
+            return
+        for usage in self._project_entity_id_usages():
+            if usage.entity_id != normalized:
+                continue
+            QMessageBox.warning(
+                self,
+                "Duplicate Entity ID",
+                f"Entity id '{normalized}' is already used by "
+                f"{self._describe_entity_id_usage(usage)}.",
+            )
+            return
+
+        project_file = self._manifest.project_file.resolve()
+        try:
+            project_data = json.loads(project_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Rename Failed",
+                f"Could not read project.json:\n{exc}",
+            )
+            return
+        raw_entities = project_data.get("global_entities", [])
+        if not isinstance(raw_entities, list):
+            QMessageBox.warning(
+                self,
+                "Rename Failed",
+                "project.json global_entities must be a JSON array.",
+            )
+            return
+
+        target_index: int | None = None
+        for index, raw_entity in enumerate(raw_entities):
+            if not isinstance(raw_entity, dict):
+                continue
+            if str(raw_entity.get("id", "")).strip() != entity_id:
+                continue
+            updated_entity = dict(raw_entity)
+            updated_entity["id"] = normalized
+            raw_entities[index] = updated_entity
+            target_index = index
+            break
+        if target_index is None:
+            QMessageBox.warning(
+                self,
+                "Rename Failed",
+                f"Could not find global entity '{entity_id}' in project.json.",
+            )
+            return
+
+        matcher = self._area_entity_reference_matcher()
+        updated_project_data, project_changed_paths = self._replace_reference_keys_in_json_value(
+            project_data,
+            old_value=entity_id,
+            new_value=normalized,
+            matcher=matcher,
+        )
+        project_update = _JsonReferenceFileUpdate(
+            file_path=project_file,
+            updated_text=f"{format_json_for_editor(updated_project_data)}\n",
+            changed_paths=tuple((f"$.global_entities[{target_index}].id", *project_changed_paths)),
+        )
+        try:
+            other_updates = self._collect_reference_updates(
+                old_value=entity_id,
+                new_value=normalized,
+                matcher=matcher,
+                skip_files={project_file},
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Rename Failed",
+                f"Could not build the reference update preview:\n{exc}",
+            )
+            return
+        reference_updates = [project_update, *other_updates]
+
+        if not self._confirm_global_entity_rename_preview(
+            old_entity_id=entity_id,
+            new_entity_id=normalized,
+            reference_updates=reference_updates,
+        ):
+            return
+
+        was_open = self._tab_widget.content_info("project/global_entities") is not None
+        try:
+            for update in reference_updates:
+                update.file_path.write_text(update.updated_text, encoding="utf-8")
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Rename Failed",
+                f"Could not rename global entity '{entity_id}':\n{exc}",
+            )
+            return
+
+        self._refresh_project_metadata_surfaces()
+        if was_open:
+            self._open_global_entities_tab(normalized)
+        else:
+            self._global_entities_panel.select_entity(normalized)
+        self.statusBar().showMessage(
+            f"Renamed global entity {entity_id} to {normalized}.",
             3500,
         )
 
@@ -1567,6 +1734,16 @@ class MainWindow(QMainWindow):
                 ),
                 "Rename/Move Command",
             )
+        if content_type == ContentType.ASSET:
+            return (
+                "",
+                list(self._manifest.asset_paths),
+                _ReferenceKeyMatcher(
+                    exact_keys=frozenset({"path", "atlas"}),
+                    suffix_keys=frozenset({"_path"}),
+                ),
+                "Rename/Move Asset",
+            )
         return None
 
     @staticmethod
@@ -1626,6 +1803,8 @@ class MainWindow(QMainWindow):
             return self._dialogue_panel
         if content_type == ContentType.NAMED_COMMAND:
             return self._command_panel
+        if content_type == ContentType.ASSET:
+            return self._asset_panel
         return None
 
     def _collect_reference_updates(
@@ -1663,6 +1842,11 @@ class MainWindow(QMainWindow):
         if self._manifest is None:
             return []
         files: list[Path] = [self._manifest.project_file]
+        if (
+            self._manifest.shared_variables_path is not None
+            and self._manifest.shared_variables_path.is_file()
+        ):
+            files.append(self._manifest.shared_variables_path.resolve())
         files.extend(entry.file_path.resolve() for entry in discover_areas(self._manifest))
         files.extend(
             entry.file_path.resolve()
@@ -1677,6 +1861,10 @@ class MainWindow(QMainWindow):
                 if not root_dir.is_dir():
                     continue
                 files.extend(path.resolve() for path in sorted(root_dir.rglob("*.json")))
+        for root_dir in self._manifest.asset_paths:
+            if not root_dir.is_dir():
+                continue
+            files.extend(path.resolve() for path in sorted(root_dir.rglob("*.json")))
         unique: list[Path] = []
         seen: set[Path] = set()
         for file_path in files:
@@ -1800,6 +1988,36 @@ class MainWindow(QMainWindow):
         dialog.setIcon(QMessageBox.Icon.Question)
         dialog.setText("Apply this rename/move and the previewed reference updates?")
         dialog.setDetailedText(detail_text)
+        dialog.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+        return dialog.exec() == int(QMessageBox.StandardButton.Ok)
+
+    def _confirm_global_entity_rename_preview(
+        self,
+        *,
+        old_entity_id: str,
+        new_entity_id: str,
+        reference_updates: list[_JsonReferenceFileUpdate],
+    ) -> bool:
+        lines = [
+            f"Rename global entity id {old_entity_id} -> {new_entity_id}",
+            "",
+        ]
+        if reference_updates:
+            lines.append("Reference updates:")
+            for update in reference_updates:
+                display_path = update.file_path.name
+                joined_paths = ", ".join(update.changed_paths)
+                lines.append(f"- {display_path}: {joined_paths}")
+        else:
+            lines.append("No known reference updates were detected.")
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Rename Global Entity ID")
+        dialog.setIcon(QMessageBox.Icon.Question)
+        dialog.setText("Apply this global entity rename and the previewed reference updates?")
+        dialog.setDetailedText("\n".join(lines))
         dialog.setStandardButtons(
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
         )
@@ -2763,9 +2981,10 @@ class MainWindow(QMainWindow):
     def _populate_asset_context_menu(
         self,
         menu,
-        _content_id: str,
+        content_id: str,
         file_path: Path,
     ) -> None:
+        self._add_rename_content_action(menu, ContentType.ASSET, content_id, file_path)
         if file_path.suffix.lower() not in _IMAGE_SUFFIXES:
             return
         menu.addSeparator()

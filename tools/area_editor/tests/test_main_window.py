@@ -537,6 +537,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
         base = QPixmap(16, 16)
         base.fill(QColor("red"))
         self.assertTrue(base.save(str(assets / "base.png")))
+        (assets / "base.json").write_text('{"kind": "metadata"}\n', encoding="utf-8")
 
         (project / "project.json").write_text(
             (
@@ -1539,6 +1540,9 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 window._global_entities_panel._tree.topLevelItem(0).text(0),
                 "pause_controller",
             )
+            asset_entries = self._panel_file_entries(window._asset_panel)
+            self.assertIn(("base.png", project_file.parent / "assets" / "base.png"), asset_entries)
+            self.assertIn(("base.json", project_file.parent / "assets" / "base.json"), asset_entries)
 
     def test_all_visible_tab_bars_prefer_scrolling_without_eliding(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1868,6 +1872,138 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             entries = self._panel_file_entries(window._item_panel)
             self.assertIn(("items/keys/silver_apple", new_path), entries)
 
+    def test_asset_rename_moves_file_and_updates_known_asset_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            items = project / "items"
+            assets.mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+            items.mkdir()
+            (assets / "fonts").mkdir()
+            (assets / "ui").mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("cyan"))
+            self.assertTrue(base.save(str(assets / "base.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "item_paths": ["items/"],\n'
+                    '  "shared_variables_path": "shared_variables.json"\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (project / "shared_variables.json").write_text(
+                (
+                    '{\n'
+                    '  "dialogue_ui": {\n'
+                    '    "panel_path": "assets/base.png"\n'
+                    '  }\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Demo",\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [\n'
+                    '    {\n'
+                    '      "firstgid": 1,\n'
+                    '      "path": "assets/base.png",\n'
+                    '      "tile_width": 16,\n'
+                    '      "tile_height": 16\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "display.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "screen",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/base.png"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (items / "apple.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Apple",\n'
+                    '  "icon": {\n'
+                    '    "path": "assets/base.png"\n'
+                    '  }\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (assets / "fonts" / "pixelbet.json").write_text(
+                (
+                    '{\n'
+                    '  "kind": "bitmap",\n'
+                    '  "atlas": "assets/base.png"\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = assets / "base.png"
+            window._open_content("base.png", old_path, ContentType.ASSET)
+
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="ui/renamed",
+            ), patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                window._on_rename_project_content(
+                    ContentType.ASSET,
+                    "base.png",
+                    old_path,
+                )
+
+            new_path = assets / "ui" / "renamed.png"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            self.assertIn('"path": "assets/ui/renamed.png"', (areas / "demo.json").read_text(encoding="utf-8"))
+            self.assertIn('"path": "assets/ui/renamed.png"', (templates / "display.json").read_text(encoding="utf-8"))
+            self.assertIn('"path": "assets/ui/renamed.png"', (items / "apple.json").read_text(encoding="utf-8"))
+            self.assertIn('"panel_path": "assets/ui/renamed.png"', (project / "shared_variables.json").read_text(encoding="utf-8"))
+            self.assertIn('"atlas": "assets/ui/renamed.png"', (assets / "fonts" / "pixelbet.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "ui/renamed.png",
+            )
+            entries = self._panel_file_entries(window._asset_panel)
+            self.assertIn(("ui/renamed.png", new_path), entries)
+
     def test_dialogue_rename_moves_file_and_updates_known_dialogue_references(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_reference_rich_project(Path(tmp))
@@ -1915,6 +2051,39 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             )
             entries = self._panel_file_entries(window._dialogue_panel)
             self.assertIn(("dialogues/system/prompt_v2", new_path), entries)
+
+    def test_global_entity_id_rename_updates_known_entity_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            project = project_file.parent
+            area_path = project / "areas" / "demo.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+            window._open_global_entities_tab("dialogue_controller")
+
+            with patch.object(
+                window,
+                "_confirm_global_entity_rename_preview",
+                return_value=True,
+            ):
+                window._apply_global_entity_id_rename(
+                    "dialogue_controller",
+                    "dialogue_controller_v2",
+                )
+
+            saved_project = project_file.read_text(encoding="utf-8")
+            saved_area = area_path.read_text(encoding="utf-8")
+            self.assertIn('"id": "dialogue_controller_v2"', saved_project)
+            self.assertIn('"entity_ids": [\n        "switch_a",\n        "dialogue_controller_v2"\n      ]', saved_area)
+            self.assertEqual(
+                window._global_entities_panel._tree.topLevelItem(0).text(0),
+                "dialogue_controller_v2",
+            )
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, GlobalEntitiesEditorWidget)
+            assert isinstance(widget, GlobalEntitiesEditorWidget)
+            self.assertIn("dialogue_controller_v2", widget._target_label.text())
 
     def test_command_rename_moves_file_and_updates_known_command_references(self):
         with tempfile.TemporaryDirectory() as tmp:
