@@ -12,10 +12,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPixmap
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QTabBar
 
 from area_editor.app.main_window import MainWindow
 from area_editor.widgets.document_tab_widget import ContentType
+from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
@@ -891,9 +892,10 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 window.dockWidgetArea(window._entity_instance_panel),
                 Qt.DockWidgetArea.LeftDockWidgetArea,
             )
-            self.assertNotIn(
-                window._entity_instance_panel,
-                window.tabifiedDockWidgets(window._area_panel),
+            self.assertIsInstance(window._browser_workspace, BrowserWorkspaceDock)
+            self.assertEqual(
+                window.dockWidgetArea(window._browser_workspace),
+                Qt.DockWidgetArea.LeftDockWidgetArea,
             )
             self.assertEqual(window._entity_instance_panel.windowTitle(), "Entity Instance")
             self.assertEqual(window._entity_instance_panel.tab_count, 2)
@@ -901,6 +903,17 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 window._entity_instance_panel.tab_titles(),
                 ["Entity Instance JSON", "Entity Instance Editor"],
             )
+            self.assertEqual(
+                window._browser_workspace.row_titles(1),
+                ["Areas", "Entity Templates", "Items", "Global Entities"],
+            )
+            self.assertEqual(
+                window._browser_workspace.row_titles(2),
+                ["Dialogues", "Commands", "Assets"],
+            )
+            self.assertEqual(window._browser_workspace.active_key(), "areas")
+            self.assertEqual(window._browser_workspace.row_visual_current_index(1), 0)
+            self.assertEqual(window._browser_workspace.row_visual_current_index(2), -1)
 
     def test_entity_instance_json_panel_applies_selected_entity_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1526,6 +1539,20 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 window._global_entities_panel._tree.topLevelItem(0).text(0),
                 "pause_controller",
             )
+
+    def test_all_visible_tab_bars_prefer_scrolling_without_eliding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            tab_bars = window.findChildren(QTabBar)
+            self.assertTrue(tab_bars)
+            for tab_bar in tab_bars:
+                self.assertTrue(tab_bar.usesScrollButtons())
+                self.assertEqual(tab_bar.elideMode(), Qt.TextElideMode.ElideNone)
+                self.assertFalse(tab_bar.expanding())
 
     def test_item_panel_signal_opens_item_json_tab(self):
         with tempfile.TemporaryDirectory() as tmp:

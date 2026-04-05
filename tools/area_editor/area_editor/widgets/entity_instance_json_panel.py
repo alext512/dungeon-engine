@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
+from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
 _ENTITY_BOOL_DEFAULTS = {
@@ -1142,6 +1143,7 @@ class EntityInstanceJsonPanel(QDockWidget):
 
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
+        configure_tab_widget_overflow(self._tabs)
 
         self._json_editor = _EntityInstanceJsonEditor()
         self._fields_editor = _EntityInstanceFieldsEditor()

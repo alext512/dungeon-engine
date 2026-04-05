@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 
 def _validate_relative_project_path(
@@ -246,6 +247,7 @@ class ProjectManifestEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._tabs = QTabWidget()
+        configure_tab_widget_overflow(self._tabs)
         layout.addWidget(self._tabs)
 
         self._fields_editor = _ProjectManifestFieldsEditor(file_path, area_ids=area_ids)

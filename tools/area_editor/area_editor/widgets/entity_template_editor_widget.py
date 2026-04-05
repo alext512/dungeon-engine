@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 
 def _parse_persistence_policy(
@@ -111,14 +112,24 @@ class _TemplateVisualsEditor(QWidget):
         summary.addRow("space", self._space_label)
         layout.addLayout(summary)
 
+        font = QFont("Consolas", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self._sections_tabs = QTabWidget()
+        self._sections_tabs.setDocumentMode(True)
+        configure_tab_widget_overflow(self._sections_tabs)
+        layout.addWidget(self._sections_tabs, 1)
+
+        visuals_tab = QWidget()
+        visuals_layout = QVBoxLayout(visuals_tab)
+        visuals_layout.setContentsMargins(0, 0, 0, 0)
+
         note = QLabel("Edit the template's `visuals` array here. Use the Raw JSON tab for the full file.")
         note.setWordWrap(True)
         note.setStyleSheet("color: #666; font-style: italic;")
-        layout.addWidget(note)
+        visuals_layout.addWidget(note)
 
         self._visuals_text = QPlainTextEdit()
         self._visuals_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._visuals_text.setFixedHeight(220)
         self._visuals_text.setPlaceholderText(
             "[\n"
             "  {\n"
@@ -129,34 +140,36 @@ class _TemplateVisualsEditor(QWidget):
             "  }\n"
             "]"
         )
-        font = QFont("Consolas", 10)
-        font.setStyleHint(QFont.StyleHint.Monospace)
         self._visuals_text.setFont(font)
         self._visuals_text.textChanged.connect(self._on_text_changed)
-        layout.addWidget(self._visuals_text, 1)
+        visuals_layout.addWidget(self._visuals_text, 1)
+        self._sections_tabs.addTab(visuals_tab, "Visuals")
+
+        persistence_tab = QWidget()
+        persistence_layout = QVBoxLayout(persistence_tab)
+        persistence_layout.setContentsMargins(0, 0, 0, 0)
 
         self._persistence_warning = QLabel("")
         self._persistence_warning.setWordWrap(True)
         self._persistence_warning.setStyleSheet("color: #a25b00;")
         self._persistence_warning.hide()
-        layout.addWidget(self._persistence_warning)
+        persistence_layout.addWidget(self._persistence_warning)
 
         persistence_form = QFormLayout()
         self._entity_state_check = QCheckBox("Persist entity state")
         self._entity_state_check.toggled.connect(self._on_text_changed)
         persistence_form.addRow("persistence.entity_state", self._entity_state_check)
-        layout.addLayout(persistence_form)
+        persistence_layout.addLayout(persistence_form)
 
         persistence_note = QLabel(
             "Optional per-variable persistence overrides. Use JSON object syntax."
         )
         persistence_note.setWordWrap(True)
         persistence_note.setStyleSheet("color: #666; font-style: italic;")
-        layout.addWidget(persistence_note)
+        persistence_layout.addWidget(persistence_note)
 
         self._persistence_variables_text = QPlainTextEdit()
         self._persistence_variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._persistence_variables_text.setFixedHeight(120)
         self._persistence_variables_text.setPlaceholderText(
             '{\n'
             '  "shake_timer": false,\n'
@@ -165,7 +178,8 @@ class _TemplateVisualsEditor(QWidget):
         )
         self._persistence_variables_text.setFont(font)
         self._persistence_variables_text.textChanged.connect(self._on_text_changed)
-        layout.addWidget(self._persistence_variables_text)
+        persistence_layout.addWidget(self._persistence_variables_text, 1)
+        self._sections_tabs.addTab(persistence_tab, "Persistence")
 
         buttons = QHBoxLayout()
         self._apply_button = QPushButton("Apply")
@@ -287,6 +301,7 @@ class EntityTemplateEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._tabs = QTabWidget()
+        configure_tab_widget_overflow(self._tabs)
         layout.addWidget(self._tabs)
 
         self._fields_editor = _TemplateVisualsEditor(content_id)

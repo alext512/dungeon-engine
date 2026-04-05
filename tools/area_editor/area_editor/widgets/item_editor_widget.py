@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 
 class _ItemArtObjectEditor(QWidget):
@@ -340,6 +341,7 @@ class ItemEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._tabs = QTabWidget()
+        configure_tab_widget_overflow(self._tabs)
         layout.addWidget(self._tabs)
 
         self._fields_editor = _ItemFieldsEditor(

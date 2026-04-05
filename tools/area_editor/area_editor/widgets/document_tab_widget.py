@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from area_editor.widgets.image_viewer_widget import ImageViewerWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 from area_editor.widgets.tile_canvas import TileCanvas
 
 log = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ class DocumentTabWidget(QStackedWidget):
         self._tabs.setTabsClosable(True)
         self._tabs.setMovable(True)
         self._tabs.setDocumentMode(True)
+        configure_tab_widget_overflow(self._tabs)
         self._tabs.tabCloseRequested.connect(self._on_tab_close_requested)
         self._tabs.currentChanged.connect(self._on_current_changed)
         self.addWidget(self._tabs)

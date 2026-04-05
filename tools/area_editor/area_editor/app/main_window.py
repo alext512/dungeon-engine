@@ -18,6 +18,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QDockWidget,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -79,6 +80,7 @@ from area_editor.operations.entities import (
     place_screen_entity,
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
+from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
@@ -345,41 +347,75 @@ class MainWindow(QMainWindow):
 
         # Dock panels — left side: project content browser tabs
         self._area_panel = AreaListPanel()
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._area_panel)
-
         self._template_panel = TemplateListPanel()
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._template_panel)
 
         self._item_panel = FileTreePanel(
             "Items",
             object_name="ItemPanel",
             content_prefix="items",
         )
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._item_panel)
-
         self._global_entities_panel = GlobalEntitiesPanel()
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._global_entities_panel)
 
         self._dialogue_panel = FileTreePanel(
             "Dialogues",
             object_name="DialoguePanel",
             content_prefix=_DIALOGUE_ID_PREFIX,
         )
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._dialogue_panel)
-
         self._command_panel = FileTreePanel(
             "Commands",
             object_name="CommandPanel",
             content_prefix=_COMMAND_ID_PREFIX,
         )
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._command_panel)
 
         self._asset_panel = FileTreePanel(
             "Assets",
             object_name="AssetPanel",
             file_extensions=(),  # show all file types
         )
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._asset_panel)
+        self._browser_workspace = BrowserWorkspaceDock()
+        self._browser_workspace.add_page(
+            row=1,
+            key="areas",
+            title="Areas",
+            widget=self._extract_dock_content(self._area_panel),
+        )
+        self._browser_workspace.add_page(
+            row=1,
+            key="templates",
+            title="Entity Templates",
+            widget=self._extract_dock_content(self._template_panel),
+        )
+        self._browser_workspace.add_page(
+            row=1,
+            key="items",
+            title="Items",
+            widget=self._extract_dock_content(self._item_panel),
+        )
+        self._browser_workspace.add_page(
+            row=1,
+            key="globals",
+            title="Global Entities",
+            widget=self._extract_dock_content(self._global_entities_panel),
+        )
+        self._browser_workspace.add_page(
+            row=2,
+            key="dialogues",
+            title="Dialogues",
+            widget=self._extract_dock_content(self._dialogue_panel),
+        )
+        self._browser_workspace.add_page(
+            row=2,
+            key="commands",
+            title="Commands",
+            widget=self._extract_dock_content(self._command_panel),
+        )
+        self._browser_workspace.add_page(
+            row=2,
+            key="assets",
+            title="Assets",
+            widget=self._extract_dock_content(self._asset_panel),
+        )
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._browser_workspace)
 
         # Right side: layer panel + tileset browser
         self._layer_panel = LayerListPanel()
@@ -403,24 +439,18 @@ class MainWindow(QMainWindow):
 
         # Build the left side as one browser stack on top plus a separate
         # entity-instance dock below it.
-        self.splitDockWidget(self._area_panel, self._entity_instance_panel, Qt.Orientation.Vertical)
-        self.tabifyDockWidget(self._area_panel, self._template_panel)
-        self.tabifyDockWidget(self._template_panel, self._item_panel)
-        self.tabifyDockWidget(self._item_panel, self._global_entities_panel)
-        self.tabifyDockWidget(self._global_entities_panel, self._dialogue_panel)
-        self.tabifyDockWidget(self._dialogue_panel, self._command_panel)
-        self.tabifyDockWidget(self._command_panel, self._asset_panel)
+        self.splitDockWidget(self._browser_workspace, self._entity_instance_panel, Qt.Orientation.Vertical)
         self.resizeDocks(
-            [self._area_panel, self._entity_instance_panel],
+            [self._browser_workspace, self._entity_instance_panel],
             [430, 240],
             Qt.Orientation.Vertical,
         )
         self.resizeDocks(
-            [self._area_panel, self._layer_panel],
-            [560, 320],
+            [self._browser_workspace, self._layer_panel],
+            [340, 320],
             Qt.Orientation.Horizontal,
         )
-        self._area_panel.raise_()  # show area list tab by default
+        self._browser_workspace.set_current_page("areas")
 
         # Settings
         self._settings = QSettings("PuzzleDungeon", "AreaEditor")
@@ -496,6 +526,14 @@ class MainWindow(QMainWindow):
         self._entity_instance_panel.fields_dirty_changed.connect(
             self._on_entity_instance_fields_dirty_changed
         )
+
+    @staticmethod
+    def _extract_dock_content(dock: QDockWidget) -> QWidget:
+        widget = dock.widget()
+        if widget is None:
+            raise RuntimeError(f"Dock '{dock.objectName() or dock.windowTitle()}' has no content widget.")
+        widget.setParent(None)
+        return widget
 
     # ------------------------------------------------------------------
     # Public API (called from __main__ for --project arg)
