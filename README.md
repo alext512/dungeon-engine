@@ -337,6 +337,10 @@ cd tools/area_editor
 ..\..\.venv/Scripts/python -m unittest discover -s tests -v
 ```
 
+Startup validation now also validates known command-bearing JSON surfaces for
+strict-command key mismatches. Likely top-level key typos on strict primitive
+commands now fail before launch instead of slipping into runtime behavior.
+
 ## Current Limits
 
 - save/load UX works, but is still basic

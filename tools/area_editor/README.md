@@ -71,7 +71,7 @@ What is still not implemented:
 
 ## Expected Responsibilities
 
-The future tool is expected to help with:
+The editor is meant to help with:
 
 - tile painting
 - layer-oriented map editing

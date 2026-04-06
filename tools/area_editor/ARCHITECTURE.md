@@ -1,26 +1,40 @@
 # Architecture
 
-This document describes the current editor architecture plus the intended shape of later slices.
+This document describes the current editor architecture plus the intended shape
+of later slices.
 
-Phase 1 is implemented. Editing, saving, validation, and runtime handoff remain planned work.
+Status: active architecture note for the current standalone editor.
+
+The editor has moved well beyond the earliest phase-1 slice. Editing, saving,
+focused validation, project-level surfaces, and reference-aware file workflows
+are implemented. The main remaining planned areas are runtime handoff/launch
+integration, broader structured coverage for newer engine-owned fields, and
+continued internal decomposition as the tool grows.
 
 ## High-Level Shape
 
-The tool is a normal standalone application with a small number of clearly separated concerns.
+The tool is a normal standalone application with a small number of clearly
+separated concerns.
 
 Current slices:
 
 - app shell
 - project scanner
-- area document loading/saving
-- tileset and asset catalog
+- area document loading/saving with unknown-field preservation
+- tileset, asset, and template catalog support
+- focused editing operations for tiles, cell flags, entities, areas, and
+  tilesets
+- structured editors for project manifest, shared variables, items, templates,
+  global entities, and entity instances
+- reference-aware file/folder reorganization for file-backed content
 - UI layer
 - tests
 
 Planned later slices:
 
-- entity reference helpers
-- editing operations
+- broader structured coverage for newer engine-owned fields and workflows
+- richer screen-space placement/manipulation workflows
+- runtime handoff / launch integration
 - tool-owned settings
 
 ## Dependency Direction
@@ -47,26 +61,30 @@ Current modules already include:
 - `catalogs/`
   - tileset image indexing, entity/template summaries
 - `operations/`
-  - current: cell-flag editing helpers, tile painting helpers
-  - planned: place entity, move entity, reorder entity, rename id
+  - current: cell-flag, tile, tileset, entity, and area editing helpers
+  - later: continue extracting editor-window logic into narrower
+    operations/services
 - `widgets/`
-  - tile canvas, layer panel, area list, template list, generic file-tree panels,
-    tabbed document area, JSON viewer, image viewer, tileset browser
+  - tile canvas, layer panel, area list, template list, generic file-tree
+    panels, tabbed document area, JSON viewer, image viewer, tileset browser,
+    project-level editors, entity/template/item editing surfaces, and
+    supporting docks
 - `tests/`
-  - manifest loading, asset resolution, and area-document round-tripping
+  - manifest loading, asset resolution, area-document round-tripping,
+    canvas behavior, focused operations, browser/workspace behavior, and
+    editor panels
 
 Planned later modules/slices:
 
-- `operations/`
-  - expand beyond cell flags into tile and entity editing operations
 - `widgets/`
-  - tileset browser, entity inspector, entity-ref picker, raw JSON pane
+  - continue decomposing the largest widgets and docks as the editor surface
+    expands
 - `settings/`
   - tool-owned preferences and UI state
 
 ## Recommended Data Flow
 
-The future tool should ideally follow this flow:
+The current tool should continue to follow this flow:
 
 1. Load project manifest and discover content roots.
 2. Load one area file into a tool-owned document model.
@@ -76,7 +94,7 @@ The future tool should ideally follow this flow:
 
 ## Document Model Guidance
 
-The future tool should not use runtime objects as its internal editing model.
+The tool should not use runtime objects as its internal editing model.
 
 Prefer tool-owned document shapes that represent authored data, for example:
 
@@ -88,7 +106,8 @@ Prefer tool-owned document shapes that represent authored data, for example:
 - per-instance parameters
 - unknown passthrough fields
 
-Tool-owned document models should be optimized for safe editing and round-tripping, not gameplay execution.
+Tool-owned document models should be optimized for safe editing and
+round-tripping, not gameplay execution.
 
 ## Unknown Field Strategy
 
@@ -121,18 +140,21 @@ If the tool later offers a "test in game" action, it should:
 
 It should not embed or import the runtime loop.
 
-## Recommended First Implementation Order
+## Recommended Ongoing Implementation Order
 
-The implementation order so far has covered:
+Earlier implementation phases covered:
 
 1. project scan and area list
 2. load area and render read-only grid
+3. tabbed document area and non-area viewers
+4. tile painting and tile selection/stamping
+5. world/screen entity placement, selection, and nudging
+6. structured editors plus guarded JSON editing for focused content surfaces
+7. preservation-focused saving and reference-aware file operations
 
 The next recommended order is:
 
-3. tabbed document area (done — multiple documents open in tabs, JSON/image viewers for non-area content)
-4. tile painting
-5. entity placement and movement
-6. entity inspector with entity-ref fields
-7. preservation-focused saving
-8. launch runtime externally
+8. continue splitting large editor modules into clearer services/helpers
+9. broaden structured editing for newer engine-owned entity/workflow fields
+10. improve screen-space placement/manipulation workflows
+11. add runtime launch/handoff integration

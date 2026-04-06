@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from dungeon_engine.logging_utils import get_logger
 
 if TYPE_CHECKING:
-    from dungeon_engine.project import ProjectContext
+    from dungeon_engine.project_context import ProjectContext
 
 
 logger = get_logger(__name__)

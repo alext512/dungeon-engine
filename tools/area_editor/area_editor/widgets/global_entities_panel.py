@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from area_editor.project_io.manifest import GlobalEntityEntry
+from area_editor.project_io.project_manifest import GlobalEntityEntry
 
 
 class GlobalEntitiesPanel(QDockWidget):

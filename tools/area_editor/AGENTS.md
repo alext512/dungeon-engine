@@ -6,25 +6,28 @@ Read this file first.
 
 ## Current Status
 
-Phases 0-3 are complete.
-Later phases are planned in `ROADMAP.md`.
+The core area-editing foundation is complete, and substantial catch-up work
+from later roadmap phases is already in place.
 
-The editor currently supports area-centric authoring:
+Use `ROADMAP.md` as a historical plan plus a status tracker for what remains,
+not as a signal that everything after Phase 3 is untouched.
+
+The editor currently supports strong area-centric and project-aware authoring:
 
 - tile painting
 - cell-flag editing
 - entity placement and nudging
-- basic entity editing
+- structured entity/template/item/project editing plus guarded raw JSON fallbacks
 - guarded raw JSON editing
 
-The next editor work should catch the tool up to the newer runtime-facing
-authoring surface:
+The main remaining editor work is to keep catching the tool up to the newer
+runtime-facing authoring surface:
 
 - better placed-entity configuration through exposed fields and parameters
-- item-definition browsing/editing
-- `shared_variables.json` / UI preset editing
-- `global_entities`
-- better reference pickers
+- richer screen-space placement/manipulation workflows
+- broader structured coverage for newer engine-owned fields
+- stronger contextual reference pickers
+- runtime launch/handoff integration
 
 The overarching goal is to let a non-coder build a full game through the
 supported template-driven workflow while keeping raw JSON escape hatches for

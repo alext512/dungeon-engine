@@ -12,7 +12,7 @@ from dungeon_engine.commands.library import _validate_command_tree
 from dungeon_engine.logging_utils import get_logger
 
 if TYPE_CHECKING:
-    from dungeon_engine.project import ProjectContext
+    from dungeon_engine.project_context import ProjectContext
 
 
 logger = get_logger(__name__)

@@ -28,6 +28,8 @@ For the philosophy behind this interface, see [PROJECT_SPIRIT.md](./PROJECT_SPIR
 - Use `run_parallel` only when child commands should start together.
 - Use `run_commands` only when you want to execute a command-list value explicitly, for example one stored in a variable or passed as a parameter.
 - Project command files may declare `deferred_params: string[]` when specific params should remain raw command/data payloads until a later explicit execution step.
+- Startup validation also validates known command-bearing JSON surfaces for strict-command key mismatches before launch.
+- Strict primitive commands now fail startup on unknown top-level keys, while mixed flow/helper commands intentionally keep accepting caller-supplied runtime params.
 
 ## Content Roots And Path-Derived IDs
 
@@ -560,6 +562,10 @@ The engine does not need every project data file to be declared in `project.json
 
 Any ordinary JSON file under the project root can be loaded through the `$json_file` value source, for example dialogue data under `dialogues/`.
 
+`$json_file` reads are cached within the current live runtime command context.
+Rebuilding runtime context, such as during area changes, `new_game`, or
+`load_game`, starts with a fresh cache.
+
 ## Command Specs
 
 A command spec is a JSON object with a `"type"` field.
@@ -639,6 +645,19 @@ How to read it:
   `"$sum"` is a helper that computes the value before `set_entity_var` runs.
 
 When one command chain needs to call another JSON command file, use `run_project_command` and pass the project command params as ordinary extra fields on that command object.
+
+Do not assume every command object accepts arbitrary extra fields. Current mixed commands that intentionally allow caller-supplied runtime params include:
+
+- `run_commands`
+- `run_parallel`
+- `spawn_flow`
+- `run_commands_for_collection`
+- `run_entity_command`
+- `run_project_command`
+- `if`
+- `move_in_direction`
+- `push_facing`
+- `interact_facing`
 
 ## Runtime Tokens
 
@@ -747,6 +766,9 @@ Current value sources:
 ### `$json_file`
 
 Loads any JSON file. Relative paths resolve from the active project root.
+
+Within one live runtime context, repeated reads of the same file reuse a small
+in-memory cache. Rebuilding the runtime context starts fresh.
 
 Example:
 
@@ -1651,7 +1673,7 @@ Notes:
 - `set_current_area_var(name, value, persistent?)`
 - `set_entity_var(entity_id, name, value, persistent?)`
 - `add_current_area_var(name, amount?, persistent?)`
-- `value_mode: "raw"` on `set_current_area_var` / `set_entity_var` / append variants stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_commands`.
+- `value_mode: "raw"` is a valid authored top-level field on `set_current_area_var`, `set_entity_var`, `append_current_area_var`, and `append_entity_var`. It stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_commands`.
 - `add_entity_var(entity_id, name, amount?, persistent?)`
 - `toggle_current_area_var(name, persistent?)`
 - `toggle_entity_var(entity_id, name, persistent?)`

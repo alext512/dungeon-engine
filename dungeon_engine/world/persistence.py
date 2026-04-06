@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from dungeon_engine.inventory import clone_inventory_state, serialize_inventory_state
-from dungeon_engine.project import ProjectContext
+from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import Entity, EntityVisual
 from dungeon_engine.world.world import World

@@ -50,7 +50,7 @@ class Game:
     """Own the play-mode runtime loop."""
 
     def __init__(self, area_path: Path, project: "ProjectContext") -> None:
-        from dungeon_engine.project import ProjectContext  # noqa: F811
+        from dungeon_engine.project_context import ProjectContext  # noqa: F811
 
         pygame.init()
 

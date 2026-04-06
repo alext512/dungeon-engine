@@ -13,7 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from area_editor.project_io.manifest import ProjectManifest, discover_entity_templates
+from area_editor.project_io.project_manifest import (
+    ProjectManifest,
+    discover_entity_templates,
+)
 
 log = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Signal
 
-from area_editor.project_io.manifest import AREA_ID_PREFIX, AreaEntry
+from area_editor.project_io.project_manifest import AREA_ID_PREFIX, AreaEntry
 from area_editor.widgets.file_tree_panel import FileTreePanel
 
 

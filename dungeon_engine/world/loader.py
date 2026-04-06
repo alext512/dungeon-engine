@@ -33,7 +33,7 @@ from dungeon_engine.world.persistence import PersistentAreaState, apply_persiste
 from dungeon_engine.world.world import World
 
 
-from dungeon_engine.project import ProjectContext
+from dungeon_engine.project_context import ProjectContext
 
 logger = get_logger(__name__)
 

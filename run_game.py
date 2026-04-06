@@ -48,7 +48,7 @@ def main() -> int:
     from dungeon_engine.engine.game import Game
     from dungeon_engine.launcher_state import load_launcher_state, update_launcher_state
     from dungeon_engine.logging_utils import install_exception_logging
-    from dungeon_engine.project import load_project
+    from dungeon_engine.project_context import load_project
     from dungeon_engine.startup_validation import validate_project_startup
 
     if not args.headless:

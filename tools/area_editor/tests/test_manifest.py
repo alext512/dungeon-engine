@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from area_editor.project_io.manifest import (
+from area_editor.project_io.project_manifest import (
     discover_areas,
     discover_entity_templates,
     discover_global_entities,

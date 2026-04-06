@@ -14,7 +14,7 @@ import math
 from typing import Any
 
 from dungeon_engine.inventory import serialize_inventory_state
-from dungeon_engine.project import ProjectContext
+from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.loader import instantiate_entity
 from dungeon_engine.world.world import World

@@ -4,6 +4,23 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Command Authoring Validation
+
+- Added startup validation for known command-bearing JSON surfaces such as
+  project commands, entity commands, area `enter_commands`, item
+  `use_commands`, and dialogue inline command lists
+- Strict primitive commands now fail fast on unknown top-level authored keys,
+  which helps catch likely JSON typos before launch
+- Mixed flow/helper commands such as `run_commands`, `run_parallel`,
+  `spawn_flow`, `run_entity_command`, `run_project_command`, and `if` remain
+  intentionally permissive for caller-supplied runtime params
+- Encoded runner-level authored fields such as `value_mode: "raw"` into the
+  command registration metadata so validation matches the active runtime
+  contract
+- Moved the `$json_file` cache from process-global state onto the live runtime
+  command context, so repeated reads stay cached during one active runtime but
+  rebuild cleanly after area changes, `new_game`, and `load_game`
+
 ## Editor Workflow Catch-Up
 
 - Added destination-marker-based area transitions through

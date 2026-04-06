@@ -62,7 +62,8 @@ dungeon_engine/
     items.py                     # Item definition loading and validation
     launcher_state.py            # Launcher state management
     logging_utils.py             # Rotating error log setup
-    project.py                   # project.json loading and search-path resolution
+    project_context.py           # Runtime project-context implementation and preferred import surface
+    project.py                   # Compatibility wrapper for older project-context imports
     startup_validation.py        # Project startup checks
     engine/
         game.py                  # Play-mode runtime loop
@@ -90,7 +91,8 @@ dungeon_engine/
     commands/
         registry.py              # Command type registry
         runner.py                # Command chain executor
-        builtin.py               # Built-in command implementations
+        builtin.py               # Built-in command registration entry point
+        builtin_domains/         # Focused builtin command domain modules
         library.py               # Project command loading and validation
 ```
 
@@ -99,6 +101,7 @@ dungeon_engine/
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
 - **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `command_paths`, `item_paths`, `shared_variables_path`, and project-level settings such as `global_entities` and `input_targets`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Separate project-layout interpreters**: Runtime code prefers `dungeon_engine/project_context.py`, while the external editor prefers `tools/area_editor/area_editor/project_io/project_manifest.py`. They intentionally stay separate and are kept aligned with parity tests rather than by importing each other.
 - **Path-derived reusable IDs**: Areas, entity templates, and commands derive identity from their path under the configured search roots instead of authored `id` fields.
 - **Project JSON data**: Reusable dialogue/menu data is now just ordinary project-relative JSON. The sample project keeps it under `dialogues/`, but that folder is conventional rather than a manifest-indexed content category.
 - **Authoring contract**: JSON area/entity/template files are the stable contract for the runtime and any future external tooling.
@@ -106,13 +109,13 @@ dungeon_engine/
 
 ## Common Tasks
 
-**Adding a new command type**: Implement it in `commands/builtin.py` inside `register_builtin_commands()` using the `@registry.register("name")` decorator. Follow the pattern of existing commands.
+**Adding a new command type**: Keep `commands/builtin.py` as the public registration entry point, but prefer placing clustered command implementations in a focused module under `commands/builtin_domains/` when a domain already exists. Use `@registry.register("name")` in the relevant registration helper and wire that helper through `register_builtin_commands()`.
 
 **Adding a new entity template**: Create a JSON file in the active project's `entity_templates/` folder (or another configured entity-template path), then reference it from authored area data.
 
 **Changing how tiles/areas work**: Core data model is `world/area.py`. Loading is `world/loader.py`. Saving is `world/serializer.py`.
 
-**Changing project asset/content lookup**: Project search-path behavior lives in `project.py` plus `world/loader.py` and `engine/asset_manager.py`.
+**Changing project asset/content lookup**: Runtime search-path behavior lives in `project_context.py`, with `project.py` kept as a compatibility import surface. Related consumers live in `world/loader.py` and `engine/asset_manager.py`. Editor-side project discovery stays separate in `tools/area_editor/area_editor/project_io/project_manifest.py`.
 
 **Running focused verification**: Use `.venv/Scripts/python -m unittest discover -s tests -v` for the runtime suite. If you touch `tools/area_editor/`, run `..\..\.venv/Scripts/python -m unittest discover -s tests -v` from `tools/area_editor/` for the editor suite.
 
@@ -145,7 +148,7 @@ Recommended direct validation snippet:
 ```text
 @'
 from pathlib import Path
-from dungeon_engine.project import load_project
+from dungeon_engine.project_context import load_project
 from dungeon_engine.commands.library import validate_project_commands
 
 for project_json in [

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 if TYPE_CHECKING:
-    from dungeon_engine.project import ProjectContext
+    from dungeon_engine.project_context import ProjectContext
 
 
 class AssetManager:

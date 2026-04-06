@@ -25,7 +25,6 @@ from dungeon_engine.logging_utils import get_logger
 
 
 logger = get_logger(__name__)
-_JSON_FILE_CACHE: dict[Path, Any] = {}
 _FALLBACK_RANDOM_GENERATOR = random.Random()
 _PLAIN_ENTITY_REF_FIELDS = (
     "entity_id",
@@ -118,6 +117,7 @@ class CommandContext:
     adjust_output_scale: Callable[[int], None] | None = None
     project_command_stack: list[str] = field(default_factory=list)
     command_trace: list[str] = field(default_factory=list)
+    json_file_cache: dict[Path, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -248,12 +248,12 @@ def _resolve_json_file_path(context: CommandContext, path: str) -> Path:
     return resolved_path.resolve()
 
 
-def _load_json_file(path: Path) -> Any:
-    """Load one JSON file through a small in-memory cache."""
-    cached = _JSON_FILE_CACHE.get(path)
+def _load_json_file(context: CommandContext, path: Path) -> Any:
+    """Load one JSON file through the current runtime context's small cache."""
+    cached = context.json_file_cache.get(path)
     if cached is None:
         cached = json.loads(path.read_text(encoding="utf-8"))
-        _JSON_FILE_CACHE[path] = cached
+        context.json_file_cache[path] = cached
     return copy.deepcopy(cached)
 
 
@@ -1119,7 +1119,10 @@ def _resolve_runtime_value_source(
     if source_name == "$json_file":
         if resolved_source in (None, ""):
             raise ValueError("JSON file value source requires a non-empty path.")
-        return _load_json_file(_resolve_json_file_path(context, str(resolved_source)))
+        return _load_json_file(
+            context,
+            _resolve_json_file_path(context, str(resolved_source)),
+        )
 
     if source_name == "$wrapped_lines":
         if context.text_renderer is None:

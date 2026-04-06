@@ -13,7 +13,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QIcon
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
-from area_editor.project_io.manifest import (
+from area_editor.project_io.project_manifest import (
     TEMPLATE_ID_PREFIX,
     ProjectManifest,
     discover_entity_templates,

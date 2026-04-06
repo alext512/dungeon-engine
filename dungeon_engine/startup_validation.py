@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from dungeon_engine.commands.audit import audit_project_command_surfaces
 from dungeon_engine.commands.library import (
     ProjectCommandValidationError,
     log_project_command_validation_error,
@@ -56,6 +57,31 @@ class StaticReferenceValidationError(ValueError):
         return "\n".join(lines)
 
 
+class CommandAuthoringValidationError(ValueError):
+    """Raised when authored command JSON contains invalid strict-command fields."""
+
+    def __init__(self, project_root: Path, issues: list[str]) -> None:
+        self.project_root = project_root
+        self.issues = list(issues)
+        super().__init__(
+            f"Command authoring validation failed for '{project_root}' with {len(self.issues)} issue(s)."
+        )
+
+    def format_user_message(self, *, max_issues: int = 8) -> str:
+        shown_issues = self.issues[:max_issues]
+        lines = [
+            f"Command authoring validation failed with {len(self.issues)} issue(s).",
+            "See logs/error.log for full details.",
+            "",
+            "First issues:",
+        ]
+        lines.extend(f"- {issue}" for issue in shown_issues)
+        hidden_count = len(self.issues) - len(shown_issues)
+        if hidden_count > 0:
+            lines.append(f"- ...and {hidden_count} more")
+        return "\n".join(lines)
+
+
 def validate_project_startup(
     project,
     *,
@@ -66,6 +92,7 @@ def validate_project_startup(
     | ItemDefinitionValidationError
     | EntityTemplateValidationError
     | AreaValidationError
+    | CommandAuthoringValidationError
     | StaticReferenceValidationError
     | None
 ):
@@ -108,6 +135,16 @@ def validate_project_startup(
         validate_project_commands(project)
     except ProjectCommandValidationError as error:
         log_project_command_validation_error(error)
+        message = error.format_user_message()
+        print(message)
+        if show_dialog:
+            _show_error_dialog(ui_title, message)
+        return error
+
+    try:
+        validate_project_command_authoring(project)
+    except CommandAuthoringValidationError as error:
+        log_command_authoring_validation_error(error)
         message = error.format_user_message()
         print(message)
         if show_dialog:
@@ -199,6 +236,24 @@ def log_static_reference_validation_error(error: StaticReferenceValidationError)
     """Write a full static-reference validation failure report to the persistent log."""
     logger.error(
         "Static reference validation failed for %s with %d issue(s):\n%s",
+        error.project_root,
+        len(error.issues),
+        "\n".join(f"- {issue}" for issue in error.issues),
+    )
+
+
+def validate_project_command_authoring(project) -> None:
+    """Fail startup when strict-command JSON carries invalid top-level authored keys."""
+    issues = audit_project_command_surfaces(project)
+    if not issues:
+        return None
+    raise CommandAuthoringValidationError(project.project_root, issues)
+
+
+def log_command_authoring_validation_error(error: CommandAuthoringValidationError) -> None:
+    """Write a full command-authoring validation failure report to the persistent log."""
+    logger.error(
+        "Command authoring validation failed for %s with %d issue(s):\n%s",
         error.project_root,
         len(error.issues),
         "\n".join(f"- {issue}" for issue in error.issues),

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from area_editor.project_io.asset_resolver import AssetResolver
-from area_editor.project_io.manifest import load_manifest
+from area_editor.project_io.project_manifest import load_manifest
 
 _TEST_PROJECT = Path(__file__).resolve().parent.parent.parent.parent / "projects" / "test_project"
 

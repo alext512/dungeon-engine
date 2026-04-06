@@ -44,7 +44,7 @@ from area_editor.documents.area_document import (
 )
 from area_editor.json_format import format_json_for_editor
 from area_editor.project_io.asset_resolver import AssetResolver
-from area_editor.project_io.manifest import (
+from area_editor.project_io.project_manifest import (
     AREA_ID_PREFIX,
     ProjectManifest,
     discover_areas,

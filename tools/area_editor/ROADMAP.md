@@ -2,7 +2,10 @@
 
 This roadmap is for the external editor.
 
-Phases 0-3 are complete. Later phases are planned work.
+Phases 0-3 are complete, and meaningful parts of later phases have also landed
+out of order. Treat this document as a status-aware roadmap: some later slices
+below are already partially or substantially implemented, while the remaining
+notes describe the gaps still worth closing.
 
 The guiding goal is to let a non-coder build a full game through the supported
 template-driven workflow while keeping raw JSON escape hatches for advanced
@@ -45,13 +48,13 @@ Implemented:
 - tab deduplication and close controls
 - area tabs, JSON viewer tabs, and image preview tabs
 
-## Phase 3: Tile And Cell Editing (In Progress)
+## Phase 3: Tile And Cell Editing (Completed, In Active Use)
 
 Goal:
 
 - edit room layout safely
 
-Implemented so far:
+Implemented:
 
 - preservation-safe saving for edited area tabs
 - canvas-based `cell_flags` editing with dirty tracking
@@ -78,7 +81,14 @@ Goal:
 - expose the highest-value fields authors actually need when using the provided
   template library
 
-This should be the first editor catch-up slice.
+Current status:
+
+- substantially implemented through structured entity-instance editing,
+  template-parameter editing, variable editing, render-property editing, and
+  guarded raw JSON fallback tabs
+- the main remaining gaps are broader structured coverage for newer
+  engine-owned fields plus better direct manipulation workflows such as drag to
+  move and screen-space placement
 
 Deliverables:
 
@@ -135,6 +145,14 @@ Goal:
 - replace high-friction free-text references with contextual pickers
 - make browsing of supported content types much easier
 
+Current status:
+
+- partially implemented through file-backed browsers for areas, templates,
+  items, dialogues, commands, assets, and folders
+- reference-aware rename/move operations already exist for file-backed content
+- the biggest remaining gaps are richer in-form contextual pickers and clearer
+  broken-reference surfacing inside editing panels
+
 Deliverables:
 
 ### 5a. Entity reference picker
@@ -183,6 +201,14 @@ Goal:
 
 - support the high-value content types needed by the curated workflow
 
+Current status:
+
+- partially implemented through structured item, template, project-manifest,
+  shared-variables, global-entity, and entity-instance editing surfaces
+- guarded JSON tabs cover dialogue/menu and command payload editing today
+- the remaining gaps are richer structured dialogue/menu editing and continued
+  workflow polish around newer authoring surfaces
+
 Deliverables:
 
 ### 6a. Item-definition support
@@ -225,6 +251,13 @@ Goal:
 
 - support the selected project-level configuration that currently still needs
   hand-editing
+
+Current status:
+
+- substantially implemented through structured project-manifest,
+  shared-variables, and global-entity editors plus guarded raw JSON fallbacks
+- the main remaining gaps are deeper coverage for some newer runtime-owned
+  fields and smoother project-wide workflow integration
 
 Deliverables:
 
@@ -272,6 +305,12 @@ Goal:
 
 - shorten the edit-test loop
 - reduce filesystem-only workflows
+
+Current status:
+
+- partially implemented through reference-aware rename/move workflows, guarded
+  delete flows with usage previews, folder operations, and area duplication
+- the largest remaining gap in this phase is runtime launch/handoff integration
 
 Deliverables:
 

@@ -816,6 +816,14 @@ In the called project command file, `$offset_x` and `$offset_y` resolve from tho
 
 This is a general rule: both `run_project_command` and `run_entity_command` forward any extra fields on the command object into the called flow as runtime parameters. The called commands can then read those values with `$param_name` tokens. This is how the dialogue examples pass `dialogue_path`, `dialogue_on_start`, `segment_hooks`, and other caller-supplied data into the controller's command chain.
 
+Important nuance:
+
+- do not assume every command object accepts arbitrary extra fields
+- startup validation now fails on unknown top-level keys for strict primitive commands
+- commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_commands`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `move_in_direction`, `push_facing`, and `interact_facing`
+
+So a typo like `"persitent": true` on `set_visible` is now a startup validation failure, while a field like `"reward_item": "items/key"` on `run_commands` is still valid when child commands need to read `$reward_item`.
+
 ## Runtime References and Tokens
 
 Commands often need to refer to the current entity or an explicitly passed related entity.
@@ -875,6 +883,10 @@ For strict primitive entity-target commands, use explicit ids or resolved id tok
 ## Ordinary JSON Dialogue Data
 
 Dialogue/menu definitions are typically kept under `dialogues/`, but that folder is only a convention. These files are ordinary JSON data loaded by controller commands through explicit variable writes with value sources such as `{"$json_file": "dialogues/system/pause_menu.json"}`.
+
+Within one live runtime context, repeated `$json_file` reads reuse a small
+cache. Rebuilding runtime context, such as after an area change, `new_game`, or
+`load_game`, starts with a fresh cache.
 
 Example:
 
