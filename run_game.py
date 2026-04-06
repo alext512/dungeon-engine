@@ -208,7 +208,12 @@ def _default_project_path(launcher_state, fallback_dir) -> Path:
     remembered = _existing_path(launcher_state.last_project)
     if remembered is not None:
         return remembered
-    return Path(fallback_dir) / "test_project" / "project.json"
+
+    fallback_root = Path(fallback_dir).resolve()
+    for candidate in sorted(fallback_root.glob("*/project.json")):
+        if candidate.is_file():
+            return candidate.resolve()
+    return fallback_root
 
 
 def _default_area_id(project, remembered_area: str | None) -> str | None:

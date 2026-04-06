@@ -139,7 +139,7 @@ From `tools/area_editor/`:
 ```text
 pip install -r requirements.txt
 python -m area_editor
-python -m area_editor --project ../../projects/test_project/project.json
+python -m area_editor --project path/to/project.json
 ```
 
 ## Related Runtime Docs

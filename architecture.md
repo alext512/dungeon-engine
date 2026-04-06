@@ -101,7 +101,7 @@ The intended split is:
 - data defines content, command chains, entities, items, dialogue, and room setup
 - code defines the runtime, command execution, rendering, collision, UI, and persistence
 
-Project content may live inside this repo for version control, for example under `projects/test_project/`, but that does not make it engine data. The real boundary is:
+Project content may live inside this repo for version control, for example under `projects/my_game/`, but that does not make it engine data. The real boundary is:
 
 - engine code lives under `dungeon_engine/`
 - project content lives in a project folder selected through `project.json`
@@ -253,7 +253,7 @@ The first versions can keep the schemas simple. They do not need to predict ever
 
 ```text
 projects/
-    test_project/                # Versioned sample project content (optional location)
+    my_game/                     # Versioned project content (optional location)
         project.json
         shared_variables.json
         areas/
@@ -575,4 +575,3 @@ The architecture is on the right track if we can quickly build a small room wher
 - the room can be authored and tested through the chosen workflow
 
 If the architecture makes that awkward, it should be changed.
-

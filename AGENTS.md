@@ -13,7 +13,7 @@ The active repo surface is the standalone game runtime plus the external area ed
 
 Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
-Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/test_project/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
+Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/my_game/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
 The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and supports active area editing workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, and guarded JSON editing. However, the runtime has recently expanded faster than the editor, so the tool currently lags behind newer authoring surfaces such as item browsing/editing, shared project config and UI presets, `global_entities`, some engine-owned entity fields, screen-space placement, richer reference pickers, and runtime handoff. Assume an editor catch-up pass is still needed unless the relevant workflow is already confirmed in code.
 
@@ -34,7 +34,7 @@ Or double-click `Run_Game.cmd`.
 | File | What It Tells You |
 |---|---|
 | `PROJECT_SPIRIT.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
-| `README.md` | Current features, sample project behavior, controls, verification commands |
+| `README.md` | Current features, project-authoring expectations, controls, verification commands |
 | `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
 | `ENGINE_JSON_INTERFACE.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
 | `architecture.md` | Design principles and medium-term architectural direction |
@@ -151,12 +151,11 @@ When you change any of the following:
 do **all** of the following before declaring the change safe:
 
 1. Run the automated test suite that covers the affected area.
-2. Directly validate the example projects, especially:
-   - `projects/test_project/`
-   - `projects/game_copy/`
+2. Directly validate every changed project manifest and any repo-local example
+   projects currently present under `projects/`.
 3. Prefer validating them through the same startup-style project-command path the app uses, not only through lower-level engine tests.
-4. If you changed project-command ids or command references, explicitly re-run project-command validation for each affected example project.
-5. If feasible, do a brief manual smoke start of the affected sample project after automated validation passes.
+4. If you changed project-command ids or command references, explicitly re-run project-command validation for each affected project manifest.
+5. If feasible, do a brief manual smoke start of the affected project after automated validation passes.
 
 If you change `tools/area_editor/`, also run the editor's own unittest suite from inside that folder so package-relative imports and tool-local assumptions match the intended workflow.
 
@@ -168,13 +167,14 @@ from pathlib import Path
 from dungeon_engine.project_context import load_project
 from dungeon_engine.commands.library import validate_project_commands
 
-for project_json in [
-    Path(r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"),
-    Path(r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\game_copy\project.json"),
-]:
-    project = load_project(project_json)
-    validate_project_commands(project)
-    print(f"{project.project_root.name}: project command validation OK")
+project_manifests = sorted(Path("projects").glob("*/project.json"))
+if not project_manifests:
+    print("No repo-local project manifests found under projects/.")
+else:
+    for project_json in project_manifests:
+        project = load_project(project_json)
+        validate_project_commands(project)
+        print(f"{project.project_root.name}: project command validation OK")
 '@ | .venv/Scripts/python -
 ```
 
@@ -183,6 +183,9 @@ Why this matters:
 - A general engine test pass does not guarantee that every example project's startup validation path is clean.
 - Literal `run_project_command` references inside project JSON can still fail at startup even when broader tests are green.
 - If you touched project content or command ids, validate the actual projects directly.
+- Some end-to-end runtime tests use optional repo-local example projects and
+  skip when those fixtures are not present. Treat those as bonus integration
+  coverage, not as the only safety net.
 
 ## Gotchas
 

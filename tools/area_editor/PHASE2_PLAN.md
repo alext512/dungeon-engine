@@ -139,7 +139,7 @@ Modify `AreaListPanel`:
 
 **Implemented (UI complete):**
 - Steps 1–7 are all implemented and verified
-- 28 existing tests pass, launch-tested with test_project
+- 28 existing tests pass, launch-tested with a repo-local fixture project
 - Tab deduplication, middle-click close, context menus all working
 
 **Known gaps for backend/follow-up agent to address:**

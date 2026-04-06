@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import run_game
 from dungeon_engine.commands.library import (
@@ -858,11 +859,7 @@ class ProjectContentContractTests(unittest.TestCase):
         )
 
     def test_load_area_from_data_rejects_duplicate_entity_ids_in_one_area(self) -> None:
-        project = load_project(
-            Path(
-                r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"
-            )
-        )
+        _, project = self._make_project()
 
         with self.assertRaises(ValueError):
             load_area_from_data(
@@ -907,3 +904,21 @@ class ProjectContentContractTests(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             run_game._resolve_area_argument(project, "areas/intro/title_screen.json")
+
+    def test_game_launcher_default_project_path_prefers_existing_manifest_over_named_fixture(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        projects_dir = Path(temp_dir.name)
+        launcher_state = SimpleNamespace(last_project=None)
+
+        self.assertEqual(run_game._default_project_path(launcher_state, projects_dir), projects_dir.resolve())
+
+        alpha_project = projects_dir / "alpha_project"
+        beta_project = projects_dir / "beta_project"
+        _write_json(alpha_project / "project.json", {"area_paths": ["areas/"]})
+        _write_json(beta_project / "project.json", {"area_paths": ["areas/"]})
+
+        self.assertEqual(
+            run_game._default_project_path(launcher_state, projects_dir),
+            (alpha_project / "project.json").resolve(),
+        )

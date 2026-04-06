@@ -16,16 +16,30 @@ from area_editor.documents.area_document import (
     save_area_document,
 )
 from area_editor.json_format import format_json_for_editor
+from fixture_project import FixtureProject, create_editor_fixture_project
 
-_TEST_PROJECT = Path(__file__).resolve().parent.parent.parent.parent / "projects" / "test_project"
-_VILLAGE_SQUARE = _TEST_PROJECT / "areas" / "village_square.json"
-_TITLE_SCREEN = _TEST_PROJECT / "areas" / "title_screen.json"
+_FIXTURE_TEMP: tempfile.TemporaryDirectory[str] | None = None
+_FIXTURE: FixtureProject | None = None
 
 
-@unittest.skipUnless(_VILLAGE_SQUARE.is_file(), "village_square.json not found")
+def setUpModule() -> None:
+    global _FIXTURE_TEMP, _FIXTURE
+    _FIXTURE_TEMP = tempfile.TemporaryDirectory()
+    _FIXTURE = create_editor_fixture_project(Path(_FIXTURE_TEMP.name))
+
+
+def tearDownModule() -> None:
+    global _FIXTURE_TEMP, _FIXTURE
+    if _FIXTURE_TEMP is not None:
+        _FIXTURE_TEMP.cleanup()
+    _FIXTURE_TEMP = None
+    _FIXTURE = None
+
+
 class TestVillageSquareLoading(unittest.TestCase):
     def setUp(self):
-        self.doc = load_area_document(_VILLAGE_SQUARE)
+        assert _FIXTURE is not None
+        self.doc = load_area_document(_FIXTURE.village_square)
 
     def test_tile_size(self):
         self.assertGreater(self.doc.tile_size, 0)
@@ -48,10 +62,10 @@ class TestVillageSquareLoading(unittest.TestCase):
         self.assertTrue(overlay_layers, "Expected at least one overlay layer with render_order=20")
 
 
-@unittest.skipUnless(_TITLE_SCREEN.is_file(), "title_screen.json not found")
 class TestTitleScreenLoading(unittest.TestCase):
     def setUp(self):
-        self.doc = load_area_document(_TITLE_SCREEN)
+        assert _FIXTURE is not None
+        self.doc = load_area_document(_FIXTURE.title_screen)
 
     def test_loads_without_error(self):
         self.assertIsInstance(self.doc, AreaDocument)
@@ -120,12 +134,12 @@ class TestEntityPositioning(unittest.TestCase):
         self.assertEqual(ent.pixel_y, 50)
 
 
-@unittest.skipUnless(_VILLAGE_SQUARE.is_file(), "village_square.json not found")
 class TestRoundTrip(unittest.TestCase):
     """Loading and re-serialising should not lose any top-level keys."""
 
     def test_no_key_loss(self):
-        raw = json.loads(_VILLAGE_SQUARE.read_text(encoding="utf-8"))
+        assert _FIXTURE is not None
+        raw = json.loads(_FIXTURE.village_square.read_text(encoding="utf-8"))
         doc = AreaDocument.from_dict(dict(raw))
         out = doc.to_dict()
         for key in raw:

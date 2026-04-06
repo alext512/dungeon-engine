@@ -41,7 +41,7 @@ tools/area_editor/                # Portable root (can be copied standalone)
     tests/                        # Automated tests (no Qt required for most)
         __init__.py
         test_manifest.py          # Area discovery, area_id derivation, path resolution
-        test_asset_resolver.py    # Asset path resolution against test_project
+        test_asset_resolver.py    # Asset path resolution against a generated fixture project
         test_area_document.py     # Document loading, unknown-field preservation, round-trip
 ```
 
@@ -71,7 +71,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 - `project_io/project_manifest.py`: `ProjectManifest` dataclass, `load_manifest()`, `discover_areas()`
 - Replicate runtime path resolution logic from `dungeon_engine/project_context.py` (`_resolve_paths` pattern: if key missing/empty, fall back to conventional dir). `dungeon_engine/project.py` now remains only as a compatibility wrapper.
 - Replicate `area_id()` from lines 263-277 (relative path, strip .json, normalize slashes)
-- **Verify**: discovers 3 areas from test_project (village_square, village_house, title_screen)
+- **Verify**: discovers the expected authored areas from the chosen fixture project
 
 ### Step 3: Document model with unknown-field preservation
 - `documents/area_document.py`: dataclasses for `TilesetRef`, `TileLayerDocument`, `EntityDocument`, `AreaDocument`
@@ -122,11 +122,11 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 - **Verify**: full flow from open project -> browse areas -> view tiles
 
 ### Step 9: Automated tests
-- `tests/test_manifest.py`: test against `projects/test_project/` — area discovery finds 3 areas, area_id derivation matches expected ids, path fallback logic works when keys are missing
-- `tests/test_asset_resolver.py`: test against `projects/test_project/` — resolves known tileset paths, returns None for missing paths
-- `tests/test_area_document.py`: load village_square.json — correct dimensions, layer count, entity count, `render_order` / `y_sort` fields preserved, unknown fields round-trip through `from_dict()`/`to_dict()`
+- `tests/test_manifest.py`: test against a generated fixture project — area discovery, area_id derivation, and path fallback logic work as expected
+- `tests/test_asset_resolver.py`: test against a generated fixture project — resolves known tileset paths and returns `None` for missing paths
+- `tests/test_area_document.py`: load a representative authored area — dimensions, layer count, entity count, `render_order` / `y_sort` fields, and unknown-field round-tripping all behave correctly
 - Run with: `python -m pytest tests/` from `tools/area_editor/`
-- These tests are pure Python (no Qt dependency) and use the real test_project fixtures via relative path
+- These tests are pure Python (no Qt dependency) and use generated fixture project data so they do not depend on whichever repo-local examples happen to exist
 
 ### Step 10: Edge cases and polish
 - Missing tileset PNG -> magenta placeholder tile + console warning
@@ -145,7 +145,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 3. **QGraphicsItemGroup per layer** — O(1) visibility toggling, clean compositing
 4. **Z-order matches the unified runtime render model** — tile layers and entity markers share `render_order`, with y-sorted content interleaving inside a band
 5. **No entity sprite rendering in Phase 1** — just colored markers with tooltips; sprite visuals are Phase 3+
-6. **Automated tests against real fixtures** — area discovery, asset resolution, and document round-trip tested against test_project to catch drift from runtime conventions
+6. **Automated tests against generated fixtures** — area discovery, asset resolution, and document round-trip tested against a generated fixture project to catch drift from runtime conventions without depending on optional repo-local content
 7. **Pixel-perfect rendering** — SmoothPixmapTransform disabled for crisp pixel art at all zoom levels
 
 ---
@@ -155,8 +155,8 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 | File | Why |
 |------|-----|
 | `dungeon_engine/project_context.py` | Path resolution and area ID algorithms to replicate |
-| `projects/test_project/project.json` | Test fixture for manifest loading |
-| `projects/test_project/areas/village_square.json` | Primary test area (3 layers, entities, tilesets) |
+| `tools/area_editor/tests/fixture_project.py` | Generated fixture-project source used by editor tests |
+| Generated `project.json` / area JSON files | Representative authored data produced during the test run |
 | `ENGINE_JSON_INTERFACE.md` | Canonical JSON field reference |
 | `tools/area_editor/ARCHITECTURE.md` | Module structure and constraints |
 | `tools/area_editor/DATA_BOUNDARY.md` | Import boundary rules |
@@ -169,7 +169,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 cd tools/area_editor
 pip install -r requirements.txt
 python -m area_editor
-python -m area_editor --project ../../projects/test_project/project.json
+python -m area_editor --project path/to/project.json
 ```
 
 Or double-click `tools/area_editor/Run_Editor.cmd`.
@@ -178,15 +178,15 @@ Or double-click `tools/area_editor/Run_Editor.cmd`.
 
 ## Verification Checklist
 
-1. From `tools/area_editor/`: `python -m area_editor --project ../../projects/test_project/project.json` opens without errors
-2. Area list shows: title_screen, village_house, village_square
-3. Clicking village_square renders the tile grid with all 3 layers
+1. From `tools/area_editor/`: `python -m area_editor --project path/to/project.json` opens without errors
+2. Area list shows the discovered authored areas from the chosen project
+3. Clicking a representative area renders the tile grid with all expected layers
 4. Layer checkboxes toggle visibility
 5. Entity markers appear at correct grid positions with tooltips
 6. Mouse wheel zooms (pixel-art crisp), drag pans
 7. Status bar shows cell coordinates on hover
-8. title_screen loads without errors — screen-space entity markers render at pixel positions
-9. `python -m pytest tests/` passes — area discovery, asset resolution, document round-trip all verified automatically
+8. An authored screen-space-heavy area loads without errors — screen-space entity markers render at pixel positions
+9. `python -m pytest tests/` passes — area discovery, asset resolution, and document round-trip all verify automatically
 
 ---
 

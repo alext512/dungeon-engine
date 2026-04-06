@@ -98,57 +98,34 @@ newer engine-owned fields.
 The older built-in editor is archived under [archived_editor](./archived_editor/)
 for reference only.
 
-## What The Sample Project Demonstrates
+## Repo-Local Example Projects
 
-The repo includes a working sample project in
-[projects/test_project](./projects/test_project/).
+The repo may contain one or more example projects under `projects/`.
 
-That sample currently shows:
+Those folders are convenience content, not part of the runtime package, and
+they may change, be replaced, or disappear as the engine evolves. The stable
+contract is the manifest-driven project format itself, not any one repo-local
+example.
 
-- a title screen with a menu
-- connected rooms you can walk between
-- player movement with authored animation timing
-- pushable blocks
-- lever-and-gate puzzle state that can persist
-- signs and prompts
-- save/load prompts
-- pause menu flow
-- controller entities that manage dialogue and UI behavior
+Repo-local examples are still useful because they can show:
 
-The repo also includes a focused contract demo project in
-[projects/physics_contract_demo](./projects/physics_contract_demo/).
+- how `project.json` points at areas, templates, commands, items, dialogue data,
+  and assets
+- how complete authored flows are composed without custom Python scripts
+- what real end-to-end JSON authoring looks like for movement, puzzles,
+  dialogue, inventory, save/load, and UI routing
 
-That smaller demo exists specifically to show the newer canonical movement /
-interaction contract and the newer engine-owned dialogue session path:
+If you want to inspect a repo-local example, start with whichever folder
+currently contains a `project.json` manifest. Good files to inspect first are
+usually:
 
-- top-level `facing`, `solid`, `pushable`, `weight`, `push_strength`
-- cell `blocked`
-- `move_in_direction`
-- `push_facing`
-- `interact_facing`
-- Inventory V1 item definitions, entity-owned inventory state, pickup templates,
-  item-gated doors, direct item use, and the first engine-owned inventory UI
-- `on_blocked`, `on_occupant_enter`, and `on_occupant_leave`
-- `open_dialogue_session` and `close_dialogue_session`
-- `open_inventory_session` and `close_inventory_session`
-- nested engine-owned dialogue sessions that suspend and resume cleanly
-- preset-driven inline or separate-panel choice layouts, including marquee overflow
-
-The older sample projects remain useful examples of lower-level authored JSON
-flows. They still work on the current engine, but they are not the canonical
-reference for the newer built-in movement/interaction contract.
-
-Good files to inspect first:
-
-- [projects/test_project/project.json](./projects/test_project/project.json)
-- [projects/test_project/shared_variables.json](./projects/test_project/shared_variables.json)
-- [projects/test_project/areas/title_screen.json](./projects/test_project/areas/title_screen.json)
-- [projects/test_project/areas/village_square.json](./projects/test_project/areas/village_square.json)
-- [projects/test_project/areas/village_house.json](./projects/test_project/areas/village_house.json)
-- [projects/test_project/entity_templates/player.json](./projects/test_project/entity_templates/player.json)
-- [projects/test_project/entity_templates/lever_toggle.json](./projects/test_project/entity_templates/lever_toggle.json)
-- [projects/test_project/dialogues/system/title_menu.json](./projects/test_project/dialogues/system/title_menu.json)
-- [projects/test_project/dialogues/system/pause_menu.json](./projects/test_project/dialogues/system/pause_menu.json)
+- `project.json`
+- `shared_variables.json`
+- `areas/*.json`
+- `entity_templates/*.json`
+- `commands/*.json`
+- `dialogues/*.json`
+- `items/*.json`
 
 ## How To Think About Authoring
 
@@ -205,11 +182,12 @@ Or directly:
 pip install pygame-ce
 ```
 
-### Run The Sample Project
+### Run A Project
 
 ```bash
-python run_game.py --project projects/test_project
-python run_game.py --project projects/test_project areas/village_square
+python run_game.py --project path/to/project_folder
+python run_game.py --project path/to/project_folder areas/start
+python run_game.py --project path/to/project.json
 ```
 
 On Windows, you can also double-click:
@@ -233,30 +211,22 @@ If debug inspection is enabled in the active project's `project.json`:
 
 ## What To Expect When You Run It
 
-When you launch the sample project:
+When you launch a project:
 
-- the title screen opens an authored menu
-- choosing `New Game` moves you into the sample rooms
-- in `village_square`, you can explore, read signs, save, and enter the house
-- in `village_house`, you can toggle the lever and see the gate react
-- the pause menu is handled by controller logic rather than a hardcoded engine UI
+- the manifest's `startup_area` opens unless you pass an explicit area id
+- everything after that depends on the authored content in that project
+- repo-local example projects often demonstrate title screens, room transitions,
+  controller-owned dialogue flows, engine-owned dialogue sessions, inventory
+  flows, pause/save prompts, and simple puzzle state
 
 Useful things to try:
 
 - walk with `WASD` or the arrow keys
 - press `Space` or `Enter` to interact
-- press `I` in `physics_contract_demo` to open the inventory
-- stand by the house door and enter `village_house`
-- toggle the lever in the house
-- leave and return to confirm the lever/gate state persisted
-- push the house block, leave the house, and return to confirm the block reset
-- press `Escape` in a playable area to open the pause menu
-
-If you want to inspect the cleaner movement/interaction contract directly, run:
-
-```bash
-python run_game.py --project projects/physics_contract_demo
-```
+- if the active project routes an `inventory` action, press `I`
+- if the active project routes a `menu` action, press `Escape`
+- inspect the project's JSON when you want to understand why a specific flow
+  behaves the way it does
 
 ## Project Structure
 
@@ -266,8 +236,7 @@ python_puzzle_engine/
     tools/area_editor/          # External area editor
     archived_editor/            # Old built-in editor kept only for reference
     projects/
-        test_project/           # Full-featured example project
-        physics_contract_demo/  # Focused demo of newer movement/interaction contract
+        my_game/                # Optional repo-local project content
     tests/                      # Engine unittest suite
     plans/                      # Planning and design documents
     archive/                    # Old documentation kept for reference
@@ -317,8 +286,8 @@ Other useful docs:
 - Dialogue now has two valid authoring paths:
   - the newer engine-owned session runtime, opened through
     `open_dialogue_session`
-  - the older controller-owned authored flow still used by the older sample
-    projects
+  - the older controller-owned authored flow still supported for projects that
+    prefer it
 - Projects can route different logical inputs to different entities at runtime.
 - Save data stores the current area, current routed input targets, camera state,
   traveler state, visited-area persistent diffs, and the current diff of the
@@ -330,9 +299,7 @@ Useful commands during development:
 
 ```text
 .venv/Scripts/python -m unittest discover -s tests -v
-.venv/Scripts/python run_game.py --project projects/test_project areas/title_screen --headless --max-frames 2
-.venv/Scripts/python run_game.py --project projects/test_project areas/village_square --headless --max-frames 2
-.venv/Scripts/python run_game.py --project projects/test_project areas/village_house --headless --max-frames 2
+.venv/Scripts/python run_game.py --project path/to/project --headless --max-frames 2
 cd tools/area_editor
 ..\..\.venv/Scripts/python -m unittest discover -s tests -v
 ```
@@ -340,6 +307,10 @@ cd tools/area_editor
 Startup validation now also validates known command-bearing JSON surfaces for
 strict-command key mismatches. Likely top-level key typos on strict primitive
 commands now fail before launch instead of slipping into runtime behavior.
+
+If you keep repo-local example projects under `projects/`, validate each
+present `project.json` directly after command-surface or content-authoring
+changes.
 
 ## Current Limits
 

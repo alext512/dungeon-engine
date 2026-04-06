@@ -880,6 +880,17 @@ class StrictContentIdTests(unittest.TestCase):
 
         return project_root, load_project(project_root / "project.json")
 
+    def _repo_project_manifest_path(self, project_name: str) -> Path:
+        return Path(__file__).resolve().parents[1] / "projects" / project_name / "project.json"
+
+    def _load_repo_project_or_skip(self, project_name: str) -> object:
+        project_path = self._repo_project_manifest_path(project_name)
+        if not project_path.is_file():
+            self.skipTest(
+                f"Optional repo-local integration fixture '{project_name}' is not available in this worktree."
+            )
+        return load_project(project_path)
+
     def _make_command_context(
         self,
         *,
@@ -4595,8 +4606,7 @@ class StrictContentIdTests(unittest.TestCase):
         pygame.display.set_mode((1, 1))
         self.addCleanup(pygame.quit)
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         asset_manager = AssetManager(project)
         text_renderer = TextRenderer(asset_manager)
 
@@ -4615,8 +4625,7 @@ class StrictContentIdTests(unittest.TestCase):
         pygame.display.set_mode((1, 1))
         self.addCleanup(pygame.quit)
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
         game = Game(area_path=title_area_path, project=project)
@@ -4672,8 +4681,7 @@ class StrictContentIdTests(unittest.TestCase):
         pygame.display.set_mode((1, 1))
         self.addCleanup(pygame.quit)
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
         game = Game(area_path=title_area_path, project=project)
@@ -4775,8 +4783,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
 
@@ -4813,8 +4820,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         title_area_path = project.resolve_area_reference("areas/title_screen")
         assert title_area_path is not None
 
@@ -4854,13 +4860,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -4889,13 +4889,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -4923,13 +4917,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -4966,13 +4954,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -5042,13 +5024,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -5089,13 +5065,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -5135,13 +5105,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = (
-            Path(__file__).resolve().parents[1]
-            / "projects"
-            / "physics_contract_demo"
-            / "project.json"
-        )
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("physics_contract_demo")
         area_path = project.resolve_area_reference("areas/physics_contract_demo")
         assert area_path is not None
 
@@ -5211,8 +5175,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertIsNone(game.command_runner.last_error_notice)
 
     def test_dialogue_choice_window_scrolls_after_three_visible_rows(self) -> None:
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         controller = instantiate_entity(
             {
                 "id": "dialogue_controller",
@@ -5293,8 +5256,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
@@ -5341,8 +5303,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         area_path = project.resolve_area_reference("areas/village_house")
         assert area_path is not None
 
@@ -5390,8 +5351,7 @@ class StrictContentIdTests(unittest.TestCase):
         import pygame
         from dungeon_engine.engine.game import Game
 
-        project_path = Path(__file__).resolve().parents[1] / "projects" / "test_project" / "project.json"
-        project = load_project(project_path)
+        project = self._load_repo_project_or_skip("test_project")
         area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
 
@@ -6287,13 +6247,8 @@ class StrictContentIdTests(unittest.TestCase):
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         from dungeon_engine.engine.game import Game
-        from pathlib import Path
 
-        project = load_project(
-            Path(
-                r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"
-            )
-        )
+        project = self._load_repo_project_or_skip("test_project")
         area_path = project.resolve_area_reference("areas/village_square")
         assert area_path is not None
         game = Game(area_path=area_path, project=project)

@@ -15,9 +15,10 @@ Current verified baseline:
 
 - runtime suite: `180` tests passing
 - editor suite: `152` tests passing
-- direct project-command validation: `projects/test_project` and
-  `projects/game_copy` passing
-- short headless boot: `projects/test_project` and `projects/game_copy` passing
+- direct project-command validation: all repo-local `projects/*/project.json`
+  manifests present in the current worktree passing
+- short headless boot: repo-local example-project smoke coverage passing for
+  each manifest currently kept under `projects/`
 
 This is a refactor-and-stabilization plan, not a "rewrite the engine" plan.
 
@@ -242,10 +243,11 @@ These rules apply across the entire plan.
 Do not split a large file and tighten runtime behavior in the same PR unless
 the behavior change is tiny, explicit, and very well tested.
 
-### Rule 2: Keep the sample projects valid at every phase
+### Rule 2: Keep repo-local example projects valid at every phase
 
 If a phase touches command semantics, content loading, project lookup,
-references, or docs describing canonical behavior, the sample projects must be
+references, or docs describing canonical behavior, repo-local example projects
+must be
 revalidated directly.
 
 ### Rule 3: Update docs as part of the phase that changes reality
@@ -365,21 +367,21 @@ from pathlib import Path
 from dungeon_engine.project_context import load_project
 from dungeon_engine.commands.library import validate_project_commands
 
-for project_json in [
-    Path(r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\test_project\project.json"),
-    Path(r"C:\Syncthing\Vault\projects\puzzle_dungeon_v3\python_puzzle_engine\projects\game_copy\project.json"),
-]:
-    project = load_project(project_json)
-    validate_project_commands(project)
-    print(f"{project.project_root.name}: project command validation OK")
+project_manifests = sorted(Path("projects").glob("*/project.json"))
+if not project_manifests:
+    print("No repo-local project manifests found under projects/.")
+else:
+    for project_json in project_manifests:
+        project = load_project(project_json)
+        validate_project_commands(project)
+        print(f"{project.project_root.name}: project command validation OK")
 '@ | .venv/Scripts/python -
 ```
 
 ### Headless smoke boot
 
 ```text
-.venv/Scripts/python run_game.py --headless --project projects/test_project --max-frames 5
-.venv/Scripts/python run_game.py --headless --project projects/game_copy --max-frames 5
+.venv/Scripts/python run_game.py --headless --project path/to/project --max-frames 5
 ```
 
 ### Documentation verification
@@ -434,7 +436,7 @@ Expected deliverables:
 - command metadata in `CommandRegistry`
 - startup validation that can consult command metadata
 - tests for positive and negative cases
-- content cleanup for sample projects if warnings surface
+- content cleanup for repo-local example projects if warnings surface
 
 ### Workstream B: Large-Module Decomposition
 
@@ -685,7 +687,7 @@ Work:
 
 Success criteria:
 
-- sample projects validate cleanly
+- repo-local example projects validate cleanly when present
 - strict primitive typos fail fast with clear errors
 - composition commands still support caller-supplied runtime params
 
@@ -974,6 +976,22 @@ Likely extraction targets:
 - canvas selection/brush state
 - entity panel field parsing/building helpers
 
+Current execution note:
+
+- The editor suite no longer depends on vanished repo-local fixture projects
+  for its main manifest/asset/area-document/main-window coverage. Generated
+  fixture builders now provide the baseline project surfaces for those tests.
+- `tools/area_editor/tests/test_main_window.py` has already shed its embedded
+  fixture-builder library into `tools/area_editor/tests/main_window_test_support.py`.
+- `tools/area_editor/area_editor/app/main_window.py` has started splitting
+  responsibility into support modules:
+  - `main_window_helpers.py`
+  - `main_window_dialogs.py`
+  - `main_window_project_content.py`
+  - `main_window_project_refactors.py`
+- Keep the next editor slices focused on responsibility boundaries, not on
+  mechanically forcing every remaining method out of `main_window.py`.
+
 Success criteria:
 
 - editor tests remain green
@@ -1006,6 +1024,14 @@ Current execution note:
   - authored content contract coverage
   - input/camera runtime coverage
   - inventory/item runtime coverage
+- The editor suite has also started the same process by extracting shared
+  generated-project builders and tree-panel helpers into dedicated test support
+  modules instead of leaving them embedded in the longest UI integration test
+  file.
+- The first focused editor-file split is also complete:
+  `test_main_window_paint_state.py` now carries the standalone open-project and
+  paint-state restoration coverage that used to live at the top of the larger
+  `test_main_window.py`.
 - Keep further extractions responsibility-based rather than line-count-based.
 
 Success criteria:
@@ -1103,7 +1129,7 @@ Mitigation:
 
 - add audit/warning mode first
 - classify commands carefully before enforcement
-- revalidate sample projects directly, not only through unit tests
+- revalidate repo-local example projects directly, not only through unit tests
 
 ### Risk: refactors cause hidden behavior changes
 
@@ -1143,8 +1169,25 @@ This plan succeeds if, at the end:
 - the largest modules are materially easier to review and change
 - tests remain strong but are no longer dominated by one giant runtime file
 - active docs are visibly current and planning docs are clearly labeled as such
-- `projects/test_project` and `projects/game_copy` still validate and boot
+- any repo-local example projects currently present still validate and boot
   cleanly through the same startup-style paths the engine uses in practice
+
+---
+
+## Additional Follow-Ups Worth Tracking
+
+These are useful observations from later review passes, but they are lower
+priority than the main refactor workstreams above.
+
+- keep splitting `tools/area_editor/area_editor/app/main_window.py` as a
+  dedicated editor-maintainability track; it is still one of the biggest active
+  hotspots in the repo
+- consider a stricter optional startup-validation mode later if the project
+  eventually wants more than existence checks for some asset/dialogue surfaces
+- do not add dedicated automated coverage for temporary repo-local example
+  projects unless one of them is promoted to a real long-term fixture
+- revisit packaging/install ergonomics later so runtime/editor dependency setup
+  is easier to understand from a fresh clone
 
 ---
 
