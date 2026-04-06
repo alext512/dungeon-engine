@@ -15,10 +15,12 @@ Current verified baseline:
 
 - runtime suite: `181` tests passing
 - editor suite: `152` tests passing
-- direct project-command validation: all repo-local `projects/*/project.json`
-  manifests present in the current worktree passing
-- short headless boot: repo-local example-project smoke coverage passing for
-  each manifest currently kept under `projects/`
+- project-command validation and headless boot smoke coverage are expected for
+  any long-lived repo-local fixture project that is intentionally kept under
+  `projects/`, but temporary example games are not treated as canonical test
+  inputs
+- generated fixture projects now carry the main editor verification burden so
+  the test suite does not depend on local sample-project churn
 
 This is a refactor-and-stabilization plan, not a "rewrite the engine" plan.
 
@@ -68,7 +70,8 @@ breaking the current data-driven direction.
 - Do not remove the JSON-driven command model.
 - Do not merge the editor back into `dungeon_engine/`.
 - Do not introduce large authoring-contract changes unless a phase explicitly
-  calls for them and sample-project migration is included.
+  calls for them and generated or intentionally kept fixture migration is
+  included.
 - Do not refactor structure and change semantics in the same step unless the
   semantics change is tiny and fully isolated.
 
@@ -238,12 +241,13 @@ These rules apply across the entire plan.
 Do not split a large file and tighten runtime behavior in the same PR unless
 the behavior change is tiny, explicit, and very well tested.
 
-### Rule 2: Keep repo-local example projects valid at every phase
+### Rule 2: Validate intentionally kept fixture projects
 
 If a phase touches command semantics, content loading, project lookup,
-references, or docs describing canonical behavior, repo-local example projects
-must be
-revalidated directly.
+references, or docs describing canonical behavior, revalidate any intentionally
+kept long-lived fixture projects under `projects/` directly. Do not treat
+temporary local example games as canonical test inputs unless they are promoted
+to fixture status first.
 
 ### Rule 3: Update docs as part of the phase that changes reality
 
@@ -292,7 +296,8 @@ Examples:
 
 - unclear command-surface compatibility tradeoffs
 - runtime/editor boundary changes that could introduce coupling
-- sample-project content that needs migration but reveals a design conflict
+- fixture or example-project content that needs migration but reveals a design
+  conflict
 - docs that disagree with each other in a way that suggests the code's intended
   behavior is itself unclear
 
@@ -431,7 +436,8 @@ Expected deliverables:
 - command metadata in `CommandRegistry`
 - startup validation that can consult command metadata
 - tests for positive and negative cases
-- content cleanup for repo-local example projects if warnings surface
+- content cleanup for generated or intentionally kept fixture projects if
+  warnings surface
 
 ### Workstream B: Large-Module Decomposition
 
@@ -665,7 +671,7 @@ Work:
 Success criteria:
 
 - audit output exists
-- no sample-project regressions
+- no generated-fixture or intentionally kept fixture-project regressions
 - warning cases are understandable and actionable
 
 ## Phase 2: Content Cleanup And Hard Enforcement For Strict Primitives
@@ -676,14 +682,14 @@ Purpose:
 
 Work:
 
-- clean any sample-project or test fixtures that rely on accidental permissive
-  behavior
+- clean any generated test fixtures or intentionally kept long-lived fixture
+  projects that rely on accidental permissive behavior
 - promote strict-primitive unknown-key warnings into hard validation errors
 - keep orchestration and dispatch commands explicitly permissive where needed
 
 Success criteria:
 
-- repo-local example projects validate cleanly when present
+- intentionally kept fixture projects validate cleanly when present
 - strict primitive typos fail fast with clear errors
 - composition commands still support caller-supplied runtime params
 
@@ -916,15 +922,16 @@ Recommended order:
 
 Current biggest active files after this pass:
 
-- `tools/area_editor/area_editor/app/main_window.py`
-  - now roughly tied with the runtime catch-all test as the largest active file
-  - should still be treated as the main editor-architecture hotspot
 - `tests/test_strict_content_ids.py`
   - much smaller after several extractions, but still large enough to justify
     future responsibility-based test splits
+- `tools/area_editor/area_editor/app/main_window.py`
+  - now roughly tied with the runtime catch-all test as the largest active file
+  - should still be treated as the main editor-architecture hotspot
 - `tools/area_editor/tests/test_main_window.py`
-  - now the biggest editor test hotspot and likely wants the same subsystem
-    split strategy used on the runtime suite
+  - smaller after paint-state and content-management extractions, but still the
+    biggest editor test hotspot and likely wants the same subsystem split
+    strategy used on the runtime suite
 - `tools/area_editor/area_editor/widgets/tile_canvas.py`
   - substantial but still cohesive; only split if a canvas-vs-screen-space seam
     becomes obvious
@@ -996,6 +1003,10 @@ Current execution note:
   after confirming the same implementation already lives in
   `main_window_project_refactors.py`; calls now resolve through the refactor
   mixin instead of a duplicate class-local method.
+- The main-window editor integration tests now also have
+  `test_main_window_content_management.py` for area/file-tree/content-management
+  workflows, leaving `test_main_window.py` more focused on broader editor
+  interaction and reference-renaming behavior.
 - Keep the next editor slices focused on responsibility boundaries, not on
   mechanically forcing every remaining method out of `main_window.py`.
 
@@ -1020,7 +1031,7 @@ Work:
   - content loading and validation
   - persistence and travelers
   - input, renderer, and runtime services
-  - startup validation and sample-project behavior
+  - startup validation and fixture-project behavior
 - keep editor tests grouped by surface but factor any repeated setup
 
 Current execution note:
@@ -1041,6 +1052,9 @@ Current execution note:
   `test_main_window_paint_state.py` now carries the standalone open-project and
   paint-state restoration coverage that used to live at the top of the larger
   `test_main_window.py`.
+- A second editor-file split moved area rename/duplicate/delete, raw area JSON
+  reopening, and file-tree folder workflows into
+  `tools/area_editor/tests/test_main_window_content_management.py`.
 - The newest runtime extraction moved the self-contained engine-owned dialogue
   and text-window coverage into `tests/test_dialogue_and_text_runtime.py`,
   which cut `tests/test_strict_content_ids.py` down again without introducing
@@ -1059,7 +1073,7 @@ Current execution note:
 - The next extraction moved entity visual command coverage, runtime named-ref
   acceptance for visual/movement commands, and strict raw-symbolic entity-ref
   rejection into `tests/test_entity_visual_and_ref_runtime.py`, bringing
-  `tests/test_strict_content_ids.py` down to roughly 3,700 lines.
+  `tests/test_strict_content_ids.py` down to roughly 4,100 lines.
 - Keep further extractions responsibility-based rather than line-count-based.
 
 Success criteria:
@@ -1157,7 +1171,8 @@ Mitigation:
 
 - add audit/warning mode first
 - classify commands carefully before enforcement
-- revalidate repo-local example projects directly, not only through unit tests
+- revalidate intentionally kept fixture projects directly, not only through
+  unit tests
 
 ### Risk: refactors cause hidden behavior changes
 
@@ -1197,8 +1212,8 @@ This plan succeeds if, at the end:
 - the largest modules are materially easier to review and change
 - tests remain strong but are no longer dominated by one giant runtime file
 - active docs are visibly current and planning docs are clearly labeled as such
-- any repo-local example projects currently present still validate and boot
-  cleanly through the same startup-style paths the engine uses in practice
+- any intentionally kept fixture projects under `projects/` still validate and
+  boot cleanly through the same startup-style paths the engine uses in practice
 
 ---
 
