@@ -658,67 +658,227 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._y_spin.setRange(0, max_y)
         del blockers
 
+    def _field_signal_blockers(self) -> list[QSignalBlocker]:
+        return [
+            QSignalBlocker(self._id_edit),
+            QSignalBlocker(self._kind_edit),
+            QSignalBlocker(self._tags_edit),
+            QSignalBlocker(self._x_spin),
+            QSignalBlocker(self._y_spin),
+            QSignalBlocker(self._pixel_x_check),
+            QSignalBlocker(self._pixel_y_check),
+            QSignalBlocker(self._pixel_x_spin),
+            QSignalBlocker(self._pixel_y_spin),
+            QSignalBlocker(self._facing_combo),
+            QSignalBlocker(self._solid_check),
+            QSignalBlocker(self._pushable_check),
+            QSignalBlocker(self._weight_spin),
+            QSignalBlocker(self._push_strength_spin),
+            QSignalBlocker(self._collision_push_strength_spin),
+            QSignalBlocker(self._interactable_check),
+            QSignalBlocker(self._interaction_priority_spin),
+            QSignalBlocker(self._present_check),
+            QSignalBlocker(self._visible_check),
+            QSignalBlocker(self._entity_commands_enabled_check),
+            QSignalBlocker(self._variables_text),
+            QSignalBlocker(self._visuals_text),
+            QSignalBlocker(self._persistence_entity_state_check),
+            QSignalBlocker(self._persistence_variables_text),
+        ]
+
+    def _reset_field_values(self) -> None:
+        self._id_edit.clear()
+        self._kind_edit.clear()
+        self._tags_edit.clear()
+        self._template_label.setText("-")
+        self._space_label.setText("world")
+        self._x_spin.setValue(0)
+        self._y_spin.setValue(0)
+        self._pixel_x_check.setChecked(False)
+        self._pixel_y_check.setChecked(False)
+        self._pixel_x_spin.setValue(0)
+        self._pixel_y_spin.setValue(0)
+        self._facing_combo.setCurrentText("down")
+        self._solid_check.setChecked(False)
+        self._pushable_check.setChecked(False)
+        self._weight_spin.setValue(_ENTITY_INT_DEFAULTS["weight"])
+        self._push_strength_spin.setValue(_ENTITY_INT_DEFAULTS["push_strength"])
+        self._collision_push_strength_spin.setValue(
+            _ENTITY_INT_DEFAULTS["collision_push_strength"]
+        )
+        self._interactable_check.setChecked(False)
+        self._interaction_priority_spin.setValue(
+            _ENTITY_INT_DEFAULTS["interaction_priority"]
+        )
+        self._present_check.setChecked(True)
+        self._visible_check.setChecked(True)
+        self._entity_commands_enabled_check.setChecked(True)
+        self._variables_text.clear()
+        self._visuals_text.clear()
+        self._persistence_entity_state_check.setChecked(False)
+        self._persistence_variables_text.clear()
+
+    def _load_persistence_ui_state(
+        self,
+        raw_persistence: object,
+    ) -> tuple[bool, dict[str, bool], str | None]:
+        try:
+            entity_state, variables = _parse_persistence_policy(raw_persistence)
+            self._persistence_editable = True
+            return entity_state, variables, None
+        except ValueError as exc:
+            self._persistence_editable = False
+            warning = (
+                "Persistence is not using the supported object shape. "
+                f"Use the JSON tab to edit it.\n{exc}"
+            )
+            return False, {}, warning
+
+    def _populate_field_values(
+        self,
+        entity: EntityDocument,
+        *,
+        tag_text: str,
+        has_pixel_x: bool,
+        has_pixel_y: bool,
+        raw_variables: object,
+        has_visuals_override: bool,
+        raw_visuals: object,
+        persistence_entity_state: bool,
+        persistence_variables: dict[str, bool],
+    ) -> None:
+        self._id_edit.setText(entity.id)
+        self._kind_edit.setText(str(entity._extra.get("kind", "")))
+        self._tags_edit.setText(tag_text)
+        self._template_label.setText(entity.template or "-")
+        self._template_label.setCursorPosition(0)
+        self._space_label.setText(self._effective_space)
+        self._x_spin.setValue(entity.x)
+        self._y_spin.setValue(entity.y)
+        self._pixel_x_check.setChecked(has_pixel_x)
+        self._pixel_y_check.setChecked(has_pixel_y)
+        self._pixel_x_spin.setValue(entity.pixel_x or 0)
+        self._pixel_y_spin.setValue(entity.pixel_y or 0)
+        self._facing_combo.setCurrentText(str(entity._extra.get("facing", "down")))
+        self._solid_check.setChecked(bool(entity._extra.get("solid", False)))
+        self._pushable_check.setChecked(bool(entity._extra.get("pushable", False)))
+        self._weight_spin.setValue(int(entity._extra.get("weight", 1)))
+        self._push_strength_spin.setValue(int(entity._extra.get("push_strength", 0)))
+        self._collision_push_strength_spin.setValue(
+            int(entity._extra.get("collision_push_strength", 0))
+        )
+        self._interactable_check.setChecked(bool(entity._extra.get("interactable", False)))
+        self._interaction_priority_spin.setValue(
+            int(entity._extra.get("interaction_priority", 0))
+        )
+        self._present_check.setChecked(bool(entity._extra.get("present", True)))
+        self._visible_check.setChecked(bool(entity._extra.get("visible", True)))
+        self._entity_commands_enabled_check.setChecked(
+            bool(entity._extra.get("entity_commands_enabled", True))
+        )
+        self._variables_text.setPlainText(
+            json.dumps(raw_variables, indent=2, ensure_ascii=False)
+        )
+        self._visuals_text.setPlainText(
+            json.dumps(raw_visuals, indent=2, ensure_ascii=False)
+            if has_visuals_override
+            else ""
+        )
+        self._persistence_entity_state_check.setChecked(persistence_entity_state)
+        self._persistence_variables_text.setPlainText(
+            json.dumps(persistence_variables, indent=2, ensure_ascii=False)
+            if persistence_variables
+            else ""
+        )
+
+    def _show_unmanaged_extra(self, extra: dict[str, object]) -> None:
+        if extra:
+            self._extra_text.setPlainText(json.dumps(extra, indent=2, ensure_ascii=False))
+            self._set_extra_visible(True)
+        else:
+            self._set_extra_visible(False)
+
+    def _apply_persistence_warning(self, warning: str | None) -> None:
+        if warning:
+            self._persistence_warning.setText(warning)
+            self._persistence_warning.show()
+        else:
+            self._persistence_warning.hide()
+
+    def _current_position_fields(self) -> tuple[str, int, int, int | None, int | None]:
+        assert self._entity is not None
+        if self._effective_space == "screen":
+            return (
+                "screen",
+                self._entity.grid_x,
+                self._entity.grid_y,
+                self._pixel_x_spin.value(),
+                self._pixel_y_spin.value(),
+            )
+        return (
+            self._entity.space,
+            self._x_spin.value(),
+            self._y_spin.value(),
+            self._pixel_x_spin.value() if self._pixel_x_check.isChecked() else None,
+            self._pixel_y_spin.value() if self._pixel_y_check.isChecked() else None,
+        )
+
+    def _parse_optional_json_block(
+        self,
+        text: str,
+        *,
+        label: str,
+        expected_type: type,
+        invalid_shape_message: str,
+    ):
+        stripped = text.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{label} must be valid JSON.\n{exc}") from exc
+        if not isinstance(parsed, expected_type):
+            raise ValueError(invalid_shape_message)
+        return parsed
+
+    def _apply_toggle_extra_values(self, extra: dict[str, object]) -> None:
+        for key, widget in (
+            ("solid", self._solid_check),
+            ("pushable", self._pushable_check),
+            ("interactable", self._interactable_check),
+            ("present", self._present_check),
+            ("visible", self._visible_check),
+            ("entity_commands_enabled", self._entity_commands_enabled_check),
+        ):
+            self._apply_extra_value(
+                extra,
+                key=key,
+                value=bool(widget.isChecked()),
+                default=_ENTITY_BOOL_DEFAULTS[key],
+            )
+
+    def _apply_numeric_extra_values(self, extra: dict[str, object]) -> None:
+        for key, widget in (
+            ("weight", self._weight_spin),
+            ("push_strength", self._push_strength_spin),
+            ("collision_push_strength", self._collision_push_strength_spin),
+            ("interaction_priority", self._interaction_priority_spin),
+        ):
+            self._apply_extra_value(
+                extra,
+                key=key,
+                value=int(widget.value()),
+                default=_ENTITY_INT_DEFAULTS[key],
+            )
+
     def clear_entity(self) -> None:
         self._entity = None
         self._effective_space = "world"
         self._loading = True
         try:
-            blockers = [
-                QSignalBlocker(self._id_edit),
-                QSignalBlocker(self._kind_edit),
-                QSignalBlocker(self._tags_edit),
-                QSignalBlocker(self._x_spin),
-                QSignalBlocker(self._y_spin),
-                QSignalBlocker(self._pixel_x_check),
-                QSignalBlocker(self._pixel_y_check),
-                QSignalBlocker(self._pixel_x_spin),
-                QSignalBlocker(self._pixel_y_spin),
-                QSignalBlocker(self._facing_combo),
-                QSignalBlocker(self._solid_check),
-                QSignalBlocker(self._pushable_check),
-                QSignalBlocker(self._weight_spin),
-                QSignalBlocker(self._push_strength_spin),
-                QSignalBlocker(self._collision_push_strength_spin),
-                QSignalBlocker(self._interactable_check),
-                QSignalBlocker(self._interaction_priority_spin),
-                QSignalBlocker(self._present_check),
-                QSignalBlocker(self._visible_check),
-                QSignalBlocker(self._entity_commands_enabled_check),
-                QSignalBlocker(self._variables_text),
-                QSignalBlocker(self._visuals_text),
-                QSignalBlocker(self._persistence_entity_state_check),
-                QSignalBlocker(self._persistence_variables_text),
-            ]
-            self._id_edit.clear()
-            self._kind_edit.clear()
-            self._tags_edit.clear()
-            self._template_label.setText("-")
-            self._space_label.setText("world")
-            self._x_spin.setValue(0)
-            self._y_spin.setValue(0)
-            self._pixel_x_check.setChecked(False)
-            self._pixel_y_check.setChecked(False)
-            self._pixel_x_spin.setValue(0)
-            self._pixel_y_spin.setValue(0)
-            self._facing_combo.setCurrentText("down")
-            self._solid_check.setChecked(False)
-            self._pushable_check.setChecked(False)
-            self._weight_spin.setValue(_ENTITY_INT_DEFAULTS["weight"])
-            self._push_strength_spin.setValue(_ENTITY_INT_DEFAULTS["push_strength"])
-            self._collision_push_strength_spin.setValue(
-                _ENTITY_INT_DEFAULTS["collision_push_strength"]
-            )
-            self._interactable_check.setChecked(False)
-            self._interaction_priority_spin.setValue(
-                _ENTITY_INT_DEFAULTS["interaction_priority"]
-            )
-            self._present_check.setChecked(True)
-            self._visible_check.setChecked(True)
-            self._entity_commands_enabled_check.setChecked(True)
-            self._variables_text.clear()
-            self._visuals_text.clear()
-            self._persistence_entity_state_check.setChecked(False)
-            self._persistence_variables_text.clear()
+            blockers = self._field_signal_blockers()
+            self._reset_field_values()
             del blockers
         finally:
             self._loading = False
@@ -747,90 +907,22 @@ class _EntityInstanceFieldsEditor(QWidget):
         has_visuals_override = "visuals" in entity._extra
         raw_visuals = entity._extra.get("visuals", [])
         raw_persistence = entity._extra.get("persistence")
-        persistence_warning: str | None = None
-        persistence_entity_state = False
-        persistence_variables: dict[str, bool] = {}
-        try:
-            persistence_entity_state, persistence_variables = _parse_persistence_policy(
-                raw_persistence
-            )
-            self._persistence_editable = True
-        except ValueError as exc:
-            persistence_warning = (
-                f"Persistence is not using the supported object shape. "
-                f"Use the JSON tab to edit it.\n{exc}"
-            )
-            self._persistence_editable = False
+        persistence_entity_state, persistence_variables, persistence_warning = (
+            self._load_persistence_ui_state(raw_persistence)
+        )
         self._loading = True
         try:
-            blockers = [
-                QSignalBlocker(self._id_edit),
-                QSignalBlocker(self._kind_edit),
-                QSignalBlocker(self._tags_edit),
-                QSignalBlocker(self._x_spin),
-                QSignalBlocker(self._y_spin),
-                QSignalBlocker(self._pixel_x_check),
-                QSignalBlocker(self._pixel_y_check),
-                QSignalBlocker(self._pixel_x_spin),
-                QSignalBlocker(self._pixel_y_spin),
-                QSignalBlocker(self._facing_combo),
-                QSignalBlocker(self._solid_check),
-                QSignalBlocker(self._pushable_check),
-                QSignalBlocker(self._weight_spin),
-                QSignalBlocker(self._push_strength_spin),
-                QSignalBlocker(self._collision_push_strength_spin),
-                QSignalBlocker(self._interactable_check),
-                QSignalBlocker(self._interaction_priority_spin),
-                QSignalBlocker(self._present_check),
-                QSignalBlocker(self._visible_check),
-                QSignalBlocker(self._entity_commands_enabled_check),
-                QSignalBlocker(self._variables_text),
-                QSignalBlocker(self._visuals_text),
-                QSignalBlocker(self._persistence_entity_state_check),
-                QSignalBlocker(self._persistence_variables_text),
-            ]
-            self._id_edit.setText(entity.id)
-            self._kind_edit.setText(str(entity._extra.get("kind", "")))
-            self._tags_edit.setText(tag_text)
-            self._template_label.setText(entity.template or "-")
-            self._template_label.setCursorPosition(0)
-            self._space_label.setText(self._effective_space)
-            self._x_spin.setValue(entity.x)
-            self._y_spin.setValue(entity.y)
-            self._pixel_x_check.setChecked(has_pixel_x)
-            self._pixel_y_check.setChecked(has_pixel_y)
-            self._pixel_x_spin.setValue(entity.pixel_x or 0)
-            self._pixel_y_spin.setValue(entity.pixel_y or 0)
-            self._facing_combo.setCurrentText(str(entity._extra.get("facing", "down")))
-            self._solid_check.setChecked(bool(entity._extra.get("solid", False)))
-            self._pushable_check.setChecked(bool(entity._extra.get("pushable", False)))
-            self._weight_spin.setValue(int(entity._extra.get("weight", 1)))
-            self._push_strength_spin.setValue(int(entity._extra.get("push_strength", 0)))
-            self._collision_push_strength_spin.setValue(
-                int(entity._extra.get("collision_push_strength", 0))
-            )
-            self._interactable_check.setChecked(bool(entity._extra.get("interactable", False)))
-            self._interaction_priority_spin.setValue(
-                int(entity._extra.get("interaction_priority", 0))
-            )
-            self._present_check.setChecked(bool(entity._extra.get("present", True)))
-            self._visible_check.setChecked(bool(entity._extra.get("visible", True)))
-            self._entity_commands_enabled_check.setChecked(
-                bool(entity._extra.get("entity_commands_enabled", True))
-            )
-            self._variables_text.setPlainText(
-                json.dumps(raw_variables, indent=2, ensure_ascii=False)
-            )
-            self._visuals_text.setPlainText(
-                json.dumps(raw_visuals, indent=2, ensure_ascii=False)
-                if has_visuals_override
-                else ""
-            )
-            self._persistence_entity_state_check.setChecked(persistence_entity_state)
-            self._persistence_variables_text.setPlainText(
-                json.dumps(persistence_variables, indent=2, ensure_ascii=False)
-                if persistence_variables
-                else ""
+            blockers = self._field_signal_blockers()
+            self._populate_field_values(
+                entity,
+                tag_text=tag_text,
+                has_pixel_x=has_pixel_x,
+                has_pixel_y=has_pixel_y,
+                raw_variables=raw_variables,
+                has_visuals_override=has_visuals_override,
+                raw_visuals=raw_visuals,
+                persistence_entity_state=persistence_entity_state,
+                persistence_variables=persistence_variables,
             )
             del blockers
         finally:
@@ -839,19 +931,8 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._apply_space_visibility(has_pixel_x=has_pixel_x, has_pixel_y=has_pixel_y)
         self._sync_pixel_spin_enabled()
         self._rebuild_parameter_rows(entity)
-        unmanaged_extra = _filtered_unmanaged_extra(entity._extra)
-        if unmanaged_extra:
-            self._extra_text.setPlainText(
-                json.dumps(unmanaged_extra, indent=2, ensure_ascii=False)
-            )
-            self._set_extra_visible(True)
-        else:
-            self._set_extra_visible(False)
-        if persistence_warning:
-            self._persistence_warning.setText(persistence_warning)
-            self._persistence_warning.show()
-        else:
-            self._persistence_warning.hide()
+        self._show_unmanaged_extra(_filtered_unmanaged_extra(entity._extra))
+        self._apply_persistence_warning(persistence_warning)
         self._set_persistence_controls_enabled(self._persistence_editable)
         self._set_dirty(False)
         self._set_buttons_enabled(True)
@@ -865,18 +946,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         for key in _MANAGED_EXTRA_KEYS:
             extra.pop(key, None)
 
-        if self._effective_space == "screen":
-            space = "screen"
-            grid_x = self._entity.grid_x
-            grid_y = self._entity.grid_y
-            pixel_x = self._pixel_x_spin.value()
-            pixel_y = self._pixel_y_spin.value()
-        else:
-            space = self._entity.space
-            grid_x = self._x_spin.value()
-            grid_y = self._y_spin.value()
-            pixel_x = self._pixel_x_spin.value() if self._pixel_x_check.isChecked() else None
-            pixel_y = self._pixel_y_spin.value() if self._pixel_y_check.isChecked() else None
+        space, grid_x, grid_y, pixel_x, pixel_y = self._current_position_fields()
 
         kind = self._kind_edit.text().strip()
         if kind:
@@ -893,53 +963,25 @@ class _EntityInstanceFieldsEditor(QWidget):
             default="down",
         )
 
-        for key, widget in (
-            ("solid", self._solid_check),
-            ("pushable", self._pushable_check),
-            ("interactable", self._interactable_check),
-            ("present", self._present_check),
-            ("visible", self._visible_check),
-            ("entity_commands_enabled", self._entity_commands_enabled_check),
-        ):
-            self._apply_extra_value(
-                extra,
-                key=key,
-                value=bool(widget.isChecked()),
-                default=_ENTITY_BOOL_DEFAULTS[key],
-            )
+        self._apply_toggle_extra_values(extra)
+        self._apply_numeric_extra_values(extra)
 
-        for key, widget in (
-            ("weight", self._weight_spin),
-            ("push_strength", self._push_strength_spin),
-            ("collision_push_strength", self._collision_push_strength_spin),
-            ("interaction_priority", self._interaction_priority_spin),
-        ):
-            self._apply_extra_value(
-                extra,
-                key=key,
-                value=int(widget.value()),
-                default=_ENTITY_INT_DEFAULTS[key],
-            )
+        variables_value = self._parse_optional_json_block(
+            self._variables_text.toPlainText(),
+            label="Variables",
+            expected_type=dict,
+            invalid_shape_message="Variables must be a JSON object.",
+        )
+        if variables_value:
+            extra["variables"] = variables_value
 
-        variables_text = self._variables_text.toPlainText().strip()
-        if variables_text:
-            try:
-                variables_value = json.loads(variables_text)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Variables must be valid JSON.\n{exc}") from exc
-            if not isinstance(variables_value, dict):
-                raise ValueError("Variables must be a JSON object.")
-            if variables_value:
-                extra["variables"] = variables_value
-
-        visuals_text = self._visuals_text.toPlainText().strip()
-        if visuals_text:
-            try:
-                visuals_value = json.loads(visuals_text)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Visuals must be valid JSON.\n{exc}") from exc
-            if not isinstance(visuals_value, list):
-                raise ValueError("Visuals must be a JSON array.")
+        visuals_value = self._parse_optional_json_block(
+            self._visuals_text.toPlainText(),
+            label="Visuals",
+            expected_type=list,
+            invalid_shape_message="Visuals must be a JSON array.",
+        )
+        if visuals_value is not None:
             extra["visuals"] = visuals_value
 
         if self._persistence_editable:

@@ -37,7 +37,6 @@ from area_editor.app.main_window_project_refactors import (
 from area_editor.app.main_window_helpers import (
     _EntityIdUsage,
     _JsonReferenceFileUpdate,
-    _ReferenceKeyMatcher,
     _TileClipboard,
     _discover_prefixed_json_content_ids,
     _relative_content_name,
@@ -2152,93 +2151,6 @@ class MainWindow(
     def _on_tab_closed(self, content_id: str) -> None:
         self._area_docs.pop(content_id, None)
         self._json_dirty_bound.discard(content_id)
-
-    def _apply_area_entity_rename_refactor(
-        self,
-        *,
-        content_id: str,
-        doc: AreaDocument,
-        current: EntityDocument,
-        updated: EntityDocument,
-        status_message: str,
-    ) -> bool:
-        if self._manifest is None:
-            return False
-        info = self._tab_widget.content_info(content_id)
-        if info is None:
-            return False
-        source_file_path = info.file_path.resolve()
-        other_dirty_ids = [
-            dirty_id
-            for dirty_id in self._tab_widget.dirty_content_ids()
-            if dirty_id != content_id
-        ]
-        if not self._maybe_save_dirty_tabs(other_dirty_ids):
-            return False
-        source_data, base_paths = self._build_area_entity_source_update(
-            doc,
-            old_entity_id=current.id,
-            updated_entity=updated,
-        )
-        matcher = self._area_entity_reference_matcher()
-        source_updated_data, source_reference_paths = self._replace_reference_keys_in_json_value(
-            source_data,
-            old_value=current.id,
-            new_value=updated.id,
-            matcher=matcher,
-        )
-        source_update = _JsonReferenceFileUpdate(
-            file_path=source_file_path,
-            updated_text=f"{format_json_for_editor(source_updated_data)}\n",
-            changed_paths=tuple((*base_paths, *source_reference_paths)),
-        )
-        other_updates = self._collect_reference_updates(
-            old_value=current.id,
-            new_value=updated.id,
-            matcher=matcher,
-            skip_files={source_file_path},
-        )
-        reference_updates = [source_update, *other_updates]
-        if not self._confirm_entity_rename_preview(
-            area_id=content_id,
-            old_entity_id=current.id,
-            new_entity_id=updated.id,
-            reference_updates=reference_updates,
-        ):
-            return False
-        try:
-            for update in reference_updates:
-                update.file_path.write_text(update.updated_text, encoding="utf-8")
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Rename Failed",
-                f"Could not rename entity '{current.id}':\n{exc}",
-            )
-            return False
-        self._tab_widget.close_all()
-        self._area_docs.clear()
-        self._json_dirty_bound.clear()
-        self._refresh_project_metadata_surfaces()
-        self._refresh_area_panel()
-        self._open_area(content_id, source_file_path)
-        self._area_panel.highlight_area(content_id)
-        self._active_instance_entity_id = updated.id
-        reopened_context = self._active_area_context()
-        if reopened_context is not None:
-            _area_id, _reloaded_doc, reloaded_canvas = reopened_context
-            reloaded_canvas.set_selected_entity(
-                updated.id,
-                cycle_position=1,
-                cycle_total=1,
-                emit=False,
-            )
-        self._refresh_render_properties_target()
-        self._refresh_entity_instance_panel()
-        self._sync_json_edit_actions()
-        self._update_paint_status()
-        self.statusBar().showMessage(status_message, 2500)
-        return True
 
     # ------------------------------------------------------------------
     # Slots — view menu

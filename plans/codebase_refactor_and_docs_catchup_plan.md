@@ -13,7 +13,7 @@ This plan is based on:
 
 Current verified baseline:
 
-- runtime suite: `180` tests passing
+- runtime suite: `181` tests passing
 - editor suite: `152` tests passing
 - direct project-command validation: all repo-local `projects/*/project.json`
   manifests present in the current worktree passing
@@ -177,8 +177,8 @@ That duplication is understandable, but it creates drift risk.
 
 Relevant files:
 
-- `dungeon_engine/project.py`
-- `tools/area_editor/area_editor/project_io/manifest.py`
+- `dungeon_engine/project_context.py`
+- `tools/area_editor/area_editor/project_io/project_manifest.py`
 
 ### 4. JSON payload caching is session-global and has no explicit invalidation
 
@@ -207,15 +207,10 @@ Relevant file:
 
 - `tests/test_strict_content_ids.py`
 
-### 6. Some docs have drifted out of date
+### 6. Some docs can drift out of date
 
-Known example at the time of writing:
-
-- `tools/area_editor/ARCHITECTURE.md` still describes editing/saving/validation
-  as planned, while `tools/area_editor/README.md` describes a far more advanced
-  implemented editor surface.
-
-There may be more doc drift across:
+The initial editor-architecture drift that motivated this issue has been
+corrected, but doc drift remains a recurring risk across:
 
 - engine-facing canonical docs
 - author-facing docs
@@ -555,9 +550,10 @@ Initial candidates:
 
 Before deeper refactors, fix obvious status mismatches and stale statements.
 
-Known current target:
+Initial target:
 
-- `tools/area_editor/ARCHITECTURE.md`
+- `tools/area_editor/ARCHITECTURE.md` has already been brought back in line
+  with the implemented editor surface during this refactor pass.
 
 Likely follow-ups:
 
@@ -920,13 +916,12 @@ Recommended order:
 
 Current biggest active files after this pass:
 
-- `tests/test_strict_content_ids.py`
-  - still the largest active file in the repo by a wide margin
-  - likely the next best test-suite split target because it improves agent/human
-    navigation with minimal behavior risk
 - `tools/area_editor/area_editor/app/main_window.py`
-  - still the largest active product code file
-  - should be treated as the main editor-architecture hotspot
+  - now roughly tied with the runtime catch-all test as the largest active file
+  - should still be treated as the main editor-architecture hotspot
+- `tests/test_strict_content_ids.py`
+  - much smaller after several extractions, but still large enough to justify
+    future responsibility-based test splits
 - `tools/area_editor/tests/test_main_window.py`
   - now the biggest editor test hotspot and likely wants the same subsystem
     split strategy used on the runtime suite
@@ -934,8 +929,11 @@ Current biggest active files after this pass:
   - substantial but still cohesive; only split if a canvas-vs-screen-space seam
     becomes obvious
 - `tools/area_editor/area_editor/widgets/entity_instance_json_panel.py`
-  - high line count suggests a future focused pass on editor JSON inspector
-    surfaces may be worthwhile
+  - improved through focused helper extraction; only split further when a
+    clear dock-vs-structured-field seam appears
+- `dungeon_engine/commands/builtin.py`
+  - much smaller after domain extraction, but still worth keeping on the watch
+    list as new command domains are added
 - `dungeon_engine/engine/dialogue_runtime.py`
   - now one of the larger remaining runtime files and may become a worthwhile
     future refactor target if dialogue work expands again
@@ -989,6 +987,15 @@ Current execution note:
   - `main_window_dialogs.py`
   - `main_window_project_content.py`
   - `main_window_project_refactors.py`
+- `tools/area_editor/area_editor/widgets/entity_instance_json_panel.py` has now
+  had its longest lifecycle methods (`clear_entity`, `load_entity`,
+  `build_entity_document`) broken onto focused private helpers for widget-state
+  resets, persistence decoding, JSON parsing, and extra-field collection,
+  keeping the public dock surface stable while reducing local complexity.
+- The remaining area-entity rename straggler was removed from `main_window.py`
+  after confirming the same implementation already lives in
+  `main_window_project_refactors.py`; calls now resolve through the refactor
+  mixin instead of a duplicate class-local method.
 - Keep the next editor slices focused on responsibility boundaries, not on
   mechanically forcing every remaining method out of `main_window.py`.
 
@@ -1021,9 +1028,11 @@ Current execution note:
 - The runtime suite has already been partially decomposed without behavior
   changes by extracting dedicated modules for:
   - command authoring and runtime cache coverage
+  - dialogue/text runtime coverage
   - authored content contract coverage
   - input/camera runtime coverage
   - inventory/item runtime coverage
+  - runtime value-source coverage
 - The editor suite has also started the same process by extracting shared
   generated-project builders and tree-panel helpers into dedicated test support
   modules instead of leaving them embedded in the longest UI integration test
@@ -1032,6 +1041,25 @@ Current execution note:
   `test_main_window_paint_state.py` now carries the standalone open-project and
   paint-state restoration coverage that used to live at the top of the larger
   `test_main_window.py`.
+- The newest runtime extraction moved the self-contained engine-owned dialogue
+  and text-window coverage into `tests/test_dialogue_and_text_runtime.py`,
+  which cut `tests/test_strict_content_ids.py` down again without introducing
+  shared test-framework indirection.
+- The next runtime extraction moved boolean/random lookup, explicit movement
+  queries, entity query selection, and removed-source-alias coverage into
+  `tests/test_runtime_value_sources.py`, bringing
+  `tests/test_strict_content_ids.py` below 5,000 lines while also retiring
+  dead fake helpers from the old catch-all module.
+- The latest runtime extraction moved named entity-reference propagation and
+  orchestration flow semantics into `tests/test_named_refs_and_flow_runtime.py`,
+  bringing `tests/test_strict_content_ids.py` down to roughly 4,300 lines.
+- The follow-up extraction moved audio command forwarding and `AudioPlayer`
+  mixer-control coverage into `tests/test_audio_runtime.py`, bringing
+  `tests/test_strict_content_ids.py` down to roughly 4,100 lines.
+- The next extraction moved entity visual command coverage, runtime named-ref
+  acceptance for visual/movement commands, and strict raw-symbolic entity-ref
+  rejection into `tests/test_entity_visual_and_ref_runtime.py`, bringing
+  `tests/test_strict_content_ids.py` down to roughly 3,700 lines.
 - Keep further extractions responsibility-based rather than line-count-based.
 
 Success criteria:

@@ -1,0 +1,849 @@
+from __future__ import annotations
+
+import copy
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.registry import CommandRegistry
+from dungeon_engine.commands.runner import (
+    CommandContext,
+    CommandExecutionError,
+    execute_command_spec,
+    execute_registered_command,
+)
+from dungeon_engine.engine.dialogue_runtime import DialogueRuntime
+from dungeon_engine.engine.screen import ScreenElementManager
+from dungeon_engine.project_context import load_project
+from dungeon_engine.world.area import Area
+from dungeon_engine.world.entity import Entity
+from dungeon_engine.world.world import World
+
+
+def _write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _dialogue_shared_variables() -> dict[str, object]:
+    return {
+        "dialogue_ui": {
+            "default_preset": "standard",
+            "presets": {
+                "standard": {
+                    "panel": {
+                        "path": "assets/project/ui/dialogue_panel.png",
+                        "x": 0,
+                        "y": 148,
+                    },
+                    "portrait_slot": {
+                        "x": 3,
+                        "y": 151,
+                        "width": 38,
+                        "height": 38,
+                    },
+                    "text": {
+                        "plain": {
+                            "x": 8,
+                            "y": 154,
+                            "width": 240,
+                            "max_lines": 3,
+                        },
+                        "with_portrait": {
+                            "x": 56,
+                            "y": 154,
+                            "width": 192,
+                            "max_lines": 3,
+                        },
+                    },
+                    "choices": {
+                        "mode": "inline",
+                        "visible_rows": 3,
+                        "base_y": 154,
+                        "row_height": 10,
+                        "overflow": "marquee",
+                        "plain": {
+                            "x": 8,
+                            "width": 240,
+                        },
+                        "with_portrait": {
+                            "x": 56,
+                            "width": 188,
+                        },
+                    },
+                    "font_id": "pixelbet",
+                    "text_color": [245, 232, 190],
+                    "choice_text_color": [238, 242, 248],
+                    "ui_layer": 100,
+                    "text_layer": 101,
+                },
+                "separate_choices": {
+                    "panel": {
+                        "path": "assets/project/ui/dialogue_panel.png",
+                        "x": 0,
+                        "y": 148,
+                    },
+                    "portrait_slot": {
+                        "x": 3,
+                        "y": 151,
+                        "width": 38,
+                        "height": 38,
+                    },
+                    "text": {
+                        "plain": {
+                            "x": 8,
+                            "y": 154,
+                            "width": 240,
+                            "max_lines": 3,
+                        },
+                        "with_portrait": {
+                            "x": 56,
+                            "y": 154,
+                            "width": 192,
+                            "max_lines": 3,
+                        },
+                    },
+                    "choices": {
+                        "mode": "separate_panel",
+                        "visible_rows": 3,
+                        "x": 24,
+                        "y": 96,
+                        "width": 120,
+                        "row_height": 10,
+                        "overflow": "marquee",
+                        "panel": {
+                            "path": "assets/project/ui/dialogue_panel.png",
+                            "x": 16,
+                            "y": 88,
+                        },
+                    },
+                    "font_id": "pixelbet",
+                    "text_color": [245, 232, 190],
+                    "choice_text_color": [238, 242, 248],
+                    "ui_layer": 100,
+                    "text_layer": 101,
+                },
+            },
+        }
+    }
+
+
+def _minimal_runtime_area() -> Area:
+    return Area(
+        area_id="areas/test_room",
+        tile_size=16,
+        tilesets=[],
+        tile_layers=[],
+        cell_flags=[],
+    )
+
+
+def _make_runtime_entity(
+    entity_id: str,
+    *,
+    kind: str = "system",
+    space: str = "world",
+) -> Entity:
+    return Entity(
+        entity_id=entity_id,
+        kind=kind,
+        grid_x=0,
+        grid_y=0,
+        space=space,  # type: ignore[arg-type]
+        scope="area",
+        visuals=[],
+    )
+
+
+class _StubTextRenderer:
+    def measure_text(self, text: str, *, font_id: str = "") -> tuple[int, int]:
+        _ = font_id
+        lines = str(text).split("\n")
+        longest = max((len(line) for line in lines), default=0)
+        return (longest * 6, max(1, len(lines)) * 8)
+
+    def wrap_lines(self, text: str, max_width: int, *, font_id: str = "") -> list[str]:
+        _ = max_width
+        _ = font_id
+        return [part for part in str(text).split(" ") if part]
+
+    def paginate_text(
+        self,
+        text: str,
+        max_width: int,
+        max_lines: int,
+        *,
+        font_id: str = "",
+    ) -> list[str]:
+        lines = self.wrap_lines(text, max_width, font_id=font_id)
+        if not lines:
+            return [""]
+        chunk_size = max(1, int(max_lines))
+        pages: list[str] = []
+        for index in range(0, len(lines), chunk_size):
+            pages.append("\n".join(lines[index:index + chunk_size]))
+        return pages or [""]
+
+
+class DialogueAndTextRuntimeTests(unittest.TestCase):
+    def _make_project(
+        self,
+        *,
+        dialogues: dict[str, dict[str, object]] | None = None,
+        shared_variables: dict[str, object] | None = None,
+    ) -> tuple[Path, object]:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        project_root = Path(temp_dir.name)
+
+        _write_json(
+            project_root / "project.json",
+            {
+                "area_paths": ["areas/"],
+                "entity_template_paths": ["entity_templates/"],
+                "command_paths": ["commands/"],
+                "item_paths": ["items/"],
+                "shared_variables_path": "shared_variables.json",
+            },
+        )
+        _write_json(project_root / "shared_variables.json", shared_variables or {})
+        for relative_path, dialogue_payload in (dialogues or {}).items():
+            _write_json(project_root / "dialogues" / relative_path, dialogue_payload)
+
+        return project_root, load_project(project_root / "project.json")
+
+    def _make_command_context(
+        self,
+        *,
+        project: object | None = None,
+        world: World | None = None,
+    ) -> tuple[CommandRegistry, CommandContext]:
+        registry = CommandRegistry()
+        register_builtin_commands(registry)
+        context = CommandContext(
+            area=_minimal_runtime_area(),
+            world=world or World(),
+            collision_system=None,  # type: ignore[arg-type]
+            movement_system=None,  # type: ignore[arg-type]
+            interaction_system=None,  # type: ignore[arg-type]
+            animation_system=None,  # type: ignore[arg-type]
+            project=project,
+        )
+        return registry, context
+
+    def _install_dialogue_runtime(
+        self,
+        *,
+        registry: CommandRegistry,
+        context: CommandContext,
+        project: object,
+    ) -> DialogueRuntime:
+        dialogue_runtime = DialogueRuntime(
+            project=project,
+            screen_manager=ScreenElementManager(),
+            text_renderer=_StubTextRenderer(),
+            registry=registry,
+            command_context=context,
+        )
+        context.screen_manager = dialogue_runtime.screen_manager
+        context.text_renderer = dialogue_runtime.text_renderer
+        context.dialogue_runtime = dialogue_runtime
+        return dialogue_runtime
+
+    def test_removed_dialogue_runtime_commands_raise_clear_errors(self) -> None:
+        registry, context = self._make_command_context()
+        for command_name in (
+            "start_dialogue_session",
+            "dialogue_advance",
+            "dialogue_move_selection",
+            "dialogue_confirm_choice",
+            "dialogue_cancel",
+            "close_dialogue",
+        ):
+            with self.assertRaises(CommandExecutionError) as raised:
+                execute_registered_command(registry, context, command_name, {})
+            self.assertIsNotNone(raised.exception.__cause__)
+            self.assertIn(
+                f"Unknown command '{command_name}'",
+                str(raised.exception.__cause__),
+            )
+
+    def test_open_dialogue_session_runs_hooks_and_renders_text(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_note.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Engine owned dialogue runtime",
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_note.json",
+                "dialogue_on_start": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "$self_id",
+                        "name": "phase",
+                        "value": "opened",
+                    }
+                ],
+                "dialogue_on_end": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "$self_id",
+                        "name": "phase",
+                        "value": "closed",
+                    }
+                ],
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+        self.assertFalse(handle.complete)
+        self.assertTrue(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["phase"], "opened")
+
+        text_element = context.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
+        assert text_element is not None
+        self.assertIn("Engine", text_element.text)
+
+        close_handle = execute_registered_command(
+            registry,
+            context,
+            "close_dialogue_session",
+            {},
+        )
+        self.assertTrue(close_handle.complete)
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["phase"], "closed")
+        handle.update(0.0)
+        self.assertTrue(handle.complete)
+
+    def test_dialogue_runtime_choice_window_scrolls_after_three_visible_rows(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_choices.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Pick one",
+                            "options": [
+                                {"text": "One", "option_id": "one"},
+                                {"text": "Two", "option_id": "two"},
+                                {"text": "Three", "option_id": "three"},
+                                {"text": "Four", "option_id": "four"},
+                                {"text": "Five", "option_id": "five"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_choices.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.choice_index, 0)
+        self.assertEqual(session.choice_scroll_offset, 0)
+
+        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_1 = context.screen_manager.get_element("engine_dialogue_option_1")
+        option_2 = context.screen_manager.get_element("engine_dialogue_option_2")
+        assert option_0 is not None
+        assert option_1 is not None
+        assert option_2 is not None
+        self.assertEqual(option_0.text, ">One")
+        self.assertEqual(option_1.text, "Two")
+        self.assertEqual(option_2.text, "Three")
+
+        dialogue_runtime.handle_action("move_down")
+        dialogue_runtime.handle_action("move_down")
+        dialogue_runtime.handle_action("move_down")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.choice_index, 3)
+        self.assertEqual(session.choice_scroll_offset, 1)
+
+        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_1 = context.screen_manager.get_element("engine_dialogue_option_1")
+        option_2 = context.screen_manager.get_element("engine_dialogue_option_2")
+        assert option_0 is not None
+        assert option_1 is not None
+        assert option_2 is not None
+        self.assertEqual(option_0.text, "Two")
+        self.assertEqual(option_1.text, "Three")
+        self.assertEqual(option_2.text, ">Four")
+
+    def test_dialogue_runtime_can_render_choices_in_a_separate_panel(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_separate_panel.json": {
+                    "ui_preset": "separate_choices",
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Pick one",
+                            "options": [
+                                {"text": "One", "option_id": "one"},
+                                {"text": "Two", "option_id": "two"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_separate_panel.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        self.assertTrue(dialogue_runtime.is_active())
+        choices_panel = context.screen_manager.get_element(
+            DialogueRuntime.CHOICES_PANEL_ELEMENT_ID
+        )
+        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        assert choices_panel is not None
+        assert option_0 is not None
+        self.assertEqual(choices_panel.kind, "image")
+        self.assertEqual((choices_panel.x, choices_panel.y), (16.0, 88.0))
+        self.assertEqual((option_0.x, option_0.y), (24.0, 96.0))
+        self.assertEqual(option_0.text, ">One")
+
+    def test_dialogue_runtime_marquees_the_selected_long_option(self) -> None:
+        shared_variables = copy.deepcopy(_dialogue_shared_variables())
+        choices = shared_variables["dialogue_ui"]["presets"]["standard"]["choices"]["plain"]
+        choices["width"] = 36
+        _, project = self._make_project(
+            shared_variables=shared_variables,
+            dialogues={
+                "system/runtime_marquee.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Pick one",
+                            "options": [
+                                {"text": "Long option text", "option_id": "long"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_marquee.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        option_before = context.screen_manager.get_element("engine_dialogue_option_0")
+        assert option_before is not None
+        before_text = option_before.text
+        self.assertTrue(before_text.startswith(">"))
+
+        dialogue_runtime.update(0.7)
+
+        option_after = context.screen_manager.get_element("engine_dialogue_option_0")
+        assert option_after is not None
+        self.assertTrue(option_after.text.startswith(">"))
+        self.assertNotEqual(option_after.text, before_text)
+
+    def test_dialogue_runtime_segment_hooks_override_inline_option_commands(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_override.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Resolve the choice",
+                            "options": [
+                                {
+                                    "text": "Apply behavior",
+                                    "option_id": "apply",
+                                    "commands": [
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "mode",
+                                            "value": "inline",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_override.json",
+                "segment_hooks": [
+                    {
+                        "option_commands_by_id": {
+                            "apply": [
+                                {
+                                    "type": "set_entity_var",
+                                    "entity_id": "$self_id",
+                                    "name": "mode",
+                                    "value": "hook",
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        self.assertTrue(dialogue_runtime.is_active())
+        dialogue_runtime.handle_action("interact")
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["mode"], "hook")
+
+    def test_dialogue_runtime_timer_segments_advance_without_input(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_timer.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Soon",
+                            "advance": {
+                                "mode": "timer",
+                                "seconds": 0.25,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": "Later",
+                        },
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_timer.json",
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.segment_index, 0)
+
+        dialogue_runtime.update(0.25)
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.segment_index, 1)
+        text_element = context.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
+        assert text_element is not None
+        self.assertIn("Later", text_element.text)
+
+    def test_nested_dialogue_sessions_suspend_parent_flow_until_child_closes(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_parent.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Open the child dialogue",
+                            "options": [
+                                {
+                                    "text": "Open child",
+                                    "option_id": "open_child",
+                                    "commands": [
+                                        {
+                                            "type": "open_dialogue_session",
+                                            "dialogue_path": "dialogues/system/runtime_child.json",
+                                            "allow_cancel": True,
+                                        },
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "result",
+                                            "value": "resumed",
+                                        },
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "system/runtime_child.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Nested child session",
+                        }
+                    ]
+                },
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_path": "dialogues/system/runtime_parent.json",
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+        self.assertFalse(parent_handle.complete)
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_parent.json")
+
+        dialogue_runtime.handle_action("interact")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_child.json")
+        self.assertNotIn("result", caller.variables)
+
+        dialogue_runtime.handle_action("menu")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_parent.json")
+        self.assertNotIn("result", caller.variables)
+
+        dialogue_runtime.update(0.0)
+
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(caller.variables["result"], "resumed")
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
+
+    def test_wrapped_lines_and_text_window_value_sources_store_visible_text(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", space="screen"))
+        registry, context = self._make_command_context(world=world)
+        context.text_renderer = _StubTextRenderer()
+
+        wrapped_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "wrapped_lines",
+                "type": "set_entity_var",
+                "value": {
+                    "$wrapped_lines": {
+                        "text": "one two three four",
+                        "max_width": 64,
+                    }
+                },
+            },
+        )
+        wrapped_handle.update(0.0)
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+
+        window_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "text_window",
+                "type": "set_entity_var",
+                "value": {
+                    "$text_window": {
+                        "lines": controller.variables["wrapped_lines"],
+                        "start": 1,
+                        "max_lines": 2,
+                    }
+                },
+            },
+        )
+        window_handle.update(0.0)
+
+        self.assertEqual(
+            controller.variables["wrapped_lines"],
+            ["one", "two", "three", "four"],
+        )
+        self.assertEqual(controller.variables["text_window"]["visible_text"], "two\nthree")
+        self.assertEqual(
+            controller.variables["text_window"]["visible_lines"],
+            ["two", "three"],
+        )
+        self.assertTrue(controller.variables["text_window"]["has_more"])
+        self.assertEqual(controller.variables["text_window"]["total_lines"], 4)
+
+    def test_slice_collection_wrap_index_and_join_text_value_sources_store_windowed_values(
+        self,
+    ) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("dialogue_controller", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        slice_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "visible_options",
+                "type": "set_entity_var",
+                "value": {
+                    "$slice_collection": {
+                        "value": ["zero", "one", "two", "three", "four"],
+                        "start": 1,
+                        "count": 3,
+                    }
+                },
+            },
+        )
+        slice_handle.update(0.0)
+
+        wrap_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "wrapped_index",
+                "type": "set_entity_var",
+                "value": {
+                    "$wrap_index": {
+                        "value": -1,
+                        "count": 5,
+                        "default": 0,
+                    }
+                },
+            },
+        )
+        wrap_handle.update(0.0)
+
+        join_handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "entity_id": "dialogue_controller",
+                "name": "joined_text",
+                "type": "set_entity_var",
+                "value": {"$join_text": [">", "one"]},
+            },
+        )
+        join_handle.update(0.0)
+
+        controller = world.get_entity("dialogue_controller")
+        assert controller is not None
+        self.assertEqual(controller.variables["visible_options"], ["one", "two", "three"])
+        self.assertEqual(controller.variables["wrapped_index"], 4)
+        self.assertEqual(controller.variables["joined_text"], ">one")
