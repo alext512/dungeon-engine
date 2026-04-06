@@ -66,7 +66,9 @@ dungeon_engine/
     project.py                   # Compatibility wrapper for older project-context imports
     startup_validation.py        # Project startup checks
     engine/
-        game.py                  # Play-mode runtime loop
+        game.py                  # Play-mode runtime loop and runtime-wiring entry point
+        game_area_runtime.py     # Area loading, transitions, resets, and camera defaults used by game.py
+        game_save_runtime.py     # Save-slot dialogs and session restore helpers used by game.py
         renderer.py              # Play-mode rendering
         asset_manager.py         # PNG loading, frame slicing, caching
         audio.py                 # Sound/music playback
@@ -80,9 +82,13 @@ dungeon_engine/
         area.py                  # Area data model (tilesets, tile layers, walkability, entity grid)
         entity.py                # Entity data model
         world.py                 # World state container
-        loader.py                # JSON -> Area/World
+        loader.py                # Area loading/validation surface and compatibility re-exports
+        loader_entities.py       # Entity/template parsing and validation helpers used by loader.py
         serializer.py            # Area/World -> JSON
-        persistence.py           # Save/load and persistent state
+        persistence.py           # Live persistence runtime plus compatibility re-exports
+        persistence_data.py      # Save-data models and JSON codec helpers
+        persistence_snapshots.py # Persistent apply/capture/snapshot helpers
+        persistence_travelers.py # Traveler lifecycle helpers used by persistence.py
     systems/
         movement.py              # Grid movement execution
         collision.py             # Collision checks
@@ -90,7 +96,10 @@ dungeon_engine/
         animation.py             # Entity visual animation
     commands/
         registry.py              # Command type registry
-        runner.py                # Command chain executor
+        runner.py                # Public command execution surface and root-flow orchestrator
+        runner_resolution.py     # Runtime token/value/spec resolution helpers
+        runner_value_utils.py    # Generic JSON/collection/math/text/random value helpers
+        runner_query_values.py   # Entity/area/world query and snapshot-backed value helpers
         builtin.py               # Built-in command registration entry point
         builtin_domains/         # Focused builtin command domain modules
         library.py               # Project command loading and validation
@@ -113,9 +122,17 @@ dungeon_engine/
 
 **Adding a new entity template**: Create a JSON file in the active project's `entity_templates/` folder (or another configured entity-template path), then reference it from authored area data.
 
-**Changing how tiles/areas work**: Core data model is `world/area.py`. Loading is `world/loader.py`. Saving is `world/serializer.py`.
+**Changing how tiles/areas work**: Core data model is `world/area.py`. Area parsing and validation stay in `world/loader.py`, while entity/template expansion now lives in `world/loader_entities.py`. Saving is `world/serializer.py`.
+
+**Changing save/load persistence**: Live persistence mutation and reset queues stay in `world/persistence.py`, save-slot models/JSON codec helpers live in `world/persistence_data.py`, persistent apply/capture/snapshot helpers live in `world/persistence_snapshots.py`, and traveler lifecycle helpers now live in `world/persistence_travelers.py`.
+
+**Changing play-mode transitions or room resets**: `engine/game_area_runtime.py` now owns area loading, transition application, deferred load/new-game switching, occupancy hook spawning, and authored camera defaults. `engine/game.py` keeps the main loop and runtime wiring entry point.
+
+**Changing play-mode save/load flow**: `engine/game_save_runtime.py` now owns save-slot dialogs plus save/load session restore. `engine/game.py` remains the main loop/runtime wiring entry point, while `engine/game_area_runtime.py` handles the deferred transition side that save/load feeds into.
 
 **Changing project asset/content lookup**: Runtime search-path behavior lives in `project_context.py`, with `project.py` kept as a compatibility import surface. Related consumers live in `world/loader.py` and `engine/asset_manager.py`. Editor-side project discovery stays separate in `tools/area_editor/area_editor/project_io/project_manifest.py`.
+
+**Changing command value lookup or runtime token behavior**: Start in `commands/runner.py`, but expect the supporting logic to be split between `commands/runner_resolution.py`, `commands/runner_value_utils.py`, and `commands/runner_query_values.py`.
 
 **Running focused verification**: Use `.venv/Scripts/python -m unittest discover -s tests -v` for the runtime suite. If you touch `tools/area_editor/`, run `..\..\.venv/Scripts/python -m unittest discover -s tests -v` from `tools/area_editor/` for the editor suite.
 

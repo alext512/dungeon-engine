@@ -77,7 +77,7 @@ So the browser surface is behind the runtime.
 
 #### 1a. Manifest support
 
-Extend `area_editor/project_io/manifest.py` to expose:
+Extend `area_editor/project_io/project_manifest.py` to expose:
 
 - `item_paths`
 - `shared_variables_path`

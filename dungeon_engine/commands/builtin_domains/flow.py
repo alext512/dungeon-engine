@@ -34,6 +34,39 @@ def _normalize_command_specs(
     raise TypeError("Command hooks must be a dict, list of dicts, or null.")
 
 
+def _branch_with_runtime_context(
+    registry: CommandRegistry,
+    context: CommandContext,
+    *,
+    condition_met: bool,
+    then: list[dict[str, Any]] | None = None,
+    else_branch: list[dict[str, Any]] | None = None,
+    runtime_params: dict[str, Any] | None = None,
+    excluded_param_names: set[str] | None = None,
+) -> CommandHandle:
+    """Run one branch while preserving inherited runtime params for child commands."""
+    branch = then if condition_met else else_branch
+    if not branch:
+        return ImmediateHandle()
+
+    inherited_params = {
+        key: value
+        for key, value in dict(runtime_params or {}).items()
+        if key not in (excluded_param_names or set())
+    }
+    return SequenceCommandHandle(registry, context, branch, base_params=inherited_params)
+
+
+_COMPARE_OPS: dict[str, Any] = {
+    "eq": lambda a, b: a == b,
+    "neq": lambda a, b: a != b,
+    "gt": lambda a, b: a is not None and b is not None and a > b,
+    "lt": lambda a, b: a is not None and b is not None and a < b,
+    "gte": lambda a, b: a is not None and b is not None and a >= b,
+    "lte": lambda a, b: a is not None and b is not None and a <= b,
+}
+
+
 class ForEachCommandHandle(CommandHandle):
     """Run one generic command list once for every item in a collection."""
 
@@ -402,6 +435,34 @@ def register_flow_commands(
                 entity_refs=entity_refs,
                 refs_mode=refs_mode,
             ),
+        )
+
+    @registry.register(
+        "if",
+        deferred_params={"then", "else"},
+        validation_mode="mixed",
+    )
+    def if_command(
+        context: CommandContext,
+        *,
+        left: Any = None,
+        op: str = "eq",
+        right: Any = None,
+        then: list[dict[str, Any]] | None = None,
+        **runtime_params: Any,
+    ) -> CommandHandle:
+        """Branch using one small structured comparison between two resolved values."""
+        comparator = _COMPARE_OPS.get(op)
+        if comparator is None:
+            raise ValueError(f"Unknown comparison operator '{op}'.")
+        return _branch_with_runtime_context(
+            registry,
+            context,
+            condition_met=comparator(left, right),
+            then=then,
+            else_branch=runtime_params.get("else"),
+            runtime_params=runtime_params,
+            excluded_param_names={"left", "op", "right", "then", "else"},
         )
 
     @registry.register(

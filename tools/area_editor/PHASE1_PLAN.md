@@ -25,7 +25,7 @@ tools/area_editor/                # Portable root (can be copied standalone)
             main_window.py        # QMainWindow with docks, menu, status bar
         project_io/
             __init__.py
-            manifest.py           # Load project.json, discover areas/templates
+            project_manifest.py   # Load project.json, discover areas/templates
             asset_resolver.py     # Resolve authored asset paths to filesystem
         documents/
             __init__.py
@@ -68,8 +68,8 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 - **Verify**: `python -m area_editor` opens an empty window
 
 ### Step 2: Manifest loading and area discovery
-- `project_io/manifest.py`: `ProjectManifest` dataclass, `load_manifest()`, `discover_areas()`
-- Replicate runtime's path resolution logic from `dungeon_engine/project.py` lines 393-441 (`_resolve_paths` pattern: if key missing/empty, fall back to conventional dir)
+- `project_io/project_manifest.py`: `ProjectManifest` dataclass, `load_manifest()`, `discover_areas()`
+- Replicate runtime path resolution logic from `dungeon_engine/project_context.py` (`_resolve_paths` pattern: if key missing/empty, fall back to conventional dir). `dungeon_engine/project.py` now remains only as a compatibility wrapper.
 - Replicate `area_id()` from lines 263-277 (relative path, strip .json, normalize slashes)
 - **Verify**: discovers 3 areas from test_project (village_square, village_house, title_screen)
 
@@ -83,7 +83,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 - **Verify**: loads village_square.json with correct dimensions, layer count, entity count
 
 ### Step 4: Asset resolver and tileset catalog
-- `project_io/asset_resolver.py`: replicate runtime's `resolve_asset()` from lines 217-235 (rooted_candidate = asset_dir.parent / rel_path, then direct_candidate = asset_dir / rel_path)
+- `project_io/asset_resolver.py`: replicate runtime `resolve_asset()` behavior from `dungeon_engine/project_context.py` (rooted_candidate = asset_dir.parent / rel_path, then direct_candidate = asset_dir / rel_path)
 - `catalogs/tileset_catalog.py`: load tileset PNGs as QPixmap, cache frames
 - GID resolution: find tileset with largest firstgid <= gid, local_index = gid - firstgid
 - Frame extraction: columns = png_width // tile_width, col = local_index % columns, row = local_index // columns, copy source rect
@@ -141,7 +141,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 ## Key Design Decisions
 
 1. **Dataclass documents with `_extra` passthrough** — every document level preserves unknown fields for safe round-tripping (Phase 2 saving)
-2. **Independent path resolution** — replicates runtime's algorithms from `dungeon_engine/project.py` without importing it (JSON-only contract)
+2. **Independent path resolution** — replicates runtime's algorithms from `dungeon_engine/project_context.py` without importing it (JSON-only contract)
 3. **QGraphicsItemGroup per layer** — O(1) visibility toggling, clean compositing
 4. **Z-order matches the unified runtime render model** — tile layers and entity markers share `render_order`, with y-sorted content interleaving inside a band
 5. **No entity sprite rendering in Phase 1** — just colored markers with tooltips; sprite visuals are Phase 3+
@@ -154,7 +154,7 @@ The editor folder must be **fully self-contained and portable** — copyable to 
 
 | File | Why |
 |------|-----|
-| `dungeon_engine/project.py` lines 217-235, 263-277, 393-441 | Path resolution and area ID algorithms to replicate |
+| `dungeon_engine/project_context.py` | Path resolution and area ID algorithms to replicate |
 | `projects/test_project/project.json` | Test fixture for manifest loading |
 | `projects/test_project/areas/village_square.json` | Primary test area (3 layers, entities, tilesets) |
 | `ENGINE_JSON_INTERFACE.md` | Canonical JSON field reference |
@@ -195,3 +195,4 @@ Or double-click `tools/area_editor/Run_Editor.cmd`.
 - `DECISIONS.md` — record PySide6 choice and rationale
 - `OPEN_QUESTIONS.md` — mark UI framework as resolved
 - `ROADMAP.md` — mark Phase 1 as complete
+

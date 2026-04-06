@@ -20,6 +20,27 @@ from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.widgets.tile_canvas import BrushType, TileCanvas, _SCENE_EDGE_PADDING
 
 
+def _make_mouse_event(
+    event_type: QMouseEvent.Type,
+    position: QPointF,
+    *,
+    button: Qt.MouseButton,
+    buttons: Qt.MouseButton | None = None,
+    modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier,
+) -> QMouseEvent:
+    """Build a mouse event with the non-deprecated Qt position signature."""
+    pressed_buttons = button if buttons is None else buttons
+    return QMouseEvent(
+        event_type,
+        position,
+        position,
+        position,
+        button,
+        pressed_buttons,
+        modifiers,
+    )
+
+
 def _make_area() -> AreaDocument:
     return AreaDocument(
         tile_size=16,
@@ -192,19 +213,15 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
             lambda col, row: deleted.append((col, row))
         )
 
-        left_event = QMouseEvent(
+        left_event = _make_mouse_event(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(8, 8),
-            Qt.MouseButton.LeftButton,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.LeftButton,
         )
-        right_event = QMouseEvent(
+        right_event = _make_mouse_event(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(8, 8),
-            Qt.MouseButton.RightButton,
-            Qt.MouseButton.RightButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.RightButton,
         )
 
         with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
@@ -255,19 +272,16 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         canvas.set_area(area, catalog, None)
         canvas.set_tile_select_mode(True)
 
-        press_event = QMouseEvent(
+        press_event = _make_mouse_event(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(1, 1),
-            Qt.MouseButton.LeftButton,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.LeftButton,
         )
-        move_event = QMouseEvent(
+        move_event = _make_mouse_event(
             QMouseEvent.Type.MouseMove,
             QPointF(31, 31),
-            Qt.MouseButton.NoButton,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.NoButton,
+            buttons=Qt.MouseButton.LeftButton,
         )
 
         with patch.object(canvas, "mapToScene", return_value=QPointF(1, 1)):
@@ -405,12 +419,10 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         self.assertEqual(canvas.selected_entity_id, "npc")
 
         screen_x, screen_y = canvas._screen_pane_origin
-        event = QMouseEvent(
+        event = _make_mouse_event(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(screen_x + 11, screen_y + 13),
-            Qt.MouseButton.LeftButton,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.LeftButton,
         )
 
         with patch.object(
@@ -435,12 +447,11 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         canvas.screen_pixel_hovered.connect(lambda px, py: hovered.append((px, py)))
 
         screen_x, screen_y = canvas._screen_pane_origin
-        event = QMouseEvent(
+        event = _make_mouse_event(
             QMouseEvent.Type.MouseMove,
             QPointF(screen_x + 20, screen_y + 30),
-            Qt.MouseButton.NoButton,
-            Qt.MouseButton.NoButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.NoButton,
+            buttons=Qt.MouseButton.NoButton,
         )
         with patch.object(
             canvas,
@@ -461,12 +472,10 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         canvas.set_active_brush_type(BrushType.TILE)
 
         screen_x, screen_y = canvas._screen_pane_origin
-        event = QMouseEvent(
+        event = _make_mouse_event(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(screen_x + 8, screen_y + 8),
-            Qt.MouseButton.LeftButton,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
+            button=Qt.MouseButton.LeftButton,
         )
         with patch.object(
             canvas,

@@ -795,27 +795,153 @@ Current execution note:
     behavior-neutral
 - Inventory session open/close commands now live in the same inventory domain,
   keeping inventory UI/runtime entry points next to inventory-state commands.
-- Keep the next slices behavior-neutral and domain-based so the registration
-  flow stays easy for both humans and agents to follow.
+- Another careful extraction slice is now complete:
+  - live entity/current-area mutation commands now live in
+    `dungeon_engine/commands/builtin_domains/entity_state.py`
+  - explicit cross-area persistence/reset commands now live in
+    `dungeon_engine/commands/builtin_domains/persistence_state.py`
+  - the `if` orchestration command moved into
+    `dungeon_engine/commands/builtin_domains/flow.py`, keeping flow control with
+    the other child-command runners
+- `dungeon_engine/commands/builtin.py` still owns the shared helper layer for
+  persistence policy, occupancy transitions, field normalization, and command
+  registration wiring, but the mixed command tail has been removed.
+- Keep the remaining slices behavior-neutral and domain-based so the
+  registration flow stays easy for both humans and agents to follow.
 - As part of the ongoing cleanup, unused nested movement helpers in
   `dungeon_engine/commands/builtin.py` have been removed once test coverage
   confirmed they were dead code.
-- The next remaining hotspot is the entity-state / persistence-heavy portion of
-  `builtin.py`; treat the next split there as a careful design step rather than
-  another purely mechanical extraction.
+- `dungeon_engine/commands/builtin.py` is now down to roughly 1,000 lines and
+  is no longer the dominant hotspot; the next runtime-structure priority should
+  shift to `dungeon_engine/commands/runner.py` unless a helper-only cleanup in
+  `builtin.py` becomes obviously worthwhile.
+- The first safe `runner.py` extraction slice is now complete:
+  - generic JSON-file, collection, math, text-window, and random value helpers
+    now live in `dungeon_engine/commands/runner_value_utils.py`
+  - `dungeon_engine/commands/runner.py` still owns the public execution surface,
+    command handles, root-flow orchestration, and the larger world/query
+    resolution layer
+- The next safe `runner.py` extraction slice is also complete:
+  - entity/area/world query value helpers now live in
+    `dungeon_engine/commands/runner_query_values.py`
+  - `load_area_owned_snapshot()` still remains available through
+    `dungeon_engine/commands/runner.py` as the public import surface used by
+    other runtime modules
+- The next safe `runner.py` extraction slice is also complete:
+  - runtime token/value/spec resolution now lives in
+    `dungeon_engine/commands/runner_resolution.py`
+  - `dungeon_engine/commands/runner.py` is now mainly the public execution
+    layer: runtime context, handles, command execution, sequencing, and the
+    root-flow runner
+- `runner.py` is now roughly one quarter of its previous size, and the next
+  remaining question there is helper polish, not major structural extraction.
+- The first safe `loader.py` extraction slice is now complete:
+  - entity/template parsing and validation now live in
+    `dungeon_engine/world/loader_entities.py`
+  - `dungeon_engine/world/loader.py` now focuses on area parsing, area
+    validation, and compatibility re-exports for the wider runtime/tests
+- `loader.py` is now under 500 lines, so the next major runtime-structure
+  priority should shift to `dungeon_engine/world/persistence.py` unless a
+  second area-focused loader slice becomes obviously worthwhile.
+- The first safe `persistence.py` extraction slice is now complete:
+  - save-data models and JSON codec helpers now live in
+    `dungeon_engine/world/persistence_data.py`
+  - `dungeon_engine/world/persistence.py` now focuses more clearly on the live
+    runtime mutation layer plus apply/capture helpers
+- The next safe `persistence.py` extraction slice is now also complete:
+  - persistent apply/capture/snapshot helpers now live in
+    `dungeon_engine/world/persistence_snapshots.py`
+  - `dungeon_engine/world/persistence.py` now acts as the live runtime facade
+    and compatibility re-export surface for the wider runtime/tests
+- The next safe `persistence.py` extraction slice is now also complete:
+  - traveler lifecycle helpers now live in
+    `dungeon_engine/world/persistence_travelers.py`
+  - `dungeon_engine/world/persistence.py` now focuses more tightly on live
+    mutation APIs, area/global persistence state, and reset queues
+- `persistence.py` is now under 450 lines. The save-format boundary, the
+  snapshot/diff boundary, and the traveler boundary are now all explicit, which
+  should make any future reset/runtime split safer.
+- The first safe `game.py` extraction slice is now complete:
+  - project-scoped save/load dialogs and save-slot restore helpers now live in
+    `dungeon_engine/engine/game_save_runtime.py`
+  - `dungeon_engine/engine/game.py` stopped owning save-slot dialogs and load
+    restore internals directly
+- The next safe `game.py` extraction slice is now also complete:
+  - area loading, transition application, deferred reset/load switching, and
+    authored camera-default helpers now live in
+    `dungeon_engine/engine/game_area_runtime.py`
+  - `dungeon_engine/engine/game.py` now focuses on the main loop, runtime
+    installation, pause/debug wiring, and window/output-state helpers
+- `game.py` is now under 350 lines. The high-churn main loop entry point is now
+  much smaller, while `game_area_runtime.py` holds the transition cluster as a
+  deliberate separate hotspot.
+- One real regression appeared during this extraction:
+  - `runner_query_values.py` still imported `get_persistent_area_state` from
+    `dungeon_engine/world/persistence.py`
+  - the fix was to restore the compatibility re-export rather than changing
+    downstream callers in the same structural step
+- New follow-up weakness noted during this pass:
+  - `PersistenceRuntime` still mixes save-slot mutation and reset queue
+    management in one class
+  - treat that as the next persistence-specific structural target instead of
+    folding it into unrelated behavior work
+- Refined persistence follow-up after the traveler split:
+  - traveler lifecycle is now isolated, so the remaining persistence hotspot is
+    the combination of save-slot mutation/flush behavior and reset queue
+    management in `PersistenceRuntime`
+  - if `persistence.py` gets another slice, that is the safest remaining
+    boundary
+- Refined game follow-up after the transition split:
+  - `game.py` itself is no longer the problem file; `game_area_runtime.py` is
+    now the remaining game-specific hotspot
+  - if the game runtime gets another slice, it should come from transition/reset
+    behavior inside `game_area_runtime.py`, not from re-fragmenting `game.py`
+- Focused editor maintenance also completed during this pass:
+  - `tools/area_editor/tests/test_tile_canvas.py` now uses the current
+    `QMouseEvent` position-signature helper instead of the deprecated
+    constructor calls
+  - the editor suite stays green, and the prior deprecation warning noise is
+    gone under the current Qt bindings
 
 Recommended order:
 
-1. `dungeon_engine/commands/builtin.py`
-2. `dungeon_engine/commands/runner.py`
-3. `dungeon_engine/world/loader.py`
-4. `dungeon_engine/world/persistence.py`
-5. `dungeon_engine/engine/game.py`
+1. another `dungeon_engine/world/persistence.py` slice focused on reset queues
+   and save-slot mutation boundaries
+2. another `dungeon_engine/engine/game_area_runtime.py` slice only if the
+   remaining transition/reset helpers still admit a clean boundary
+3. another `dungeon_engine/world/loader.py` slice only if it clearly improves
+   locality without fragmenting the area-loading surface
+4. shared-helper cleanup in `dungeon_engine/commands/builtin.py` only if it
+   still improves locality after the larger files above move first
+5. `tools/area_editor/area_editor/app/main_window.py` structural follow-up
+   during the Phase 6 editor pass if the remaining sprawl is still worth it
+
+Current biggest active files after this pass:
+
+- `tests/test_strict_content_ids.py`
+  - still the largest active file in the repo by a wide margin
+  - likely the next best test-suite split target because it improves agent/human
+    navigation with minimal behavior risk
+- `tools/area_editor/area_editor/app/main_window.py`
+  - still the largest active product code file
+  - should be treated as the main editor-architecture hotspot
+- `tools/area_editor/tests/test_main_window.py`
+  - now the biggest editor test hotspot and likely wants the same subsystem
+    split strategy used on the runtime suite
+- `tools/area_editor/area_editor/widgets/tile_canvas.py`
+  - substantial but still cohesive; only split if a canvas-vs-screen-space seam
+    becomes obvious
+- `tools/area_editor/area_editor/widgets/entity_instance_json_panel.py`
+  - high line count suggests a future focused pass on editor JSON inspector
+    surfaces may be worthwhile
+- `dungeon_engine/engine/dialogue_runtime.py`
+  - now one of the larger remaining runtime files and may become a worthwhile
+    future refactor target if dialogue work expands again
 
 Suggested submodule targets:
 
 - command domains: flow, movement, interaction, dialogue, inventory, audio,
-  screen, camera, state, save/game
+  screen, camera, entity-state, persistence-state
 - runner domains: tokens, value sources, execution, handles
 - loader domains: area parsing, entity parsing, template resolution, validation
 - persistence domains: data model, capture, apply, travelers, reset helpers
