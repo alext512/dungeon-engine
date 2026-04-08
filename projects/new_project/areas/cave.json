@@ -1,0 +1,60 @@
+{
+  "tile_size": 16,
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/used_tilesets_sprites/underworld.png",
+      "tile_width": 16,
+      "tile_height": 16
+    },
+    {
+      "firstgid": 170,
+      "path": "assets/used_tilesets_sprites/overworld_expanded.png",
+      "tile_width": 16,
+      "tile_height": 16
+    }
+  ],
+  "tile_layers": [
+    {
+      "name": "ground",
+      "render_order": 0,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619],
+        [619, 619, 619, 619, 619, 619, 619, 619, 619, 619]
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "transition_to_cave",
+      "grid_x": 4,
+      "grid_y": 8,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/area_transition_target"
+    },
+    {
+      "id": "area_transition_1",
+      "grid_x": 4,
+      "grid_y": 9,
+      "render_order": 10,
+      "y_sort": true,
+      "sort_y_offset": 0.0,
+      "stack_order": 0,
+      "template": "entity_templates/area_transition"
+    }
+  ],
+  "variables": {}
+}

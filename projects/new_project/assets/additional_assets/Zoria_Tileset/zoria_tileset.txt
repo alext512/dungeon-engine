@@ -1,0 +1,23 @@
+Asset: Zoria Tileset
+Author: DragonDePlatino
+Source URL: https://opengameart.org/content/zoria-tileset
+License URL: https://creativecommons.org/licenses/by/4.0/
+Checked: 2026-03-21
+
+License Summary:
+- The OpenGameArt page lists this asset as CC-BY 4.0.
+- The downloaded package readme repeats that all artwork in the download is licensed under CC-BY 4.0.
+- Attribution should be treated as required when redistributing or using the art publicly.
+
+Content Notes:
+- The pack is a 16x16 Zelda-style tileset and sprite set using an NES-style palette.
+- The bundled readme says the overworld content is the most complete, while underworld tiles are unfinished and many sprites are unanimated.
+- The bundled readme also says the files in the aseprite folder are layered animations intended to be opened in Aseprite.
+
+Credit:
+- Suggested credit line:
+  Zoria Tileset by DragonDePlatino, licensed CC BY 4.0
+
+Local Packaging Notes:
+- The package readme matched the OpenGameArt page, so the note above reflects both sources.
+- We kept the PNG and .ase source files and removed extra packaging docs after copying the relevant info here.

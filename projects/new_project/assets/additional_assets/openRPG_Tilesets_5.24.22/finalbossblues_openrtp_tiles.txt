@@ -1,0 +1,23 @@
+Asset: Open RPG Fantasy Tilesets
+Author: finalbossblues
+Source URL: https://finalbossblues.itch.io/openrtp-tiles
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+Checked: 2026-03-21
+
+License Summary:
+- The asset page states that the art is released to the public domain under CC0.
+- The page also says there are no restrictions on use and that credit is not necessary.
+- itch.io metadata on the page lists the asset license as Creative Commons Zero v1.0 Universal.
+- The downloaded package includes a ReadMe.txt that repeats the same CC0 / no-credit-needed terms.
+
+Credit:
+- Credit is not required.
+- Optional suggested credit line:
+  Open RPG Fantasy Tilesets by finalbossblues (CC0)
+
+Notes:
+- The creator asks that if the files are shared, they should preferably be shared by linking back to the source page.
+- The FAQ on the page says the tiles use the same 16x16 tile base as the creator's other compatible packs.
+
+Download Package:
+- openRPG_Tilesets_5.24.22.zip

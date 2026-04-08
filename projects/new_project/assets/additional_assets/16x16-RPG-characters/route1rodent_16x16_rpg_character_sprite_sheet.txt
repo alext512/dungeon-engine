@@ -1,0 +1,24 @@
+Asset: 16x16 RPG character sprite sheet
+Author: @javikolog (route1rodent on itch.io)
+Source URL: https://route1rodent.itch.io/16x16-rpg-character-sprite-sheet
+License URL: https://creativecommons.org/licenses/by-sa/3.0/
+Checked: 2026-03-21
+
+License Summary:
+- The downloaded package includes a bundled LICENSE file and README.md that identify the pack as CC BY-SA 3.0.
+- Under that license, attribution should be treated as required.
+- If the sprites are modified or remixed, the adapted sprite art should be distributed under the same or a compatible share-alike license.
+- The page says this pack is adapted from the OpenGameArt packs "NES-Style RPG Characters" and "More NES-style RPG Characters".
+
+Credit:
+- Treat credit as required.
+- Suggested credit line:
+  16x16 RPG character sprite sheet by @route1rodent / @javikolog, licensed CC BY-SA 3.0
+
+Caution:
+- The current itch page description points to CC BY-SA 4.0, but the downloaded package itself ships with CC BY-SA 3.0 text.
+- For the files currently stored in this folder, the bundled LICENSE and README are the strongest local evidence, so this note follows CC BY-SA 3.0.
+- If the author later republishes the pack with a different license, re-check before redistributing updated versions.
+
+Download Package:
+- 16x16-RPG-characters.zip
