@@ -250,6 +250,22 @@ python_puzzle_engine/
 
 ## Documentation
 
+This repo now also contains a publishable docs site under `docs/`, configured by
+`mkdocs.yml`.
+
+Preview it locally with:
+
+```text
+pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+Build static output with:
+
+```text
+mkdocs build
+```
+
 If you want the practical authoring docs, start here:
 
 - [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)

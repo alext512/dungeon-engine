@@ -1,0 +1,61 @@
+# Editor Gaps And Future Work
+
+The editor has moved well beyond the earliest phase, but it is not fully caught up with the runtime.
+
+## Main Known Gaps
+
+The most important current gaps are:
+
+- visual placement of new screen-space entities from the canvas
+- drag-to-move entity manipulation
+- runtime handoff or launch integration
+- broader structured editing coverage for newer engine-owned entity fields and workflow values
+- richer structured dialogue and menu editing
+- more contextual reference pickers inside editing panels
+
+## What Is Already Partly Solved
+
+Several areas that used to be major gaps are now at least partly addressed:
+
+- project manifest editing
+- shared variable and UI-preset editing
+- item editing
+- global entity editing
+- reference-aware rename or move for file-backed content
+- safer layer management
+
+That means the editor should be described as a strong project and area authoring tool, not as a phase-1 prototype.
+
+## Likely Next High-Value Improvements
+
+Based on the current roadmap and future-features notes, the next valuable steps are:
+
+- broader structured coverage for engine-owned fields
+- clearer reference pickers and broken-reference surfacing
+- better screen-space placement workflows
+- runtime launch or handoff from the editor
+- richer content editing for dialogue and commands
+
+## Longer-Term Future Features
+
+Ideas that are clearly interesting but should still be treated as future work include:
+
+- guided command-chain editing for templates and items
+- richer asset previews
+- drag-and-drop placement workflows
+- "find references" style project refactor support beyond the existing rename or move flows
+
+## Scope Reminder
+
+Even as the editor grows, some things are intentionally out of scope for now:
+
+- full gameplay simulation inside the editor
+- reproducing runtime `World` or command-runner behavior
+- becoming a second engine
+- visually exposing every arbitrary JSON shape the runtime can express
+
+## Deep References
+
+- [tools/area_editor/ROADMAP.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/ROADMAP.md)
+- [tools/area_editor/FUTURE_FEATURES.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/FUTURE_FEATURES.md)
+- [tools/area_editor/SCOPE.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/SCOPE.md)

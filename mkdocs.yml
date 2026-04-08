@@ -1,0 +1,82 @@
+site_name: Dungeon Engine Docs
+site_description: Documentation for the command-driven top-down RPG/puzzle engine and its external area editor.
+repo_url: https://github.com/alext512/dungeon-engine
+repo_name: alext512/dungeon-engine
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Overview: getting-started/index.md
+      - Install and Run: getting-started/install-and-run.md
+      - Project Layout: getting-started/project-layout.md
+  - Guides:
+      - Engine Concepts: guides/engine-concepts.md
+      - Authoring Workflow: guides/authoring-workflow.md
+      - Command System: guides/command-system.md
+      - Dialogue, Inventory, and UI: guides/dialogue-inventory-ui.md
+  - Reference:
+      - Overview: reference/index.md
+      - Project Manifest: reference/project-manifest.md
+      - Content Types: reference/content-types.md
+      - Built-in Commands: reference/builtin-commands.md
+      - Runtime Tokens: reference/runtime-tokens.md
+  - Editor:
+      - Overview: editor/index.md
+      - Workflow: editor/workflow.md
+      - Gaps and Future Work: editor/gaps-and-future-work.md
+  - Architecture:
+      - Runtime Architecture: architecture/runtime-architecture.md
+      - For Coding Agents: architecture/for-coding-agents.md
+  - Contributing:
+      - Docs Maintenance: contributing/docs-maintenance.md
+      - Publishing: contributing/publishing.md
