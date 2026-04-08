@@ -93,7 +93,7 @@
       "sort_y_offset": 0.0,
       "stack_order": 0,
       "template": "entity_templates/area_transition",
-      "variables": {
+      "parameters": {
         "target_area": "areas/levels/first_area",
         "destination_entity_id": "from_start_marker"
       }

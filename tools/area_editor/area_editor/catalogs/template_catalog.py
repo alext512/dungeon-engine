@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -131,6 +132,16 @@ class TemplateCatalog:
         names = sorted(name for name in found if name not in _BUILTIN_VARIABLES)
         self._template_parameter_names[template_id] = names
         return list(names)
+
+    def get_template_parameter_defaults(self, template_id: str) -> dict[str, Any]:
+        """Return template-level default parameter values, if authored."""
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return {}
+        defaults = raw.get("parameters")
+        if not isinstance(defaults, dict):
+            return {}
+        return copy.deepcopy(defaults)
 
     def clear(self) -> None:
         self._templates.clear()

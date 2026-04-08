@@ -14,12 +14,14 @@
       "visible": true
     }
   ],
-  "variables": {
-    "pressed": false,
+  "parameters": {
     "latching": false,
     "target_entity_id": "",
     "target_press_command_id": "contribute_on",
     "target_release_command_id": "contribute_off"
+  },
+  "variables": {
+    "pressed": false
   },
   "entity_commands": {
     "on_occupant_enter": {
@@ -47,8 +49,8 @@
             },
             {
               "type": "run_entity_command",
-              "entity_id": "$self.target_entity_id",
-              "command_id": "$self.target_press_command_id"
+              "entity_id": "$target_entity_id",
+              "command_id": "$target_press_command_id"
             }
           ]
         }
@@ -65,7 +67,7 @@
           "then": [
             {
               "type": "if",
-              "left": "$self.latching",
+              "left": "$latching",
               "op": "eq",
               "right": false,
               "then": [
@@ -107,8 +109,8 @@
                     },
                     {
                       "type": "run_entity_command",
-                      "entity_id": "$self.target_entity_id",
-                      "command_id": "$self.target_release_command_id"
+                      "entity_id": "$target_entity_id",
+                      "command_id": "$target_release_command_id"
                     }
                   ]
                 }

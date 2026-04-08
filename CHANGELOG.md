@@ -4,6 +4,25 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Area Start UI + Template Parameter Cleanup
+
+- Added a tabbed right-side area workspace in the external editor so `Layers`
+  stays focused and area-enter behavior now has its own `Area Start` surface
+- Added `Area Start` helper insertions for common `enter_commands` such as
+  routing inputs, running one entity command, opening dialogue, setting camera
+  follow, and starting music
+- Fixed the `set_camera_follow` helper to author the real structured `follow`
+  payload instead of an invalid shorthand field
+- Moved static configuration on `new_project` transition, button, lever, gate,
+  counter-target, and hole templates from runtime `variables` into real
+  template `parameters` with authored defaults
+- Updated the starter transition instances to override destination data through
+  instance `parameters`, which now surfaces those fields properly in the entity
+  instance editor
+- Taught the editor to show template-authored default parameter values as
+  placeholders, while avoiding misleading project-command pickers for
+  entity-command id parameters
+
 ## Command Authoring Validation
 
 - Added startup validation for known command-bearing JSON surfaces such as

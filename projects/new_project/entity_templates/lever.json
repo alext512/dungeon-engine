@@ -15,12 +15,14 @@
       "visible": true
     }
   ],
-  "variables": {
-    "active": false,
+  "parameters": {
     "toggleable": true,
     "target_entity_id": "",
     "target_activate_command_id": "contribute_on",
     "target_deactivate_command_id": "contribute_off"
+  },
+  "variables": {
+    "active": false
   },
   "entity_commands": {
     "interact": {
@@ -56,14 +58,14 @@
             },
             {
               "type": "run_entity_command",
-              "entity_id": "$self.target_entity_id",
-              "command_id": "$self.target_activate_command_id"
+              "entity_id": "$target_entity_id",
+              "command_id": "$target_activate_command_id"
             }
           ],
           "else": [
             {
               "type": "if",
-              "left": "$self.toggleable",
+              "left": "$toggleable",
               "op": "eq",
               "right": true,
               "then": [
@@ -91,8 +93,8 @@
                 },
                 {
                   "type": "run_entity_command",
-                  "entity_id": "$self.target_entity_id",
-                  "command_id": "$self.target_deactivate_command_id"
+                  "entity_id": "$target_entity_id",
+                  "command_id": "$target_deactivate_command_id"
                 }
               ]
             }

@@ -22,12 +22,14 @@
       "visible": false
     }
   ],
-  "variables": {
-    "filled": false,
+  "parameters": {
     "group_target_entity_id": "",
     "group_fill_command_id": "contribute_on",
     "filled_target_entity_id": "",
     "filled_command_id": ""
+  },
+  "variables": {
+    "filled": false
   },
   "entity_commands": {
     "on_occupant_enter": {
@@ -86,13 +88,13 @@
             },
             {
               "type": "run_entity_command",
-              "entity_id": "$self.group_target_entity_id",
-              "command_id": "$self.group_fill_command_id"
+              "entity_id": "$group_target_entity_id",
+              "command_id": "$group_fill_command_id"
             },
             {
               "type": "run_entity_command",
-              "entity_id": "$self.filled_target_entity_id",
-              "command_id": "$self.filled_command_id"
+              "entity_id": "$filled_target_entity_id",
+              "command_id": "$filled_command_id"
             }
           ]
         }

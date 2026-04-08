@@ -62,6 +62,16 @@ _ENTITY_REFERENCE_PARAMETER_NAMES = {
     "caller_id",
     "target_id",
 }
+_ENTITY_COMMAND_PARAMETER_NAMES = {
+    "target_press_command_id",
+    "target_release_command_id",
+    "target_activate_command_id",
+    "target_deactivate_command_id",
+    "on_completed_command_id",
+    "on_uncompleted_command_id",
+    "group_fill_command_id",
+    "filled_command_id",
+}
 _AREA_REFERENCE_PARAMETER_NAMES = {
     "area_id",
     "target_area",
@@ -179,6 +189,8 @@ def _build_persistence_policy(
 def _parameter_reference_kind(name: str) -> str | None:
     normalized = str(name).strip()
     if not normalized:
+        return None
+    if normalized in _ENTITY_COMMAND_PARAMETER_NAMES:
         return None
     if normalized == "item_id" or normalized.endswith("_item_id"):
         return "item"
@@ -1042,6 +1054,7 @@ class _EntityInstanceFieldsEditor(QWidget):
     def _rebuild_parameter_rows(self, entity: EntityDocument) -> None:
         self._clear_parameter_rows()
         parameters = entity.parameters
+        template_defaults: dict[str, object] = {}
         if parameters is not None and not isinstance(parameters, dict):
             self._parameters_editable = False
             self._parameters_widget.hide()
@@ -1060,15 +1073,26 @@ class _EntityInstanceFieldsEditor(QWidget):
             parameter_names.update(
                 self._template_catalog.get_template_parameter_names(entity.template)
             )
+            template_defaults = self._template_catalog.get_template_parameter_defaults(
+                entity.template
+            )
         if isinstance(parameters, dict):
             parameter_names.update(parameters.keys())
+        parameter_names.update(template_defaults.keys())
 
         for name in sorted(parameter_names):
             label = QLabel(name)
             edit = QLineEdit()
             value = None if not isinstance(parameters, dict) else parameters.get(name)
+            default_value = template_defaults.get(name)
             if value is None:
                 edit.setText("")
+                if default_value is None:
+                    edit.setPlaceholderText("")
+                elif isinstance(default_value, str):
+                    edit.setPlaceholderText(default_value)
+                else:
+                    edit.setPlaceholderText(json.dumps(default_value, ensure_ascii=False))
             elif isinstance(value, str):
                 edit.setText(value)
             else:

@@ -318,6 +318,9 @@ Important notes:
 - area `camera` defaults are just initial runtime state; commands can replace them later
 - newer projects should prefer destination marker entities plus `destination_entity_id`
   instead of relying on authored `entry_points`
+- if you want explicit area-enter behavior such as routing inputs, opening
+  dialogue, setting camera follow, or starting music, prefer `enter_commands`
+  over passive defaults
 
 ### Tilesets and layers
 
@@ -425,6 +428,10 @@ Placed entities usually reference a template:
 For world-space placement, authored entities now use `grid_x` / `grid_y`. Screen-space entities continue to use `pixel_x` / `pixel_y`.
 
 Authored `id` values are project-wide identities. If the same actor truly moves between areas, author it once and transfer it; do not keep duplicate placeholders with the same id in multiple areas.
+
+Templates can also author top-level `parameters` defaults. Instance
+`parameters` override only the keys you set, which keeps reusable templates
+compact while still exposing the important knobs.
 
 ## Entity Templates
 
@@ -1706,7 +1713,7 @@ Transition trigger example:
   "solid": false,
   "visible": false,
   "interactable": false,
-  "variables": {
+  "parameters": {
     "target_area": "areas/start",
     "destination_entity_id": "spawn_marker"
   },
@@ -1716,8 +1723,8 @@ Transition trigger example:
       "commands": [
         {
           "type": "change_area",
-          "area_id": "$self.target_area",
-          "destination_entity_id": "$self.destination_entity_id",
+          "area_id": "$target_area",
+          "destination_entity_id": "$destination_entity_id",
           "transfer_entity_ids": [
             "$ref_ids.instigator"
           ]

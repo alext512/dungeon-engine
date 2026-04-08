@@ -363,6 +363,10 @@ Inside template JSON:
 
 will be replaced by `parameters.foo` if present.
 
+Templates may also author top-level `parameters` defaults. The engine merges
+template defaults with instance `parameters` before substitution, so instances
+can override only the values they need to change.
+
 ### Current Entity Fields
 
 Current engine-known entity fields:

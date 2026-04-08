@@ -94,6 +94,7 @@ from area_editor.operations.entities import (
     place_screen_entity,
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
+from area_editor.widgets.area_start_panel import AreaStartPanel
 from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
@@ -239,9 +240,32 @@ class MainWindow(
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._browser_workspace)
 
-        # Right side: layer panel + tileset browser
+        # Right side: area-tools workspace on top, render + tileset below
         self._layer_panel = LayerListPanel()
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._layer_panel)
+        self._area_start_panel = AreaStartPanel()
+        self._area_start_panel.set_picker_callbacks(
+            entity_picker=self._browse_project_entity_id,
+            dialogue_picker=self._browse_project_dialogue_id,
+            command_picker=self._browse_project_command_id,
+            asset_picker=self._browse_project_asset,
+        )
+        self._area_workspace = BrowserWorkspaceDock(
+            title="Area Tools",
+            object_name="AreaWorkspaceDock",
+        )
+        self._area_workspace.add_page(
+            row=1,
+            key="layers",
+            title="Layers",
+            widget=self._extract_dock_content(self._layer_panel),
+        )
+        self._area_workspace.add_page(
+            row=1,
+            key="area_start",
+            title="Area Start",
+            widget=self._area_start_panel,
+        )
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._area_workspace)
 
         self._render_panel = RenderPropertiesPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._render_panel)
@@ -268,11 +292,19 @@ class MainWindow(
             Qt.Orientation.Vertical,
         )
         self.resizeDocks(
-            [self._browser_workspace, self._layer_panel],
+            [self._browser_workspace, self._area_workspace],
             [340, 320],
             Qt.Orientation.Horizontal,
         )
         self._browser_workspace.set_current_page("areas")
+        self._area_workspace.set_current_page("layers")
+        self.splitDockWidget(self._area_workspace, self._render_panel, Qt.Orientation.Vertical)
+        self.splitDockWidget(self._render_panel, self._tileset_panel, Qt.Orientation.Vertical)
+        self.resizeDocks(
+            [self._area_workspace, self._render_panel, self._tileset_panel],
+            [300, 190, 260],
+            Qt.Orientation.Vertical,
+        )
 
         # Settings
         self._settings = QSettings("PuzzleDungeon", "AreaEditor")
@@ -473,6 +505,7 @@ class MainWindow(
         self._layer_panel.move_layer_down_requested.connect(
             lambda index: self._on_move_tile_layer_requested(index, 1)
         )
+        self._area_start_panel.commands_applied.connect(self._on_area_start_commands_applied)
         self._render_panel.properties_changed.connect(self._on_render_properties_changed)
         self._entity_instance_panel.apply_requested.connect(self._on_apply_entity_instance_json)
         self._entity_instance_panel.revert_requested.connect(self._on_revert_entity_instance_json)
@@ -1183,6 +1216,7 @@ class MainWindow(
         if content_type == ContentType.AREA and content_id in self._area_docs:
             doc = self._area_docs[content_id]
             self._layer_panel.set_layers(doc.tile_layers)
+            self._area_start_panel.load_area(content_id, doc.enter_commands)
             self._status_area.setText(content_id)
             self._save_action.setEnabled(True)
             self._cell_flags_action.setEnabled(True)
@@ -1234,6 +1268,7 @@ class MainWindow(
                     self._status_gid.setText("")
         elif content_id:
             self._layer_panel.clear_layers()
+            self._area_start_panel.clear()
             self._tileset_panel.clear_tilesets()
             self._status_area.setText(self._status_label_for_content(content_id, content_type))
             self._status_cell.setText("")
@@ -1261,6 +1296,7 @@ class MainWindow(
         else:
             # No tabs open
             self._layer_panel.clear_layers()
+            self._area_start_panel.clear()
             self._tileset_panel.clear_tilesets()
             project_name = (
                 self._manifest.project_root.name if self._manifest else ""
@@ -3864,6 +3900,15 @@ class MainWindow(
             return
         self._entity_instance_panel.set_area_bounds(doc.width, doc.height)
         self._entity_instance_panel.load_entity(entity)
+
+    def _on_area_start_commands_applied(self, commands: object) -> None:
+        context = self._active_area_context()
+        if context is None or not isinstance(commands, list):
+            return
+        content_id, doc, _canvas = context
+        doc.enter_commands = copy.deepcopy(commands)
+        self._tab_widget.set_dirty(content_id, True)
+        self._area_start_panel.load_area(content_id, doc.enter_commands)
 
     def _prepare_for_entity_instance_target_change(self, new_entity_id: str | None) -> bool:
         if not self._entity_instance_panel.is_dirty and not self._entity_instance_panel.fields_dirty:

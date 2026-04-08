@@ -82,6 +82,42 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             window._tab_widget.set_dirty("areas/demo", False)
 
+    def test_area_workspace_exposes_layers_and_area_start_tabs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            self.assertEqual(window._area_workspace.row_titles(1), ["Layers", "Area Start"])
+            self.assertEqual(window._area_workspace.row_titles(2), [])
+            self.assertEqual(window._area_start_panel._target_label.text(), "Area Start: areas/demo")
+
+    def test_area_start_panel_apply_updates_area_enter_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            panel = window._area_start_panel
+            panel._helper_combo.setCurrentIndex(0)
+            panel._route_entity_edit.setText("player_1")
+            panel._on_add_helper_command()
+            panel._on_apply()
+
+            self.assertEqual(
+                window._area_docs["areas/demo"].enter_commands,
+                [
+                    {
+                        "type": "route_inputs_to_entity",
+                        "entity_id": "player_1",
+                    }
+                ],
+            )
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            window._tab_widget.set_dirty("areas/demo", False)
+
     def test_edit_tileset_updates_dimensions(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project(Path(tmp))

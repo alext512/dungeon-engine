@@ -14,11 +14,13 @@
       "visible": true
     }
   ],
-  "variables": {
+  "parameters": {
     "required_count": 1,
-    "current_count": 0,
-    "open": false,
     "reversible": true
+  },
+  "variables": {
+    "current_count": 0,
+    "open": false
   },
   "entity_commands": {
     "contribute_on": {
@@ -42,7 +44,7 @@
       "commands": [
         {
           "type": "if",
-          "left": "$self.reversible",
+          "left": "$reversible",
           "op": "eq",
           "right": true,
           "then": [
@@ -82,7 +84,7 @@
               "type": "if",
               "left": "$self.current_count",
               "op": "gte",
-              "right": "$self.required_count",
+              "right": "$required_count",
               "then": [
                 {
                   "type": "run_entity_command",
@@ -100,7 +102,7 @@
       "commands": [
         {
           "type": "if",
-          "left": "$self.reversible",
+          "left": "$reversible",
           "op": "eq",
           "right": true,
           "then": [
@@ -114,7 +116,7 @@
                   "type": "if",
                   "left": "$self.current_count",
                   "op": "lt",
-                  "right": "$self.required_count",
+                  "right": "$required_count",
                   "then": [
                     {
                       "type": "run_entity_command",

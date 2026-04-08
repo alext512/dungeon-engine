@@ -3,7 +3,7 @@
   "solid": false,
   "visible": false,
   "interactable": false,
-  "variables": {
+  "parameters": {
     "target_area": "areas/start",
     "destination_entity_id": "spawn_marker"
   },
@@ -13,8 +13,8 @@
       "commands": [
         {
           "type": "change_area",
-          "area_id": "$self.target_area",
-          "destination_entity_id": "$self.destination_entity_id",
+          "area_id": "$target_area",
+          "destination_entity_id": "$destination_entity_id",
           "transfer_entity_ids": [
             "$ref_ids.instigator"
           ]

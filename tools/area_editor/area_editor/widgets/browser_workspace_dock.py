@@ -58,13 +58,19 @@ class _VisualTabBar(QTabBar):
 
 
 class BrowserWorkspaceDock(QDockWidget):
-    """Left dock with two independent tab rows controlling one content stack."""
+    """Dock with up to two tab rows controlling one shared content stack."""
 
     page_changed = Signal(str)
 
-    def __init__(self, parent=None) -> None:
-        super().__init__("Project Browser", parent)
-        self.setObjectName("BrowserWorkspaceDock")
+    def __init__(
+        self,
+        parent=None,
+        *,
+        title: str = "Project Browser",
+        object_name: str = "BrowserWorkspaceDock",
+    ) -> None:
+        super().__init__(title, parent)
+        self.setObjectName(object_name)
         self.setFeatures(
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
@@ -93,6 +99,7 @@ class BrowserWorkspaceDock(QDockWidget):
         self._page_indices: dict[str, int] = {}
         self._active_key: str | None = None
         self._syncing = False
+        self._refresh_row_visibility()
 
     def add_page(self, *, row: int, key: str, title: str, widget: QWidget) -> None:
         self._page_indices[key] = self._stack.addWidget(widget)
@@ -105,6 +112,7 @@ class BrowserWorkspaceDock(QDockWidget):
         else:
             raise ValueError("row must be 1 or 2")
 
+        self._refresh_row_visibility()
         if self._stack.count() == 1:
             self.set_current_page(key)
 
@@ -147,3 +155,7 @@ class BrowserWorkspaceDock(QDockWidget):
         keys = self._row1_keys if row == 1 else self._row2_keys
         if index < len(keys):
             self.set_current_page(keys[index])
+
+    def _refresh_row_visibility(self) -> None:
+        self._row1.setVisible(self._row1.count() > 0)
+        self._row2.setVisible(self._row2.count() > 0)

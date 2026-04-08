@@ -62,6 +62,7 @@ The current engine already supports:
 - tile-based rooms with separate walkability data
 - item definitions through `item_paths`
 - reusable entity templates with per-instance parameters
+- template-authored default parameter values that instances can selectively override
 - entities with visuals, variables, inventories, input mappings, named behaviors, and engine-known runtime fields
 - command-driven movement, interaction, pushing, animation, and persistence
 - standard engine-owned grid movement, pushing, and facing interaction helpers
@@ -84,6 +85,9 @@ It now supports active authoring workflows such as:
 - tile-layer add/rename/delete/reorder
 - area duplication as either a full copy or a layout-only shell copy
 - entity placement, selection, deletion, and nudging
+- a tabbed right-side area workspace with `Layers` plus `Area Start`
+  `enter_commands` helpers for common actions like input routing, dialogue,
+  camera follow, and music
 - render-property editing
 - project manifest, shared-variables, item, and global-entity editing
 - reference-aware `Rename/Move...` for file-backed project content

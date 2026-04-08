@@ -47,6 +47,11 @@ The current editor can:
 - place and delete world-space entities with the template brush
 - select stacked world entities by cell and select screen-space entities from the screen pane
 - nudge selected world entities by tiles and selected screen-space entities by pixels
+- use a tabbed right-side area workspace so `Layers` stays focused and area
+  startup behavior lives in a dedicated `Area Start` tab
+- edit area `enter_commands` through helper insertions plus direct JSON, including
+  common actions like `route_inputs_to_entity`, `run_entity_command`,
+  `open_dialogue_session`, `set_camera_follow`, and `play_music`
 - edit selected entity instances through a structured Fields tab or guarded raw JSON tab
 - edit entity templates, items, project manifest fields, shared variables, and
   global entities through structured tabs plus guarded raw JSON fallbacks
@@ -79,6 +84,7 @@ The editor is meant to help with:
 - entity placement
 - editing common per-instance values
 - selecting other entity ids when parameters reference them
+- editing area-enter behavior without opening the whole area file as raw JSON
 - preserving room JSON without forcing the user to hand-edit common cases
 
 ## Screen-Space Notes

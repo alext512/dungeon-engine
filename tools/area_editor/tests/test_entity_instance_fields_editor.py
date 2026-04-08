@@ -59,6 +59,42 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 }
             }
         }
+        self.catalog._templates["entity_templates/area_transition"] = {
+            "parameters": {
+                "target_area": "areas/start",
+                "destination_entity_id": "spawn_marker",
+            },
+            "entity_commands": {
+                "on_occupant_enter": {
+                    "enabled": True,
+                    "commands": [
+                        {
+                            "type": "change_area",
+                            "area_id": "$target_area",
+                            "destination_entity_id": "$destination_entity_id",
+                        }
+                    ],
+                }
+            },
+        }
+        self.catalog._templates["entity_templates/button_target"] = {
+            "parameters": {
+                "target_entity_id": "",
+                "target_press_command_id": "contribute_on",
+            },
+            "entity_commands": {
+                "interact": {
+                    "enabled": True,
+                    "commands": [
+                        {
+                            "type": "run_entity_command",
+                            "entity_id": "$target_entity_id",
+                            "command_id": "$target_press_command_id",
+                        }
+                    ],
+                }
+            },
+        }
         self.panel.set_template_catalog(self.catalog)
 
     def test_build_entity_from_fields_parses_named_parameters(self):
@@ -343,3 +379,43 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             "Persistence variable 'times_pushed' must be true or false.",
         ):
             self.panel.build_entity_from_fields()
+
+    def test_template_parameter_defaults_show_as_placeholders(self):
+        entity = EntityDocument(
+            id="to_start_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/area_transition",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertIn("target_area", fields._parameter_edits)
+        self.assertIn("destination_entity_id", fields._parameter_edits)
+        self.assertEqual(
+            fields._parameter_edits["target_area"].placeholderText(),
+            "areas/start",
+        )
+        self.assertEqual(
+            fields._parameter_edits["destination_entity_id"].placeholderText(),
+            "spawn_marker",
+        )
+
+    def test_entity_command_parameters_do_not_get_project_command_picker(self):
+        entity = EntityDocument(
+            id="button_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/button_target",
+        )
+
+        self.panel.set_reference_picker_callbacks(
+            entity_picker=lambda current: "gate_1",
+            command_picker=lambda current: "commands/system/open_gate",
+        )
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertIn("target_entity_id", fields._parameter_browse_buttons)
+        self.assertNotIn("target_press_command_id", fields._parameter_browse_buttons)

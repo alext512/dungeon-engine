@@ -130,3 +130,30 @@ class TestTemplateCatalog(unittest.TestCase):
             catalog.get_template_parameter_names("entity_templates/door"),
             ["target_entry"],
         )
+
+    def test_get_template_parameter_defaults_returns_authored_defaults(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/transition"] = {
+            "parameters": {
+                "target_area": "areas/start",
+                "destination_entity_id": "spawn_marker",
+            },
+            "entity_commands": {
+                "interact": {
+                    "enabled": True,
+                    "commands": [
+                        {"type": "change_area", "area_id": "$target_area"}
+                    ],
+                }
+            },
+        }
+
+        defaults = catalog.get_template_parameter_defaults("entity_templates/transition")
+
+        self.assertEqual(
+            defaults,
+            {
+                "target_area": "areas/start",
+                "destination_entity_id": "spawn_marker",
+            },
+        )

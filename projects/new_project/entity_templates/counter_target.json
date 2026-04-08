@@ -3,14 +3,16 @@
   "solid": false,
   "visible": false,
   "interactable": false,
-  "variables": {
+  "parameters": {
     "required_count": 1,
-    "current_count": 0,
-    "completed": false,
     "reversible": true,
     "target_entity_id": "",
     "on_completed_command_id": "",
     "on_uncompleted_command_id": ""
+  },
+  "variables": {
+    "current_count": 0,
+    "completed": false
   },
   "entity_commands": {
     "contribute_on": {
@@ -34,7 +36,7 @@
       "commands": [
         {
           "type": "if",
-          "left": "$self.reversible",
+          "left": "$reversible",
           "op": "eq",
           "right": true,
           "then": [
@@ -74,7 +76,7 @@
               "type": "if",
               "left": "$self.current_count",
               "op": "gte",
-              "right": "$self.required_count",
+              "right": "$required_count",
               "then": [
                 {
                   "type": "set_entity_var",
@@ -84,8 +86,8 @@
                 },
                 {
                   "type": "run_entity_command",
-                  "entity_id": "$self.target_entity_id",
-                  "command_id": "$self.on_completed_command_id"
+                  "entity_id": "$target_entity_id",
+                  "command_id": "$on_completed_command_id"
                 }
               ]
             }
@@ -98,7 +100,7 @@
       "commands": [
         {
           "type": "if",
-          "left": "$self.reversible",
+          "left": "$reversible",
           "op": "eq",
           "right": true,
           "then": [
@@ -112,7 +114,7 @@
                   "type": "if",
                   "left": "$self.current_count",
                   "op": "lt",
-                  "right": "$self.required_count",
+                  "right": "$required_count",
                   "then": [
                     {
                       "type": "set_entity_var",
@@ -122,8 +124,8 @@
                     },
                     {
                       "type": "run_entity_command",
-                      "entity_id": "$self.target_entity_id",
-                      "command_id": "$self.on_uncompleted_command_id"
+                      "entity_id": "$target_entity_id",
+                      "command_id": "$on_uncompleted_command_id"
                     }
                   ]
                 }
