@@ -24,7 +24,7 @@ The current editor is already strong for project and area authoring. It can:
 - select tile rectangles, copy, cut, paste, and delete them
 - select multi-tile tileset regions and paint them as stamps
 - add, rename, delete, reorder, and duplicate tile layers
-- place, select, delete, and nudge entities
+- place, select, delete, and nudge entities, including basic screen-space template placement from the screen pane
 - edit render properties
 - edit area startup behavior through a dedicated `Area Start` surface
 - edit project manifest data, shared variables, items, global entities, templates, and entity instances through structured tabs
@@ -46,7 +46,7 @@ Right now the best mental model is:
 
 - it is an excellent area editor
 - it already covers several project-level content surfaces
-- it still has catch-up work to do for some newer runtime-facing fields and workflows
+- it still has catch-up work to do for some newer runtime-facing fields and richer direct-manipulation workflows
 
 ## Recommended Usage
 

@@ -8,8 +8,9 @@ Status: active architecture note for the current standalone editor.
 The editor has moved well beyond the earliest phase-1 slice. Editing, saving,
 focused validation, project-level surfaces, and reference-aware file workflows
 are implemented. The main remaining planned areas are runtime handoff/launch
-integration, broader structured coverage for newer engine-owned fields, and
-continued internal decomposition as the tool grows.
+integration, broader structured coverage for newer engine-owned fields, richer
+direct-manipulation workflows, and continued internal decomposition as the tool
+grows.
 
 ## High-Level Shape
 
@@ -24,6 +25,8 @@ Current slices:
 - tileset, asset, and template catalog support
 - focused editing operations for tiles, cell flags, entities, areas, and
   tilesets
+- world-space entity placement plus basic screen-space placement, selection,
+  and nudging support
 - structured editors for project manifest, shared variables, items, templates,
   global entities, and entity instances
 - reference-aware file/folder reorganization for file-backed content
@@ -33,7 +36,7 @@ Current slices:
 Planned later slices:
 
 - broader structured coverage for newer engine-owned fields and workflows
-- richer screen-space placement/manipulation workflows
+- richer direct-manipulation workflows, especially for screen-space content
 - runtime handoff / launch integration
 - tool-owned settings
 
@@ -156,5 +159,5 @@ The next recommended order is:
 
 8. continue splitting large editor modules into clearer services/helpers
 9. broaden structured editing for newer engine-owned entity/workflow fields
-10. improve screen-space placement/manipulation workflows
+10. improve direct-manipulation workflows such as drag editing and richer screen-space placement polish
 11. add runtime launch/handoff integration

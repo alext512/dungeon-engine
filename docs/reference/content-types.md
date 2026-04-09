@@ -99,6 +99,8 @@ Not every content file needs a manifest category.
 
 Any ordinary JSON file under the project root can be loaded through the `$json_file` value source. This is why dialogue data often lives under `dialogues/` without needing a dedicated manifest field.
 
+That said, `dialogues/` is more than just a style preference right now. Dialogue and menu data conventionally lives there, editor dialogue pickers use that convention, and startup command/static-reference auditing also scans that tree specifically.
+
 ## Path-Derived IDs
 
 Typed content gets ids from its file path under the configured root.

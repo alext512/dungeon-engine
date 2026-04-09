@@ -46,6 +46,7 @@ The external editor already supports:
 - If you want to get the engine running quickly, start with [Getting Started](getting-started/index.md).
 - If you want to make content, go to [Authoring Workflow](guides/authoring-workflow.md) and [Project Manifest](reference/project-manifest.md).
 - If you want to understand how gameplay logic works, read [Command System](guides/command-system.md) and [Built-in Commands](reference/builtin-commands.md).
+- If you are validating content or changing command surfaces, read [Validation and Startup Checks](guides/validation-and-startup-checks.md).
 - If you want to use or extend the editor, read [Editor Overview](editor/index.md) and [Editor Workflow](editor/workflow.md).
 - If you are modifying the codebase or using coding agents, read [For Coding Agents](architecture/for-coding-agents.md) and [Docs Maintenance](contributing/docs-maintenance.md).
 
@@ -63,7 +64,7 @@ This docs site is the guided front door. The deep canonical sources still live i
 ## Current Limits Worth Knowing Up Front
 
 - The editor is strong but not fully caught up with every newer runtime surface.
-- Runtime handoff from the editor, richer screen-space placement, and some structured editing coverage are still missing.
+- Runtime handoff from the editor, richer screen-space direct manipulation, and some structured editing coverage are still missing.
 - The JSON contract is rich enough that advanced workflows still sometimes fall back to raw JSON editing.
 
 ## A Good First Goal

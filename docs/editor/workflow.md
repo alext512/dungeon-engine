@@ -57,12 +57,15 @@ This is important because:
 Current entity workflows include:
 
 - world-space entity placement from templates
+- screen-space template placement from the screen pane
 - selection of stacked entities by cell
 - screen-space entity selection from the screen pane
 - nudging world entities by tiles
 - nudging screen-space entities by pixels
 - structured editing of common instance fields
 - guarded raw JSON editing for the rest
+
+If the active template is screen-space, keep `Paint` mode active and click inside the screen pane to place the new entity at screen-pixel coordinates.
 
 ## Area Startup Editing
 

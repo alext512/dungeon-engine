@@ -84,7 +84,7 @@ It now supports active authoring workflows such as:
 - multi-tile tileset selection that paints as a stamp brush
 - tile-layer add/rename/delete/reorder
 - area duplication as either a full copy or a layout-only shell copy
-- entity placement, selection, deletion, and nudging
+- world- and screen-space entity placement, selection, deletion, and nudging
 - a tabbed right-side area workspace with `Layers` plus `Area Start`
   `enter_commands` helpers for common actions like input routing, dialogue,
   camera follow, and music
@@ -95,9 +95,9 @@ It now supports active authoring workflows such as:
 
 The editor is still not fully caught up with every newer runtime-facing workflow,
 but it has moved well beyond the earlier area-only slice. The main remaining gaps
-are things like runtime handoff/launch integration, richer visual screen-space
-placement, drag-to-move entity manipulation, and broader structured editing for
-newer engine-owned fields.
+are things like runtime handoff/launch integration, richer screen-space
+direct-manipulation workflows, drag-to-move entity manipulation, and broader
+structured editing for newer engine-owned fields.
 
 The older built-in editor is archived under [archived_editor](./archived_editor/)
 for reference only.
@@ -205,9 +205,10 @@ On Windows, you can also double-click:
 - `WASD` or arrow keys: move
 - `Space` or `Enter`: interact, advance dialogue, confirm a choice
 - `I`: open inventory directly when the active project routes the `inventory` action
-- `Escape`: open the pause menu in playable areas
+- `Escape`: request the routed `menu` action when the active project routes it
 
-If debug inspection is enabled in the active project's `project.json`:
+If debug inspection is enabled in the active project's `project.json` and the
+project routes the matching debug actions:
 
 - `F6`: pause or resume simulation
 - `F7`: step one simulation tick
@@ -324,9 +325,9 @@ cd tools/area_editor
 ..\..\.venv/Scripts/python -m unittest discover -s tests -v
 ```
 
-Startup validation now also validates known command-bearing JSON surfaces for
-strict-command key mismatches. Likely top-level key typos on strict primitive
-commands now fail before launch instead of slipping into runtime behavior.
+Startup validation now also audits known command-bearing JSON surfaces for
+strict-command key mismatches and validates statically resolvable dialogue and
+asset references before launch.
 
 If you keep repo-local example projects under `projects/`, validate each
 present `project.json` directly after command-surface or content-authoring
@@ -336,7 +337,7 @@ changes.
 
 - save/load UX works, but is still basic
 - external PNG import workflow is not finished
-- the external area editor still has a few important gaps, especially runtime handoff, visual screen-space placement, drag-to-move entity manipulation, and broader structured editing for some newer engine-owned fields
+- the external area editor still has a few important gaps, especially runtime handoff, richer screen-space direct-manipulation workflows, drag-to-move entity manipulation, and broader structured editing for some newer engine-owned fields
 - movement/render feel should still be checked periodically on real hardware as
   the project grows
 
@@ -344,7 +345,7 @@ changes.
 
 - build more real project content and let that pressure guide engine changes
 - expand dialogue/menu authoring support
-- continue turning the external editor into a fuller authoring tool, especially around runtime handoff, visual screen-space placement, drag manipulation, and broader structured editing of newer engine-owned fields
+- continue turning the external editor into a fuller authoring tool, especially around runtime handoff, richer screen-space direct manipulation, drag manipulation, and broader structured editing of newer engine-owned fields
 - keep improving movement/render quality
 
 ## License

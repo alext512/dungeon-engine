@@ -168,15 +168,18 @@ mention old module boundaries.
 
 These were already identified during the initial review:
 
-- `tools/area_editor/ARCHITECTURE.md` understates the currently implemented
-  editor surface and still reads partly like a much earlier phase snapshot.
+- `tools/area_editor/ARCHITECTURE.md` drift was resolved during the 2026-04-08
+  code-backed docs audit.
 
 Potential follow-up audit targets:
 
-- `README.md` versus editor docs for wording around current editor limitations
-- `architecture.md` versus newer engine-owned runtime sessions and current
-  command-surface reality
+- dialogue-folder startup scanning versus the broader `$json_file` contract
+- dialogue UI preset override semantics versus inventory UI preset merging
 - any plan files that are easy to misread as active current-state docs
+
+See also:
+
+- `plans/documentation_followup_questions.md`
 
 ---
 

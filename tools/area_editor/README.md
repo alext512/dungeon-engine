@@ -23,9 +23,9 @@ Phase 3 is in active use.
 The editor is currently a strong project/area authoring tool, but it is still not the
 entire runtime authoring surface. The earlier catch-up pass for items, project-level
 config, `global_entities`, reference-aware content reorganization, and safer layer
-management is now in place. The main remaining gaps are visual screen-space placement,
-drag-to-move manipulation, runtime handoff, and broader structured editing for some
-newer engine-owned fields.
+management is now in place. The main remaining gaps are richer screen-space
+manipulation workflows, drag-to-move manipulation, runtime handoff, and broader
+structured editing for some newer engine-owned fields.
 
 The current editor can:
 
@@ -45,6 +45,7 @@ The current editor can:
 - add, rename, delete, and reorder real tile layers
 - duplicate areas either as a `Full Copy` or as a stripped `Layout Copy`
 - place and delete world-space entities with the template brush
+- place screen-space entities with a screen-space template brush in the screen pane
 - select stacked world entities by cell and select screen-space entities from the screen pane
 - nudge selected world entities by tiles and selected screen-space entities by pixels
 - use a tabbed right-side area workspace so `Layers` stays focused and area
@@ -65,11 +66,11 @@ The current editor can:
   and delete completely empty folders
 - save edited area files back to JSON with unknown-field preservation
 - write known dense JSON matrices such as tile grids in a more readable compact form
-- run focused automated tests around manifest loading, canvas interaction, and document round-tripping
+- run focused automated tests around manifest loading, canvas interaction, editor panels, and document round-tripping
 
 What is still not implemented:
 
-- visual placement of new screen-space entities from the canvas
+- richer screen-space direct manipulation such as drag-style placement/editing polish
 - drag-to-move entity manipulation
 - broader structured editing for newer engine-owned entity fields and exposed workflow variables
 - runtime handoff / launch integration
@@ -94,7 +95,8 @@ The area canvas now includes a separate screen pane to the right of the world gr
 - It is a reference frame for area-owned screen-space entities only.
 - Its size comes from the project's configured shared variables display size, with runtime-matching defaults when that data is absent.
 - Existing screen-space entities can be selected, nudged, and deleted there.
-- Screen-space paint/placement is intentionally deferred for now.
+- Screen-space templates can be placed there by selecting a screen-space template brush and clicking in the pane.
+- Richer direct manipulation in that pane is still a future improvement.
 - `global_entities` from `project.json` are not shown in the area canvas yet.
 
 ## Tile Selection Notes

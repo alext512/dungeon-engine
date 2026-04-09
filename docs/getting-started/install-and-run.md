@@ -48,6 +48,8 @@ Useful smoke command:
 .venv/Scripts/python run_game.py --project projects/new_project --headless --max-frames 2
 ```
 
+Headless mode requires `--project`.
+
 ## Run The Editor
 
 From `tools/area_editor/`:
@@ -94,3 +96,5 @@ If you change command surfaces, authoring conventions, or repo-local example pro
 - prefer startup-style validation paths, not only low-level tests
 
 The validation workflow is documented in the repo's [AGENTS.md](https://github.com/alext512/dungeon-engine/blob/main/AGENTS.md) and [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md).
+
+For the exact startup pipeline, audited JSON surfaces, and what the static-reference pass does and does not catch, see [Validation and Startup Checks](../guides/validation-and-startup-checks.md).

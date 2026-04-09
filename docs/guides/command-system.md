@@ -124,6 +124,27 @@ Use `run_project_command` when the behavior is project-wide reusable logic that 
 
 Both commands can forward extra fields as runtime params, which the called flow can read through `$param_name` tokens.
 
+They can also forward named entity refs through `entity_refs`, which is one of the cleanest ways to keep authored flows reusable without hardcoding one concrete entity id.
+
+Example:
+
+```json
+{
+  "type": "run_project_command",
+  "command_id": "commands/open_gate",
+  "entity_refs": {
+    "instigator": "$self_id",
+    "gate": "gate_a"
+  }
+}
+```
+
+Inside the called flow:
+
+- use `$ref_ids.gate` when a command field expects an entity id
+- use `$refs.gate.some_var` when you want to read that referenced entity's variables
+- use `refs_mode` on flow-composition commands when a child flow should inherit, merge, or replace the current named-ref map
+
 ## Flow Composition Patterns
 
 ### Sequential work
@@ -172,12 +193,17 @@ Example:
 Commands can reference runtime data through tokens such as:
 
 - `$self_id`
+- `$ref_ids.some_name`
+- `$refs.some_name.some_var`
 - `$current_area.some_var`
 - `$project.some_value`
 - `$param_name`
-- `$entity_refs.some_name`
+
+Author-facing `entity_refs` inputs populate the runtime `$refs...` and `$ref_ids...` token families.
 
 The engine also supports richer structured value-source objects. See [Runtime Tokens](../reference/runtime-tokens.md) for the quick map and the repo's JSON interface doc for the exhaustive surface.
+
+One practical rule matters a lot: strict primitive commands still expect real entity ids in fields like `entity_id`, so use `$self_id` or `$ref_ids.some_name` there instead of inventing your own symbolic string format.
 
 ## Validation Matters
 
@@ -188,6 +214,8 @@ If you change command names, command ids, or command-bearing JSON surfaces:
 - prefer startup-style validation paths
 
 This project already treats command-surface drift as a serious risk because a generic engine test pass does not guarantee that every authored project still validates.
+
+The exact startup audit surface is documented in [Validation and Startup Checks](validation-and-startup-checks.md).
 
 ## Exact Reference
 

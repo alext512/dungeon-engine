@@ -6,7 +6,7 @@ The editor has moved well beyond the earliest phase, but it is not fully caught 
 
 The most important current gaps are:
 
-- visual placement of new screen-space entities from the canvas
+- richer screen-space placement and direct-manipulation workflows
 - drag-to-move entity manipulation
 - runtime handoff or launch integration
 - broader structured editing coverage for newer engine-owned entity fields and workflow values
@@ -32,7 +32,7 @@ Based on the current roadmap and future-features notes, the next valuable steps 
 
 - broader structured coverage for engine-owned fields
 - clearer reference pickers and broken-reference surfacing
-- better screen-space placement workflows
+- better screen-space manipulation and placement polish
 - runtime launch or handoff from the editor
 - richer content editing for dialogue and commands
 

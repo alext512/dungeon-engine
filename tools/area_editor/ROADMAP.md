@@ -88,7 +88,7 @@ Current status:
   guarded raw JSON fallback tabs
 - the main remaining gaps are broader structured coverage for newer
   engine-owned fields plus better direct manipulation workflows such as drag to
-  move and screen-space placement
+  move and richer screen-space editing polish
 
 Deliverables:
 

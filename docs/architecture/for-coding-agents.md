@@ -59,6 +59,8 @@ If you touch command surfaces, authoring conventions, or repo-local example proj
 
 If you touch `tools/area_editor/`, also run its own test suite from inside that folder.
 
+Use [Validation and Startup Checks](../guides/validation-and-startup-checks.md) when you need the exact current startup pipeline and the command-bearing surfaces the runtime audits before launch.
+
 ## Documentation Rules
 
 - Do not let plans silently become truth.

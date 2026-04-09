@@ -63,10 +63,14 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 - `run_commands_for_collection` iterates a collection and runs one command list per item.
 - `if` branches on a comparison result.
 
+These flow-composition commands can also carry `source_entity_id`, `entity_refs`, and `refs_mode` so the child flow has the right calling context.
+
 ## Entity And Project Command Dispatch
 
 - `run_entity_command` calls a named command on a specific entity.
 - `run_project_command` calls a reusable project command by path-derived id.
+
+When a called flow needs referenced entities, author `entity_refs` on the caller and then use `$ref_ids.name` inside entity-target fields or `$refs.name.some_var` for variable reads.
 
 ## Entity-Command And Input Routing
 

@@ -63,6 +63,7 @@ nav:
       - Engine Concepts: guides/engine-concepts.md
       - Authoring Workflow: guides/authoring-workflow.md
       - Command System: guides/command-system.md
+      - Validation and Startup Checks: guides/validation-and-startup-checks.md
       - Dialogue, Inventory, and UI: guides/dialogue-inventory-ui.md
   - Reference:
       - Overview: reference/index.md

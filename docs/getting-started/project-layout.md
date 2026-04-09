@@ -41,6 +41,8 @@ my_project/
 
 The stable contract is the file format, not the fact that a project happens to live under `projects/`.
 
+`dialogues/` is conventional rather than manifest-indexed, but it is still an important convention today: dialogue/menu JSON often lives there, editor pickers expect it, and startup dialogue auditing currently scans that tree specifically.
+
 ## Path-Derived IDs
 
 Areas, templates, commands, and items derive identity from their path under configured content roots.
