@@ -63,7 +63,7 @@ tools\area_editor\Run_Editor.cmd
 tools\area_editor\Run_Editor.cmd --project ..\..\projects\new_project\project.json
 ```
 
-The Windows launcher now tries to help beginners:
+The Windows launcher also handles the initial setup steps automatically:
 
 - it creates `tools\area_editor\.venv` if needed
 - it installs the editor requirements automatically

@@ -1,8 +1,8 @@
 # Absolute Beginner Quickstart
 
-Use this page if you are completely new to this project, new to JSON, or even new to Python-based tools in general.
+Use this page if you are new to this project, new to JSON-based authoring, or new to Python-based tools in general.
 
-This page is intentionally practical. The goal is not to explain everything at once. The goal is to get you from "I opened the repo" to "I made a visible change" with the least confusion possible.
+This page is intentionally practical. It is meant to get you from opening the repo to making one visible change, while also explaining the basic workflow in plain language.
 
 ## What This Project Actually Is
 
@@ -12,7 +12,7 @@ This project is a game engine plus an editor.
 - the editor helps you build and change game content
 - the game content mostly lives in JSON files
 
-If "JSON" sounds scary, treat it as this:
+For this project, JSON is simply:
 
 - JSON is just a structured text file
 - the engine reads those text files to know what your game contains
@@ -54,7 +54,7 @@ If you are on Windows, start with:
 tools\area_editor\Run_Editor.cmd
 ```
 
-That launcher is meant to be beginner-friendlier than typing commands by hand:
+That launcher is the simplest way to start the editor on Windows:
 
 - if the editor environment does not exist yet, it creates one
 - if the editor dependencies are missing, it installs them
@@ -96,7 +96,7 @@ Good beginner-safe examples:
 - move one entity by one cell
 - change one render property
 
-Do not worry yet about making something "good". The point is just to prove the workflow to yourself.
+At this stage, the goal is simply to confirm the workflow: edit, save, and see the result in the game.
 
 ## Step 5: Save
 
@@ -181,16 +181,16 @@ Use raw JSON when you want to:
 - edit a field the structured UI does not expose yet
 - copy or compare exact data more directly
 
-## If You Feel Lost
+## If You Need To Reorient
 
-That is normal. The easiest recovery path is:
+A reliable way to get back on track is:
 
 1. go back to the sample project
 2. inspect one area and one entity template
 3. make one tiny change
 4. run again
 
-You do not need to understand the whole engine before you can use it.
+You do not need a full understanding of the engine before you can start using it productively.
 
 ## Where To Go Next
 
