@@ -9,6 +9,7 @@ does not yet know about.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,8 +23,17 @@ from area_editor.json_format import format_json_for_editor
 CellFlag = bool | dict[str, Any] | None
 
 
+def _normalize_entity_space(space: str) -> str:
+    normalized = str(space).strip().lower()
+    return normalized or "world"
+
+
+def _default_entity_render_order(space: str) -> int:
+    return 10 if _normalize_entity_space(space) == "world" else 0
+
+
 def _default_entity_y_sort(space: str) -> bool:
-    return str(space).strip().lower() == "world"
+    return _normalize_entity_space(space) == "world"
 
 
 @dataclass
@@ -127,7 +137,7 @@ class EntityDocument:
             pixel_x=d.pop("pixel_x", None),
             pixel_y=d.pop("pixel_y", None),
             space=space,
-            render_order=int(d.pop("render_order", 10 if str(space).strip().lower() == "world" else 0)),
+            render_order=int(d.pop("render_order", _default_entity_render_order(space))),
             y_sort=bool(d.pop("y_sort", _default_entity_y_sort(space))),
             sort_y_offset=float(d.pop("sort_y_offset", 0.0)),
             stack_order=int(d.pop("stack_order", 0)),
@@ -147,10 +157,14 @@ class EntityDocument:
             out["pixel_y"] = self.pixel_y
         if self.space != "world":
             out["space"] = self.space
-        out["render_order"] = self.render_order
-        out["y_sort"] = self.y_sort
-        out["sort_y_offset"] = self.sort_y_offset
-        out["stack_order"] = self.stack_order
+        if self.render_order != _default_entity_render_order(self.space):
+            out["render_order"] = self.render_order
+        if self.y_sort != _default_entity_y_sort(self.space):
+            out["y_sort"] = self.y_sort
+        if not math.isclose(float(self.sort_y_offset), 0.0, abs_tol=0.001):
+            out["sort_y_offset"] = self.sort_y_offset
+        if self.stack_order != 0:
+            out["stack_order"] = self.stack_order
         if self.template is not None:
             out["template"] = self.template
         if self.parameters is not None:

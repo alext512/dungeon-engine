@@ -62,7 +62,6 @@
       "id": "title_backdrop",
       "pixel_x": 0,
       "pixel_y": 0,
-      "render_order": 0,
       "template": "entity_templates/screen_sprite",
       "parameters": {
         "sprite_path": "assets/project/ui/title/backdrop.png",

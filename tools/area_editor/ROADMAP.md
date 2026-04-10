@@ -67,11 +67,13 @@ Implemented:
 
 Current reality note:
 
-- the editor is usable for area-centric work
-- the runtime has moved ahead in other authoring surfaces
-- the next practical work is a catch-up slice for item definitions,
-  `shared_variables.json` / UI preset editing, `global_entities`, and better
-  configuration of placed entities
+- the editor is already usable for both area-centric work and several
+  project-level workflows
+- item definitions, `shared_variables.json` / UI preset editing, and
+  `global_entities` are now implemented in structured form
+- the next practical work is the remaining catch-up slice: better direct
+  manipulation, richer reference pickers, broader structured coverage for
+  newer engine-owned fields, and runtime launch/handoff
 
 ## Phase 4: Placed Entity Catch-Up
 
@@ -203,8 +205,9 @@ Goal:
 
 Current status:
 
-- partially implemented through structured item, template, project-manifest,
-  shared-variables, global-entity, and entity-instance editing surfaces
+- substantially implemented through structured item, template,
+  project-manifest, shared-variables, global-entity, and entity-instance
+  editing surfaces
 - guarded JSON tabs cover dialogue/menu and command payload editing today
 - the remaining gaps are richer structured dialogue/menu editing and continued
   workflow polish around newer authoring surfaces

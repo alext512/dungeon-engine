@@ -15,7 +15,7 @@ Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
 Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/my_game/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
-The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and supports active area editing workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, and guarded JSON editing. However, the runtime has recently expanded faster than the editor, so the tool currently lags behind newer authoring surfaces such as item browsing/editing, shared project config and UI presets, `global_entities`, some engine-owned entity fields, screen-space placement, richer reference pickers, and runtime handoff. Assume an editor catch-up pass is still needed unless the relevant workflow is already confirmed in code.
+The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and already supports active area editing plus broader project-authoring workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, project manifest and shared-variable editing, item/global-entity editing, and guarded JSON editing. The main remaining gaps are broader coverage for some newer engine-owned fields, richer reference pickers, stronger screen-space direct manipulation, and runtime handoff.
 
 ## How to Run
 
@@ -35,8 +35,8 @@ Or double-click `Run_Game.cmd`.
 |---|---|
 | `docs/project/project-spirit.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
 | `README.md` | Current features, project-authoring expectations, controls, verification commands |
-| `docs/manuals/authoring-guide.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
-| `docs/manuals/engine-json-interface.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
+| `docs/authoring/manuals/authoring-guide.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
+| `docs/authoring/manuals/engine-json-interface.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
 | `docs/project/architecture-direction.md` | Design principles and medium-term architectural direction |
 | `CONTRIBUTING.md` | Working rules and project direction |
 | `CHANGELOG.md` | Reverse-chronological history of functionality changes |

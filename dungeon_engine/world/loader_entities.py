@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from dungeon_engine.authored_command_validation import (
+    RESERVED_ENTITY_IDS,
+    validate_authored_command_tree,
+)
 from dungeon_engine.inventory import clone_inventory_state
 from dungeon_engine.items import load_item_definition
 from dungeon_engine.logging_utils import get_logger
@@ -23,37 +27,6 @@ from dungeon_engine.world.entity import (
 logger = get_logger(__name__)
 
 _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
-_RESERVED_ENTITY_IDS = {"self"}
-_STRICT_ENTITY_TARGET_COMMANDS = {
-    "set_entity_var",
-    "add_entity_var",
-    "toggle_entity_var",
-    "set_entity_var_length",
-    "append_entity_var",
-    "pop_entity_var",
-    "set_entity_command_enabled",
-    "set_entity_commands_enabled",
-    "set_input_target",
-    "set_entity_field",
-    "set_entity_fields",
-    "route_inputs_to_entity",
-    "set_camera_follow",
-    "set_entity_grid_position",
-    "set_entity_world_position",
-    "set_entity_screen_position",
-    "move_entity_world_position",
-    "move_entity_screen_position",
-    "wait_for_move",
-    "play_animation",
-    "wait_for_animation",
-    "stop_animation",
-    "set_visual_frame",
-    "set_visual_flip_x",
-    "set_visible",
-    "set_present",
-    "set_color",
-    "destroy_entity",
-}
 
 
 class EntityTemplateValidationError(ValueError):
@@ -81,30 +54,6 @@ class EntityTemplateValidationError(ValueError):
             lines.append(f"- ...and {hidden_count} more")
         return "\n".join(lines)
 
-
-def _validate_strict_camera_follow(
-    value: dict[str, Any],
-    *,
-    source_name: str,
-    location: str,
-) -> None:
-    """Reject symbolic follow.entity_id values on strict camera primitives."""
-    command_type = value.get("type")
-    if command_type not in {"set_camera_follow", "set_camera_state"}:
-        return
-    raw_follow = value.get("follow")
-    if not isinstance(raw_follow, dict):
-        return
-    symbolic_id = raw_follow.get("entity_id")
-    if symbolic_id not in _RESERVED_ENTITY_IDS:
-        return
-    raise ValueError(
-        f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
-        f"inside '{command_type}.follow.entity_id'; use '${symbolic_id}_id' or resolve the id "
-        "before invoking the primitive."
-    )
-
-
 def instantiate_entity(
     entity_instance: dict[str, Any],
     tile_size: int,
@@ -124,8 +73,8 @@ def instantiate_entity(
         source_name=source_name,
     )
     entity_id = _require_non_empty_string(entity_data, "id", source_name=source_name)
-    if entity_id in _RESERVED_ENTITY_IDS:
-        reserved_names = ", ".join(sorted(_RESERVED_ENTITY_IDS))
+    if entity_id in RESERVED_ENTITY_IDS:
+        reserved_names = ", ".join(sorted(RESERVED_ENTITY_IDS))
         raise ValueError(
             f"{source_name} field 'id' must not use reserved runtime entity reference "
             f"'{entity_id}' ({reserved_names})."
@@ -677,7 +626,7 @@ def _parse_entity_commands(entity_data: dict[str, Any]) -> dict[str, EntityComma
                     f"Entity command '{command_id}' must define both 'enabled' and 'commands'."
                 )
 
-            _validate_command_tree(
+            validate_authored_command_tree(
                 raw_command.get("commands", []),
                 source_name="Entity commands",
                 location=f"entity_commands.{command_id}.commands",
@@ -698,34 +647,6 @@ def _parse_input_map(raw_input_map: Any) -> dict[str, str]:
         str(action): str(command_name)
         for action, command_name in raw_input_map.items()
     }
-
-
-def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
-    """Enforce current command-tree invariants for authored command data."""
-    if isinstance(value, dict):
-        command_type = value.get("type")
-        if command_type in _STRICT_ENTITY_TARGET_COMMANDS and value.get("entity_id") in _RESERVED_ENTITY_IDS:
-            symbolic_id = value["entity_id"]
-            raise ValueError(
-                f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
-                f"with strict primitive '{command_type}'; use '${symbolic_id}_id' or resolve the id "
-                "before invoking the primitive."
-            )
-        _validate_strict_camera_follow(value, source_name=source_name, location=location)
-        for key, item in value.items():
-            child_location = f"{location}.{key}"
-            _validate_command_tree(item, source_name=source_name, location=child_location)
-        return
-
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _validate_command_tree(
-                item,
-                source_name=source_name,
-                location=f"{location}[{index}]",
-            )
-
-
 def validate_project_entity_templates(project: ProjectContext) -> None:
     """Validate entity template files for a project at startup.
 
@@ -809,7 +730,7 @@ def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: 
             raise ValueError(
                 f"{source_name} entity command '{command_id}' field 'commands' must be a JSON array."
             )
-        _validate_command_tree(
+        validate_authored_command_tree(
             raw_commands,
             source_name=source_name,
             location=f"entity_commands.{command_id}.commands",

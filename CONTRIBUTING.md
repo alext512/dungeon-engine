@@ -4,8 +4,8 @@ Read these files in this order:
 
 1. `docs/project/project-spirit.md`
 2. `README.md`
-3. `docs/manuals/authoring-guide.md`
-4. `docs/manuals/engine-json-interface.md`
+3. `docs/authoring/manuals/authoring-guide.md`
+4. `docs/authoring/manuals/engine-json-interface.md`
 5. `docs/project/architecture-direction.md`
 6. `roadmap.md`
 

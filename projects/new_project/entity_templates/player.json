@@ -65,32 +65,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_entity_fields",
-          "entity_id": "$self_id",
-          "set": {
-            "visuals": {
-              "down": {
-                "visible": false,
-                "current_frame": 0
-              },
-              "up": {
-                "visible": true,
-                "current_frame": 1
-              },
-              "side": {
-                "visible": false,
-                "current_frame": 2,
-                "flip_x": false
-              }
-            }
-          }
-        },
-        {
-          "type": "move_in_direction",
-          "entity_id": "$self_id",
+          "type": "run_project_command",
+          "command_id": "commands/player/move_one_tile",
           "direction": "up",
-          "frames_needed": "$project.movement.ticks_per_tile",
-          "wait": false
+          "facing_visual": "up"
         }
       ]
     },
@@ -98,32 +76,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_entity_fields",
-          "entity_id": "$self_id",
-          "set": {
-            "visuals": {
-              "down": {
-                "visible": true,
-                "current_frame": 0
-              },
-              "up": {
-                "visible": false,
-                "current_frame": 1
-              },
-              "side": {
-                "visible": false,
-                "current_frame": 2,
-                "flip_x": false
-              }
-            }
-          }
-        },
-        {
-          "type": "move_in_direction",
-          "entity_id": "$self_id",
+          "type": "run_project_command",
+          "command_id": "commands/player/move_one_tile",
           "direction": "down",
-          "frames_needed": "$project.movement.ticks_per_tile",
-          "wait": false
+          "facing_visual": "down"
         }
       ]
     },
@@ -131,32 +87,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_entity_fields",
-          "entity_id": "$self_id",
-          "set": {
-            "visuals": {
-              "down": {
-                "visible": false,
-                "current_frame": 0
-              },
-              "up": {
-                "visible": false,
-                "current_frame": 1
-              },
-              "side": {
-                "visible": true,
-                "current_frame": 2,
-                "flip_x": true
-              }
-            }
-          }
-        },
-        {
-          "type": "move_in_direction",
-          "entity_id": "$self_id",
+          "type": "run_project_command",
+          "command_id": "commands/player/move_one_tile",
           "direction": "left",
-          "frames_needed": "$project.movement.ticks_per_tile",
-          "wait": false
+          "facing_visual": "side"
         }
       ]
     },
@@ -164,32 +98,10 @@
       "enabled": true,
       "commands": [
         {
-          "type": "set_entity_fields",
-          "entity_id": "$self_id",
-          "set": {
-            "visuals": {
-              "down": {
-                "visible": false,
-                "current_frame": 0
-              },
-              "up": {
-                "visible": false,
-                "current_frame": 1
-              },
-              "side": {
-                "visible": true,
-                "current_frame": 2,
-                "flip_x": false
-              }
-            }
-          }
-        },
-        {
-          "type": "move_in_direction",
-          "entity_id": "$self_id",
+          "type": "run_project_command",
+          "command_id": "commands/player/move_one_tile",
           "direction": "right",
-          "frames_needed": "$project.movement.ticks_per_tile",
-          "wait": false
+          "facing_visual": "side"
         }
       ]
     },

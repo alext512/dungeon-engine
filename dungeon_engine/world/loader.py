@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from dungeon_engine import config
+from dungeon_engine.authored_command_validation import validate_authored_command_tree
 from dungeon_engine.logging_utils import get_logger
 from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
@@ -21,7 +22,6 @@ from dungeon_engine.world.loader_entities import (
     _coerce_int,
     _coerce_required_int,
     _require_non_empty_string,
-    _validate_command_tree,
     extract_template_parameter_names,
     instantiate_entity,
     list_entity_template_ids,
@@ -323,7 +323,7 @@ def _parse_command_list(
                 f"{source_name} field '{field_name}' must contain JSON objects "
                 f"(invalid entry at index {index})."
             )
-        _validate_command_tree(
+        validate_authored_command_tree(
             command,
             source_name=source_name,
             location=f"{field_name}[{index}]",

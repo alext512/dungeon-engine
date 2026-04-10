@@ -39,20 +39,12 @@
       "id": "transition_to_cave",
       "grid_x": 4,
       "grid_y": 8,
-      "render_order": 10,
-      "y_sort": true,
-      "sort_y_offset": 0.0,
-      "stack_order": 0,
       "template": "entity_templates/area_transition_target"
     },
     {
       "id": "area_transition_1",
       "grid_x": 4,
       "grid_y": 9,
-      "render_order": 10,
-      "y_sort": true,
-      "sort_y_offset": 0.0,
-      "stack_order": 0,
       "template": "entity_templates/area_transition"
     }
   ],

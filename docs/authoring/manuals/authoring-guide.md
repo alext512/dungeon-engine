@@ -433,6 +433,25 @@ Templates can also author top-level `parameters` defaults. Instance
 `parameters` override only the keys you set, which keeps reusable templates
 compact while still exposing the important knobs.
 
+You usually omit render-layering fields on placed entities unless that specific
+instance needs a non-default override. Default authored entity render values are:
+
+- world-space entities: `render_order: 10`, `y_sort: true`, `sort_y_offset: 0`, `stack_order: 0`
+- screen-space entities: `render_order: 0`, `y_sort: false`, `sort_y_offset: 0`, `stack_order: 0`
+
+So this is preferred:
+
+```json
+{
+  "id": "transition_to_cave",
+  "grid_x": 4,
+  "grid_y": 8,
+  "template": "entity_templates/area_transition_target"
+}
+```
+
+instead of repeating the default render values on every placed marker.
+
 ## Entity Templates
 
 Entity templates define reusable gameplay objects.
@@ -584,6 +603,9 @@ Entity rendering follows the same model as tile layers:
   Pixel adjustment applied to the entity's y-sort pivot.
 - `stack_order`
   Local tie-breaker after `render_order` and y-sort position.
+
+If an entity uses the default values for its `space`, leave these fields out of
+the authored JSON and only write the ones that truly differ.
 
 Project-specific state like `toggled`, `dialogue_path`, and custom puzzle data
 should live under `variables`.

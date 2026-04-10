@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dungeon_engine.authored_command_validation import validate_authored_command_tree
 from dungeon_engine.logging_utils import get_logger
 
 if TYPE_CHECKING:
@@ -15,60 +16,6 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
-_STRICT_ENTITY_TARGET_COMMANDS = {
-    "set_entity_var",
-    "add_entity_var",
-    "toggle_entity_var",
-    "set_entity_var_length",
-    "append_entity_var",
-    "pop_entity_var",
-    "set_entity_command_enabled",
-    "set_entity_commands_enabled",
-    "set_input_target",
-    "set_entity_field",
-    "set_entity_fields",
-    "route_inputs_to_entity",
-    "set_camera_follow",
-    "set_entity_grid_position",
-    "set_entity_world_position",
-    "set_entity_screen_position",
-    "move_entity_world_position",
-    "move_entity_screen_position",
-    "wait_for_move",
-    "play_animation",
-    "wait_for_animation",
-    "stop_animation",
-    "set_visual_frame",
-    "set_visual_flip_x",
-    "set_visible",
-    "set_present",
-    "set_color",
-    "destroy_entity",
-}
-_RESERVED_ENTITY_IDS = {"self"}
-
-
-def _validate_strict_camera_follow(
-    value: dict[str, Any],
-    *,
-    source_name: str,
-    location: str,
-) -> None:
-    """Reject symbolic follow.entity_id values on strict camera primitives."""
-    command_type = value.get("type")
-    if command_type not in {"set_camera_follow", "set_camera_state"}:
-        return
-    raw_follow = value.get("follow")
-    if not isinstance(raw_follow, dict):
-        return
-    symbolic_id = raw_follow.get("entity_id")
-    if symbolic_id not in _RESERVED_ENTITY_IDS:
-        return
-    raise ValueError(
-        f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
-        f"inside '{command_type}.follow.entity_id'; use '${symbolic_id}_id' or resolve the id "
-        "before invoking the primitive."
-    )
 
 
 @dataclass(slots=True)
@@ -266,7 +213,7 @@ def _load_project_command_definition_from_path(
             raise ValueError(
                 f"Command definition '{resolved_id}' must use JSON objects inside 'commands'."
             )
-        _validate_command_tree(
+        validate_authored_command_tree(
             command,
             source_name=f"Command definition '{resolved_id}'",
             location=f"commands[{index}]",
@@ -279,37 +226,6 @@ def _load_project_command_definition_from_path(
         commands=[dict(command) for command in raw_commands],
         source_path=command_path,
     )
-
-
-def _validate_command_tree(value: Any, *, source_name: str, location: str) -> None:
-    """Enforce current command-tree invariants for project command content."""
-    if isinstance(value, dict):
-        command_type = value.get("type")
-        if command_type in _STRICT_ENTITY_TARGET_COMMANDS and value.get("entity_id") in _RESERVED_ENTITY_IDS:
-            symbolic_id = value["entity_id"]
-            raise ValueError(
-                f"{source_name} command '{location}' must not use symbolic entity id '{symbolic_id}' "
-                f"with strict primitive '{command_type}'; use '${symbolic_id}_id' or resolve the id "
-                "before invoking the primitive."
-            )
-        _validate_strict_camera_follow(value, source_name=source_name, location=location)
-        for key, item in value.items():
-            _validate_command_tree(
-                item,
-                source_name=source_name,
-                location=f"{location}.{key}",
-            )
-        return
-
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _validate_command_tree(
-                item,
-                source_name=source_name,
-                location=f"{location}[{index}]",
-            )
-
-
 def instantiate_project_command_commands(
     definition: ProjectCommandDefinition,
     parameters: dict[str, Any],

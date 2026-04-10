@@ -403,6 +403,16 @@ Current engine-known entity fields:
 - `inventory`
 - `input_map`
 
+Render-field defaults may be omitted from authored entity JSON when they match
+the entity's space:
+
+- world-space entities default to `render_order: 10`, `y_sort: true`, `sort_y_offset: 0`, `stack_order: 0`
+- screen-space entities default to `render_order: 0`, `y_sort: false`, `sort_y_offset: 0`, `stack_order: 0`
+
+That applies to both inline entities and template instances. Serializers should
+only write these fields back out when the authored value differs from the
+default or from the referenced template.
+
 Template-only / instance metadata that the engine also tracks:
 - `template`
 - `parameters`

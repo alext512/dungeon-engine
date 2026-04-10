@@ -289,6 +289,90 @@ class ProjectContentContractTests(unittest.TestCase):
         self.assertEqual(entity_data["stack_order"], 9)
         self.assertNotIn("layer", entity_data)
 
+    def test_serialize_area_omits_default_entity_render_fields(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "marker.json": {
+                    "kind": "marker",
+                    "visible": False,
+                    "interactable": False,
+                }
+            }
+        )
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "inline_world",
+                "kind": "actor",
+                "grid_x": 0,
+                "grid_y": 0,
+                "render_order": 10,
+                "y_sort": True,
+                "sort_y_offset": 0,
+                "stack_order": 0,
+            },
+            {
+                "id": "screen_overlay",
+                "kind": "ui",
+                "space": "screen",
+                "pixel_x": 32,
+                "pixel_y": 48,
+                "render_order": 0,
+                "y_sort": False,
+                "sort_y_offset": 0,
+                "stack_order": 0,
+            },
+            {
+                "id": "template_marker",
+                "grid_x": 1,
+                "grid_y": 0,
+                "template": "entity_templates/marker",
+                "render_order": 10,
+                "y_sort": True,
+                "sort_y_offset": 0,
+                "stack_order": 0,
+            },
+            {
+                "id": "custom_render",
+                "kind": "actor",
+                "grid_x": 2,
+                "grid_y": 0,
+                "render_order": 12,
+                "y_sort": False,
+                "sort_y_offset": 5,
+                "stack_order": 9,
+            },
+        ]
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        serialized = serialize_area(area, world, project=project)
+        entities_by_id = {entity["id"]: entity for entity in serialized["entities"]}
+
+        inline_world = entities_by_id["inline_world"]
+        self.assertNotIn("render_order", inline_world)
+        self.assertNotIn("y_sort", inline_world)
+        self.assertNotIn("sort_y_offset", inline_world)
+        self.assertNotIn("stack_order", inline_world)
+
+        screen_overlay = entities_by_id["screen_overlay"]
+        self.assertNotIn("render_order", screen_overlay)
+        self.assertNotIn("y_sort", screen_overlay)
+        self.assertNotIn("sort_y_offset", screen_overlay)
+        self.assertNotIn("stack_order", screen_overlay)
+
+        template_marker = entities_by_id["template_marker"]
+        self.assertEqual(template_marker["template"], "entity_templates/marker")
+        self.assertNotIn("render_order", template_marker)
+        self.assertNotIn("y_sort", template_marker)
+        self.assertNotIn("sort_y_offset", template_marker)
+        self.assertNotIn("stack_order", template_marker)
+
+        custom_render = entities_by_id["custom_render"]
+        self.assertEqual(custom_render["render_order"], 12)
+        self.assertFalse(custom_render["y_sort"])
+        self.assertEqual(custom_render["sort_y_offset"], 5)
+        self.assertEqual(custom_render["stack_order"], 9)
+
     def test_area_loader_normalizes_blocked_and_walkable_cell_flags(self) -> None:
         _, project = self._make_project()
         raw_area = _minimal_area()

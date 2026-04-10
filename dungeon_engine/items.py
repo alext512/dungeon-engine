@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from dungeon_engine.commands.library import _validate_command_tree
+from dungeon_engine.authored_command_validation import validate_authored_command_tree
 from dungeon_engine.logging_utils import get_logger
 
 if TYPE_CHECKING:
@@ -277,7 +277,7 @@ def _parse_use_commands(raw_commands: Any, *, source_name: str) -> list[dict[str
     for index, raw_command in enumerate(raw_commands):
         if not isinstance(raw_command, dict):
             raise ValueError(f"{source_name} use_commands[{index}] must be a JSON object.")
-        _validate_command_tree(
+        validate_authored_command_tree(
             raw_command,
             source_name=source_name,
             location=f"use_commands[{index}]",

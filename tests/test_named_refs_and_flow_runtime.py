@@ -193,6 +193,134 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
 
         self.assertTrue(world.get_entity("lever").variables["toggled"])  # type: ignore[index]
 
+    def test_run_project_command_can_compute_entity_field_values_from_params(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "player/move_one_tile.json": {
+                    "params": ["direction", "facing_visual"],
+                    "commands": [
+                        {
+                            "type": "set_entity_fields",
+                            "entity_id": "$self_id",
+                            "set": {
+                                "visuals": {
+                                    "down": {
+                                        "visible": {
+                                            "$any_in_collection": {
+                                                "value": ["$facing_visual"],
+                                                "op": "eq",
+                                                "match": "down",
+                                            }
+                                        },
+                                        "current_frame": 0,
+                                    },
+                                    "up": {
+                                        "visible": {
+                                            "$any_in_collection": {
+                                                "value": ["$facing_visual"],
+                                                "op": "eq",
+                                                "match": "up",
+                                            }
+                                        },
+                                        "current_frame": 1,
+                                    },
+                                    "side": {
+                                        "visible": {
+                                            "$any_in_collection": {
+                                                "value": ["$facing_visual"],
+                                                "op": "eq",
+                                                "match": "side",
+                                            }
+                                        },
+                                        "current_frame": 2,
+                                        "flip_x": {
+                                            "$any_in_collection": {
+                                                "value": ["$direction"],
+                                                "op": "eq",
+                                                "match": "left",
+                                            }
+                                        },
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                }
+            }
+        )
+        player = Entity(
+            entity_id="player",
+            kind="player",
+            grid_x=0,
+            grid_y=0,
+            visuals=[
+                EntityVisual(
+                    visual_id="down",
+                    path="assets/project/sprites/test.png",
+                    frame_width=16,
+                    frame_height=16,
+                    frames=[0],
+                    visible=True,
+                ),
+                EntityVisual(
+                    visual_id="up",
+                    path="assets/project/sprites/test.png",
+                    frame_width=16,
+                    frame_height=16,
+                    frames=[1],
+                    visible=False,
+                ),
+                EntityVisual(
+                    visual_id="side",
+                    path="assets/project/sprites/test.png",
+                    frame_width=16,
+                    frame_height=16,
+                    frames=[2],
+                    visible=False,
+                    flip_x=False,
+                ),
+            ],
+        )
+        world = World()
+        world.add_entity(player)
+        registry, context = self._make_command_context(project=project, world=world)
+
+        left_handle = execute_registered_command(
+            registry,
+            context,
+            "run_project_command",
+            {
+                "command_id": "commands/player/move_one_tile",
+                "source_entity_id": "player",
+                "direction": "left",
+                "facing_visual": "side",
+            },
+        )
+        left_handle.update(0.0)
+
+        self.assertFalse(player.require_visual("down").visible)
+        self.assertFalse(player.require_visual("up").visible)
+        self.assertTrue(player.require_visual("side").visible)
+        self.assertTrue(player.require_visual("side").flip_x)
+
+        up_handle = execute_registered_command(
+            registry,
+            context,
+            "run_project_command",
+            {
+                "command_id": "commands/player/move_one_tile",
+                "source_entity_id": "player",
+                "direction": "up",
+                "facing_visual": "up",
+            },
+        )
+        up_handle.update(0.0)
+
+        self.assertFalse(player.require_visual("down").visible)
+        self.assertTrue(player.require_visual("up").visible)
+        self.assertFalse(player.require_visual("side").visible)
+        self.assertFalse(player.require_visual("side").flip_x)
+
     def test_run_commands_propagates_named_entity_refs(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever")

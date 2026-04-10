@@ -67,10 +67,6 @@
       "id": "player_1",
       "grid_x": 2,
       "grid_y": 4,
-      "render_order": 10,
-      "y_sort": true,
-      "sort_y_offset": 0.0,
-      "stack_order": 0,
       "template": "entity_templates/player",
       "facing": "up"
     },
@@ -78,20 +74,12 @@
       "id": "from_first_area_marker",
       "grid_x": 2,
       "grid_y": 4,
-      "render_order": 10,
-      "y_sort": true,
-      "sort_y_offset": 0.0,
-      "stack_order": 0,
       "template": "entity_templates/area_transition_target"
     },
     {
       "id": "to_first_area_1",
       "grid_x": 2,
       "grid_y": 1,
-      "render_order": 10,
-      "y_sort": true,
-      "sort_y_offset": 0.0,
-      "stack_order": 0,
       "template": "entity_templates/area_transition",
       "parameters": {
         "target_area": "areas/levels/first_area",

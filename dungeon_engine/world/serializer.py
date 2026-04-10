@@ -46,7 +46,12 @@ def serialize_area(
             for row in area.cell_flags
         ],
         "entities": [
-            serialize_entity_instance(entity, area.tile_size, project=project)
+            serialize_entity_instance(
+                entity,
+                area.tile_size,
+                project=project,
+                omit_default_render_fields=True,
+            )
             for entity in sorted(
                 world.iter_area_entities(include_absent=True),
                 key=world.entity_sort_key,
@@ -128,6 +133,7 @@ def serialize_entity_instance(
     tile_size: int,
     *,
     project: ProjectContext,
+    omit_default_render_fields: bool = False,
 ) -> dict[str, Any]:
     """Persist either a template instance or a fully inline entity definition."""
     data: dict[str, Any] = {
@@ -145,7 +151,13 @@ def serialize_entity_instance(
         data.update(_serialize_template_entity_overrides(entity, tile_size, project=project))
         return data
 
-    data.update(_serialize_runtime_entity_fields(entity, tile_size))
+    data.update(
+        _serialize_runtime_entity_fields(
+            entity,
+            tile_size,
+            omit_default_render_fields=omit_default_render_fields,
+        )
+    )
 
     visuals_data = _serialize_visuals(entity)
     if visuals_data:
@@ -243,7 +255,12 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
     return data
 
 
-def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, Any]:
+def _serialize_runtime_entity_fields(
+    entity: Any,
+    tile_size: int,
+    *,
+    omit_default_render_fields: bool,
+) -> dict[str, Any]:
     """Return the stable authored/runtime fields that should round-trip through JSON."""
     data = {
         "kind": entity.kind,
@@ -261,14 +278,16 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
         "interaction_priority": int(entity.interaction_priority),
         "entity_commands_enabled": entity.entity_commands_enabled,
         "inventory": serialize_inventory_state(entity.inventory),
-        "render_order": entity.render_order,
-        "y_sort": entity.y_sort,
-        "sort_y_offset": _serialize_number(entity.sort_y_offset),
-        "stack_order": entity.stack_order,
         "color": list(entity.color),
         "tags": copy.deepcopy(entity.tags),
         "variables": copy.deepcopy(entity.variables),
     }
+    data.update(
+        _serialize_entity_render_fields(
+            entity,
+            omit_defaults=omit_default_render_fields,
+        )
+    )
     persistence = _serialize_entity_persistence(entity)
     if persistence is not None:
         data["persistence"] = persistence
@@ -280,6 +299,31 @@ def _serialize_runtime_entity_fields(entity: Any, tile_size: int) -> dict[str, A
     entity_commands = _serialize_entity_commands(entity)
     if entity_commands:
         data["entity_commands"] = entity_commands
+    return data
+
+
+def _default_entity_render_order(space: str) -> int:
+    return 10 if str(space).strip().lower() == "world" else 0
+
+
+def _default_entity_y_sort(space: str) -> bool:
+    return str(space).strip().lower() == "world"
+
+
+def _serialize_entity_render_fields(entity: Any, *, omit_defaults: bool) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    render_order = int(entity.render_order)
+    y_sort = bool(entity.y_sort)
+    sort_y_offset = float(entity.sort_y_offset)
+    stack_order = int(entity.stack_order)
+    if not omit_defaults or render_order != _default_entity_render_order(entity.space):
+        data["render_order"] = render_order
+    if not omit_defaults or y_sort != _default_entity_y_sort(entity.space):
+        data["y_sort"] = y_sort
+    if not omit_defaults or not math.isclose(sort_y_offset, 0.0, abs_tol=0.001):
+        data["sort_y_offset"] = _serialize_number(sort_y_offset)
+    if not omit_defaults or stack_order != 0:
+        data["stack_order"] = stack_order
     return data
 
 

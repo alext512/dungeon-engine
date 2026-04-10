@@ -1,0 +1,57 @@
+{
+  "params": ["direction", "facing_visual"],
+  "commands": [
+    {
+      "type": "set_entity_fields",
+      "entity_id": "$self_id",
+      "set": {
+        "visuals": {
+          "down": {
+            "visible": {
+              "$any_in_collection": {
+                "value": ["$facing_visual"],
+                "op": "eq",
+                "match": "down"
+              }
+            },
+            "current_frame": 0
+          },
+          "up": {
+            "visible": {
+              "$any_in_collection": {
+                "value": ["$facing_visual"],
+                "op": "eq",
+                "match": "up"
+              }
+            },
+            "current_frame": 1
+          },
+          "side": {
+            "visible": {
+              "$any_in_collection": {
+                "value": ["$facing_visual"],
+                "op": "eq",
+                "match": "side"
+              }
+            },
+            "current_frame": 2,
+            "flip_x": {
+              "$any_in_collection": {
+                "value": ["$direction"],
+                "op": "eq",
+                "match": "left"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "move_in_direction",
+      "entity_id": "$self_id",
+      "direction": "$direction",
+      "frames_needed": "$project.movement.ticks_per_tile",
+      "wait": false
+    }
+  ]
+}

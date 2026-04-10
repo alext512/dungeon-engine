@@ -8,10 +8,10 @@ This docs site should stay aligned with the repo's existing documentation truth 
 
 These must stay close to implementation reality:
 
-- `docs/manuals/engine-json-interface.md`
-- `docs/manuals/authoring-guide.md`
+- `docs/authoring/manuals/engine-json-interface.md`
+- `docs/authoring/manuals/authoring-guide.md`
 - `README.md`
-- editor current-state docs such as `docs/editor/editor-manual.md`
+- editor current-state docs such as `docs/authoring/editor/editor-manual.md`
 
 ### Explanatory docs
 
@@ -19,7 +19,7 @@ These explain boundaries, direction, and architecture:
 
 - `docs/project/project-spirit.md`
 - `docs/project/architecture-direction.md`
-- `docs/editor/architecture.md`
+- `docs/development/editor-architecture.md`
 
 ### Planning docs
 
@@ -54,24 +54,24 @@ The MkDocs site is the curated front door. It should:
 
 If the JSON contract changes, review:
 
-- `docs/manuals/engine-json-interface.md`
-- `docs/manuals/authoring-guide.md`
+- `docs/authoring/manuals/engine-json-interface.md`
+- `docs/authoring/manuals/authoring-guide.md`
 - this site's reference pages
 - `README.md`
 - `CHANGELOG.md`
 
 If command behavior changes, review:
 
-- `docs/manuals/engine-json-interface.md`
-- `docs/manuals/authoring-guide.md`
+- `docs/authoring/manuals/engine-json-interface.md`
+- `docs/authoring/manuals/authoring-guide.md`
 - this site's command pages
 - `README.md`
 - `CHANGELOG.md`
 
 If editor workflows change, review:
 
-- `docs/editor/editor-manual.md`
-- `docs/editor/architecture.md`
+- `docs/authoring/editor/editor-manual.md`
+- `docs/development/editor-architecture.md`
 - this site's editor pages
 - `README.md`
 - `CHANGELOG.md`

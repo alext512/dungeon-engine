@@ -121,6 +121,68 @@ class TestUnknownFieldPreservation(unittest.TestCase):
             {"interact": {"enabled": True, "commands": []}},
         )
 
+    def test_entity_default_world_render_fields_are_omitted(self):
+        ent = EntityDocument.from_dict(
+            {
+                "id": "marker",
+                "grid_x": 1,
+                "grid_y": 2,
+                "render_order": 10,
+                "y_sort": True,
+                "sort_y_offset": 0.0,
+                "stack_order": 0,
+            }
+        )
+
+        out = ent.to_dict()
+
+        self.assertNotIn("render_order", out)
+        self.assertNotIn("y_sort", out)
+        self.assertNotIn("sort_y_offset", out)
+        self.assertNotIn("stack_order", out)
+
+    def test_entity_default_screen_render_fields_are_omitted(self):
+        ent = EntityDocument.from_dict(
+            {
+                "id": "overlay",
+                "space": "screen",
+                "pixel_x": 100,
+                "pixel_y": 50,
+                "render_order": 0,
+                "y_sort": False,
+                "sort_y_offset": 0.0,
+                "stack_order": 0,
+            }
+        )
+
+        out = ent.to_dict()
+
+        self.assertNotIn("render_order", out)
+        self.assertNotIn("y_sort", out)
+        self.assertNotIn("sort_y_offset", out)
+        self.assertNotIn("stack_order", out)
+
+    def test_entity_non_default_render_fields_are_preserved(self):
+        ent = EntityDocument.from_dict(
+            {
+                "id": "overlay",
+                "space": "screen",
+                "pixel_x": 100,
+                "pixel_y": 50,
+                "render_order": 7,
+                "y_sort": True,
+                "sort_y_offset": 3.5,
+                "stack_order": 2,
+            }
+        )
+
+        out = ent.to_dict()
+
+        self.assertEqual(out["render_order"], 7)
+        self.assertTrue(out["y_sort"])
+        self.assertEqual(out["sort_y_offset"], 3.5)
+        self.assertEqual(out["stack_order"], 2)
+
 
 class TestEntityPositioning(unittest.TestCase):
     def test_world_space_default(self):
