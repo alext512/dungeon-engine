@@ -56,6 +56,19 @@ python -m area_editor
 python -m area_editor --project ../../projects/new_project/project.json
 ```
 
+On Windows you can also use:
+
+```text
+tools\area_editor\Run_Editor.cmd
+tools\area_editor\Run_Editor.cmd --project ..\..\projects\new_project\project.json
+```
+
+The Windows launcher now tries to help beginners:
+
+- it creates `tools\area_editor\.venv` if needed
+- it installs the editor requirements automatically
+- it shows a clearer message if Python is missing
+
 ## Next Steps
 
 - Use [Project Layout](project-layout.md) to understand where authored JSON lives.

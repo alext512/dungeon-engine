@@ -57,6 +57,7 @@ nav:
   - Home: index.md
   - Game Authoring:
       - Start Here: authoring/index.md
+      - Absolute Beginner Quickstart: authoring/absolute-beginner-quickstart.md
       - Install and Run: authoring/install-and-run.md
       - Project Layout: authoring/project-layout.md
       - Engine Concepts: authoring/engine-concepts.md

@@ -269,9 +269,13 @@ mkdocs build
 
 If you want the practical authoring docs, start here:
 
-- [docs/manuals/authoring-guide.md](./docs/manuals/authoring-guide.md)
+- [docs/authoring/index.md](./docs/authoring/index.md)
+  - start-here path for users building a game through JSON and the editor
+- [docs/authoring/absolute-beginner-quickstart.md](./docs/authoring/absolute-beginner-quickstart.md)
+  - editor-first quickstart for people who are new to JSON, Python-based tools, or both
+- [docs/authoring/manuals/authoring-guide.md](./docs/authoring/manuals/authoring-guide.md)
   - explains how to author content in JSON without needing to read much Python
-- [docs/manuals/engine-json-interface.md](./docs/manuals/engine-json-interface.md)
+- [docs/authoring/manuals/engine-json-interface.md](./docs/authoring/manuals/engine-json-interface.md)
   - the exact current JSON surface, commands, tokens, and value sources
 
 Other useful docs:

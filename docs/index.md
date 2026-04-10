@@ -44,6 +44,7 @@ The external editor already supports:
 ## Recommended Reading Paths
 
 - If you want to build a game through JSON and the editor, start in the `Game Authoring` section.
+- If you are a complete beginner, go straight to [Absolute Beginner Quickstart](authoring/absolute-beginner-quickstart.md).
 - If you want exact command and token surfaces, stay in `Game Authoring` and use the `JSON and Command Reference` subsection there.
 - If you want to understand the engine's design intent, read `Project Direction`.
 - If you are changing Python code or maintaining docs, use `Development`.

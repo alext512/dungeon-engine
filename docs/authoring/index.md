@@ -2,6 +2,8 @@
 
 Use this section when you are new to the engine and want a reliable path into the project.
 
+If you are completely new to this kind of tool, start with [Absolute Beginner Quickstart](absolute-beginner-quickstart.md) first.
+
 ## First Principles
 
 The fastest way to orient yourself is:
@@ -15,6 +17,7 @@ The fastest way to orient yourself is:
 ## Suggested Reading Order
 
 - [Install and Run](install-and-run.md)
+- [Absolute Beginner Quickstart](absolute-beginner-quickstart.md)
 - [Project Layout](project-layout.md)
 - [Engine Concepts](engine-concepts.md)
 - [Authoring Workflow](authoring-workflow.md)
@@ -37,8 +40,9 @@ Then use the long-form manuals when you need more depth:
 ### I want to author a game
 
 - Start with `project.json`, one area, one player template, and one set of input routes.
-- Use the editor for map-centric tasks and structured project editing.
+- Use the editor for map-centric tasks and structured project editing. On Windows, `tools\area_editor\Run_Editor.cmd` is the quickest launcher.
 - Drop to raw JSON for advanced command chains until the editor catches up.
+- If you are brand new to all of this, use [Absolute Beginner Quickstart](absolute-beginner-quickstart.md).
 
 ### I want exact JSON fields and command details
 

@@ -2,6 +2,9 @@
 
 The external area editor lives under `tools/area_editor/` and is the main authoring tool for common project workflows.
 
+On Windows, the quickest launcher is `tools\area_editor\Run_Editor.cmd`.
+That launcher can create a local editor environment and install the editor dependencies automatically if needed.
+
 ## Why The Editor Exists
 
 The editor exists because the project benefits from a dedicated authoring tool, but the old built-in editor became too coupled to runtime code and assumptions.
