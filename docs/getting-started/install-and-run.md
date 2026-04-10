@@ -36,13 +36,9 @@ On Windows you can also use:
 Run_Game.cmd
 ```
 
-## Run The Runtime Tests
+## Optional Quick Startup Smoke
 
-```bash
-.venv/Scripts/python -m unittest discover -s tests -v
-```
-
-Useful smoke command:
+If you only want to confirm that a project loads and reaches the main loop cleanly, this is a fast check:
 
 ```bash
 .venv/Scripts/python run_game.py --project projects/new_project --headless --max-frames 2
@@ -60,41 +56,9 @@ python -m area_editor
 python -m area_editor --project ../../projects/new_project/project.json
 ```
 
-Editor tests:
+## Next Steps
 
-```bash
-cd tools/area_editor
-..\..\.venv\Scripts\python -m unittest discover -s tests -v
-```
-
-## Run The Docs Site Locally
-
-Install the docs-only dependencies:
-
-```bash
-pip install -r requirements-docs.txt
-```
-
-Then preview the site:
-
-```bash
-mkdocs serve
-```
-
-Build static output:
-
-```bash
-mkdocs build
-```
-
-## Validation Habit
-
-If you change command surfaces, authoring conventions, or repo-local example project content, do more than just unit tests:
-
-- run the relevant automated tests
-- validate each repo-local `project.json`
-- prefer startup-style validation paths, not only low-level tests
-
-The validation workflow is documented in the repo's [AGENTS.md](https://github.com/alext512/dungeon-engine/blob/main/AGENTS.md) and [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md).
-
-For the exact startup pipeline, audited JSON surfaces, and what the static-reference pass does and does not catch, see [Validation and Startup Checks](../guides/validation-and-startup-checks.md).
+- Use [Project Layout](project-layout.md) to understand where authored JSON lives.
+- Use [Authoring Workflow](../guides/authoring-workflow.md) for the practical build path.
+- Use [Startup Checks](../guides/validation-and-startup-checks.md) if you want to know what the engine catches before play begins.
+- If you are changing engine code, editor internals, or docs infrastructure, use [Verification and Validation](../development/verification-and-validation.md).

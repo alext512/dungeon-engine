@@ -59,7 +59,8 @@ If you touch command surfaces, authoring conventions, or repo-local example proj
 
 If you touch `tools/area_editor/`, also run its own test suite from inside that folder.
 
-Use [Validation and Startup Checks](../guides/validation-and-startup-checks.md) when you need the exact current startup pipeline and the command-bearing surfaces the runtime audits before launch.
+Use [Startup Checks](../guides/validation-and-startup-checks.md) when you need the exact current startup pipeline and the command-bearing surfaces the runtime audits before launch.
+Use [Verification and Validation](../development/verification-and-validation.md) when you need the full maintainer workflow: tests, smoke commands, repo-local project validation, and docs builds.
 
 ## Documentation Rules
 

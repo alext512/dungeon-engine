@@ -63,19 +63,20 @@ nav:
       - Authoring Workflow: guides/authoring-workflow.md
       - Command System: guides/command-system.md
       - Dialogue, Inventory, and UI: guides/dialogue-inventory-ui.md
-      - Validation and Startup Checks: guides/validation-and-startup-checks.md
-      - Editor Overview: editor/index.md
-      - Full Editor Manual: editor/editor-manual.md
-      - Editor Workflow: editor/workflow.md
-      - Editor Gaps and Future Work: editor/gaps-and-future-work.md
-  - JSON Reference:
-      - Overview: reference/index.md
-      - Project Manifest: reference/project-manifest.md
-      - Content Types: reference/content-types.md
-      - Built-in Commands: reference/builtin-commands.md
-      - Runtime Tokens: reference/runtime-tokens.md
-      - Full Authoring Guide: manuals/authoring-guide.md
-      - Full Engine JSON Interface: manuals/engine-json-interface.md
+      - Startup Checks: guides/validation-and-startup-checks.md
+      - Editor:
+          - Editor Overview: editor/index.md
+          - Full Editor Manual: editor/editor-manual.md
+          - Editor Workflow: editor/workflow.md
+          - Editor Gaps and Future Work: editor/gaps-and-future-work.md
+      - JSON and Command Reference:
+          - Overview: reference/index.md
+          - Project Manifest: reference/project-manifest.md
+          - Content Types: reference/content-types.md
+          - Built-in Commands: reference/builtin-commands.md
+          - Runtime Tokens: reference/runtime-tokens.md
+          - Full Authoring Guide: manuals/authoring-guide.md
+          - Full Engine JSON Interface: manuals/engine-json-interface.md
   - Project Direction:
       - Overview: project/index.md
       - Project Spirit: project/project-spirit.md
@@ -83,6 +84,7 @@ nav:
       - Editor Vision: editor/vision.md
       - Editor Scope: editor/scope.md
   - Development:
+      - Verification and Validation: development/verification-and-validation.md
       - Runtime Architecture: architecture/runtime-architecture.md
       - Editor Architecture: editor/architecture.md
       - Editor Data Boundary: editor/data-boundary.md

@@ -1,6 +1,6 @@
-# Validation and Startup Checks
+# Startup Checks
 
-This engine does more than just load `project.json` and hope for the best.
+Use this page when you want to know what the engine checks before play begins, or when an authored project fails during startup.
 
 ## What Startup Validation Currently Checks
 
@@ -65,49 +65,21 @@ Dialogue and menu JSON is ordinary project-relative JSON and can be loaded throu
 
 However, the current extra startup dialogue scanning is still convention-based: it walks the conventional `dialogues/` folder specifically. Keeping dialogue/menu data there gives you the most tooling and validation coverage today.
 
-## Recommended Validation Habit
+## What Authors Should Take From This
 
-When you change command surfaces, authoring conventions, or repo-local example project content:
+- Literal asset and dialogue references are checked earlier than dynamic token-filled ones.
+- Keeping dialogue and menu JSON under `dialogues/` gives you the most validation coverage today.
+- If you rename files or command ids, a quick relaunch often catches mistakes immediately.
+- Dynamic references still need real gameplay coverage because they may only resolve at runtime.
 
-1. run the relevant automated tests
-2. validate each repo-local `project.json`
-3. prefer startup-style validation, not only low-level tests
-4. re-run project-command validation if ids or references changed
-5. do a brief smoke start when feasible
+## Quick Startup Smoke
 
-## Useful Commands
-
-Runtime tests:
-
-```text
-.venv/Scripts/python -m unittest discover -s tests -v
-```
-
-Quick headless smoke:
+If you want a fast project-load check without playing through the full game loop:
 
 ```text
 .venv/Scripts/python run_game.py --project projects/new_project --headless --max-frames 2
 ```
 
-Repo-local project validation snippet:
+## If You Are Maintaining The Engine
 
-```text
-@'
-from pathlib import Path
-from dungeon_engine.project_context import load_project
-from dungeon_engine.commands.library import validate_project_commands
-
-project_manifests = sorted(Path("projects").glob("*/project.json"))
-if not project_manifests:
-    print("No repo-local project manifests found under projects/.")
-else:
-    for project_json in project_manifests:
-        project = load_project(project_json)
-        validate_project_commands(project)
-        print(f"{project.project_root.name}: project command validation OK")
-'@ | .venv/Scripts/python -
-```
-
-## For Agents And Contributors
-
-If docs and implementation disagree about validation behavior, trust the implementation first and record the ambiguity explicitly instead of silently "fixing" the docs to match an older plan.
+Use [Verification and Validation](../development/verification-and-validation.md) for runtime tests, editor tests, repo-wide validation workflow, and docs-build commands.

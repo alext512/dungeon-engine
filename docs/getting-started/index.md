@@ -26,13 +26,13 @@ Then use the long-form manuals when you need more depth:
 - [Authoring Guide](../manuals/authoring-guide.md) for full author-facing workflow details
 - [Engine JSON Interface](../manuals/engine-json-interface.md) for the exact JSON contract
 
-## Pick Your Track
+## Pick Your Goal
 
 ### I want to play or smoke-test the engine
 
 - Install the runtime dependencies.
 - Run `run_game.py` against the repo-local example project.
-- Use the headless command for quick validation.
+- Optionally use the headless command for a quick startup smoke.
 
 ### I want to author a game
 
@@ -40,11 +40,18 @@ Then use the long-form manuals when you need more depth:
 - Use the editor for map-centric tasks and structured project editing.
 - Drop to raw JSON for advanced command chains until the editor catches up.
 
-### I want to modify engine code
+### I want exact JSON fields and command details
 
-- Read [Runtime Architecture](../architecture/runtime-architecture.md).
-- Read [For Coding Agents](../architecture/for-coding-agents.md).
-- Run the runtime and editor tests that match the surfaces you touch.
+- Use the `JSON and Command Reference` subsection in this same `Game Authoring` section.
+- Drop into the long-form manuals when you need the full contract.
+
+## If You Are Changing Engine Code
+
+The maintainer path now lives under `Development`, especially:
+
+- [Verification and Validation](../development/verification-and-validation.md)
+- [Runtime Architecture](../architecture/runtime-architecture.md)
+- [For Coding Agents](../architecture/for-coding-agents.md)
 
 ## Repo-Local Example Project
 

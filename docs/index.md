@@ -6,13 +6,11 @@ This project is a command-driven 2D top-down puzzle and RPG engine written in Py
 
 ## What This Docs Site Covers
 
-This site is meant to help three kinds of users:
+This site is centered on people building games through JSON and the editor.
 
-- content authors who want to build rooms, entities, dialogue, items, and puzzle logic
-- engine contributors who need a map of the runtime, content contract, and module boundaries
-- coding agents that need to understand what is canonical, what is planning material, and how to validate changes safely
+It also includes smaller sections for project direction and engine/developer workflow, but the main path through the site is `Game Authoring`.
 
-It is also the permanent home for the public long-form manuals. Root-level compatibility pointers still exist in the repo, but the docs site is now the main place to browse and maintain them.
+The docs site is also the permanent home for the public long-form manuals. Root-level compatibility pointers still exist in the repo, but the site is now the main place to browse and maintain them.
 
 ## What You Can Build Today
 
@@ -46,7 +44,7 @@ The external editor already supports:
 ## Recommended Reading Paths
 
 - If you want to build a game through JSON and the editor, start in the `Game Authoring` section.
-- If you want exact command and token surfaces, go to `JSON Reference` and the long-form manuals there.
+- If you want exact command and token surfaces, stay in `Game Authoring` and use the `JSON and Command Reference` subsection there.
 - If you want to understand the engine's design intent, read `Project Direction`.
 - If you are changing Python code or maintaining docs, use `Development`.
 

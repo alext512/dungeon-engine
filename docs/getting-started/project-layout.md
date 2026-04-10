@@ -10,9 +10,7 @@ At a high level:
 python_puzzle_engine/
     dungeon_engine/          # Runtime package
     tools/area_editor/       # External authoring tool
-    tests/                   # Runtime tests
     projects/                # Repo-local example projects
-    docs/                    # This documentation site
     run_game.py              # Main game entry point
     README.md                # Repo front page
 ```

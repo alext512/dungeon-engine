@@ -1,34 +1,22 @@
-# Reference Overview
+# JSON and Command Reference
 
-This section is the quick-reference layer of the docs site.
+This subsection is the quick lookup layer for game authors working through JSON and the editor.
 
-## Use This Section When You Need Exact Surfaces
+## Use This Subsection When You Need Exact Surfaces
 
 - [Project Manifest](project-manifest.md) for `project.json`
 - [Content Types](content-types.md) for areas, templates, commands, items, and ordinary project JSON
 - [Built-in Commands](builtin-commands.md) for the runtime command inventory
 - [Runtime Tokens](runtime-tokens.md) for command-time lookups and structured value sources
 
-## Canonical Truth Model
-
-The repo already has a documentation truth order, and it is worth preserving:
-
-- canonical contract/reference docs should stay closest to implementation reality
-- author-facing workflow docs should explain how to use the current contract
-- planning docs should stay clearly future-facing
-- historical docs should not be mistaken for current behavior
-
-The current canonical long-form references are:
+## Use The Long-Form Manuals When You Need More Depth
 
 - [Engine JSON Interface](../manuals/engine-json-interface.md)
 - [Authoring Guide](../manuals/authoring-guide.md)
 - [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md)
 
-## If You Are Working With Agents
+## How This Fits With The Rest Of Game Authoring
 
-The most useful agent-facing references are:
-
-- [For Coding Agents](../architecture/for-coding-agents.md)
-- [Docs Maintenance](../contributing/docs-maintenance.md)
-
-Those pages explain what is canonical, what must be updated when behavior changes, and what validation steps matter before declaring a docs or command-surface change safe.
+- Use `Game Authoring` guides when you want task-oriented help.
+- Use this subsection when you already know roughly what you want to author and need the exact JSON contract.
+- Use `Development` only if you are changing Python code, editor internals, or documentation tooling.

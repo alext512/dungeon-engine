@@ -207,15 +207,11 @@ One practical rule matters a lot: strict primitive commands still expect real en
 
 ## Validation Matters
 
-If you change command names, command ids, or command-bearing JSON surfaces:
+If you change command names, command ids, or command-bearing JSON surfaces, relaunch early and often.
 
-- run the relevant tests
-- validate repo-local projects directly
-- prefer startup-style validation paths
+This project treats command-surface drift as a serious risk because one renamed command id or moved reference can break authored content long before you notice it in gameplay.
 
-This project already treats command-surface drift as a serious risk because a generic engine test pass does not guarantee that every authored project still validates.
-
-The exact startup audit surface is documented in [Validation and Startup Checks](validation-and-startup-checks.md).
+The exact startup audit surface is documented in [Startup Checks](validation-and-startup-checks.md). If you are changing Python code or maintaining repo-local example projects, the contributor workflow lives in [Verification and Validation](../development/verification-and-validation.md).
 
 ## Exact Reference
 
