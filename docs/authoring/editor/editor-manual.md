@@ -154,7 +154,7 @@ python -m area_editor --project path/to/project.json
 
 - [../manuals/authoring-guide.md](../manuals/authoring-guide.md)
 - [../manuals/engine-json-interface.md](../manuals/engine-json-interface.md)
-- [../project/architecture-direction.md](../project/architecture-direction.md)
+- [../../project/architecture-direction.md](../../project/architecture-direction.md)
 
 ## Historical Reference
 

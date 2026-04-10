@@ -83,4 +83,4 @@ The repo-local example project starts like this:
 - Keep engine code and project content mentally separate.
 - Treat `project.json` as the project root contract.
 - Prefer reading one real example file from `projects/new_project/` whenever a concept feels abstract.
-- Use [Project Manifest](../reference/project-manifest.md) and [Content Types](../reference/content-types.md) once you are ready for the exact surfaces.
+- Use [Project Manifest](reference/project-manifest.md) and [Content Types](reference/content-types.md) once you are ready for the exact surfaces.

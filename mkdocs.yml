@@ -56,38 +56,38 @@ extra_css:
 nav:
   - Home: index.md
   - Game Authoring:
-      - Start Here: getting-started/index.md
-      - Install and Run: getting-started/install-and-run.md
-      - Project Layout: getting-started/project-layout.md
-      - Engine Concepts: guides/engine-concepts.md
-      - Authoring Workflow: guides/authoring-workflow.md
-      - Command System: guides/command-system.md
-      - Dialogue, Inventory, and UI: guides/dialogue-inventory-ui.md
-      - Startup Checks: guides/validation-and-startup-checks.md
+      - Start Here: authoring/index.md
+      - Install and Run: authoring/install-and-run.md
+      - Project Layout: authoring/project-layout.md
+      - Engine Concepts: authoring/engine-concepts.md
+      - Authoring Workflow: authoring/authoring-workflow.md
+      - Command System: authoring/command-system.md
+      - Dialogue, Inventory, and UI: authoring/dialogue-inventory-ui.md
+      - Startup Checks: authoring/startup-checks.md
       - Editor:
-          - Editor Overview: editor/index.md
-          - Full Editor Manual: editor/editor-manual.md
-          - Editor Workflow: editor/workflow.md
-          - Editor Gaps and Future Work: editor/gaps-and-future-work.md
+          - Editor Overview: authoring/editor/index.md
+          - Full Editor Manual: authoring/editor/editor-manual.md
+          - Editor Workflow: authoring/editor/workflow.md
+          - Editor Gaps and Future Work: authoring/editor/gaps-and-future-work.md
       - JSON and Command Reference:
-          - Overview: reference/index.md
-          - Project Manifest: reference/project-manifest.md
-          - Content Types: reference/content-types.md
-          - Built-in Commands: reference/builtin-commands.md
-          - Runtime Tokens: reference/runtime-tokens.md
-          - Full Authoring Guide: manuals/authoring-guide.md
-          - Full Engine JSON Interface: manuals/engine-json-interface.md
+          - Overview: authoring/reference/index.md
+          - Project Manifest: authoring/reference/project-manifest.md
+          - Content Types: authoring/reference/content-types.md
+          - Built-in Commands: authoring/reference/builtin-commands.md
+          - Runtime Tokens: authoring/reference/runtime-tokens.md
+          - Full Authoring Guide: authoring/manuals/authoring-guide.md
+          - Full Engine JSON Interface: authoring/manuals/engine-json-interface.md
   - Project Direction:
       - Overview: project/index.md
       - Project Spirit: project/project-spirit.md
       - Architecture Direction: project/architecture-direction.md
-      - Editor Vision: editor/vision.md
-      - Editor Scope: editor/scope.md
+      - Editor Vision: project/editor-vision.md
+      - Editor Scope: project/editor-scope.md
   - Development:
       - Verification and Validation: development/verification-and-validation.md
-      - Runtime Architecture: architecture/runtime-architecture.md
-      - Editor Architecture: editor/architecture.md
-      - Editor Data Boundary: editor/data-boundary.md
-      - For Coding Agents: architecture/for-coding-agents.md
-      - Docs Maintenance: contributing/docs-maintenance.md
-      - Publishing: contributing/publishing.md
+      - Runtime Architecture: development/runtime-architecture.md
+      - Editor Architecture: development/editor-architecture.md
+      - Editor Data Boundary: development/editor-data-boundary.md
+      - For Coding Agents: development/for-coding-agents.md
+      - Docs Maintenance: development/docs-maintenance.md
+      - Publishing: development/publishing.md

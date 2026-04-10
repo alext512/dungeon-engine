@@ -16,15 +16,15 @@ The fastest way to orient yourself is:
 
 - [Install and Run](install-and-run.md)
 - [Project Layout](project-layout.md)
-- [Engine Concepts](../guides/engine-concepts.md)
-- [Authoring Workflow](../guides/authoring-workflow.md)
-- [Command System](../guides/command-system.md)
+- [Engine Concepts](engine-concepts.md)
+- [Authoring Workflow](authoring-workflow.md)
+- [Command System](command-system.md)
 
 Then use the long-form manuals when you need more depth:
 
 - [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md) for the overview and quick commands
-- [Authoring Guide](../manuals/authoring-guide.md) for full author-facing workflow details
-- [Engine JSON Interface](../manuals/engine-json-interface.md) for the exact JSON contract
+- [Authoring Guide](manuals/authoring-guide.md) for full author-facing workflow details
+- [Engine JSON Interface](manuals/engine-json-interface.md) for the exact JSON contract
 
 ## Pick Your Goal
 
@@ -50,8 +50,8 @@ Then use the long-form manuals when you need more depth:
 The maintainer path now lives under `Development`, especially:
 
 - [Verification and Validation](../development/verification-and-validation.md)
-- [Runtime Architecture](../architecture/runtime-architecture.md)
-- [For Coding Agents](../architecture/for-coding-agents.md)
+- [Runtime Architecture](../development/runtime-architecture.md)
+- [For Coding Agents](../development/for-coding-agents.md)
 
 ## Repo-Local Example Project
 

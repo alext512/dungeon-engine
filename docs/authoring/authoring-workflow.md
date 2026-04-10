@@ -144,5 +144,5 @@ That is usually a better path than trying to invent every abstraction on day one
 
 When you need the full long-form material, go straight to:
 
-- [Authoring Guide](../manuals/authoring-guide.md)
-- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Authoring Guide](manuals/authoring-guide.md)
+- [Engine JSON Interface](manuals/engine-json-interface.md)

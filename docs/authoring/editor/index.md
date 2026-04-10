@@ -68,6 +68,6 @@ Use raw JSON when:
 ## Deep References
 
 - [Full Editor Manual](editor-manual.md)
-- [Editor Architecture](architecture.md)
-- [Editor Scope](scope.md)
-- [Editor Vision](vision.md)
+- [Editor Architecture](../../development/editor-architecture.md)
+- [Editor Scope](../../project/editor-scope.md)
+- [Editor Vision](../../project/editor-vision.md)

@@ -112,6 +112,6 @@ The project-wide `shared_variables.json` surface is the right home for reusable 
 
 ## Deeper References
 
-- [Engine JSON Interface](../manuals/engine-json-interface.md)
-- [Authoring Guide](../manuals/authoring-guide.md)
+- [Engine JSON Interface](manuals/engine-json-interface.md)
+- [Authoring Guide](manuals/authoring-guide.md)
 - [Architecture Direction](../project/architecture-direction.md)

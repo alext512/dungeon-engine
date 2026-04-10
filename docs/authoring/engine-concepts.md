@@ -47,7 +47,7 @@ Typical content roots include:
 - `item_paths`
 - `asset_paths`
 
-See [Project Manifest](../reference/project-manifest.md) for the exact fields.
+See [Project Manifest](reference/project-manifest.md) for the exact fields.
 
 ## Areas And Entities
 

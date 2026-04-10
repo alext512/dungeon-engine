@@ -7,25 +7,25 @@ This page is the shortest reliable onboarding path for agents working on the rep
 - [AGENTS.md](https://github.com/alext512/dungeon-engine/blob/main/AGENTS.md)
 - [Project Spirit](../project/project-spirit.md)
 - [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md)
-- [Authoring Guide](../manuals/authoring-guide.md)
-- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Authoring Guide](../authoring/manuals/authoring-guide.md)
+- [Engine JSON Interface](../authoring/manuals/engine-json-interface.md)
 - [Architecture Direction](../project/architecture-direction.md)
 - [CONTRIBUTING.md](https://github.com/alext512/dungeon-engine/blob/main/CONTRIBUTING.md)
 - [CHANGELOG.md](https://github.com/alext512/dungeon-engine/blob/main/CHANGELOG.md)
 
 If the change touches the editor, also read:
 
-- [Editor Manual](../editor/editor-manual.md)
-- [Editor Architecture](../editor/architecture.md)
-- [Editor Data Boundary](../editor/data-boundary.md)
+- [Editor Manual](../authoring/editor/editor-manual.md)
+- [Editor Architecture](editor-architecture.md)
+- [Editor Data Boundary](editor-data-boundary.md)
 
 ## What Is Canonical
 
 For current behavior, trust these first:
 
 - implementation
-- [Engine JSON Interface](../manuals/engine-json-interface.md) for the exact JSON contract
-- [Authoring Guide](../manuals/authoring-guide.md) for current author-facing workflows
+- [Engine JSON Interface](../authoring/manuals/engine-json-interface.md) for the exact JSON contract
+- [Authoring Guide](../authoring/manuals/authoring-guide.md) for current author-facing workflows
 - `README.md` for the project summary and current capabilities
 
 Treat these as planning or historical material unless they explicitly say otherwise:
@@ -59,8 +59,8 @@ If you touch command surfaces, authoring conventions, or repo-local example proj
 
 If you touch `tools/area_editor/`, also run its own test suite from inside that folder.
 
-Use [Startup Checks](../guides/validation-and-startup-checks.md) when you need the exact current startup pipeline and the command-bearing surfaces the runtime audits before launch.
-Use [Verification and Validation](../development/verification-and-validation.md) when you need the full maintainer workflow: tests, smoke commands, repo-local project validation, and docs builds.
+Use [Startup Checks](../authoring/startup-checks.md) when you need the exact current startup pipeline and the command-bearing surfaces the runtime audits before launch.
+Use [Verification and Validation](verification-and-validation.md) when you need the full maintainer workflow: tests, smoke commands, repo-local project validation, and docs builds.
 
 ## Documentation Rules
 

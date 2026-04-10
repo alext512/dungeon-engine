@@ -201,7 +201,7 @@ Commands can reference runtime data through tokens such as:
 
 Author-facing `entity_refs` inputs populate the runtime `$refs...` and `$ref_ids...` token families.
 
-The engine also supports richer structured value-source objects. See [Runtime Tokens](../reference/runtime-tokens.md) for the quick map and the repo's JSON interface doc for the exhaustive surface.
+The engine also supports richer structured value-source objects. See [Runtime Tokens](reference/runtime-tokens.md) for the quick map and the repo's JSON interface doc for the exhaustive surface.
 
 One practical rule matters a lot: strict primitive commands still expect real entity ids in fields like `entity_id`, so use `$self_id` or `$ref_ids.some_name` there instead of inventing your own symbolic string format.
 
@@ -211,11 +211,11 @@ If you change command names, command ids, or command-bearing JSON surfaces, rela
 
 This project treats command-surface drift as a serious risk because one renamed command id or moved reference can break authored content long before you notice it in gameplay.
 
-The exact startup audit surface is documented in [Startup Checks](validation-and-startup-checks.md). If you are changing Python code or maintaining repo-local example projects, the contributor workflow lives in [Verification and Validation](../development/verification-and-validation.md).
+The exact startup audit surface is documented in [Startup Checks](startup-checks.md). If you are changing Python code or maintaining repo-local example projects, the contributor workflow lives in [Verification and Validation](../development/verification-and-validation.md).
 
 ## Exact Reference
 
 For the complete built-in inventory, signatures, deferred nested command fields, and command-chain rules, use:
 
-- [Built-in Commands](../reference/builtin-commands.md)
-- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Built-in Commands](reference/builtin-commands.md)
+- [Engine JSON Interface](manuals/engine-json-interface.md)

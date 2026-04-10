@@ -59,6 +59,6 @@ python -m area_editor --project ../../projects/new_project/project.json
 ## Next Steps
 
 - Use [Project Layout](project-layout.md) to understand where authored JSON lives.
-- Use [Authoring Workflow](../guides/authoring-workflow.md) for the practical build path.
-- Use [Startup Checks](../guides/validation-and-startup-checks.md) if you want to know what the engine catches before play begins.
+- Use [Authoring Workflow](authoring-workflow.md) for the practical build path.
+- Use [Startup Checks](startup-checks.md) if you want to know what the engine catches before play begins.
 - If you are changing engine code, editor internals, or docs infrastructure, use [Verification and Validation](../development/verification-and-validation.md).

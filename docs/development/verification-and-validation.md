@@ -2,7 +2,7 @@
 
 Use this page when you are changing Python code, editor behavior, docs infrastructure, or repo-local example content and need the maintainer workflow rather than the normal author workflow.
 
-If you are authoring a game through JSON and the editor, the user-facing page is [Startup Checks](../guides/validation-and-startup-checks.md).
+If you are authoring a game through JSON and the editor, the user-facing page is [Startup Checks](../authoring/startup-checks.md).
 
 ## Runtime Tests
 
@@ -82,6 +82,6 @@ When you change command surfaces, authoring conventions, repo-local example proj
 
 ## Related Pages
 
-- [Startup Checks](../guides/validation-and-startup-checks.md) for what authors can expect before play begins
-- [For Coding Agents](../architecture/for-coding-agents.md) for repo-specific agent workflow
-- [Docs Maintenance](../contributing/docs-maintenance.md) for the docs truth model
+- [Startup Checks](../authoring/startup-checks.md) for what authors can expect before play begins
+- [For Coding Agents](for-coding-agents.md) for repo-specific agent workflow
+- [Docs Maintenance](docs-maintenance.md) for the docs truth model

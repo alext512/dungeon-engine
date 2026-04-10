@@ -10,7 +10,7 @@ Use it when you need to answer questions like:
 - which runtime tokens and value sources can commands use?
 - which builtin commands exist right now?
 
-For the philosophy behind this interface, see [Project Spirit](../project/project-spirit.md). For authoring walkthroughs, see [Authoring Guide](authoring-guide.md). This file is the lower-level reference.
+For the philosophy behind this interface, see [Project Spirit](../../project/project-spirit.md). For authoring walkthroughs, see [Authoring Guide](authoring-guide.md). This file is the lower-level reference.
 
 ## Core Rules
 
@@ -1906,7 +1906,7 @@ Font ids are the JSON filename without extension. The engine looks for `{font_id
 
 Use the docs together like this:
 
-1. [Project Spirit](../project/project-spirit.md)
+1. [Project Spirit](../../project/project-spirit.md)
    Read for philosophy and design intent.
 2. [Authoring Guide](authoring-guide.md)
    Read for normal authoring workflow.

@@ -52,11 +52,11 @@ The external editor already supports:
 
 The deepest permanent manuals now live inside `docs/` as part of the site:
 
-- [Authoring Guide](manuals/authoring-guide.md)
-- [Engine JSON Interface](manuals/engine-json-interface.md)
+- [Authoring Guide](authoring/manuals/authoring-guide.md)
+- [Engine JSON Interface](authoring/manuals/engine-json-interface.md)
 - [Project Spirit](project/project-spirit.md)
 - [Architecture Direction](project/architecture-direction.md)
-- [Editor Manual](editor/editor-manual.md)
+- [Editor Manual](authoring/editor/editor-manual.md)
 
 Repo-level files such as `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` still live at the repo root because they also serve repository and hosting conventions.
 
