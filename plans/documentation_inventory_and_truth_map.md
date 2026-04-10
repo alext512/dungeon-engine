@@ -33,15 +33,15 @@ either update it to match reality or mark it clearly as historical/outdated.
 
 ---
 
-## Top-Level Engine Docs
+## Permanent Engine Docs
 
 | Path | Status | Role | Must Match Code Closely? | Notes |
 |---|---|---|---|---|
-| `PROJECT_SPIRIT.md` | Active direction | Design compass / philosophy | No, but should reflect current direction | High-level intent, not implementation detail |
+| `docs/project/project-spirit.md` | Active direction | Design compass / philosophy | No, but should reflect current direction | Permanent public copy; root file is a compatibility pointer |
 | `README.md` | Active summary | Project overview, quick start, current capabilities | Yes, at summary level | Should not overstate or understate runtime/editor capability |
-| `AUTHORING_GUIDE.md` | Active author-facing doc | How to build content against the current system | Yes | Should track real authoring workflows and surfaces |
-| `ENGINE_JSON_INTERFACE.md` | Active canonical reference | Current engine <-> JSON contract | Yes, strictly | Primary source for exact current JSON shape and command surface |
-| `architecture.md` | Active explanatory doc | Architecture and medium-term direction | Yes, at architectural level | Can include direction, but must not contradict implemented boundaries |
+| `docs/manuals/authoring-guide.md` | Active author-facing doc | How to build content against the current system | Yes | Permanent public copy; root file is a compatibility pointer |
+| `docs/manuals/engine-json-interface.md` | Active canonical reference | Current engine <-> JSON contract | Yes, strictly | Permanent public copy and primary source for exact current JSON shape and command surface |
+| `docs/project/architecture-direction.md` | Active explanatory doc | Architecture and medium-term direction | Yes, at architectural level | Permanent public copy; root file is a compatibility pointer |
 | `CONTRIBUTING.md` | Active contributor guidance | Working rules and update expectations | Yes | Should describe doc/update/test expectations accurately |
 | `CHANGELOG.md` | Active historical summary | Reverse-chronological feature/change log | Yes | Should reflect shipped changes, not plans |
 | `roadmap.md` | Active planning summary | Future direction | No | Must not be mistaken for current engine/editor contract |
@@ -77,15 +77,17 @@ Key active planning docs:
 
 | Path | Status | Role | Must Match Code Closely? | Notes |
 |---|---|---|---|---|
-| `tools/area_editor/README.md` | Active summary | Editor overview, current capabilities, limits | Yes | Primary summary of current editor status |
-| `tools/area_editor/ARCHITECTURE.md` | Active architecture note | Current editor architecture plus intended shape | Yes | Must not describe already-implemented surfaces as still entirely planned |
+| `docs/editor/editor-manual.md` | Active summary | Editor overview, current capabilities, limits | Yes | Permanent public copy; tool-folder file is a compatibility pointer |
+| `docs/editor/architecture.md` | Active architecture note | Current editor architecture plus intended shape | Yes | Permanent public copy; tool-folder file is a compatibility pointer |
+| `docs/editor/data-boundary.md` | Active boundary note | Tool/runtime separation rules | Yes | Permanent public copy; tool-folder file is a compatibility pointer |
+| `docs/editor/scope.md` | Active summary | Tool scope and non-goals | Yes | Permanent public copy; tool-folder file is a compatibility pointer |
+| `docs/editor/vision.md` | Active direction | High-level editor goals | No | Permanent public copy; tool-folder file is a compatibility pointer |
+| `tools/area_editor/README.md` | Compatibility pointer | Entry file for the tool folder | No | Keep lightweight and point at `docs/editor/editor-manual.md` |
+| `tools/area_editor/ARCHITECTURE.md` | Compatibility pointer | Entry file for the tool folder | No | Keep lightweight and point at `docs/editor/architecture.md` |
 | `tools/area_editor/AGENTS.md` | Active tool onboarding | Tool-specific working rules | Yes | Must preserve the editor/runtime boundary |
-| `tools/area_editor/DATA_BOUNDARY.md` | Active boundary note | Tool/runtime separation rules | Yes | Important for refactors touching shared helpers |
 | `tools/area_editor/DECISIONS.md` | Active decision log | Tool architectural decisions | Yes, at policy level | Can include rationale beyond current implementation details |
 | `tools/area_editor/ROADMAP.md` | Active planning summary | Editor future work | No | Must not be confused with current capability |
 | `tools/area_editor/FUTURE_FEATURES.md` | Active planning summary | Known editor gaps/future ideas | No | Should stay clearly future-facing |
-| `tools/area_editor/SCOPE.md` | Active summary | Tool scope and non-goals | Yes | Should stay aligned with the current boundary |
-| `tools/area_editor/VISION.md` | Active direction | High-level editor goals | No | Directional document |
 | `tools/area_editor/OPEN_QUESTIONS.md` | Active planning note | Unresolved questions | No | Planning material |
 | `tools/area_editor/PHASE1_PLAN.md` | Historical plan | Early implementation planning | No | Historical/planning reference |
 | `tools/area_editor/PHASE2_PLAN.md` | Historical plan | Early implementation planning | No | Historical/planning reference |
@@ -111,8 +113,8 @@ Key active planning docs:
 
 Review and update:
 
-- `ENGINE_JSON_INTERFACE.md`
-- `AUTHORING_GUIDE.md`
+- `docs/manuals/engine-json-interface.md`
+- `docs/manuals/authoring-guide.md`
 - `README.md`
 - `CHANGELOG.md`
 - relevant editor docs if the editor surface or support expectations changed
@@ -121,8 +123,8 @@ Review and update:
 
 Review and update:
 
-- `ENGINE_JSON_INTERFACE.md`
-- `AUTHORING_GUIDE.md`
+- `docs/manuals/engine-json-interface.md`
+- `docs/manuals/authoring-guide.md`
 - `README.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md` if contributor workflow changed
@@ -132,20 +134,20 @@ Review and update:
 
 Review and update:
 
-- `ENGINE_JSON_INTERFACE.md`
-- `AUTHORING_GUIDE.md`
+- `docs/manuals/engine-json-interface.md`
+- `docs/manuals/authoring-guide.md`
 - `README.md`
-- `architecture.md`
-- `tools/area_editor/README.md`
-- `tools/area_editor/ARCHITECTURE.md`
-- `tools/area_editor/DATA_BOUNDARY.md` if the shared boundary changes
+- `docs/project/architecture-direction.md`
+- `docs/editor/editor-manual.md`
+- `docs/editor/architecture.md`
+- `docs/editor/data-boundary.md` if the shared boundary changes
 
 ### If editor workflows or supported surfaces change
 
 Review and update:
 
-- `tools/area_editor/README.md`
-- `tools/area_editor/ARCHITECTURE.md`
+- `docs/editor/editor-manual.md`
+- `docs/editor/architecture.md`
 - `README.md`
 - `CHANGELOG.md`
 - any relevant tool planning/status docs if they now misstate reality
@@ -154,8 +156,8 @@ Review and update:
 
 Still review:
 
-- `architecture.md`
-- `tools/area_editor/ARCHITECTURE.md`
+- `docs/project/architecture-direction.md`
+- `docs/editor/architecture.md`
 - `CONTRIBUTING.md`
 - any onboarding docs that mention file ownership or workflow
 

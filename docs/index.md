@@ -12,6 +12,8 @@ This site is meant to help three kinds of users:
 - engine contributors who need a map of the runtime, content contract, and module boundaries
 - coding agents that need to understand what is canonical, what is planning material, and how to validate changes safely
 
+It is also the permanent home for the public long-form manuals. Root-level compatibility pointers still exist in the repo, but the docs site is now the main place to browse and maintain them.
+
 ## What You Can Build Today
 
 Runtime features already in active use include:
@@ -43,23 +45,22 @@ The external editor already supports:
 
 ## Recommended Reading Paths
 
-- If you want to get the engine running quickly, start with [Getting Started](getting-started/index.md).
-- If you want to make content, go to [Authoring Workflow](guides/authoring-workflow.md) and [Project Manifest](reference/project-manifest.md).
-- If you want to understand how gameplay logic works, read [Command System](guides/command-system.md) and [Built-in Commands](reference/builtin-commands.md).
-- If you are validating content or changing command surfaces, read [Validation and Startup Checks](guides/validation-and-startup-checks.md).
-- If you want to use or extend the editor, read [Editor Overview](editor/index.md) and [Editor Workflow](editor/workflow.md).
-- If you are modifying the codebase or using coding agents, read [For Coding Agents](architecture/for-coding-agents.md) and [Docs Maintenance](contributing/docs-maintenance.md).
+- If you want to build a game through JSON and the editor, start in the `Game Authoring` section.
+- If you want exact command and token surfaces, go to `JSON Reference` and the long-form manuals there.
+- If you want to understand the engine's design intent, read `Project Direction`.
+- If you are changing Python code or maintaining docs, use `Development`.
 
-## Canonical Long-Form Sources In The Repo
+## Long-Form Manuals
 
-This docs site is the guided front door. The deep canonical sources still live in the repo and are worth keeping nearby:
+The deepest permanent manuals now live inside `docs/` as part of the site:
 
-- [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md)
-- [AUTHORING_GUIDE.md](https://github.com/alext512/dungeon-engine/blob/main/AUTHORING_GUIDE.md)
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
-- [PROJECT_SPIRIT.md](https://github.com/alext512/dungeon-engine/blob/main/PROJECT_SPIRIT.md)
-- [architecture.md](https://github.com/alext512/dungeon-engine/blob/main/architecture.md)
-- [tools/area_editor/README.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/README.md)
+- [Authoring Guide](manuals/authoring-guide.md)
+- [Engine JSON Interface](manuals/engine-json-interface.md)
+- [Project Spirit](project/project-spirit.md)
+- [Architecture Direction](project/architecture-direction.md)
+- [Editor Manual](editor/editor-manual.md)
+
+Repo-level files such as `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` still live at the repo root because they also serve repository and hosting conventions.
 
 ## Current Limits Worth Knowing Up Front
 

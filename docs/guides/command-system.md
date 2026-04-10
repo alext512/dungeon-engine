@@ -222,4 +222,4 @@ The exact startup audit surface is documented in [Validation and Startup Checks]
 For the complete built-in inventory, signatures, deferred nested command fields, and command-chain rules, use:
 
 - [Built-in Commands](../reference/builtin-commands.md)
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)

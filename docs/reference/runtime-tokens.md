@@ -144,4 +144,4 @@ Use value sources when you need:
 
 For the exhaustive current token heads, query shapes, and return shapes, see:
 
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)

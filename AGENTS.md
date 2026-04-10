@@ -33,11 +33,11 @@ Or double-click `Run_Game.cmd`.
 
 | File | What It Tells You |
 |---|---|
-| `PROJECT_SPIRIT.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
+| `docs/project/project-spirit.md` | The main spirit of the project, the intended engine behavior, and the design compass for future decisions |
 | `README.md` | Current features, project-authoring expectations, controls, verification commands |
-| `AUTHORING_GUIDE.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
-| `ENGINE_JSON_INTERFACE.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
-| `architecture.md` | Design principles and medium-term architectural direction |
+| `docs/manuals/authoring-guide.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
+| `docs/manuals/engine-json-interface.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
+| `docs/project/architecture-direction.md` | Design principles and medium-term architectural direction |
 | `CONTRIBUTING.md` | Working rules and project direction |
 | `CHANGELOG.md` | Reverse-chronological history of functionality changes |
 

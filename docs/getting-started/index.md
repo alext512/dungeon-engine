@@ -20,11 +20,11 @@ The fastest way to orient yourself is:
 - [Authoring Workflow](../guides/authoring-workflow.md)
 - [Command System](../guides/command-system.md)
 
-Then use the repo's long-form docs when you need more depth:
+Then use the long-form manuals when you need more depth:
 
 - [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md) for the overview and quick commands
-- [AUTHORING_GUIDE.md](https://github.com/alext512/dungeon-engine/blob/main/AUTHORING_GUIDE.md) for full author-facing workflow details
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md) for the exact JSON contract
+- [Authoring Guide](../manuals/authoring-guide.md) for full author-facing workflow details
+- [Engine JSON Interface](../manuals/engine-json-interface.md) for the exact JSON contract
 
 ## Pick Your Track
 

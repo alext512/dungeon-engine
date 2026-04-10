@@ -117,5 +117,5 @@ That convention is one of the reasons reference-aware rename or move support mat
 
 For the exhaustive shape of these content types, use:
 
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
-- [AUTHORING_GUIDE.md](https://github.com/alext512/dungeon-engine/blob/main/AUTHORING_GUIDE.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Authoring Guide](../manuals/authoring-guide.md)

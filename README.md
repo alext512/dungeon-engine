@@ -51,7 +51,7 @@ The engine itself handles lower-level jobs such as:
 - command execution
 - save/load
 
-For the design spirit behind those choices, see [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md).
+For the design spirit behind those choices, see [docs/project/project-spirit.md](./docs/project/project-spirit.md).
 
 ## What You Can Do Today
 
@@ -269,16 +269,16 @@ mkdocs build
 
 If you want the practical authoring docs, start here:
 
-- [AUTHORING_GUIDE.md](./AUTHORING_GUIDE.md)
+- [docs/manuals/authoring-guide.md](./docs/manuals/authoring-guide.md)
   - explains how to author content in JSON without needing to read much Python
-- [ENGINE_JSON_INTERFACE.md](./ENGINE_JSON_INTERFACE.md)
+- [docs/manuals/engine-json-interface.md](./docs/manuals/engine-json-interface.md)
   - the exact current JSON surface, commands, tokens, and value sources
 
 Other useful docs:
 
-- [PROJECT_SPIRIT.md](./PROJECT_SPIRIT.md)
+- [docs/project/project-spirit.md](./docs/project/project-spirit.md)
   - the design compass for what this project is trying to be
-- [architecture.md](./architecture.md)
+- [docs/project/architecture-direction.md](./docs/project/architecture-direction.md)
   - medium-term technical direction and tradeoffs
 - [roadmap.md](./roadmap.md)
   - phased development plan

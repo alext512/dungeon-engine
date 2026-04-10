@@ -55,29 +55,37 @@ extra_css:
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - Overview: getting-started/index.md
+  - Game Authoring:
+      - Start Here: getting-started/index.md
       - Install and Run: getting-started/install-and-run.md
       - Project Layout: getting-started/project-layout.md
-  - Guides:
       - Engine Concepts: guides/engine-concepts.md
       - Authoring Workflow: guides/authoring-workflow.md
       - Command System: guides/command-system.md
-      - Validation and Startup Checks: guides/validation-and-startup-checks.md
       - Dialogue, Inventory, and UI: guides/dialogue-inventory-ui.md
-  - Reference:
+      - Validation and Startup Checks: guides/validation-and-startup-checks.md
+      - Editor Overview: editor/index.md
+      - Full Editor Manual: editor/editor-manual.md
+      - Editor Workflow: editor/workflow.md
+      - Editor Gaps and Future Work: editor/gaps-and-future-work.md
+  - JSON Reference:
       - Overview: reference/index.md
       - Project Manifest: reference/project-manifest.md
       - Content Types: reference/content-types.md
       - Built-in Commands: reference/builtin-commands.md
       - Runtime Tokens: reference/runtime-tokens.md
-  - Editor:
-      - Overview: editor/index.md
-      - Workflow: editor/workflow.md
-      - Gaps and Future Work: editor/gaps-and-future-work.md
-  - Architecture:
+      - Full Authoring Guide: manuals/authoring-guide.md
+      - Full Engine JSON Interface: manuals/engine-json-interface.md
+  - Project Direction:
+      - Overview: project/index.md
+      - Project Spirit: project/project-spirit.md
+      - Architecture Direction: project/architecture-direction.md
+      - Editor Vision: editor/vision.md
+      - Editor Scope: editor/scope.md
+  - Development:
       - Runtime Architecture: architecture/runtime-architecture.md
+      - Editor Architecture: editor/architecture.md
+      - Editor Data Boundary: editor/data-boundary.md
       - For Coding Agents: architecture/for-coding-agents.md
-  - Contributing:
       - Docs Maintenance: contributing/docs-maintenance.md
       - Publishing: contributing/publishing.md

@@ -67,6 +67,7 @@ Use raw JSON when:
 
 ## Deep References
 
-- [tools/area_editor/README.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/README.md)
-- [tools/area_editor/ARCHITECTURE.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/ARCHITECTURE.md)
-- [tools/area_editor/SCOPE.md](https://github.com/alext512/dungeon-engine/blob/main/tools/area_editor/SCOPE.md)
+- [Full Editor Manual](editor-manual.md)
+- [Editor Architecture](architecture.md)
+- [Editor Scope](scope.md)
+- [Editor Vision](vision.md)

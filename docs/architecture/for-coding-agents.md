@@ -4,28 +4,28 @@ This page is the shortest reliable onboarding path for agents working on the rep
 
 ## Read In This Order
 
-- `AGENTS.md`
-- `PROJECT_SPIRIT.md`
-- `README.md`
-- `AUTHORING_GUIDE.md`
-- `ENGINE_JSON_INTERFACE.md`
-- `architecture.md`
-- `CONTRIBUTING.md`
-- `CHANGELOG.md`
+- [AGENTS.md](https://github.com/alext512/dungeon-engine/blob/main/AGENTS.md)
+- [Project Spirit](../project/project-spirit.md)
+- [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md)
+- [Authoring Guide](../manuals/authoring-guide.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Architecture Direction](../project/architecture-direction.md)
+- [CONTRIBUTING.md](https://github.com/alext512/dungeon-engine/blob/main/CONTRIBUTING.md)
+- [CHANGELOG.md](https://github.com/alext512/dungeon-engine/blob/main/CHANGELOG.md)
 
 If the change touches the editor, also read:
 
-- `tools/area_editor/README.md`
-- `tools/area_editor/ARCHITECTURE.md`
-- `tools/area_editor/DATA_BOUNDARY.md`
+- [Editor Manual](../editor/editor-manual.md)
+- [Editor Architecture](../editor/architecture.md)
+- [Editor Data Boundary](../editor/data-boundary.md)
 
 ## What Is Canonical
 
 For current behavior, trust these first:
 
 - implementation
-- `ENGINE_JSON_INTERFACE.md` for the exact JSON contract
-- `AUTHORING_GUIDE.md` for current author-facing workflows
+- [Engine JSON Interface](../manuals/engine-json-interface.md) for the exact JSON contract
+- [Authoring Guide](../manuals/authoring-guide.md) for current author-facing workflows
 - `README.md` for the project summary and current capabilities
 
 Treat these as planning or historical material unless they explicitly say otherwise:

@@ -2,11 +2,11 @@
 
 Read these files in this order:
 
-1. `PROJECT_SPIRIT.md`
+1. `docs/project/project-spirit.md`
 2. `README.md`
-3. `AUTHORING_GUIDE.md`
-4. `ENGINE_JSON_INTERFACE.md`
-5. `architecture.md`
+3. `docs/manuals/authoring-guide.md`
+4. `docs/manuals/engine-json-interface.md`
+5. `docs/project/architecture-direction.md`
 6. `roadmap.md`
 
 ## Project direction

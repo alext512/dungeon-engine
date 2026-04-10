@@ -8,18 +8,18 @@ This docs site should stay aligned with the repo's existing documentation truth 
 
 These must stay close to implementation reality:
 
-- `ENGINE_JSON_INTERFACE.md`
-- `AUTHORING_GUIDE.md`
+- `docs/manuals/engine-json-interface.md`
+- `docs/manuals/authoring-guide.md`
 - `README.md`
-- editor current-state docs such as `tools/area_editor/README.md`
+- editor current-state docs such as `docs/editor/editor-manual.md`
 
 ### Explanatory docs
 
 These explain boundaries, direction, and architecture:
 
-- `PROJECT_SPIRIT.md`
-- `architecture.md`
-- `tools/area_editor/ARCHITECTURE.md`
+- `docs/project/project-spirit.md`
+- `docs/project/architecture-direction.md`
+- `docs/editor/architecture.md`
 
 ### Planning docs
 
@@ -54,24 +54,24 @@ The MkDocs site is the curated front door. It should:
 
 If the JSON contract changes, review:
 
-- `ENGINE_JSON_INTERFACE.md`
-- `AUTHORING_GUIDE.md`
+- `docs/manuals/engine-json-interface.md`
+- `docs/manuals/authoring-guide.md`
 - this site's reference pages
 - `README.md`
 - `CHANGELOG.md`
 
 If command behavior changes, review:
 
-- `ENGINE_JSON_INTERFACE.md`
-- `AUTHORING_GUIDE.md`
+- `docs/manuals/engine-json-interface.md`
+- `docs/manuals/authoring-guide.md`
 - this site's command pages
 - `README.md`
 - `CHANGELOG.md`
 
 If editor workflows change, review:
 
-- `tools/area_editor/README.md`
-- `tools/area_editor/ARCHITECTURE.md`
+- `docs/editor/editor-manual.md`
+- `docs/editor/architecture.md`
 - this site's editor pages
 - `README.md`
 - `CHANGELOG.md`
@@ -86,3 +86,4 @@ If editor workflows change, review:
 ## Best Practice
 
 When in doubt, update the canonical repo doc first, then make the docs site explain that updated truth more clearly.
+When a public manual already lives under `docs/`, prefer updating that page directly instead of treating a root compatibility pointer as the real source.

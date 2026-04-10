@@ -112,6 +112,6 @@ The project-wide `shared_variables.json` surface is the right home for reusable 
 
 ## Deeper References
 
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
-- [AUTHORING_GUIDE.md](https://github.com/alext512/dungeon-engine/blob/main/AUTHORING_GUIDE.md)
-- [architecture.md](https://github.com/alext512/dungeon-engine/blob/main/architecture.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Authoring Guide](../manuals/authoring-guide.md)
+- [Architecture Direction](../project/architecture-direction.md)

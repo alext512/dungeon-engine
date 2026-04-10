@@ -20,8 +20,8 @@ The repo already has a documentation truth order, and it is worth preserving:
 
 The current canonical long-form references are:
 
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
-- [AUTHORING_GUIDE.md](https://github.com/alext512/dungeon-engine/blob/main/AUTHORING_GUIDE.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)
+- [Authoring Guide](../manuals/authoring-guide.md)
 - [README.md](https://github.com/alext512/dungeon-engine/blob/main/README.md)
 
 ## If You Are Working With Agents

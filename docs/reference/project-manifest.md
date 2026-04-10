@@ -93,4 +93,4 @@ Enables debug runtime features such as pausing simulation, stepping ticks, and o
 
 For the exact current manifest contract and notes, see:
 
-- [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md)
+- [Engine JSON Interface](../manuals/engine-json-interface.md)

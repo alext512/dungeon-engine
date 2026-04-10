@@ -1,6 +1,6 @@
 # Built-in Commands
 
-This page is the quick inventory. For the exact signatures and edge-case notes, use the repo's [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md).
+This page is the quick inventory. For the exact signatures and edge-case notes, use the full [Engine JSON Interface](../manuals/engine-json-interface.md).
 
 ## Movement And Position
 
@@ -156,4 +156,4 @@ Use the canonical reference when you need:
 - deferred nested command fields
 - completion behavior for `run_parallel`
 
-That level of detail lives in [ENGINE_JSON_INTERFACE.md](https://github.com/alext512/dungeon-engine/blob/main/ENGINE_JSON_INTERFACE.md).
+That level of detail lives in [Engine JSON Interface](../manuals/engine-json-interface.md).

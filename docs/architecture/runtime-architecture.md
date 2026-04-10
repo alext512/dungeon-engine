@@ -109,6 +109,6 @@ The external editor intentionally has its own project-layout interpreter and sho
 
 ## Deeper References
 
-- [architecture.md](https://github.com/alext512/dungeon-engine/blob/main/architecture.md)
-- [PROJECT_SPIRIT.md](https://github.com/alext512/dungeon-engine/blob/main/PROJECT_SPIRIT.md)
+- [Architecture Direction](../project/architecture-direction.md)
+- [Project Spirit](../project/project-spirit.md)
 - [AGENTS.md](https://github.com/alext512/dungeon-engine/blob/main/AGENTS.md)
