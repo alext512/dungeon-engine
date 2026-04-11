@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QPlainTextEdit
 
+from area_editor.json_io import (
+    JsonDataDecodeError,
+    compose_json_file_text,
+    is_json_data_file,
+    loads_json_data,
+)
 from area_editor.json_format import format_json_for_editor
 
 
@@ -53,10 +58,16 @@ class JsonViewerWidget(QPlainTextEdit):
 
     def save_to_file(self) -> None:
         text = self.toPlainText()
-        if self._file_path.suffix.lower() == ".json":
-            data = json.loads(text)
-            text = format_json_for_editor(data)
-        self._file_path.write_text(f"{text}\n", encoding="utf-8")
+        if is_json_data_file(self._file_path):
+            data = loads_json_data(text, source_name=str(self._file_path))
+            if self._file_path.suffix.lower() == ".json":
+                text = compose_json_file_text(
+                    format_json_for_editor(data),
+                    original_text=text,
+                )
+            else:
+                text = f"{text.rstrip()}\n"
+        self._file_path.write_text(text, encoding="utf-8")
         self._load()
 
     def set_document_text(self, text: str, *, dirty: bool) -> None:
@@ -74,9 +85,12 @@ class JsonViewerWidget(QPlainTextEdit):
             # Re-indent JSON for consistent display
             if self._file_path.suffix.lower() == ".json":
                 try:
-                    data = json.loads(text)
-                    text = format_json_for_editor(data)
-                except json.JSONDecodeError:
+                    data = loads_json_data(text, source_name=str(self._file_path))
+                    text = compose_json_file_text(
+                        format_json_for_editor(data),
+                        original_text=text,
+                    )
+                except JsonDataDecodeError:
                     pass  # show raw text if JSON is malformed
             self._loading = True
             try:

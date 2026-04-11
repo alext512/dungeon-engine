@@ -15,125 +15,113 @@
     "completed": false
   },
   "entity_commands": {
-    "contribute_on": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "add_entity_var",
-          "entity_id": "$self_id",
-          "name": "current_count",
-          "amount": 1
-        },
-        {
-          "type": "run_entity_command",
-          "entity_id": "$self_id",
-          "command_id": "try_complete"
-        }
-      ]
-    },
-    "contribute_off": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$reversible",
-          "op": "eq",
-          "right": true,
-          "then": [
-            {
-              "type": "if",
-              "left": "$self.current_count",
-              "op": "gt",
-              "right": 0,
-              "then": [
-                {
-                  "type": "add_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "current_count",
-                  "amount": -1
-                }
-              ]
-            },
-            {
-              "type": "run_entity_command",
-              "entity_id": "$self_id",
-              "command_id": "try_uncomplete"
-            }
-          ]
-        }
-      ]
-    },
-    "try_complete": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$self.completed",
-          "op": "eq",
-          "right": false,
-          "then": [
-            {
-              "type": "if",
-              "left": "$self.current_count",
-              "op": "gte",
-              "right": "$required_count",
-              "then": [
-                {
-                  "type": "set_entity_var",
-                  "entity_id": "$self_id",
-                  "name": "completed",
-                  "value": true
-                },
-                {
-                  "type": "run_entity_command",
-                  "entity_id": "$target_entity_id",
-                  "command_id": "$on_completed_command_id"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    "try_uncomplete": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$reversible",
-          "op": "eq",
-          "right": true,
-          "then": [
-            {
-              "type": "if",
-              "left": "$self.completed",
-              "op": "eq",
-              "right": true,
-              "then": [
-                {
-                  "type": "if",
-                  "left": "$self.current_count",
-                  "op": "lt",
-                  "right": "$required_count",
-                  "then": [
-                    {
-                      "type": "set_entity_var",
-                      "entity_id": "$self_id",
-                      "name": "completed",
-                      "value": false
-                    },
-                    {
-                      "type": "run_entity_command",
-                      "entity_id": "$target_entity_id",
-                      "command_id": "$on_uncompleted_command_id"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
+    "contribute_on": [
+      {
+        "type": "add_entity_var",
+        "entity_id": "$self_id",
+        "name": "current_count",
+        "amount": 1
+      },
+      {
+        "type": "run_entity_command",
+        "entity_id": "$self_id",
+        "command_id": "try_complete"
+      }
+    ],
+    "contribute_off": [
+      {
+        "type": "if",
+        "left": "$reversible",
+        "op": "eq",
+        "right": true,
+        "then": [
+          {
+            "type": "if",
+            "left": "$self.current_count",
+            "op": "gt",
+            "right": 0,
+            "then": [
+              {
+                "type": "add_entity_var",
+                "entity_id": "$self_id",
+                "name": "current_count",
+                "amount": -1
+              }
+            ]
+          },
+          {
+            "type": "run_entity_command",
+            "entity_id": "$self_id",
+            "command_id": "try_uncomplete"
+          }
+        ]
+      }
+    ],
+    "try_complete": [
+      {
+        "type": "if",
+        "left": "$self.completed",
+        "op": "eq",
+        "right": false,
+        "then": [
+          {
+            "type": "if",
+            "left": "$self.current_count",
+            "op": "gte",
+            "right": "$required_count",
+            "then": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "$self_id",
+                "name": "completed",
+                "value": true
+              },
+              {
+                "type": "run_entity_command",
+                "entity_id": "$target_entity_id",
+                "command_id": "$on_completed_command_id"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "try_uncomplete": [
+      {
+        "type": "if",
+        "left": "$reversible",
+        "op": "eq",
+        "right": true,
+        "then": [
+          {
+            "type": "if",
+            "left": "$self.completed",
+            "op": "eq",
+            "right": true,
+            "then": [
+              {
+                "type": "if",
+                "left": "$self.current_count",
+                "op": "lt",
+                "right": "$required_count",
+                "then": [
+                  {
+                    "type": "set_entity_var",
+                    "entity_id": "$self_id",
+                    "name": "completed",
+                    "value": false
+                  },
+                  {
+                    "type": "run_entity_command",
+                    "entity_id": "$target_entity_id",
+                    "command_id": "$on_uncompleted_command_id"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

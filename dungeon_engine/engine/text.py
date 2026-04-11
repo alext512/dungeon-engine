@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import pygame
 
 from dungeon_engine import config
 from dungeon_engine.engine.asset_manager import AssetManager
+from dungeon_engine.json_io import json_data_path_candidates, load_json_data
 
 
 @dataclass(slots=True)
@@ -263,7 +263,7 @@ class TextRenderer:
         if not definition_path.exists():
             raise FileNotFoundError(f"Missing font definition '{definition_path}'.")
 
-        definition = json.loads(definition_path.read_text(encoding="utf-8"))
+        definition = load_json_data(definition_path)
         kind = definition.get("kind", "bitmap")
         if kind != "bitmap":
             raise ValueError(f"Unsupported font kind '{kind}' in '{definition_path}'.")
@@ -333,12 +333,13 @@ class TextRenderer:
             raise FileNotFoundError("Bitmap fonts require an active project context.")
 
         for asset_dir in project.asset_paths:
-            candidate = asset_dir / "fonts" / f"{font_id}.json"
-            if candidate.exists():
-                return candidate
-            for recursive_candidate in sorted(asset_dir.rglob(f"{font_id}.json")):
-                if recursive_candidate.is_file():
-                    return recursive_candidate
+            for candidate in json_data_path_candidates(asset_dir / "fonts" / font_id):
+                if candidate.exists():
+                    return candidate
+            for candidate in json_data_path_candidates(Path(font_id)):
+                for recursive_candidate in sorted(asset_dir.rglob(candidate.name)):
+                    if recursive_candidate.is_file():
+                        return recursive_candidate
 
         raise FileNotFoundError(
             f"Bitmap font '{font_id}' could not be resolved in project '{project.project_root}'."

@@ -58,12 +58,17 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 - `wait_frames` waits a fixed number of simulation frames.
 - `wait_seconds` waits a fixed number of seconds.
 - `spawn_flow` starts a child flow without blocking the caller.
-- `run_commands` runs an inline command list as a child flow.
+- `run_sequence` runs an inline command list as a child flow.
 - `run_parallel` starts multiple child flows together.
 - `run_commands_for_collection` iterates a collection and runs one command list per item.
 - `if` branches on a comparison result.
 
 These flow-composition commands can also carry `source_entity_id`, `entity_refs`, and `refs_mode` so the child flow has the right calling context.
+
+Timing note: command chains are eager. A sequence keeps running in the same
+simulation tick until a command actually waits. `spawn_flow` starts its child
+immediately and the parent continues immediately; use `run_parallel` when you
+want grouped children with an explicit completion policy.
 
 ## Entity And Project Command Dispatch
 
@@ -88,6 +93,10 @@ When a called flow needs referenced entities, author `entity_refs` on the caller
 - `load_game` restores from a save path.
 - `save_game` writes the current session to a save path.
 - `quit_game` exits play mode.
+
+`change_area`, `new_game`, and `load_game` are scene boundaries. Once one runs,
+old-scene command work is cancelled and later commands in that old-scene
+sequence do not continue.
 
 ## Debug Runtime
 

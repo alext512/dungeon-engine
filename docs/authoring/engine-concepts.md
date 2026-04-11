@@ -33,7 +33,15 @@ That means:
 - inputs normally route to named entity commands
 - interactions are resolved through command chains
 - puzzle state changes are authored in JSON
-- flows can compose other flows through built-ins such as `run_commands`, `run_parallel`, and `run_project_command`
+- flows can compose other flows through built-ins such as `run_sequence`, `run_parallel`, and `run_project_command`
+
+Command chains are eager: when a chain is ready, it keeps running in the same
+simulation tick until it reaches a real wait. Rendering sees the settled result
+of command, input, and simulation work rather than the intermediate steps.
+
+Scene-changing commands such as `change_area`, `new_game`, and `load_game` are
+boundaries. They stop old-scene command work instead of letting later commands
+in the old scene continue after the request.
 
 ## Projects Are Manifest-Driven
 

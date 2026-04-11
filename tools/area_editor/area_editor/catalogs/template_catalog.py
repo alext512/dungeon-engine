@@ -6,7 +6,6 @@ visual definition for sprite rendering on the canvas.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import copy
@@ -14,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from area_editor.json_io import load_json_data
 from area_editor.project_io.project_manifest import (
     ProjectManifest,
     discover_entity_templates,
@@ -60,7 +60,7 @@ class TemplateCatalog:
         self._template_parameter_names.clear()
         for entry in discover_entity_templates(manifest):
             try:
-                raw = json.loads(entry.file_path.read_text(encoding="utf-8"))
+                raw = load_json_data(entry.file_path)
                 self._templates[entry.template_id] = raw
             except Exception as exc:
                 log.warning("Failed to load template %s: %s", entry.template_id, exc)

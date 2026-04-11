@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 import random
 from typing import Any
+
+from dungeon_engine.json_io import json_data_path_candidates, load_json_data
 
 
 _FALLBACK_RANDOM_GENERATOR = random.Random()
@@ -43,14 +44,20 @@ def resolve_json_file_path(context: Any, path: str) -> Path:
             resolved_path = context.project.project_root / resolved_path
         else:
             resolved_path = Path.cwd() / resolved_path
-    return resolved_path.resolve()
+    resolved_path = resolved_path.resolve()
+    if resolved_path.exists():
+        return resolved_path
+    matches = [candidate.resolve() for candidate in json_data_path_candidates(resolved_path) if candidate.is_file()]
+    if len(matches) == 1:
+        return matches[0]
+    return resolved_path
 
 
 def load_json_file(context: Any, path: Path) -> Any:
     """Load one JSON file through the current runtime context's small cache."""
     cached = context.json_file_cache.get(path)
     if cached is None:
-        cached = json.loads(path.read_text(encoding="utf-8"))
+        cached = load_json_data(path)
         context.json_file_cache[path] = cached
     return copy.deepcopy(cached)
 

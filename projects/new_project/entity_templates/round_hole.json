@@ -32,73 +32,67 @@
     "filled": false
   },
   "entity_commands": {
-    "on_occupant_enter": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$self.filled",
-          "op": "eq",
-          "right": false,
-          "then": [
-            {
-              "type": "run_entity_command",
-              "entity_id": "$ref_ids.instigator",
-              "command_id": "fall_into_round_hole",
-              "hole_id": "$self_id"
-            }
-          ]
-        }
-      ]
-    },
-    "fill_now": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$self.filled",
-          "op": "eq",
-          "right": false,
-          "then": [
-            {
-              "type": "set_entity_fields",
-              "entity_id": "$self_id",
-              "set": {
-                "variables": {
-                  "filled": true
+    "on_occupant_enter": [
+      {
+        "type": "if",
+        "left": "$self.filled",
+        "op": "eq",
+        "right": false,
+        "then": [
+          {
+            "type": "run_entity_command",
+            "entity_id": "$ref_ids.instigator",
+            "command_id": "fall_into_round_hole",
+            "hole_id": "$self_id"
+          }
+        ]
+      }
+    ],
+    "fill_now": [
+      {
+        "type": "if",
+        "left": "$self.filled",
+        "op": "eq",
+        "right": false,
+        "then": [
+          {
+            "type": "set_entity_fields",
+            "entity_id": "$self_id",
+            "set": {
+              "variables": {
+                "filled": true
+              },
+              "visuals": {
+                "empty": {
+                  "visible": false
                 },
-                "visuals": {
-                  "empty": {
-                    "visible": false
-                  },
-                  "fill": {
-                    "visible": true,
-                    "current_frame": 4
-                  }
+                "fill": {
+                  "visible": true,
+                  "current_frame": 4
                 }
               }
-            },
-            {
-              "type": "play_animation",
-              "entity_id": "$self_id",
-              "visual_id": "fill",
-              "frame_sequence": [4, 5, 6, 7],
-              "hold_last_frame": true,
-              "wait": false
-            },
-            {
-              "type": "run_entity_command",
-              "entity_id": "$group_target_entity_id",
-              "command_id": "$group_fill_command_id"
-            },
-            {
-              "type": "run_entity_command",
-              "entity_id": "$filled_target_entity_id",
-              "command_id": "$filled_command_id"
             }
-          ]
-        }
-      ]
-    }
+          },
+          {
+            "type": "play_animation",
+            "entity_id": "$self_id",
+            "visual_id": "fill",
+            "frame_sequence": [4, 5, 6, 7],
+            "hold_last_frame": true,
+            "wait": false
+          },
+          {
+            "type": "run_entity_command",
+            "entity_id": "$group_target_entity_id",
+            "command_id": "$group_fill_command_id"
+          },
+          {
+            "type": "run_entity_command",
+            "entity_id": "$filled_target_entity_id",
+            "command_id": "$filled_command_id"
+          }
+        ]
+      }
+    ]
   }
 }

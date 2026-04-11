@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
+from area_editor.json_io import JsonDataDecodeError, loads_json_data
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
@@ -162,8 +163,11 @@ def _build_persistence_policy(
     variables: dict[str, bool] = {}
     if raw_variables_text:
         try:
-            parsed = json.loads(raw_variables_text)
-        except json.JSONDecodeError as exc:
+            parsed = loads_json_data(
+                raw_variables_text,
+                source_name="Persistence variables",
+            )
+        except JsonDataDecodeError as exc:
             raise ValueError(f"Persistence variables must be valid JSON.\n{exc}") from exc
         if not isinstance(parsed, dict):
             raise ValueError("Persistence variables must be a JSON object.")
@@ -847,8 +851,8 @@ class _EntityInstanceFieldsEditor(QWidget):
         if not stripped:
             return None
         try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError as exc:
+            parsed = loads_json_data(stripped, source_name=label)
+        except JsonDataDecodeError as exc:
             raise ValueError(f"{label} must be valid JSON.\n{exc}") from exc
         if not isinstance(parsed, expected_type):
             raise ValueError(invalid_shape_message)

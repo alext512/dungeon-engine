@@ -4,6 +4,43 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Command Runner Settling And Tick Phases
+
+- Added guarded eager command settling so ready command chains continue in the
+  same simulation tick until they reach a real wait
+- Added project-level `command_runtime` safety/diagnostic settings for settle
+  pass limits, immediate-command limits, usage-peak logging, and warning ratio
+- Reworked the play-mode simulation tick into explicit settle, simulation,
+  input, presentation, and scene-boundary phases
+- Changed scene-changing commands such as `change_area`, `new_game`, and
+  `load_game` to cancel old-scene command work instead of letting later
+  commands in the old scene continue
+- Added focused tests for zero-dt settling, spawned-flow eagerness, safety-fuse
+  overflow, and scene-boundary cancellation
+- Updated authoring and reference docs to explain eager command timing,
+  `wait=true` / `wait=false`, `spawn_flow`, scene boundaries, and
+  `command_runtime`
+
+## Command Authoring Shorthand And Sequence Naming
+
+- Renamed the command-list orchestration command from `run_commands` to
+  `run_sequence` without keeping a legacy alias
+- Added entity-command array shorthand so common named commands can omit the
+  wrapper object and `enabled: true`
+- Kept the long entity-command object form for disabled commands and future
+  named-command metadata
+- Updated command docs and validation around `commands: [...]` as the default
+  sequential body shape
+
+## Render Defaults Cleanup
+
+- Updated area/entity serialization so default entity render fields are omitted
+  from authored JSON instead of repeated on every instance
+- Updated sample project templates and area content to rely on render defaults
+  where appropriate
+- Updated docs to clarify the render-order defaults and when explicit
+  `render_order`, `y_sort`, `sort_y_offset`, and `stack_order` are useful
+
 ## Area Start UI + Template Parameter Cleanup
 
 - Added a tabbed right-side area workspace in the external editor so `Layers`
@@ -30,7 +67,7 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
   `use_commands`, and dialogue inline command lists
 - Strict primitive commands now fail fast on unknown top-level authored keys,
   which helps catch likely JSON typos before launch
-- Mixed flow/helper commands such as `run_commands`, `run_parallel`,
+- Mixed flow/helper commands such as `run_sequence`, `run_parallel`,
   `spawn_flow`, `run_entity_command`, `run_project_command`, and `if` remain
   intentionally permissive for caller-supplied runtime params
 - Encoded runner-level authored fields such as `value_mode: "raw"` into the

@@ -21,6 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from area_editor.json_io import (
+    JsonDataDecodeError,
+    compose_json_file_text,
+    dumps_for_clone,
+    load_json_data,
+    loads_json_data,
+)
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
@@ -111,7 +118,7 @@ class _ItemArtObjectEditor(QWidget):
                 )
                 self._editable = False
             else:
-                self._base_object = json.loads(json.dumps(raw_value))
+                self._base_object = dumps_for_clone(raw_value)
                 path_value = str(raw_value.get("path", "") or "")
                 frame_width = self._coerce_positive_int(raw_value.get("frame_width", 16), 16)
                 frame_height = self._coerce_positive_int(raw_value.get("frame_height", 16), 16)
@@ -135,11 +142,11 @@ class _ItemArtObjectEditor(QWidget):
 
     def build_object(self) -> dict[str, Any] | None:
         if not self._editable:
-            return json.loads(json.dumps(self._base_object)) if self._base_object is not None else None
+            return dumps_for_clone(self._base_object) if self._base_object is not None else None
         path_value = self._path_edit.text().strip()
         if not path_value:
             return None
-        result = json.loads(json.dumps(self._base_object)) if self._base_object is not None else {}
+        result = dumps_for_clone(self._base_object) if self._base_object is not None else {}
         result["path"] = path_value
         result["frame_width"] = self._frame_width_spin.value()
         result["frame_height"] = self._frame_height_spin.value()
@@ -284,7 +291,7 @@ class _ItemFieldsEditor(QWidget):
         self._set_dirty(False)
 
     def build_updated_item_data(self, base_data: dict[str, Any]) -> dict[str, Any]:
-        updated = json.loads(json.dumps(base_data))
+        updated = dumps_for_clone(base_data)
         updated["name"] = self._name_edit.text().strip()
         description = self._description_edit.toPlainText().strip()
         if description:
@@ -412,12 +419,18 @@ class ItemEditorWidget(QWidget):
         base_data = self._current_raw_data()
         updated = self._fields_editor.build_updated_item_data(base_data)
         text = json.dumps(updated, indent=2, ensure_ascii=False)
-        self._raw_json.set_document_text(text, dirty=True)
+        self._raw_json.set_document_text(
+            compose_json_file_text(
+                text,
+                original_text=self._raw_json.toPlainText(),
+            ),
+            dirty=True,
+        )
         self._fields_editor.load_item_data(updated)
         self._set_dirty(True)
 
     def _reload_fields_from_saved_file(self) -> None:
-        data = json.loads(self._file_path.read_text(encoding="utf-8"))
+        data = load_json_data(self._file_path)
         if not isinstance(data, dict):
             raise ValueError("Item JSON must be a JSON object.")
         self._fields_editor.load_item_data(data)
@@ -427,8 +440,11 @@ class ItemEditorWidget(QWidget):
 
     def _current_raw_data(self) -> dict[str, Any]:
         try:
-            data = json.loads(self._raw_json.toPlainText())
-        except json.JSONDecodeError as exc:
+            data = loads_json_data(
+                self._raw_json.toPlainText(),
+                source_name=str(self._file_path),
+            )
+        except JsonDataDecodeError as exc:
             raise ValueError(
                 f"Raw JSON must be valid before item fields can apply.\n{exc}"
             ) from exc

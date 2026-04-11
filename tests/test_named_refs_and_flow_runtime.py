@@ -321,7 +321,7 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         self.assertFalse(player.require_visual("side").visible)
         self.assertFalse(player.require_visual("side").flip_x)
 
-    def test_run_commands_propagates_named_entity_refs(self) -> None:
+    def test_run_sequence_propagates_named_entity_refs(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
@@ -331,7 +331,7 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "commands": [
                     {
@@ -356,14 +356,14 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         runner = CommandRunner(registry, context)
 
         runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=[
                 {"type": "wait_frames", "frames": 1},
                 {"type": "set_current_area_var", "name": "first_done", "value": True},
             ],
         )
         runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=[
                 {"type": "wait_frames", "frames": 1},
                 {"type": "set_current_area_var", "name": "second_done", "value": True},
@@ -376,13 +376,13 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         self.assertTrue(world.variables["second_done"])
         self.assertFalse(runner.has_pending_work())
 
-    def test_spawn_flow_returns_immediately_inside_run_commands(self) -> None:
+    def test_spawn_flow_returns_immediately_inside_run_sequence(self) -> None:
         world = World()
         registry, context = self._make_command_context(world=world)
         runner = CommandRunner(registry, context)
 
         runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=[
                 {
                     "type": "spawn_flow",
@@ -410,7 +410,7 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         runner = CommandRunner(registry, context)
 
         runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=[
                 {
                     "type": "run_parallel",
@@ -427,7 +427,7 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
                         },
                         {
                             "id": "slow",
-                            "type": "run_commands",
+                            "type": "run_sequence",
                             "commands": [
                                 {"type": "wait_frames", "frames": 2},
                                 {"type": "set_current_area_var", "name": "slow_done", "value": True},
@@ -448,7 +448,7 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         self.assertTrue(world.variables["slow_done"])
         self.assertFalse(runner.has_pending_work())
 
-    def test_set_entity_field_supports_named_ref_via_run_commands(self) -> None:
+    def test_set_entity_field_supports_named_ref_via_run_sequence(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -458,7 +458,7 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "entity_refs": {
                     "caller": "lever",

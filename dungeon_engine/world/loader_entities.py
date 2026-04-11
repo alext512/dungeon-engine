@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ from dungeon_engine.authored_command_validation import (
 )
 from dungeon_engine.inventory import clone_inventory_state
 from dungeon_engine.items import load_item_definition
+from dungeon_engine.json_io import JsonDataDecodeError, load_json_data
 from dungeon_engine.logging_utils import get_logger
 from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.entity import (
@@ -522,7 +522,7 @@ def _load_entity_template(template_id: str, *, project: ProjectContext) -> dict[
     if template_path is None or not template_path.exists():
         raise FileNotFoundError(f"Missing entity template '{normalized_id}'.")
 
-    template_data = json.loads(template_path.read_text(encoding="utf-8"))
+    template_data = load_json_data(template_path)
     _TEMPLATE_CACHE[cache_key] = template_data
     return copy.deepcopy(template_data)
 
@@ -619,21 +619,14 @@ def _parse_entity_commands(entity_data: dict[str, Any]) -> dict[str, EntityComma
     raw_commands = entity_data.get("entity_commands", {})
     if isinstance(raw_commands, dict):
         for command_id, raw_command in raw_commands.items():
-            if not isinstance(raw_command, dict):
-                raise ValueError("Entity commands must be objects with 'enabled' and 'commands'.")
-            if "enabled" not in raw_command or "commands" not in raw_command:
-                raise ValueError(
-                    f"Entity command '{command_id}' must define both 'enabled' and 'commands'."
-                )
-
-            validate_authored_command_tree(
-                raw_command.get("commands", []),
-                source_name="Entity commands",
-                location=f"entity_commands.{command_id}.commands",
+            enabled, commands = _parse_entity_command_definition(
+                raw_command,
+                source_name="Entity data",
+                command_id=str(command_id),
             )
             parsed_commands[str(command_id)] = EntityCommandDefinition(
-                enabled=bool(raw_command.get("enabled", True)),
-                commands=copy.deepcopy(raw_command.get("commands", [])),
+                enabled=enabled,
+                commands=commands,
             )
 
     return parsed_commands
@@ -666,7 +659,7 @@ def validate_project_entity_templates(project: ProjectContext) -> None:
 
         template_path = paths[0]
         try:
-            raw = json.loads(template_path.read_text(encoding="utf-8"))
+            raw = load_json_data(template_path)
             if not isinstance(raw, dict):
                 issues.append(f"{template_path}: entity template must be a JSON object.")
                 continue
@@ -674,7 +667,7 @@ def validate_project_entity_templates(project: ProjectContext) -> None:
                 raw,
                 source_name=str(template_path),
             )
-        except json.JSONDecodeError as exc:
+        except JsonDataDecodeError as exc:
             issues.append(
                 f"{template_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )
@@ -717,24 +710,49 @@ def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: 
         raise ValueError(f"{source_name} field 'entity_commands' must be a JSON object.")
 
     for command_id, raw_command in raw_entity_commands.items():
-        if not isinstance(raw_command, dict):
-            raise ValueError(
-                f"{source_name} entity command '{command_id}' must be an object."
-            )
-        if "enabled" not in raw_command or "commands" not in raw_command:
-            raise ValueError(
-                f"{source_name} entity command '{command_id}' must define both 'enabled' and 'commands'."
-            )
-        raw_commands = raw_command.get("commands", [])
-        if not isinstance(raw_commands, list):
-            raise ValueError(
-                f"{source_name} entity command '{command_id}' field 'commands' must be a JSON array."
-            )
-        validate_authored_command_tree(
-            raw_commands,
+        _parse_entity_command_definition(
+            raw_command,
             source_name=source_name,
-            location=f"entity_commands.{command_id}.commands",
+            command_id=str(command_id),
         )
+
+
+def _parse_entity_command_definition(
+    raw_command: Any,
+    *,
+    source_name: str,
+    command_id: str,
+) -> tuple[bool, list[dict[str, Any]]]:
+    """Parse one authored entity-command entry in shorthand or explicit form."""
+    if isinstance(raw_command, list):
+        validate_authored_command_tree(
+            raw_command,
+            source_name=source_name,
+            location=f"entity_commands.{command_id}",
+        )
+        return True, copy.deepcopy(raw_command)
+
+    if not isinstance(raw_command, dict):
+        raise ValueError(
+            f"{source_name} entity command '{command_id}' must be either a JSON array or an object with 'enabled' and 'commands'."
+        )
+    if "enabled" not in raw_command or "commands" not in raw_command:
+        raise ValueError(
+            f"{source_name} entity command '{command_id}' object form must define both 'enabled' and 'commands'."
+        )
+
+    raw_commands = raw_command.get("commands", [])
+    if not isinstance(raw_commands, list):
+        raise ValueError(
+            f"{source_name} entity command '{command_id}' field 'commands' must be a JSON array."
+        )
+
+    validate_authored_command_tree(
+        raw_commands,
+        source_name=source_name,
+        location=f"entity_commands.{command_id}.commands",
+    )
+    return bool(raw_command.get("enabled", True)), copy.deepcopy(raw_commands)
 
 
 def _normalize_optional_id(value: Any) -> str | None:

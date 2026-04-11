@@ -26,7 +26,7 @@ For the philosophy behind this interface, see [Project Spirit](../../project/pro
 - Any `commands: [...]` list is a sequential command body by default.
 - This applies to area `enter_commands`, entity-command bodies, project-command bodies, `if.then`, `if.else`, and child command lists under flow/orchestration commands.
 - Use `run_parallel` only when child commands should start together.
-- Use `run_commands` only when you want to execute a command-list value explicitly, for example one stored in a variable or passed as a parameter.
+- Use `run_sequence` only when you want to execute a command-list value explicitly, for example one stored in a variable or passed as a parameter.
 - Project command files may declare `deferred_params: string[]` when specific params should remain raw command/data payloads until a later explicit execution step.
 - Startup validation also validates known command-bearing JSON surfaces for strict-command key mismatches before launch.
 - Strict primitive commands now fail startup on unknown top-level keys, while mixed flow/helper commands intentionally keep accepting caller-supplied runtime params.
@@ -71,6 +71,7 @@ Current manifest fields the engine reads:
 - `startup_area: string`
 - `input_targets: object`
 - `debug_inspection_enabled: boolean`
+- `command_runtime: object`
 
 Notes:
 - If the path arrays are omitted or empty, the engine falls back to conventional folders inside the project root:
@@ -83,6 +84,7 @@ Notes:
 - `save_dir` defaults to `saves`.
 - `global_entities` uses the same instance shape as area `entities`. Global entities are project-level runtime entities — the runtime injects them into the active play world whenever an area is built. Their persistent state is stored separately from per-area state and is not affected by area resets. Unlike travelers (entities transferred between areas via `change_area`), globals don't physically move — the runtime always includes them.
 - `input_targets` is a project-level logical-action routing table.
+- `command_runtime` is optional; omitted fields use engine defaults.
 
 Minimal example:
 
@@ -101,7 +103,13 @@ Minimal example:
   "input_targets": {
     "menu": "pause_controller"
   },
-  "debug_inspection_enabled": true
+  "debug_inspection_enabled": true,
+  "command_runtime": {
+    "max_settle_passes": 128,
+    "max_immediate_commands_per_settle": 8192,
+    "log_settle_usage_peaks": false,
+    "settle_warning_ratio": 0.75
+  }
 }
 ```
 
@@ -111,6 +119,32 @@ Notes:
   `open_dialogue_session`.
 - Older authored projects may still keep a `dialogue_controller` because that
   remains a valid authored pattern.
+
+### `command_runtime`
+
+Optional command-runner safety and diagnostics settings:
+
+- `max_settle_passes: integer`
+- `max_immediate_commands_per_settle: integer`
+- `log_settle_usage_peaks: boolean`
+- `settle_warning_ratio: number`
+
+Defaults:
+
+```json
+{
+  "max_settle_passes": 128,
+  "max_immediate_commands_per_settle": 8192,
+  "log_settle_usage_peaks": false,
+  "settle_warning_ratio": 0.75
+}
+```
+
+These limits are safety fuses, not frame budgets. When eager command settling
+hits a fuse, the runner logs a command error and clears current command work
+instead of silently spilling ready commands into a later tick. If
+`log_settle_usage_peaks` is `true`, the runtime logs the largest settle workload
+observed so far so you can tune the limits or spot suspicious cascades.
 
 ## Shared Variables: `shared_variables.json`
 
@@ -506,8 +540,14 @@ Current `entity_commands` form:
 
 ```json
 "entity_commands": {
-  "interact": {
-    "enabled": true,
+  "interact": [
+    {
+      "type": "run_project_command",
+      "command_id": "commands/dialogue/open"
+    }
+  ],
+  "disabled_example": {
+    "enabled": false,
     "commands": [
       {
         "type": "run_project_command",
@@ -519,8 +559,13 @@ Current `entity_commands` form:
 ```
 
 Notes:
-- `entity_commands.<name>` always uses the long form object with `enabled` and `commands`.
-- The command body in `commands` runs sequentially by default.
+- `entity_commands.<name>` accepts either:
+  - an array shorthand, which means the command body is enabled by default
+  - a long object form with `enabled` and `commands`
+- Use the array shorthand for ordinary enabled commands.
+- Use the long object form when you need metadata such as `enabled: false`.
+- There is no supported middle form like `{ "commands": [...] }` without `enabled`.
+- The command body runs sequentially by default in either form.
 - Another command chain can invoke one named entity command with `run_entity_command`.
 - Standard engine-dispatched hook names currently include `interact`, `on_blocked`,
   `on_occupant_enter`, and `on_occupant_leave`.
@@ -584,6 +629,23 @@ Rebuilding runtime context, such as during area changes, `new_game`, or
 
 A command spec is a JSON object with a `"type"` field.
 
+Command execution is eager. A ready command chain continues in the same
+simulation tick until it reaches a real wait. This means immediate commands
+after other immediate commands run immediately, and immediate commands after a
+completed wait resume in the tick where that wait completes.
+
+Important timing rules:
+
+- a plain command array is sequential
+- `wait=true` on a time-taking command blocks the current sequence until that
+  work finishes
+- `wait=false` starts that work and lets the current sequence continue
+  immediately
+- `spawn_flow` starts a child flow immediately and lets the parent continue
+  immediately
+- ready command work does not intentionally defer to a later tick unless a real
+  async handle is still waiting
+
 Examples:
 
 ```json
@@ -592,7 +654,7 @@ Examples:
 
 ```json
 {
-  "type": "run_commands",
+  "type": "run_sequence",
   "commands": [
     { "type": "play_audio", "path": "assets/project/sfx/open.wav" },
     { "type": "set_current_area_var", "name": "opened", "value": true }
@@ -601,10 +663,11 @@ Examples:
 ```
 
 Command arrays currently appear in:
-- entity command command lists
+- entity command shorthand arrays
 - area `enter_commands`
 - project command `commands`
-- `run_commands.commands`
+- long-form entity command `commands`
+- `run_sequence.commands`
 - `run_parallel.commands`
 - `spawn_flow.commands`
 - `run_commands_for_collection.commands`
@@ -618,16 +681,20 @@ Lifecycle wrapper fields are no longer valid:
 
 Use:
 - plain sequential `commands: [...]` bodies
-- `run_commands`
+- `run_sequence`
 - `run_parallel`
 - `spawn_flow`
 
 ### Reading Command JSON
 
-There are three important authored JSON shapes:
+There are four important authored JSON shapes:
 
 - command objects
   These have a `"type"` field and are executed by the engine.
+- command arrays
+  These are ordered lists of command objects. A bare `commands: [...]` array is
+  the engine's default sequential-flow form, and named entity commands may also
+  use the array shorthand directly.
 - runtime token strings
   These look like `$self_id` or `$project.dialogue.max_lines` and resolve to a value at runtime.
 - structured value sources
@@ -662,7 +729,7 @@ When one command chain needs to call another JSON command file, use `run_project
 
 Do not assume every command object accepts arbitrary extra fields. Current mixed commands that intentionally allow caller-supplied runtime params include:
 
-- `run_commands`
+- `run_sequence`
 - `run_parallel`
 - `spawn_flow`
 - `run_commands_for_collection`
@@ -1548,9 +1615,19 @@ Notes:
 - `wait_frames(frames)`
 - `wait_seconds(seconds)`
 - `spawn_flow(commands?, source_entity_id?, entity_refs?, refs_mode?)`
-- `run_commands(commands?, source_entity_id?, entity_refs?, refs_mode?)`
+- `run_sequence(commands?, source_entity_id?, entity_refs?, refs_mode?)`
 - `run_parallel(commands?, completion?, source_entity_id?, entity_refs?, refs_mode?)`
 - `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, entity_refs?, refs_mode?)` — iterates a list/tuple and runs `commands` once per item, injecting the current item and index as runtime params
+
+Timing notes:
+
+- `wait_frames` and `wait_seconds` are real waits; zero-dt settling does not
+  advance them
+- `run_sequence` runs its child list eagerly until a child command waits
+- `spawn_flow` starts its child flow eagerly and returns immediately to the
+  parent flow
+- `run_parallel` starts children together; completion policy controls when the
+  parent continues
 
 Current `run_parallel` completion shape:
 
@@ -1642,6 +1719,9 @@ Notes:
   in the destination area instead of only using an authored `entry_id`
 - if both `destination_entity_id` and `entry_id` are provided,
   `destination_entity_id` wins
+- `change_area`, `new_game`, and `load_game` are scene boundaries; once one of
+  these requests runs, old-scene command work is cancelled and later commands in
+  the same old-scene sequence do not continue
 
 ### Debug Runtime
 
@@ -1687,7 +1767,7 @@ Notes:
 - `set_current_area_var(name, value, persistent?)`
 - `set_entity_var(entity_id, name, value, persistent?)`
 - `add_current_area_var(name, amount?, persistent?)`
-- `value_mode: "raw"` is a valid authored top-level field on `set_current_area_var`, `set_entity_var`, `append_current_area_var`, and `append_entity_var`. It stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_commands`.
+- `value_mode: "raw"` is a valid authored top-level field on `set_current_area_var`, `set_entity_var`, `append_current_area_var`, and `append_entity_var`. It stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_sequence`.
 - `add_entity_var(entity_id, name, amount?, persistent?)`
 - `toggle_current_area_var(name, persistent?)`
 - `toggle_entity_var(entity_id, name, persistent?)`
@@ -1772,7 +1852,7 @@ Some command params intentionally defer nested command specs instead of resolvin
 Current deferred command params:
 
 - `spawn_flow.commands`
-- `run_commands.commands`
+- `run_sequence.commands`
 - `run_parallel.commands`
 - `run_commands_for_collection.commands`
 - `if.then`
@@ -1844,7 +1924,7 @@ The current command runner model is:
 
 - top-level dispatches become independent root flows
 - any `commands: [...]` body executes child commands in order by default
-- `run_commands` executes an explicit stored command-list value
+- `run_sequence` executes an explicit stored command-list value
 - `run_parallel` executes child commands together with an explicit completion policy
 - `spawn_flow` starts a separate flow and returns immediately
 

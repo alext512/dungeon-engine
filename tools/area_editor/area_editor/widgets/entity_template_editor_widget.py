@@ -21,6 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from area_editor.json_io import (
+    JsonDataDecodeError,
+    compose_json_file_text,
+    dumps_for_clone,
+    load_json_data,
+    loads_json_data,
+)
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
@@ -63,8 +70,11 @@ def _build_persistence_policy(
     variables: dict[str, bool] = {}
     if raw_variables_text:
         try:
-            parsed = json.loads(raw_variables_text)
-        except json.JSONDecodeError as exc:
+            parsed = loads_json_data(
+                raw_variables_text,
+                source_name="Persistence variables",
+            )
+        except JsonDataDecodeError as exc:
             raise ValueError(f"Persistence variables must be valid JSON.\n{exc}") from exc
         if not isinstance(parsed, dict):
             raise ValueError("Persistence variables must be a JSON object.")
@@ -210,7 +220,7 @@ class _TemplateVisualsEditor(QWidget):
         self._revert_button.setEnabled(enabled)
 
     def load_template_data(self, data: dict[str, Any]) -> None:
-        self._current_data = json.loads(json.dumps(data))
+        self._current_data = dumps_for_clone(data)
         raw_persistence = data.get("persistence")
         persistence_warning: str | None = None
         persistence_entity_state = False
@@ -254,12 +264,16 @@ class _TemplateVisualsEditor(QWidget):
     def build_updated_template_data(self, base_data: dict[str, Any]) -> dict[str, Any]:
         visuals_text = self._visuals_text.toPlainText().strip()
         try:
-            visuals_value = json.loads(visuals_text) if visuals_text else []
-        except json.JSONDecodeError as exc:
+            visuals_value = (
+                loads_json_data(visuals_text, source_name="Template visuals")
+                if visuals_text
+                else []
+            )
+        except JsonDataDecodeError as exc:
             raise ValueError(f"Visuals must be valid JSON.\n{exc}") from exc
         if not isinstance(visuals_value, list):
             raise ValueError("Visuals must be a JSON array.")
-        updated = json.loads(json.dumps(base_data))
+        updated = dumps_for_clone(base_data)
         updated["visuals"] = visuals_value
         if self._persistence_editable:
             persistence_value = _build_persistence_policy(
@@ -369,12 +383,18 @@ class EntityTemplateEditorWidget(QWidget):
         base_data = self._current_raw_data()
         updated = self._fields_editor.build_updated_template_data(base_data)
         text = json.dumps(updated, indent=2, ensure_ascii=False)
-        self._raw_json.set_document_text(text, dirty=True)
+        self._raw_json.set_document_text(
+            compose_json_file_text(
+                text,
+                original_text=self._raw_json.toPlainText(),
+            ),
+            dirty=True,
+        )
         self._fields_editor.load_template_data(updated)
         self._set_dirty(True)
 
     def _reload_fields_from_saved_file(self) -> None:
-        data = json.loads(self._file_path.read_text(encoding="utf-8"))
+        data = load_json_data(self._file_path)
         if not isinstance(data, dict):
             raise ValueError("Entity template JSON must be a JSON object.")
         self._fields_editor.load_template_data(data)
@@ -385,8 +405,11 @@ class EntityTemplateEditorWidget(QWidget):
 
     def _current_raw_data(self) -> dict[str, Any]:
         try:
-            data = json.loads(self._raw_json.toPlainText())
-        except json.JSONDecodeError as exc:
+            data = loads_json_data(
+                self._raw_json.toPlainText(),
+                source_name=str(self._file_path),
+            )
+        except JsonDataDecodeError as exc:
             raise ValueError(f"Raw JSON must be valid before template fields can apply.\n{exc}") from exc
         if not isinstance(data, dict):
             raise ValueError("Entity template JSON must be a JSON object.")

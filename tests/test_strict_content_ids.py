@@ -2522,7 +2522,7 @@ class StrictContentIdTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
 
-        self.assertEqual(registry.get_deferred_params("run_commands"), {"commands"})
+        self.assertEqual(registry.get_deferred_params("run_sequence"), {"commands"})
         self.assertEqual(registry.get_deferred_params("spawn_flow"), {"commands"})
         self.assertEqual(registry.get_deferred_params("run_parallel"), {"commands"})
         self.assertEqual(registry.get_deferred_params("run_commands_for_collection"), {"commands"})
@@ -3478,7 +3478,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.world.get_input_target_id("menu"), "pause_controller")
 
         game.command_runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=[
                 {
                     "type": "run_entity_command",

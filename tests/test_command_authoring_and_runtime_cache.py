@@ -175,7 +175,7 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                     "params": [],
                     "commands": [
                         {
-                            "type": "run_commands",
+                            "type": "run_sequence",
                             "reward_item": "items/key",
                             "commands": [
                                 {
@@ -217,6 +217,36 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         issues = audit_project_command_surfaces(project)
 
         self.assertEqual(issues, [])
+
+    def test_command_audit_scans_entity_command_shorthand(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "lever.json": {
+                    "kind": "lever",
+                    "entity_commands": {
+                        "interact": [
+                            {
+                                "type": "set_visible",
+                                "entity_id": "gate",
+                                "visible": False,
+                                "persitent": True,
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "entity_commands.interact" in issue
+                and "command 'set_visible' contains unknown field(s): persitent."
+                in issue
+                for issue in issues
+            )
+        )
 
     def test_command_audit_allows_value_mode_on_raw_storage_commands(self) -> None:
         _, project = self._make_project(

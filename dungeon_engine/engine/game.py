@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import random
 
@@ -168,32 +169,117 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
         if self.animation_system is None:
             raise RuntimeError("Game runtime is missing an animation system.")
 
-        self.command_runner.update(0.0)
-        if self.dialogue_runtime is not None:
-            self.dialogue_runtime.update(0.0)
-        if self.inventory_runtime is not None:
-            self.inventory_runtime.update(0.0)
-        self.movement_system.update_tick()
-        self.input_handler.update_held_direction_repeat(dt)
-        self.animation_system.update_tick(dt)
-        self.command_runner.update(dt)
+        self._settle_runtime_work()
+        self._advance_simulation_systems_tick(dt)
+        self._advance_runtime_waits_tick(dt)
+        self._settle_runtime_work()
+        self._process_input_intent(dt)
+        self._settle_runtime_work()
+        self._advance_visual_presentation_tick(dt)
+        self._apply_scene_boundary_changes_if_requested()
+        self.simulation_tick_count += 1
+
+    def _settle_runtime_work(self) -> None:
+        """Settle ready command and modal-runtime work without advancing time."""
+        if self.command_runner is None:
+            return
+
+        max_passes = max(1, int(self.command_runner.max_settle_passes))
+        for _ in range(max_passes):
+            before_state = self._runtime_settle_signature()
+            self.command_runner.settle()
+            if self.command_runner.scene_boundary_requested:
+                return
+            if self.dialogue_runtime is not None:
+                self.dialogue_runtime.update(0.0)
+            if self.command_runner.scene_boundary_requested:
+                return
+            if self.inventory_runtime is not None:
+                self.inventory_runtime.update(0.0)
+            if self.command_runner.scene_boundary_requested:
+                return
+            self.command_runner.settle()
+            after_state = self._runtime_settle_signature()
+            if after_state == before_state:
+                return
+
+        logging.getLogger(__name__).warning(
+            "Runtime settle reached %s game-level passes; command runner state was left settled as far as possible.",
+            max_passes,
+        )
+
+    def _runtime_settle_signature(self) -> tuple[object, ...]:
+        """Return a small snapshot used to stop game-level zero-dt settling."""
+        runner_state: tuple[object, ...]
+        if self.command_runner is None:
+            runner_state = ()
+        else:
+            runner_state = (
+                self.command_runner.context.command_execution_count,
+                tuple(queued.name for queued in self.command_runner.pending),
+                tuple(id(handle) for handle in self.command_runner.root_handles),
+                tuple(
+                    id(handle)
+                    for handle in self.command_runner._pending_spawned_root_handles
+                ),
+                self.command_runner.scene_boundary_requested,
+            )
+
+        dialogue_state: tuple[object, ...]
+        if self.dialogue_runtime is None:
+            dialogue_state = ()
+        else:
+            session = self.dialogue_runtime.current_session
+            dialogue_state = (
+                id(session) if session is not None else None,
+                len(self.dialogue_runtime.session_stack),
+                (
+                    id(session.pending_handle)
+                    if session is not None and session.pending_handle is not None
+                    else None
+                ),
+                None if session is None else session.timer_remaining,
+            )
+
+        inventory_state: tuple[object, ...]
+        if self.inventory_runtime is None:
+            inventory_state = ()
+        else:
+            inventory_state = (
+                id(self.inventory_runtime.current_session)
+                if self.inventory_runtime.current_session is not None
+                else None,
+            )
+
+        return runner_state + dialogue_state + inventory_state
+
+    def _advance_simulation_systems_tick(self, dt: float) -> None:
+        """Advance non-command simulation systems by one logical tick."""
+        _ = dt
+        if self.movement_system is not None:
+            self.movement_system.update_tick()
+
+    def _advance_runtime_waits_tick(self, dt: float) -> None:
+        """Advance async command and modal-runtime waits by one logical tick."""
+        if self.command_runner is not None:
+            self.command_runner.advance_tick(dt)
         if self.dialogue_runtime is not None:
             self.dialogue_runtime.update(dt)
         if self.inventory_runtime is not None:
             self.inventory_runtime.update(dt)
+
+    def _process_input_intent(self, dt: float) -> None:
+        """Convert held input intent into ordinary command requests."""
+        if self.input_handler is not None:
+            self.input_handler.update_held_direction_repeat(dt)
+
+    def _advance_visual_presentation_tick(self, dt: float) -> None:
+        """Advance presentation systems after simulation and command work settles."""
+        if self.animation_system is not None:
+            self.animation_system.update_tick(dt)
         self.screen_manager.update_tick()
-        self.camera.update(self.world, advance_tick=True)
-        self._apply_pending_reset_if_idle()
-        self.command_runner.update(0.0)
-        if self.dialogue_runtime is not None:
-            self.dialogue_runtime.update(0.0)
-        if self.inventory_runtime is not None:
-            self.inventory_runtime.update(0.0)
-        self._apply_pending_reset_if_idle()
-        self._apply_pending_load_if_idle()
-        self._apply_pending_new_game_if_idle()
-        self._apply_pending_area_change_if_idle()
-        self.simulation_tick_count += 1
+        if self.camera is not None:
+            self.camera.update(self.world, advance_tick=True)
 
     def _install_play_runtime(self) -> None:
         """Rebuild runtime systems around the current play world."""
@@ -275,30 +361,8 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
         """Let queued immediate commands settle while paused without advancing time."""
         if self.command_runner is None:
             return
-        for _ in range(8):
-            before_state = (
-                len(self.command_runner.pending),
-                len(self.command_runner.root_handles),
-                tuple(id(handle) for handle in self.command_runner.root_handles),
-                False if self.dialogue_runtime is None else self.dialogue_runtime.has_pending_work(),
-                False if self.inventory_runtime is None else self.inventory_runtime.has_pending_work(),
-            )
-            self.command_runner.update(0.0)
-            if self.dialogue_runtime is not None:
-                self.dialogue_runtime.update(0.0)
-            if self.inventory_runtime is not None:
-                self.inventory_runtime.update(0.0)
-            after_state = (
-                len(self.command_runner.pending),
-                len(self.command_runner.root_handles),
-                tuple(id(handle) for handle in self.command_runner.root_handles),
-                False if self.dialogue_runtime is None else self.dialogue_runtime.has_pending_work(),
-                False if self.inventory_runtime is None else self.inventory_runtime.has_pending_work(),
-            )
-            if not self._has_blocking_runtime_work():
-                break
-            if after_state == before_state:
-                break
+        self._settle_runtime_work()
+        self._apply_scene_boundary_changes_if_requested()
 
     def _has_blocking_runtime_work(self) -> bool:
         """Return whether any active runtime lane should block deferred transitions."""

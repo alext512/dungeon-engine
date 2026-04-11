@@ -7,10 +7,18 @@ is the ``project.json`` manifest and the filesystem layout it describes.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from area_editor.json_io import (
+    is_json_data_file,
+    iter_json_data_files,
+    json_data_path_candidates,
+    load_json_data,
+    resolve_json_data_file,
+    strip_json_data_suffix,
+)
 
 
 AREA_ID_PREFIX = "areas"
@@ -87,18 +95,31 @@ def _resolve_optional_path(
 ) -> Path | None:
     """Resolve one optional manifest file path with an optional fallback file."""
     if raw_value not in (None, ""):
-        return (project_root / str(raw_value)).resolve()
+        configured = (project_root / str(raw_value)).resolve()
+        if is_json_data_file(configured):
+            return configured
+        matches = [candidate.resolve() for candidate in json_data_path_candidates(configured) if candidate.is_file()]
+        if len(matches) > 1:
+            formatted = ", ".join(str(path) for path in matches)
+            raise ValueError(f"Ambiguous project variable file matches: {formatted}")
+        if matches:
+            return matches[0]
+        return configured
     if fallback_name is None:
         return None
-    fallback = (project_root / fallback_name).resolve()
-    return fallback if fallback.is_file() else None
+    fallback = strip_json_data_suffix(project_root / fallback_name)
+    matches = [candidate.resolve() for candidate in json_data_path_candidates(fallback) if candidate.is_file()]
+    if len(matches) > 1:
+        formatted = ", ".join(str(path) for path in matches)
+        raise ValueError(f"Ambiguous fallback project variable file matches: {formatted}")
+    return matches[0] if matches else None
 
 
 def _load_shared_variables(variables_path: Path | None) -> dict[str, Any]:
     """Load project shared variables, or return an empty mapping when absent."""
     if variables_path is None or not variables_path.is_file():
         return {}
-    raw = json.loads(variables_path.read_text(encoding="utf-8"))
+    raw = load_json_data(variables_path)
     if not isinstance(raw, dict):
         raise ValueError(f"Project variables file '{variables_path}' must contain a JSON object.")
     return raw
@@ -122,7 +143,7 @@ def _content_id(file_path: Path, root_dirs: list[Path]) -> str:
     for directory in root_dirs:
         try:
             relative = resolved.relative_to(directory.resolve())
-            return str(relative.with_suffix("")).replace("\\", "/")
+            return str(strip_json_data_suffix(relative)).replace("\\", "/")
         except ValueError:
             continue
     return file_path.stem
@@ -145,7 +166,11 @@ def load_manifest(project_path: Path) -> ProjectManifest:
     that contains it.
     """
     if project_path.is_dir():
-        project_file = project_path / "project.json"
+        project_file = resolve_json_data_file(
+            project_path,
+            basename="project",
+            description="Project manifest",
+        )
     else:
         project_file = project_path
 
@@ -153,7 +178,7 @@ def load_manifest(project_path: Path) -> ProjectManifest:
         raise FileNotFoundError(f"Project manifest not found: {project_file}")
 
     project_root = project_file.parent.resolve()
-    raw: dict[str, Any] = json.loads(project_file.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = load_json_data(project_file)
     shared_variables_path = _resolve_optional_path(
         project_root,
         raw.get("shared_variables_path"),
@@ -191,7 +216,7 @@ def discover_areas(manifest: ProjectManifest) -> list[AreaEntry]:
     for directory in manifest.area_paths:
         if not directory.is_dir():
             continue
-        for f in sorted(directory.rglob("*.json")):
+        for f in iter_json_data_files(directory):
             resolved = f.resolve()
             if resolved in seen:
                 continue
@@ -212,7 +237,7 @@ def discover_entity_templates(manifest: ProjectManifest) -> list[TemplateEntry]:
     for directory in manifest.entity_template_paths:
         if not directory.is_dir():
             continue
-        for f in sorted(directory.rglob("*.json")):
+        for f in iter_json_data_files(directory):
             resolved = f.resolve()
             if resolved in seen:
                 continue
@@ -233,7 +258,7 @@ def discover_items(manifest: ProjectManifest) -> list[ItemEntry]:
     for directory in manifest.item_paths:
         if not directory.is_dir():
             continue
-        for f in sorted(directory.rglob("*.json")):
+        for f in iter_json_data_files(directory):
             resolved = f.resolve()
             if resolved in seen:
                 continue

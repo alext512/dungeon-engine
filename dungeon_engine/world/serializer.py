@@ -391,9 +391,12 @@ def _serialize_entity_commands(entity: Any) -> dict[str, Any]:
     """Serialize named entity commands in a stable JSON-friendly form."""
     serialized: dict[str, Any] = {}
     for command_id, entity_command in entity.entity_commands.items():
-        serialized[str(command_id)] = {
-            "enabled": bool(entity_command.enabled),
-            "commands": copy.deepcopy(entity_command.commands),
-        }
+        if bool(entity_command.enabled):
+            serialized[str(command_id)] = copy.deepcopy(entity_command.commands)
+        else:
+            serialized[str(command_id)] = {
+                "enabled": False,
+                "commands": copy.deepcopy(entity_command.commands),
+            }
     return serialized
 

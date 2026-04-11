@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from PySide6.QtWidgets import QMessageBox
 
 from area_editor.documents.area_document import AreaDocument, EntityDocument
+from area_editor.json_io import (
+    compose_json_file_text,
+    iter_json_data_files,
+    load_json_data,
+    strip_json_data_suffix,
+)
 from area_editor.json_format import format_json_for_editor
 from area_editor.project_io.project_manifest import (
     discover_areas,
@@ -34,7 +39,7 @@ class MainWindowProjectRefactorMixin:
     ) -> list[Path]:
         if content_type == ContentType.ASSET:
             return sorted(path for path in folder_path.rglob("*") if path.is_file())
-        return sorted(folder_path.rglob("*.json"))
+        return iter_json_data_files(folder_path)
 
     def _reference_value_for_content_file(
         self,
@@ -53,7 +58,7 @@ class MainWindowProjectRefactorMixin:
             relative = resolved.relative_to(root_dir.resolve())
         except ValueError:
             return None
-        relative_name = str(relative.with_suffix("")).replace("\\", "/").strip("/")
+        relative_name = str(strip_json_data_suffix(relative)).replace("\\", "/").strip("/")
         return f"{prefix}/{relative_name}".strip("/") if prefix else relative_name
 
     def _panel_for_content_type(self, content_type: ContentType) -> FileTreePanel | None:
@@ -82,7 +87,8 @@ class MainWindowProjectRefactorMixin:
         for file_path in self._project_json_reference_scan_files():
             if file_path.resolve() in skipped:
                 continue
-            data = json.loads(file_path.read_text(encoding="utf-8"))
+            original_text = file_path.read_text(encoding="utf-8")
+            data = load_json_data(file_path)
             updated, changed_paths = self._replace_reference_keys_in_json_value(
                 data,
                 old_value=old_value,
@@ -94,7 +100,10 @@ class MainWindowProjectRefactorMixin:
             updates.append(
                 _JsonReferenceFileUpdate(
                     file_path=file_path,
-                    updated_text=f"{format_json_for_editor(updated)}\n",
+                    updated_text=compose_json_file_text(
+                        format_json_for_editor(updated),
+                        original_text=original_text,
+                    ),
                     changed_paths=tuple(changed_paths),
                 )
             )
@@ -112,7 +121,7 @@ class MainWindowProjectRefactorMixin:
         for file_path in self._project_json_reference_scan_files():
             if file_path.resolve() in skipped:
                 continue
-            data = json.loads(file_path.read_text(encoding="utf-8"))
+            data = load_json_data(file_path)
             matched_paths = self._find_reference_paths_in_json_value(
                 data,
                 target_value=value,
@@ -142,7 +151,8 @@ class MainWindowProjectRefactorMixin:
         for file_path in self._project_json_reference_scan_files():
             if file_path.resolve() in skipped:
                 continue
-            data = json.loads(file_path.read_text(encoding="utf-8"))
+            original_text = file_path.read_text(encoding="utf-8")
+            data = load_json_data(file_path)
             updated = data
             changed_paths: list[str] = []
             for old_value, new_value in replacements:
@@ -158,7 +168,10 @@ class MainWindowProjectRefactorMixin:
             updates.append(
                 _JsonReferenceFileUpdate(
                     file_path=file_path,
-                    updated_text=f"{format_json_for_editor(updated)}\n",
+                    updated_text=compose_json_file_text(
+                        format_json_for_editor(updated),
+                        original_text=original_text,
+                    ),
                     changed_paths=tuple(changed_paths),
                 )
             )
@@ -186,11 +199,11 @@ class MainWindowProjectRefactorMixin:
             for root_dir in path_list:
                 if not root_dir.is_dir():
                     continue
-                files.extend(path.resolve() for path in sorted(root_dir.rglob("*.json")))
+                files.extend(path.resolve() for path in iter_json_data_files(root_dir))
         for root_dir in self._manifest.asset_paths:
             if not root_dir.is_dir():
                 continue
-            files.extend(path.resolve() for path in sorted(root_dir.rglob("*.json")))
+            files.extend(path.resolve() for path in iter_json_data_files(root_dir))
         unique: list[Path] = []
         seen: set[Path] = set()
         for file_path in files:
@@ -627,7 +640,10 @@ class MainWindowProjectRefactorMixin:
         )
         source_update = _JsonReferenceFileUpdate(
             file_path=source_file_path,
-            updated_text=f"{format_json_for_editor(source_updated_data)}\n",
+            updated_text=compose_json_file_text(
+                format_json_for_editor(source_updated_data),
+                original_text=source_file_path.read_text(encoding="utf-8"),
+            ),
             changed_paths=tuple((*base_paths, *source_reference_paths)),
         )
         other_updates = self._collect_reference_updates(

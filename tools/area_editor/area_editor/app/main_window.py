@@ -8,7 +8,6 @@ menus, status bar, and cross-widget signals.
 from __future__ import annotations
 
 import copy
-import json
 import logging
 from pathlib import Path
 
@@ -50,6 +49,15 @@ from area_editor.documents.area_document import (
     EntityDocument,
     load_area_document,
     save_area_document,
+)
+from area_editor.json_io import (
+    compose_json_file_text,
+    is_json_data_file,
+    json_data_path_candidates,
+    load_json_data,
+    loads_json_data,
+    strip_json_data_suffix,
+    with_json_data_suffix,
 )
 from area_editor.json_format import format_json_for_editor
 from area_editor.project_io.asset_resolver import AssetResolver
@@ -357,7 +365,7 @@ class MainWindow(
             lambda _cid, _fp: "Open Raw JSON"
         )
         self._asset_panel.set_open_action_label_provider(
-            lambda _cid, fp: "Open Raw JSON" if fp.suffix.lower() == ".json" else "Open"
+            lambda _cid, fp: "Open Raw JSON" if is_json_data_file(fp) else "Open"
         )
         self._area_panel.set_context_menu_builder(self._populate_area_context_menu)
         self._area_panel.set_folder_context_menu_builder(
@@ -900,7 +908,7 @@ class MainWindow(
             self,
             "Open Project",
             start_dir,
-            "Project manifest (project.json);;All files (*)",
+            "Project manifest (project.json project.json5);;All files (*)",
         )
         if path:
             self.open_project(Path(path))
@@ -939,12 +947,16 @@ class MainWindow(
         normalized_id = area_id.strip().replace("\\", "/").strip("/")
         if not normalized_id:
             raise ValueError("Area ID must not be empty.")
-        if normalized_id.endswith(".json"):
-            normalized_id = normalized_id[:-5]
+        raw_id_path = Path(normalized_id)
+        explicit_suffix = raw_id_path.suffix if is_json_data_file(raw_id_path) else ".json5"
+        normalized_id = str(strip_json_data_suffix(raw_id_path)).replace("\\", "/")
         area_root = self._default_area_root()
-        file_path = (area_root / Path(normalized_id)).with_suffix(".json")
+        file_path = with_json_data_suffix(
+            area_root / Path(normalized_id),
+            default_suffix=explicit_suffix,
+        )
         content_id = f"{AREA_ID_PREFIX}/{normalized_id}"
-        if file_path.exists():
+        if any(candidate.exists() for candidate in json_data_path_candidates(area_root / Path(normalized_id))):
             raise ValueError(f"An area already exists at {content_id}.")
         file_path.parent.mkdir(parents=True, exist_ok=True)
         if area_root not in self._manifest.area_paths:
@@ -1783,8 +1795,11 @@ class MainWindow(
         normalized_relative_name = new_relative_name.strip().replace("\\", "/").strip("/")
         if not normalized_relative_name:
             raise ValueError("Area ID must not be empty.")
-        if normalized_relative_name.endswith(".json"):
-            normalized_relative_name = normalized_relative_name[:-5]
+        raw_relative_path = Path(normalized_relative_name)
+        explicit_suffix = raw_relative_path.suffix if is_json_data_file(raw_relative_path) else None
+        normalized_relative_name = str(
+            strip_json_data_suffix(raw_relative_path)
+        ).replace("\\", "/")
         if not normalized_relative_name:
             raise ValueError("Area ID must not be empty.")
 
@@ -1792,13 +1807,21 @@ class MainWindow(
         root_dir = _root_dir_for_content_file(source_file_path, area_roots)
         if root_dir is None:
             root_dir = self._default_area_root()
-        new_file_path = (root_dir / Path(normalized_relative_name)).with_suffix(".json").resolve()
+        default_suffix = explicit_suffix or (
+            source_file_path.suffix
+            if is_json_data_file(source_file_path)
+            else ".json5"
+        )
+        new_file_path = with_json_data_suffix(
+            root_dir / Path(normalized_relative_name),
+            default_suffix=default_suffix,
+        ).resolve()
         try:
             new_file_path.relative_to(root_dir.resolve())
         except ValueError as exc:
             raise ValueError("Duplicated areas must stay inside their configured project root.") from exc
         new_content_id = f"{AREA_ID_PREFIX}/{normalized_relative_name}"
-        if new_file_path.exists():
+        if any(candidate.exists() for candidate in json_data_path_candidates(root_dir / Path(normalized_relative_name))):
             raise ValueError(f"An area already exists at {new_content_id}.")
 
         source_document = self._area_docs.get(source_content_id)
@@ -2007,7 +2030,7 @@ class MainWindow(
 
         project_file = self._manifest.project_file.resolve()
         try:
-            project_data = json.loads(project_file.read_text(encoding="utf-8"))
+            project_data = load_json_data(project_file)
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -2052,7 +2075,10 @@ class MainWindow(
         )
         project_update = _JsonReferenceFileUpdate(
             file_path=project_file,
-            updated_text=f"{format_json_for_editor(updated_project_data)}\n",
+            updated_text=compose_json_file_text(
+                format_json_for_editor(updated_project_data),
+                original_text=project_file.read_text(encoding="utf-8"),
+            ),
             changed_paths=tuple((f"$.global_entities[{target_index}].id", *project_changed_paths)),
         )
         try:
@@ -2128,7 +2154,8 @@ class MainWindow(
             return
 
         try:
-            project_data = json.loads(project_file.read_text(encoding="utf-8"))
+            original_text = project_file.read_text(encoding="utf-8")
+            project_data = load_json_data(project_file)
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -2163,7 +2190,10 @@ class MainWindow(
         project_data["global_entities"] = updated_entities
         try:
             project_file.write_text(
-                f"{format_json_for_editor(project_data)}\n",
+                compose_json_file_text(
+                    format_json_for_editor(project_data),
+                    original_text=original_text,
+                ),
                 encoding="utf-8",
             )
         except Exception as exc:
@@ -2933,7 +2963,10 @@ class MainWindow(
         if current is None:
             return
         try:
-            raw = json.loads(self._entity_instance_panel.json_text)
+            raw = loads_json_data(
+                self._entity_instance_panel.json_text,
+                source_name="Entity instance JSON",
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Invalid JSON", f"Could not parse entity JSON:\n{exc}")
             return

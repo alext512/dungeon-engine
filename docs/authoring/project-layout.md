@@ -71,6 +71,10 @@ The repo-local example project starts like this:
 }
 ```
 
+You can usually omit advanced runtime tuning. If you need it, `project.json`
+also accepts an optional `command_runtime` object for command-settle safety
+limits and diagnostics.
+
 ## Where Different Kinds Of Logic Live
 
 - engine behavior lives in Python under `dungeon_engine/`

@@ -75,7 +75,7 @@ project commands
 Two command-authoring rules apply everywhere:
 
 - Any `commands: [...]` list is sequential by default.
-- Use `run_commands` only when you want to execute a command-list value explicitly, such as one stored in a variable or passed as raw hook data.
+- Use `run_sequence` only when you want to execute a command-list value explicitly, such as one stored in a variable or passed as raw hook data.
 
 ## A Minimal Project
 
@@ -131,7 +131,13 @@ Example:
     "debug_zoom_in": "debug_controller",
     "debug_zoom_out": "debug_controller"
   },
-  "debug_inspection_enabled": true
+  "debug_inspection_enabled": true,
+  "command_runtime": {
+    "max_settle_passes": 128,
+    "max_immediate_commands_per_settle": 8192,
+    "log_settle_usage_peaks": false,
+    "settle_warning_ratio": 0.75
+  }
 }
 ```
 
@@ -157,6 +163,11 @@ Example:
   Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
 - `save_dir`
   Directory for save files. Defaults to `saves`.
+- `command_runtime`
+  Optional command-runner safety and diagnostics settings. Most projects can
+  omit this. The defaults are `max_settle_passes: 128`,
+  `max_immediate_commands_per_settle: 8192`,
+  `log_settle_usage_peaks: false`, and `settle_warning_ratio: 0.75`.
 
 Authored entity ids are now project-wide identities. Do not reuse the same entity id across different areas or between area entities and `global_entities`.
 
@@ -476,26 +487,29 @@ Example:
     }
   ],
   "entity_commands": {
-    "interact": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "open_dialogue_session",
-          "dialogue_path": "$dialogue_path",
-          "dialogue_on_start": [],
-          "dialogue_on_end": [],
-          "segment_hooks": [],
-          "allow_cancel": false,
-          "entity_refs": {
-            "instigator": "$ref_ids.instigator",
-            "caller": "$self_id"
-          }
+    "interact": [
+      {
+        "type": "open_dialogue_session",
+        "dialogue_path": "$dialogue_path",
+        "dialogue_on_start": [],
+        "dialogue_on_end": [],
+        "segment_hooks": [],
+        "allow_cancel": false,
+        "entity_refs": {
+          "instigator": "$ref_ids.instigator",
+          "caller": "$self_id"
         }
-      ]
-    }
+      }
+    ]
   }
 }
 ```
+
+For named entity commands:
+
+- prefer the array shorthand for normal enabled commands
+- use the long object form only when you need metadata such as `enabled: false`
+- there is no `{ "commands": [...] }` middle form without `enabled`
 
 ### Important entity fields
 
@@ -785,7 +799,7 @@ Example with deferred hook params:
       "value": "$dialogue_on_end"
     },
     {
-      "type": "run_commands",
+      "type": "run_sequence",
       "commands": "$dialogue_on_start"
     }
   ]
@@ -796,10 +810,14 @@ Example with deferred hook params:
 
 ### How To Read Command JSON
 
-There are three important JSON shapes in authored command files:
+There are four important JSON shapes in authored command files:
 
 - command objects
   These have a `"type"` field and tell the engine to do something.
+- command arrays
+  These are ordered lists of command objects. A bare `commands: [...]` array is
+  the engine's default "sequence" form, even though there is no explicit
+  `type: "sequence"` wrapper.
 - runtime token strings
   These look like `$self_id` or `$project.movement.ticks_per_tile` and read a value at runtime.
 - structured value sources
@@ -830,6 +848,13 @@ How to read it:
 - `"value": { "$sum": [...] }`
   `"$sum"` is a helper that computes the value before `set_entity_var` runs.
 
+One more important rule:
+
+- when you see a `commands: [...]` list, read it as "run these commands in
+  sequence"
+- `run_parallel`, `spawn_flow`, and `if` are explicit flow commands because
+  they change that default sequential behavior
+
 When one JSON command chain needs to call another JSON command file, use `run_project_command`:
 
 ```json
@@ -849,9 +874,9 @@ Important nuance:
 
 - do not assume every command object accepts arbitrary extra fields
 - startup validation now fails on unknown top-level keys for strict primitive commands
-- commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_commands`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `move_in_direction`, `push_facing`, and `interact_facing`
+- commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_sequence`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `move_in_direction`, `push_facing`, and `interact_facing`
 
-So a typo like `"persitent": true` on `set_visible` is now a startup validation failure, while a field like `"reward_item": "items/key"` on `run_commands` is still valid when child commands need to read `$reward_item`.
+So a typo like `"persitent": true` on `set_visible` is now a startup validation failure, while a field like `"reward_item": "items/key"` on `run_sequence` is still valid when child commands need to read `$reward_item`.
 
 ## Runtime References and Tokens
 
@@ -1237,7 +1262,7 @@ Generic per-command lifecycle wrapper fields are removed from the active command
 - removed: command-level `on_start`
 - removed: command-level `on_end`
 - use the surrounding sequential `commands: [...]` body when later commands should wait for earlier ones
-- use `run_commands` when the next command chain is stored in a variable or passed as raw data
+- use `run_sequence` when the next command chain is stored in a variable or passed as raw data
 - use `run_parallel` when a grouped set of child commands should start together and the group should complete by an explicit rule
 - use `spawn_flow` when work should start and the current sequence should continue immediately
 
@@ -1245,9 +1270,19 @@ Scheduling model:
 
 - top-level command flows run independently by default
 - any `commands: [...]` body runs in order by default
-- `run_commands` is the explicit executor for a stored command-list value
+- command execution is eager; a ready sequence keeps running in the same tick
+  until it reaches a real wait
+- when a wait completes during a tick, the next immediate commands in that
+  sequence run in that same tick
+- `wait=true` blocks the current sequence until the time-taking command
+  completes
+- `wait=false` starts the time-taking command and lets the current sequence
+  continue immediately
+- `run_sequence` is the explicit executor for a stored command-list value
 - `run_parallel` is the explicit grouped parallel composition command
 - `spawn_flow` is the explicit fire-and-forget flow spawner
+- `change_area`, `new_game`, and `load_game` are scene boundaries; commands
+  after the boundary in the old scene do not continue
 
 `run_parallel` completion modes:
 
@@ -1391,18 +1426,15 @@ A typical simple player flow is now:
 Minimal player `move_up` entity command:
 
 ```json
-"move_up": {
-  "enabled": true,
-  "commands": [
-    {
-      "type": "move_in_direction",
-      "entity_id": "$self_id",
-      "direction": "up",
-      "frames_needed": "$project.movement.ticks_per_tile",
-      "wait": false
-    }
-  ]
-}
+"move_up": [
+  {
+    "type": "move_in_direction",
+    "entity_id": "$self_id",
+    "direction": "up",
+    "frames_needed": "$project.movement.ticks_per_tile",
+    "wait": false
+  }
+]
 ```
 
 If you want a bump reaction, author `on_blocked` on the mover:
@@ -1740,19 +1772,16 @@ Transition trigger example:
     "destination_entity_id": "spawn_marker"
   },
   "entity_commands": {
-    "on_occupant_enter": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "change_area",
-          "area_id": "$target_area",
-          "destination_entity_id": "$destination_entity_id",
-          "transfer_entity_ids": [
-            "$ref_ids.instigator"
-          ]
-        }
-      ]
-    }
+    "on_occupant_enter": [
+      {
+        "type": "change_area",
+        "area_id": "$target_area",
+        "destination_entity_id": "$destination_entity_id",
+        "transfer_entity_ids": [
+          "$ref_ids.instigator"
+        ]
+      }
+    ]
   }
 }
 ```

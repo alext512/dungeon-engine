@@ -17,7 +17,11 @@ Example ``project.json``::
         "input_targets": {
             "menu": "pause_controller"
         },
-        "debug_inspection_enabled": true
+        "debug_inspection_enabled": true,
+        "command_runtime": {
+            "max_settle_passes": 128,
+            "max_immediate_commands_per_settle": 8192
+        }
     }
 
 If any section is omitted the engine falls back to conventional folders inside
@@ -32,16 +36,38 @@ the selected project root:
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from dungeon_engine import config
+from dungeon_engine.json_io import (
+    dumps_for_clone,
+    is_json_data_file,
+    iter_json_data_files,
+    json_data_path_candidates,
+    load_json_data,
+    resolve_json_data_file,
+    strip_json_data_suffix,
+)
 
 
 AREA_ID_PREFIX = "areas"
 ENTITY_TEMPLATE_ID_PREFIX = "entity_templates"
 COMMAND_ID_PREFIX = "commands"
 ITEM_ID_PREFIX = "items"
+
+
+@dataclass(frozen=True, slots=True)
+class CommandRuntimeConfig:
+    """Runtime safety settings for eager command settling."""
+
+    max_settle_passes: int = config.COMMAND_RUNTIME_MAX_SETTLE_PASSES
+    max_immediate_commands_per_settle: int = (
+        config.COMMAND_RUNTIME_MAX_IMMEDIATE_COMMANDS_PER_SETTLE
+    )
+    log_settle_usage_peaks: bool = config.COMMAND_RUNTIME_LOG_SETTLE_USAGE_PEAKS
+    settle_warning_ratio: float = config.COMMAND_RUNTIME_SETTLE_WARNING_RATIO
 
 
 def _normalize_content_id(value: str) -> str:
@@ -70,9 +96,10 @@ def _relative_id_from_canonical(value: str, *, prefix: str) -> Path | None:
     relative = normalized[len(prefix_with_sep):].strip("/")
     if not relative:
         return None
-    if relative.lower().endswith(".json"):
+    if Path(relative).suffix.lower() in (".json", ".json5"):
         return None
     return Path(relative)
+
 
 @dataclass
 class ProjectContext:
@@ -93,6 +120,7 @@ class ProjectContext:
     shared_variables: dict[str, Any] = field(default_factory=dict)
     internal_width: int = 320
     internal_height: int = 240
+    command_runtime: CommandRuntimeConfig = field(default_factory=CommandRuntimeConfig)
 
     # ------------------------------------------------------------------
     # Entity template discovery
@@ -102,7 +130,7 @@ class ProjectContext:
         """Return the canonical template id for an entity-template file.
 
         The id is derived from the file's path relative to its entity root
-        directory, with the ``.json`` suffix stripped, the
+        directory, with the JSON data suffix stripped, the
         ``entity_templates/`` type prefix added, and backslashes
         normalized to forward slashes.
         """
@@ -111,7 +139,7 @@ class ProjectContext:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return _prefix_relative_id(
-                    str(relative.with_suffix("")).replace("\\", "/"),
+                    str(strip_json_data_suffix(relative)).replace("\\", "/"),
                     prefix=ENTITY_TEMPLATE_ID_PREFIX,
                 )
             except ValueError:
@@ -125,7 +153,7 @@ class ProjectContext:
         for directory in self.entity_template_paths:
             if not directory.is_dir():
                 continue
-            for file_path in sorted(directory.rglob("*.json")):
+            for file_path in iter_json_data_files(directory):
                 resolved = file_path.resolve()
                 if resolved in seen:
                     continue
@@ -164,12 +192,11 @@ class ProjectContext:
 
         for directory in self.entity_template_paths:
             direct_candidate = directory / relative_id
-            if direct_candidate.suffix.lower() != ".json":
-                direct_candidate = direct_candidate.with_suffix(".json")
-            if direct_candidate.exists():
-                _record(direct_candidate)
+            for candidate in json_data_path_candidates(direct_candidate):
+                if candidate.exists():
+                    _record(candidate)
 
-            for candidate in directory.rglob("*.json"):
+            for candidate in iter_json_data_files(directory):
                 relative_candidate = self.entity_template_id(candidate)
                 if relative_candidate == normalized_id:
                     _record(candidate)
@@ -198,7 +225,7 @@ class ProjectContext:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return _prefix_relative_id(
-                    str(relative.with_suffix("")).replace("\\", "/"),
+                    str(strip_json_data_suffix(relative)).replace("\\", "/"),
                     prefix=COMMAND_ID_PREFIX,
                 )
             except ValueError:
@@ -212,7 +239,7 @@ class ProjectContext:
         for directory in self.command_paths:
             if not directory.is_dir():
                 continue
-            for file_path in sorted(directory.rglob("*.json")):
+            for file_path in iter_json_data_files(directory):
                 resolved = file_path.resolve()
                 if resolved in seen:
                     continue
@@ -244,12 +271,11 @@ class ProjectContext:
 
         for directory in self.command_paths:
             direct_candidate = directory / relative_id
-            if direct_candidate.suffix.lower() != ".json":
-                direct_candidate = direct_candidate.with_suffix(".json")
-            if direct_candidate.exists():
-                _record(direct_candidate)
+            for candidate in json_data_path_candidates(direct_candidate):
+                if candidate.exists():
+                    _record(candidate)
 
-            for candidate in directory.rglob("*.json"):
+            for candidate in iter_json_data_files(directory):
                 relative_candidate = self.command_id(candidate)
                 if relative_candidate == normalized_id:
                     _record(candidate)
@@ -278,7 +304,7 @@ class ProjectContext:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return _prefix_relative_id(
-                    str(relative.with_suffix("")).replace("\\", "/"),
+                    str(strip_json_data_suffix(relative)).replace("\\", "/"),
                     prefix=ITEM_ID_PREFIX,
                 )
             except ValueError:
@@ -292,7 +318,7 @@ class ProjectContext:
         for directory in self.item_paths:
             if not directory.is_dir():
                 continue
-            for file_path in sorted(directory.rglob("*.json")):
+            for file_path in iter_json_data_files(directory):
                 resolved = file_path.resolve()
                 if resolved in seen:
                     continue
@@ -331,12 +357,11 @@ class ProjectContext:
 
         for directory in self.item_paths:
             direct_candidate = directory / relative_id
-            if direct_candidate.suffix.lower() != ".json":
-                direct_candidate = direct_candidate.with_suffix(".json")
-            if direct_candidate.exists():
-                _record(direct_candidate)
+            for candidate in json_data_path_candidates(direct_candidate):
+                if candidate.exists():
+                    _record(candidate)
 
-            for candidate in directory.rglob("*.json"):
+            for candidate in iter_json_data_files(directory):
                 relative_candidate = self.item_id(candidate)
                 if relative_candidate == normalized_id:
                     _record(candidate)
@@ -408,7 +433,7 @@ class ProjectContext:
         """Return the canonical area id for an area JSON file.
 
         The id is derived from the file's path relative to its area root
-        directory, with the ``.json`` suffix stripped, the ``areas/``
+        directory, with the JSON data suffix stripped, the ``areas/``
         type prefix added, and backslashes normalized to forward slashes.
         """
         resolved = area_path.resolve()
@@ -416,7 +441,7 @@ class ProjectContext:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return _prefix_relative_id(
-                    str(relative.with_suffix("")).replace("\\", "/"),
+                    str(strip_json_data_suffix(relative)).replace("\\", "/"),
                     prefix=AREA_ID_PREFIX,
                 )
             except ValueError:
@@ -430,7 +455,7 @@ class ProjectContext:
         for directory in self.area_paths:
             if not directory.is_dir():
                 continue
-            for f in sorted(directory.rglob("*.json")):
+            for f in iter_json_data_files(directory):
                 resolved = f.resolve()
                 if resolved not in seen:
                     seen.add(resolved)
@@ -471,12 +496,11 @@ class ProjectContext:
 
         for directory in self.area_paths:
             direct_candidate = directory / relative_id
-            if direct_candidate.suffix.lower() != ".json":
-                direct_candidate = direct_candidate.with_suffix(".json")
-            if direct_candidate.exists():
-                _record(direct_candidate)
+            for candidate in json_data_path_candidates(direct_candidate):
+                if candidate.exists():
+                    _record(candidate)
 
-            for candidate in directory.rglob("*.json"):
+            for candidate in iter_json_data_files(directory):
                 relative_candidate = self.area_id(candidate)
                 if relative_candidate == normalized_id:
                     _record(candidate)
@@ -508,7 +532,7 @@ class ProjectContext:
             try:
                 relative = resolved.relative_to(directory.resolve())
                 return _prefix_relative_id(
-                    str(relative.with_suffix("")).replace("\\", "/"),
+                    str(strip_json_data_suffix(relative)).replace("\\", "/"),
                     prefix=AREA_ID_PREFIX,
                 )
             except ValueError:
@@ -553,7 +577,11 @@ def load_project(project_path: Path) -> ProjectContext:
     - A path to a folder that contains ``project.json``
     """
     if project_path.is_dir():
-        project_file = project_path / "project.json"
+        project_file = resolve_json_data_file(
+            project_path,
+            basename="project",
+            description="Project manifest",
+        )
     else:
         project_file = project_path
 
@@ -562,7 +590,7 @@ def load_project(project_path: Path) -> ProjectContext:
     if not project_file.is_file():
         raise FileNotFoundError(f"Project manifest '{project_file}' was not found.")
 
-    raw: dict[str, Any] = json.loads(project_file.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = load_json_data(project_file)
 
     def _resolve_paths(key: str, default_name: str) -> list[Path]:
         entries = raw.get(key, [])
@@ -594,24 +622,38 @@ def load_project(project_path: Path) -> ProjectContext:
         shared_variables=shared_variables,
         internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
         internal_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
+        command_runtime=_resolve_command_runtime_config(raw.get("command_runtime")),
     )
 
 
 def _resolve_optional_path(project_root: Path, raw_value: Any, *, fallback_name: str | None = None) -> Path | None:
     """Resolve an optional manifest file path, falling back to a conventional file if present."""
     if raw_value not in (None, ""):
-        return (project_root / str(raw_value)).resolve()
+        configured = (project_root / str(raw_value)).resolve()
+        if is_json_data_file(configured):
+            return configured
+        matches = [candidate.resolve() for candidate in json_data_path_candidates(configured) if candidate.is_file()]
+        if len(matches) > 1:
+            formatted = ", ".join(str(path) for path in matches)
+            raise ValueError(f"Ambiguous project variable file matches: {formatted}")
+        if matches:
+            return matches[0]
+        return configured
     if fallback_name is None:
         return None
-    fallback = (project_root / fallback_name).resolve()
-    return fallback if fallback.is_file() else None
+    fallback = strip_json_data_suffix(project_root / fallback_name)
+    matches = [candidate.resolve() for candidate in json_data_path_candidates(fallback) if candidate.is_file()]
+    if len(matches) > 1:
+        formatted = ", ".join(str(path) for path in matches)
+        raise ValueError(f"Ambiguous fallback project variable file matches: {formatted}")
+    return matches[0] if matches else None
 
 
 def _load_shared_variables(variables_path: Path | None) -> dict[str, Any]:
     """Load project-shared variables from JSON, or return an empty mapping."""
     if variables_path is None or not variables_path.is_file():
         return {}
-    raw = json.loads(variables_path.read_text(encoding="utf-8"))
+    raw = load_json_data(variables_path)
     if not isinstance(raw, dict):
         raise ValueError(f"Project variables file '{variables_path}' must contain a JSON object.")
     return raw
@@ -627,6 +669,54 @@ def _resolve_project_dimension(shared_variables: dict[str, Any], key: str, defau
         return max(1, int(raw_value))
     except (TypeError, ValueError):
         return int(default)
+
+
+def _resolve_command_runtime_config(raw_value: Any) -> CommandRuntimeConfig:
+    """Normalize optional command-runtime safety settings from project.json."""
+    if raw_value in (None, ""):
+        return CommandRuntimeConfig()
+    if not isinstance(raw_value, dict):
+        raise ValueError("project.json field 'command_runtime' must be a JSON object.")
+
+    def _positive_int(key: str, default: int) -> int:
+        raw_setting = raw_value.get(key, default)
+        try:
+            return max(1, int(raw_setting))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"project.json field 'command_runtime.{key}' must be a positive integer."
+            ) from exc
+
+    def _ratio(key: str, default: float) -> float:
+        raw_setting = raw_value.get(key, default)
+        try:
+            return max(0.0, min(1.0, float(raw_setting)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"project.json field 'command_runtime.{key}' must be a number between 0 and 1."
+            ) from exc
+
+    return CommandRuntimeConfig(
+        max_settle_passes=_positive_int(
+            "max_settle_passes",
+            config.COMMAND_RUNTIME_MAX_SETTLE_PASSES,
+        ),
+        max_immediate_commands_per_settle=_positive_int(
+            "max_immediate_commands_per_settle",
+            config.COMMAND_RUNTIME_MAX_IMMEDIATE_COMMANDS_PER_SETTLE,
+        ),
+        log_settle_usage_peaks=bool(
+            raw_value.get(
+                "log_settle_usage_peaks",
+                config.COMMAND_RUNTIME_LOG_SETTLE_USAGE_PEAKS,
+            )
+        ),
+        settle_warning_ratio=_ratio(
+            "settle_warning_ratio",
+            config.COMMAND_RUNTIME_SETTLE_WARNING_RATIO,
+        ),
+    )
+
 
 def _resolve_input_targets(raw_input_targets: Any) -> dict[str, str]:
     """Normalize authored project-level input-target overrides."""
@@ -664,5 +754,5 @@ def _resolve_global_entities(raw_global_entities: Any) -> list[dict[str, Any]]:
             raise ValueError(
                 f"project.json field 'global_entities' must contain JSON objects (invalid entry at index {index})."
             )
-        normalized.append(json.loads(json.dumps(entity_data)))
+        normalized.append(dumps_for_clone(entity_data))
     return normalized

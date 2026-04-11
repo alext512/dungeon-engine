@@ -88,7 +88,7 @@ def register_runtime_control_commands(
         source_entity_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
-        """Queue a transition into another authored area once the command lane is idle."""
+        """Queue a transition into another authored area at the next scene boundary."""
         if context.request_area_change is None:
             raise ValueError("Cannot change area without an active area-transition handler.")
 

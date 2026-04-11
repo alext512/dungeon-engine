@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.registry import CommandRegistry
+from dungeon_engine.json_io import iter_json_data_files, load_json_data
 
 
 def audit_project_command_surfaces(project) -> list[str]:
@@ -92,7 +92,7 @@ def audit_project_command_surfaces(project) -> list[str]:
 
     dialogue_root = (project.project_root / "dialogues").resolve()
     if dialogue_root.is_dir():
-        for dialogue_path in sorted(dialogue_root.rglob("*.json")):
+        for dialogue_path in iter_json_data_files(dialogue_root):
             raw = _load_json_object(dialogue_path)
             if raw is None:
                 continue
@@ -110,7 +110,7 @@ def audit_project_command_surfaces(project) -> list[str]:
 def _load_json_object(path: Path) -> dict[str, Any] | None:
     """Load one JSON file as an object when possible, otherwise skip it."""
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = load_json_data(path)
     except Exception:
         return None
     if not isinstance(raw, dict):
@@ -129,16 +129,25 @@ def _audit_entity_command_map(
         return []
     issues: list[str] = []
     for command_id, raw_command in raw_entity_commands.items():
-        if not isinstance(raw_command, dict):
-            continue
-        issues.extend(
-            _audit_command_list(
-                raw_command.get("commands"),
-                registry,
-                source_name=source_name,
-                location=f"entity_commands.{command_id}.commands",
+        if isinstance(raw_command, list):
+            issues.extend(
+                _audit_command_list(
+                    raw_command,
+                    registry,
+                    source_name=source_name,
+                    location=f"entity_commands.{command_id}",
+                )
             )
-        )
+            continue
+        if isinstance(raw_command, dict):
+            issues.extend(
+                _audit_command_list(
+                    raw_command.get("commands"),
+                    registry,
+                    source_name=source_name,
+                    location=f"entity_commands.{command_id}.commands",
+                )
+            )
     return issues
 
 

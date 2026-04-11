@@ -38,7 +38,37 @@ A typical command object has a `type` plus fields specific to that command:
 }
 ```
 
+There are two common authored shapes:
+
+- one command object with a `type`
+- one `commands: [...]` array, which means "run these commands in sequence"
+
+There is no separate `type: "sequence"` wrapper today. The JSON array itself is
+the default sequential-flow container.
+
 Command arrays run in order unless you explicitly use a flow-composition command.
+
+## Execution Timing
+
+The command runner is eager. When a command chain is ready, it keeps running in
+the same simulation tick until it reaches a real wait.
+
+In practice:
+
+- immediate commands after another immediate command run in the same tick
+- immediate commands after a completed wait also run in that same tick
+- a sequence only pauses when a command returns an incomplete async handle
+- `wait=true` on a time-taking command blocks the current sequence until that
+  work finishes
+- `wait=false` starts the work and lets the current sequence continue
+  immediately
+- `spawn_flow` starts a child flow immediately and the parent sequence also
+  continues immediately
+
+The engine has command-runtime safety fuses for runaway immediate command
+cascades. Those limits are error guardrails, not per-frame throttles. If ready
+command work cannot settle within the configured limits, the runner logs a
+command error instead of silently pushing ready work into a later tick.
 
 ## Example: Player Input Commands
 
@@ -46,27 +76,24 @@ The repo-local player template uses entity commands for input-driven behavior:
 
 ```json
 {
-  "move_up": {
-    "enabled": true,
-    "commands": [
-      {
-        "type": "set_entity_fields",
-        "entity_id": "$self_id",
-        "set": {
-          "visuals": {
-            "up": { "visible": true, "current_frame": 1 }
-          }
+  "move_up": [
+    {
+      "type": "set_entity_fields",
+      "entity_id": "$self_id",
+      "set": {
+        "visuals": {
+          "up": { "visible": true, "current_frame": 1 }
         }
-      },
-      {
-        "type": "move_in_direction",
-        "entity_id": "$self_id",
-        "direction": "up",
-        "frames_needed": "$project.movement.ticks_per_tile",
-        "wait": false
       }
-    ]
-  }
+    },
+    {
+      "type": "move_in_direction",
+      "entity_id": "$self_id",
+      "direction": "up",
+      "frames_needed": "$project.movement.ticks_per_tile",
+      "wait": false
+    }
+  ]
 }
 ```
 
@@ -75,6 +102,9 @@ That pattern is very common:
 - adjust entity state or visuals
 - call a built-in movement or interaction command
 - let runtime tokens fill in per-instance or per-session values
+
+For entity commands specifically, prefer the array shorthand shown above. Use
+the long object form only when you need metadata such as `enabled: false`.
 
 ## Main Command Families
 
@@ -92,7 +122,7 @@ Use commands such as:
 
 Use commands such as:
 
-- `run_commands`
+- `run_sequence`
 - `spawn_flow`
 - `run_parallel`
 - `run_commands_for_collection`
@@ -151,9 +181,16 @@ Inside the called flow:
 
 Just place commands in one array.
 
+The array runs eagerly: if the first command completes immediately, the next
+command starts immediately in the same tick. If the first command waits, the
+sequence resumes immediately in the tick where that wait completes.
+
 ### Parallel work
 
 Use `run_parallel` when multiple flows should start together.
+
+Use `spawn_flow` instead when you want a fire-and-forget child flow: the child
+starts now, and the parent does not wait for it.
 
 ### Conditional work
 
@@ -187,6 +224,19 @@ Example:
   ]
 }
 ```
+
+## Scene Boundaries
+
+Commands that change the active scene/session, such as `change_area`,
+`new_game`, and `load_game`, are scene boundaries.
+
+When a scene-boundary command runs:
+
+- the request is applied at the scene-boundary phase of the current tick
+- old-scene command work is cancelled
+- commands after the boundary command in that old scene do not continue
+- preserving a flow across a scene change is not implicit; that would need a
+  future explicit API
 
 ## Runtime Tokens And Value Sources
 

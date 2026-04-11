@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from area_editor.documents.area_document import EntityDocument
+from area_editor.json_io import iter_json_data_files, strip_json_data_suffix
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,7 @@ def _discover_prefixed_json_content_ids(root_dirs: list[Path], *, prefix: str) -
     for directory in root_dirs:
         if not directory.is_dir():
             continue
-        for file_path in sorted(directory.rglob("*.json")):
+        for file_path in iter_json_data_files(directory):
             resolved = file_path.resolve()
             if resolved in seen:
                 continue
@@ -97,6 +98,6 @@ def _discover_prefixed_json_content_ids(root_dirs: list[Path], *, prefix: str) -
                 relative = resolved.relative_to(directory.resolve())
             except ValueError:
                 relative = resolved.name
-            relative_name = str(Path(relative).with_suffix("")).replace("\\", "/")
+            relative_name = str(strip_json_data_suffix(Path(relative))).replace("\\", "/")
             entries.append(f"{prefix}/{relative_name}".strip("/"))
     return sorted(entries)

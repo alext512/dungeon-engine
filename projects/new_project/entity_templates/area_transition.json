@@ -8,18 +8,15 @@
     "destination_entity_id": "spawn_marker"
   },
   "entity_commands": {
-    "on_occupant_enter": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "change_area",
-          "area_id": "$target_area",
-          "destination_entity_id": "$destination_entity_id",
-          "transfer_entity_ids": [
-            "$ref_ids.instigator"
-          ]
-        }
-      ]
-    }
+    "on_occupant_enter": [
+      {
+        "type": "change_area",
+        "area_id": "$target_area",
+        "destination_entity_id": "$destination_entity_id",
+        "transfer_entity_ids": [
+          "$ref_ids.instigator"
+        ]
+      }
+    ]
   }
 }

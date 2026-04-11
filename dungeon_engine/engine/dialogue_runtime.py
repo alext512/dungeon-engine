@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import copy
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 from dungeon_engine.commands.runner import CommandContext, CommandHandle, SequenceCommandHandle
+from dungeon_engine.json_io import json_data_path_candidates, load_json_data
 
 
 def _normalize_command_list(commands: Any) -> list[dict[str, Any]]:
@@ -231,7 +231,7 @@ class DialogueRuntime:
             caller_id=None if caller_id in (None, "") else str(caller_id),
         )
         self.current_session = session
-        self._run_commands(
+        self._run_command_list(
             session,
             session.dialogue_on_start,
             on_complete=lambda owner: self._show_current_segment(owner),
@@ -257,7 +257,15 @@ class DialogueRuntime:
         resolved_path = Path(dialogue_path)
         if not resolved_path.is_absolute():
             resolved_path = (self.project.project_root / resolved_path).resolve()
-        definition = json.loads(resolved_path.read_text(encoding="utf-8"))
+        if not resolved_path.exists():
+            matches = [
+                candidate.resolve()
+                for candidate in json_data_path_candidates(resolved_path)
+                if candidate.is_file()
+            ]
+            if len(matches) == 1:
+                resolved_path = matches[0]
+        definition = load_json_data(resolved_path)
         if not isinstance(definition, dict):
             raise ValueError(f"Dialogue file '{resolved_path}' must contain a JSON object.")
         return definition
@@ -414,7 +422,7 @@ class DialogueRuntime:
         session.advance_mode = str(advance.get("mode", "interact")).strip() or "interact"
         session.advance_seconds = float(advance.get("seconds", 0.0) or 0.0)
 
-        self._run_commands(
+        self._run_command_list(
             session,
             self._resolve_segment_hook_commands(session, "on_start"),
             on_complete=lambda owner: self._render_session(owner),
@@ -647,7 +655,7 @@ class DialogueRuntime:
             "selected_option_id": option_id,
             "selected_option_index": int(session.choice_index),
         }
-        self._run_commands(
+        self._run_command_list(
             session,
             commands,
             on_complete=lambda owner: self._finish_segment(owner),
@@ -659,7 +667,7 @@ class DialogueRuntime:
         if self.current_session is not session:
             return
         session.timer_remaining = None
-        self._run_commands(
+        self._run_command_list(
             session,
             self._resolve_segment_hook_commands(session, "on_end"),
             on_complete=lambda owner: self._advance_segment(owner),
@@ -692,7 +700,7 @@ class DialogueRuntime:
         if self.current_session is not session:
             return
         session.closing = True
-        self._run_commands(
+        self._run_command_list(
             session,
             session.dialogue_on_end,
             on_complete=lambda owner: self._finalize_close(owner),
@@ -717,7 +725,7 @@ class DialogueRuntime:
         option = dict(session.current_options[session.choice_index])
         return _normalize_command_list(option.get("commands"))
 
-    def _run_commands(
+    def _run_command_list(
         self,
         session: DialogueSession,
         commands: Any,

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import copy
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dungeon_engine.authored_command_validation import validate_authored_command_tree
+from dungeon_engine.json_io import JsonDataDecodeError, load_json_data
 from dungeon_engine.logging_utils import get_logger
 
 if TYPE_CHECKING:
@@ -147,7 +147,7 @@ def _scan_project_item_database(
         item_path = paths[0]
         try:
             definitions[item_id] = _load_item_definition_from_path(project, item_id, item_path)
-        except json.JSONDecodeError as exc:
+        except JsonDataDecodeError as exc:
             issues.append(
                 f"{item_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )
@@ -174,7 +174,7 @@ def _load_item_definition_from_path(
 
     cached = _ITEM_CACHE.get(item_path)
     if cached is None:
-        cached = json.loads(item_path.read_text(encoding="utf-8"))
+        cached = load_json_data(item_path)
         _ITEM_CACHE[item_path] = cached
     raw = copy.deepcopy(cached)
 

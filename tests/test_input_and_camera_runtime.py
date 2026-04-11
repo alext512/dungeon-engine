@@ -386,7 +386,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         self.assertEqual(world.get_input_target_id("interact"), "player")
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
 
-    def test_route_inputs_to_entity_command_supports_instigator_ref_via_run_commands(self) -> None:
+    def test_route_inputs_to_entity_command_supports_instigator_ref_via_run_sequence(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -403,7 +403,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "entity_refs": {
                     "instigator": "player",
@@ -524,7 +524,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 {},
             )
 
-    def test_set_camera_follow_supports_named_ref_via_run_commands(self) -> None:
+    def test_set_camera_follow_supports_named_ref_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -535,7 +535,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "entity_refs": {
                     "caller": "lever",

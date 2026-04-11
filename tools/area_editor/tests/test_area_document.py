@@ -121,6 +121,35 @@ class TestUnknownFieldPreservation(unittest.TestCase):
             {"interact": {"enabled": True, "commands": []}},
         )
 
+    def test_entity_extra_fields_preserve_entity_command_shorthand(self):
+        raw = {
+            "id": "e1",
+            "grid_x": 0,
+            "grid_y": 0,
+            "render_order": 10,
+            "entity_commands": {
+                "interact": [
+                    {
+                        "type": "open_dialogue_session",
+                        "dialogue_path": "dialogues/npc/sign.json",
+                    }
+                ]
+            },
+        }
+        ent = EntityDocument.from_dict(raw)
+        out = ent.to_dict()
+        self.assertEqual(
+            out["entity_commands"],
+            {
+                "interact": [
+                    {
+                        "type": "open_dialogue_session",
+                        "dialogue_path": "dialogues/npc/sign.json",
+                    }
+                ]
+            },
+        )
+
     def test_entity_default_world_render_fields_are_omitted(self):
         ent = EntityDocument.from_dict(
             {

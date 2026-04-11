@@ -244,7 +244,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 self.assertIsNotNone(raised.exception.__cause__)
                 self.assertIn("use '$self_id' or '$ref_ids.<name>'", str(raised.exception.__cause__))
 
-    def test_animation_commands_accept_visual_id_and_named_ref_via_run_commands(self) -> None:
+    def test_animation_commands_accept_visual_id_and_named_ref_via_run_sequence(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -256,7 +256,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         play_handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "entity_refs": {
                     "caller": "lever",
@@ -279,7 +279,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         wait_handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "entity_refs": {
                     "caller": "lever",
@@ -301,7 +301,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
 
-    def test_move_entity_world_position_supports_named_ref_via_run_commands(self) -> None:
+    def test_move_entity_world_position_supports_named_ref_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -312,7 +312,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "run_commands",
+            "run_sequence",
             {
                 "entity_refs": {
                     "caller": "lever",

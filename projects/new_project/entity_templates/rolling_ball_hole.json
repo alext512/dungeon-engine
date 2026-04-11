@@ -29,62 +29,59 @@
     "falling": false
   },
   "entity_commands": {
-    "fall_into_round_hole": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$self.falling",
-          "op": "eq",
-          "right": false,
-          "then": [
-            {
-              "type": "set_entity_fields",
-              "entity_id": "$self_id",
-              "set": {
-                "fields": {
-                  "solid": false,
-                  "pushable": false
+    "fall_into_round_hole": [
+      {
+        "type": "if",
+        "left": "$self.falling",
+        "op": "eq",
+        "right": false,
+        "then": [
+          {
+            "type": "set_entity_fields",
+            "entity_id": "$self_id",
+            "set": {
+              "fields": {
+                "solid": false,
+                "pushable": false
+              },
+              "variables": {
+                "falling": true
+              },
+              "visuals": {
+                "main": {
+                  "visible": false
                 },
-                "variables": {
-                  "falling": true
-                },
-                "visuals": {
-                  "main": {
-                    "visible": false
-                  },
-                  "fall": {
-                    "visible": true,
-                    "current_frame": 0
-                  }
+                "fall": {
+                  "visible": true,
+                  "current_frame": 0
                 }
               }
-            },
-            {
-              "type": "play_animation",
-              "entity_id": "$self_id",
-              "visual_id": "fall",
-              "frame_sequence": [0, 1, 2, 3],
-              "hold_last_frame": true,
-              "wait": false
-            },
-            {
-              "type": "wait_for_animation",
-              "entity_id": "$self_id",
-              "visual_id": "fall"
-            },
-            {
-              "type": "run_entity_command",
-              "entity_id": "$hole_id",
-              "command_id": "fill_now"
-            },
-            {
-              "type": "destroy_entity",
-              "entity_id": "$self_id"
             }
-          ]
-        }
-      ]
-    }
+          },
+          {
+            "type": "play_animation",
+            "entity_id": "$self_id",
+            "visual_id": "fall",
+            "frame_sequence": [0, 1, 2, 3],
+            "hold_last_frame": true,
+            "wait": false
+          },
+          {
+            "type": "wait_for_animation",
+            "entity_id": "$self_id",
+            "visual_id": "fall"
+          },
+          {
+            "type": "run_entity_command",
+            "entity_id": "$hole_id",
+            "command_id": "fill_now"
+          },
+          {
+            "type": "destroy_entity",
+            "entity_id": "$self_id"
+          }
+        ]
+      }
+    ]
   }
 }

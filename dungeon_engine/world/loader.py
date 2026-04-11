@@ -8,12 +8,12 @@ for the wider runtime and tests while the file is being decomposed.
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 from typing import Any
 
 from dungeon_engine import config
 from dungeon_engine.authored_command_validation import validate_authored_command_tree
+from dungeon_engine.json_io import JsonDataDecodeError, load_json_data
 from dungeon_engine.logging_utils import get_logger
 from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
@@ -49,7 +49,7 @@ def load_area(
     (the area will still work, but GID bounds won't be validated).
     """
     resolved_area_path = area_path.resolve()
-    raw_data = json.loads(resolved_area_path.read_text(encoding="utf-8"))
+    raw_data = load_json_data(resolved_area_path)
     return load_area_from_data(
         raw_data,
         source_name=str(resolved_area_path),
@@ -489,7 +489,7 @@ def validate_project_areas(project: ProjectContext) -> None:
 
         area_path = paths[0]
         try:
-            raw = json.loads(area_path.read_text(encoding="utf-8"))
+            raw = load_json_data(area_path)
             _, world = load_area_from_data(
                 raw,
                 source_name=str(area_path),
@@ -507,7 +507,7 @@ def validate_project_areas(project: ProjectContext) -> None:
                 )
             for entity_id in world.area_entities:
                 area_entity_ids.setdefault(entity_id, []).append(area_path)
-        except json.JSONDecodeError as exc:
+        except JsonDataDecodeError as exc:
             issues.append(
                 f"{area_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )

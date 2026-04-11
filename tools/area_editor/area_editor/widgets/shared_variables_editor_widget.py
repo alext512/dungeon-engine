@@ -19,6 +19,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from area_editor.json_io import (
+    JsonDataDecodeError,
+    compose_json_file_text,
+    dumps_for_clone,
+    load_json_data,
+    loads_json_data,
+)
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
@@ -166,7 +173,7 @@ class _SharedVariablesFieldsEditor(QWidget):
     def build_updated_shared_variables_data(self, base_data: dict[str, Any]) -> dict[str, Any]:
         if not self._structured_editable:
             raise ValueError("Use the Raw JSON tab to edit the current shared variables shape.")
-        updated = json.loads(json.dumps(base_data))
+        updated = dumps_for_clone(base_data)
         display = updated.get("display")
         movement = updated.get("movement")
         if display is None:
@@ -281,12 +288,18 @@ class SharedVariablesEditorWidget(QWidget):
         base_data = self._current_raw_data()
         updated = self._fields_editor.build_updated_shared_variables_data(base_data)
         text = json.dumps(updated, indent=2, ensure_ascii=False)
-        self._raw_json.set_document_text(text, dirty=True)
+        self._raw_json.set_document_text(
+            compose_json_file_text(
+                text,
+                original_text=self._raw_json.toPlainText(),
+            ),
+            dirty=True,
+        )
         self._fields_editor.load_shared_variables_data(updated)
         self._set_dirty(True)
 
     def _reload_fields_from_saved_file(self) -> None:
-        data = json.loads(self._file_path.read_text(encoding="utf-8"))
+        data = load_json_data(self._file_path)
         if not isinstance(data, dict):
             raise ValueError("shared_variables.json must be a JSON object.")
         self._fields_editor.load_shared_variables_data(data)
@@ -296,8 +309,11 @@ class SharedVariablesEditorWidget(QWidget):
 
     def _current_raw_data(self) -> dict[str, Any]:
         try:
-            data = json.loads(self._raw_json.toPlainText())
-        except json.JSONDecodeError as exc:
+            data = loads_json_data(
+                self._raw_json.toPlainText(),
+                source_name=str(self._file_path),
+            )
+        except JsonDataDecodeError as exc:
             raise ValueError(
                 f"Raw JSON must be valid before shared variables can apply.\n{exc}"
             ) from exc

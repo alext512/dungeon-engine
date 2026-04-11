@@ -83,6 +83,7 @@ class ProjectContentContractTests(unittest.TestCase):
         *,
         startup_area: str | None = None,
         input_targets: dict[str, str] | None = None,
+        command_runtime: dict[str, object] | None = None,
         global_entities: list[dict[str, object]] | None = None,
         entity_templates: dict[str, dict[str, object]] | None = None,
         areas: dict[str, dict[str, object]] | None = None,
@@ -104,6 +105,8 @@ class ProjectContentContractTests(unittest.TestCase):
             project_payload["startup_area"] = startup_area
         if input_targets is not None:
             project_payload["input_targets"] = input_targets
+        if command_runtime is not None:
+            project_payload["command_runtime"] = command_runtime
         if global_entities is not None:
             project_payload["global_entities"] = global_entities
 
@@ -118,6 +121,21 @@ class ProjectContentContractTests(unittest.TestCase):
             _write_json(project_root / "commands" / relative_path, command_payload)
 
         return project_root, load_project(project_root / "project.json")
+
+    def test_project_manifest_loads_command_runtime_config(self) -> None:
+        _, project = self._make_project(
+            command_runtime={
+                "max_settle_passes": 32,
+                "max_immediate_commands_per_settle": 1024,
+                "log_settle_usage_peaks": True,
+                "settle_warning_ratio": 0.5,
+            }
+        )
+
+        self.assertEqual(project.command_runtime.max_settle_passes, 32)
+        self.assertEqual(project.command_runtime.max_immediate_commands_per_settle, 1024)
+        self.assertTrue(project.command_runtime.log_settle_usage_peaks)
+        self.assertEqual(project.command_runtime.settle_warning_ratio, 0.5)
 
     def test_area_validation_rejects_authored_area_id(self) -> None:
         _, project = self._make_project(
@@ -497,6 +515,129 @@ class ProjectContentContractTests(unittest.TestCase):
         self.assertFalse(explicit_block.is_effectively_solid())
         self.assertFalse(explicit_block.is_effectively_pushable())
         self.assertFalse(explicit_block.is_effectively_interactable())
+
+    def test_entity_command_shorthand_loads_and_serializes_with_default_enabled(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "switch",
+                "kind": "lever",
+                "grid_x": 0,
+                "grid_y": 0,
+                "entity_commands": {
+                    "interact": [
+                        {
+                            "type": "set_current_area_var",
+                            "name": "opened",
+                            "value": True,
+                        }
+                    ]
+                },
+            }
+        ]
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        switch = world.get_entity("switch")
+        self.assertIsNotNone(switch)
+        assert switch is not None
+        self.assertTrue(switch.entity_commands["interact"].enabled)
+        self.assertEqual(
+            switch.entity_commands["interact"].commands,
+            [{"type": "set_current_area_var", "name": "opened", "value": True}],
+        )
+
+        serialized = serialize_area(area, world, project=project)
+        self.assertEqual(
+            serialized["entities"][0]["entity_commands"],
+            {
+                "interact": [
+                    {
+                        "type": "set_current_area_var",
+                        "name": "opened",
+                        "value": True,
+                    }
+                ]
+            },
+        )
+
+    def test_entity_command_long_form_preserves_disabled_state(self) -> None:
+        _, project = self._make_project()
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "sign_1",
+                "kind": "sign",
+                "grid_x": 0,
+                "grid_y": 0,
+                "entity_commands": {
+                    "interact": {
+                        "enabled": False,
+                        "commands": [
+                            {
+                                "type": "set_current_area_var",
+                                "name": "opened",
+                                "value": True,
+                            }
+                        ],
+                    }
+                },
+            }
+        ]
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        sign = world.get_entity("sign_1")
+        self.assertIsNotNone(sign)
+        assert sign is not None
+        self.assertFalse(sign.entity_commands["interact"].enabled)
+
+        serialized = serialize_area(area, world, project=project)
+        self.assertEqual(
+            serialized["entities"][0]["entity_commands"],
+            {
+                "interact": {
+                    "enabled": False,
+                    "commands": [
+                        {
+                            "type": "set_current_area_var",
+                            "name": "opened",
+                            "value": True,
+                        }
+                    ],
+                }
+            },
+        )
+
+    def test_entity_command_object_without_enabled_is_rejected(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "sign.json": {
+                    "kind": "sign",
+                    "entity_commands": {
+                        "interact": {
+                            "commands": [
+                                {
+                                    "type": "set_current_area_var",
+                                    "name": "opened",
+                                    "value": True,
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        with self.assertRaises(EntityTemplateValidationError) as raised:
+            validate_project_entity_templates(project)
+
+        self.assertTrue(
+            any(
+                "object form must define both 'enabled' and 'commands'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
 
     def test_load_project_requires_manifest(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()

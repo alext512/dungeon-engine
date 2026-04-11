@@ -6,6 +6,7 @@ import copy
 from pathlib import Path
 
 from dungeon_engine.commands.runner import AreaTransitionRequest, execute_registered_command
+from dungeon_engine.json_io import json_data_path_candidates
 from dungeon_engine.world.loader import instantiate_entity, load_area, load_area_from_data
 from dungeon_engine.world.persistence import (
     PersistenceRuntime,
@@ -26,12 +27,26 @@ class GameAreaRuntimeMixin:
         self._pending_area_change_request = copy.deepcopy(request)
         self._pending_new_game_request = None
         self._pending_load_save_path = None
+        self._request_scene_boundary()
 
     def request_new_game(self, request: AreaTransitionRequest) -> None:
         """Queue a fresh session reset and transition into another authored area."""
         self._pending_new_game_request = copy.deepcopy(request)
         self._pending_area_change_request = None
         self._pending_load_save_path = None
+        self._request_scene_boundary()
+
+    def _request_scene_boundary(self) -> None:
+        """Tell the command runner that current-scene command work should stop."""
+        if self.command_runner is not None:
+            self.command_runner.request_scene_boundary()
+
+    def _clear_scene_boundary_command_work(self) -> None:
+        """Drop old-scene command work before applying a scene-boundary request."""
+        if self.command_runner is None:
+            return
+        self.command_runner.cancel_all_work()
+        self.command_runner.clear_scene_boundary_request()
 
     def _load_area_runtime(
         self,
@@ -153,9 +168,7 @@ class GameAreaRuntimeMixin:
             )
 
         raw_path = Path(area_path)
-        candidate_inputs = [raw_path]
-        if raw_path.suffix.lower() != ".json":
-            candidate_inputs.append(raw_path.with_suffix(".json"))
+        candidate_inputs = json_data_path_candidates(raw_path)
 
         candidates: list[Path] = []
         seen: set[Path] = set()
@@ -188,7 +201,7 @@ class GameAreaRuntimeMixin:
         if self.command_runner is None or not self.area.enter_commands:
             return
         self.command_runner.enqueue(
-            "run_commands",
+            "run_sequence",
             commands=copy.deepcopy(self.area.enter_commands),
         )
 
@@ -243,14 +256,14 @@ class GameAreaRuntimeMixin:
             ):
                 _spawn_hook(receiver, "on_occupant_enter")
 
-    def _apply_pending_reset_if_idle(self) -> None:
+    def _apply_pending_reset_if_idle(self) -> bool:
         """Apply queued immediate reset requests once the command lane is idle."""
         if self.command_runner is None or self._has_blocking_runtime_work():
-            return
+            return False
 
         request = self.persistence_runtime.consume_immediate_reset()
         if request is None:
-            return
+            return False
 
         if request.kind == "persistent":
             self.persistence_runtime.clear_persistent_area_state(
@@ -261,43 +274,57 @@ class GameAreaRuntimeMixin:
             )
 
         self._apply_runtime_reset(request)
+        return True
 
-    def _apply_pending_load_if_idle(self) -> None:
-        """Apply a queued save-slot load once the command lane is idle."""
-        if self.command_runner is None or self._has_blocking_runtime_work():
-            return
+    def _apply_pending_load_if_idle(self) -> bool:
+        """Apply a queued save-slot load at the scene-boundary phase."""
         if self._pending_load_save_path is None:
-            return
+            return False
 
         load_path = self._pending_load_save_path
         self._pending_load_save_path = None
         self._accumulated_time = 0.0
+        self._clear_scene_boundary_command_work()
         self._load_save_slot(load_path)
+        return True
 
-    def _apply_pending_new_game_if_idle(self) -> None:
-        """Apply a queued new-game request once the command lane is idle."""
-        if self.command_runner is None or self._has_blocking_runtime_work():
-            return
+    def _apply_pending_new_game_if_idle(self) -> bool:
+        """Apply a queued new-game request at the scene-boundary phase."""
         if self._pending_new_game_request is None:
-            return
+            return False
 
         request = self._pending_new_game_request
         self._pending_new_game_request = None
         self._accumulated_time = 0.0
+        self._clear_scene_boundary_command_work()
         self.persistence_runtime = PersistenceRuntime(project=self.project)
         self._apply_area_transition_request(request)
+        return True
 
-    def _apply_pending_area_change_if_idle(self) -> None:
-        """Apply a queued area transition once the main command lane is idle."""
-        if self.command_runner is None or self._has_blocking_runtime_work():
-            return
+    def _apply_pending_area_change_if_idle(self) -> bool:
+        """Apply a queued area transition at the scene-boundary phase."""
         if self._pending_area_change_request is None:
-            return
+            return False
 
         request = self._pending_area_change_request
         self._pending_area_change_request = None
         self._accumulated_time = 0.0
+        self._clear_scene_boundary_command_work()
         self._apply_area_transition_request(request)
+        return True
+
+    def _apply_scene_boundary_changes_if_requested(self) -> bool:
+        """Apply scene-boundary work requested during this settled tick."""
+        changed_scene = False
+        while self._apply_pending_reset_if_idle():
+            changed_scene = True
+        if self._apply_pending_load_if_idle():
+            return True
+        if self._apply_pending_new_game_if_idle():
+            return True
+        if self._apply_pending_area_change_if_idle():
+            return True
+        return changed_scene
 
     def _apply_reentry_resets_for_area(self, area_id: str, authored_world) -> None:
         """Apply scheduled on-reentry persistent resets before constructing an area runtime."""

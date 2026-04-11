@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from area_editor.json_io import JsonDataDecodeError, loads_json_data
+
 
 def _format_commands_text(commands: list[Any]) -> str:
     return json.dumps(commands, indent=2, ensure_ascii=False)
@@ -297,8 +299,8 @@ class AreaStartPanel(QWidget):
         if not raw:
             return []
         try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError as exc:
+            parsed = loads_json_data(raw, source_name="Enter commands")
+        except JsonDataDecodeError as exc:
             raise ValueError(f"Enter commands must be valid JSON.\n{exc}") from exc
         if not isinstance(parsed, list):
             raise ValueError("Enter commands must be a JSON array.")

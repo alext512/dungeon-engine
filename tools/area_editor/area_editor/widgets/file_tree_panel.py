@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from area_editor.json_io import strip_json_data_suffix
+
 
 class FileTreePanel(QDockWidget):
     """Generic dock panel showing a folder tree of project files."""
@@ -40,7 +42,7 @@ class FileTreePanel(QDockWidget):
         *,
         object_name: str | None = None,
         icon_size: int = 0,
-        file_extensions: tuple[str, ...] = (".json",),
+        file_extensions: tuple[str, ...] = (".json", ".json5"),
         content_prefix: str | None = None,
         preserve_file_extensions: bool = False,
         parent=None,
@@ -300,7 +302,7 @@ class FileTreePanel(QDockWidget):
                     if self._preserve_file_extensions:
                         content_id = str(relative).replace("\\", "/")
                     else:
-                        content_id = str(relative.with_suffix("")).replace("\\", "/")
+                        content_id = str(strip_json_data_suffix(relative)).replace("\\", "/")
                 except ValueError:
                     content_id = f.name if self._preserve_file_extensions else f.stem
                 if self._content_prefix:

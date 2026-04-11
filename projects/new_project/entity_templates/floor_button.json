@@ -24,101 +24,95 @@
     "pressed": false
   },
   "entity_commands": {
-    "on_occupant_enter": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$self.pressed",
-          "op": "eq",
-          "right": false,
-          "then": [
-            {
-              "type": "set_entity_fields",
-              "entity_id": "$self_id",
-              "set": {
-                "variables": {
-                  "pressed": true
-                },
-                "visuals": {
-                  "main": {
-                    "current_frame": 1
-                  }
+    "on_occupant_enter": [
+      {
+        "type": "if",
+        "left": "$self.pressed",
+        "op": "eq",
+        "right": false,
+        "then": [
+          {
+            "type": "set_entity_fields",
+            "entity_id": "$self_id",
+            "set": {
+              "variables": {
+                "pressed": true
+              },
+              "visuals": {
+                "main": {
+                  "current_frame": 1
                 }
               }
-            },
-            {
-              "type": "run_entity_command",
-              "entity_id": "$target_entity_id",
-              "command_id": "$target_press_command_id"
             }
-          ]
-        }
-      ]
-    },
-    "on_occupant_leave": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "if",
-          "left": "$self.pressed",
-          "op": "eq",
-          "right": true,
-          "then": [
-            {
-              "type": "if",
-              "left": "$latching",
-              "op": "eq",
-              "right": false,
-              "then": [
-                {
-                  "type": "if",
-                  "left": {
-                    "$any_in_collection": {
-                      "value": {
-                        "$entities_at": {
-                          "x": "$from_x",
-                          "y": "$from_y",
-                          "exclude_entity_id": "$self_id",
-                          "select": {
-                            "fields": ["entity_id"]
-                          }
-                        }
-                      },
-                      "field": "entity_id",
-                      "op": "neq",
-                      "match": ""
-                    }
-                  },
-                  "op": "eq",
-                  "right": false,
-                  "then": [
-                    {
-                      "type": "set_entity_fields",
-                      "entity_id": "$self_id",
-                      "set": {
-                        "variables": {
-                          "pressed": false
-                        },
-                        "visuals": {
-                          "main": {
-                            "current_frame": 0
-                          }
+          },
+          {
+            "type": "run_entity_command",
+            "entity_id": "$target_entity_id",
+            "command_id": "$target_press_command_id"
+          }
+        ]
+      }
+    ],
+    "on_occupant_leave": [
+      {
+        "type": "if",
+        "left": "$self.pressed",
+        "op": "eq",
+        "right": true,
+        "then": [
+          {
+            "type": "if",
+            "left": "$latching",
+            "op": "eq",
+            "right": false,
+            "then": [
+              {
+                "type": "if",
+                "left": {
+                  "$any_in_collection": {
+                    "value": {
+                      "$entities_at": {
+                        "x": "$from_x",
+                        "y": "$from_y",
+                        "exclude_entity_id": "$self_id",
+                        "select": {
+                          "fields": ["entity_id"]
                         }
                       }
                     },
-                    {
-                      "type": "run_entity_command",
-                      "entity_id": "$target_entity_id",
-                      "command_id": "$target_release_command_id"
+                    "field": "entity_id",
+                    "op": "neq",
+                    "match": ""
+                  }
+                },
+                "op": "eq",
+                "right": false,
+                "then": [
+                  {
+                    "type": "set_entity_fields",
+                    "entity_id": "$self_id",
+                    "set": {
+                      "variables": {
+                        "pressed": false
+                      },
+                      "visuals": {
+                        "main": {
+                          "current_frame": 0
+                        }
+                      }
                     }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
+                  },
+                  {
+                    "type": "run_entity_command",
+                    "entity_id": "$target_entity_id",
+                    "command_id": "$target_release_command_id"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

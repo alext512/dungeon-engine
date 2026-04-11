@@ -15,12 +15,14 @@ The runtime starts from `project.json`. This file tells the engine where to find
 - `startup_area: string`
 - `input_targets: object`
 - `debug_inspection_enabled: boolean`
+- `command_runtime: object`
 
 ## Defaults And Fallbacks
 
 - If a path array is omitted or empty, the engine falls back to a conventional folder under the project root.
 - `shared_variables_path` falls back to `shared_variables.json` if present.
 - `save_dir` defaults to `saves`.
+- `command_runtime` is optional; omitted fields use engine defaults.
 
 ## Example
 
@@ -39,7 +41,13 @@ The runtime starts from `project.json`. This file tells the engine where to find
   "input_targets": {
     "menu": "pause_controller"
   },
-  "debug_inspection_enabled": true
+  "debug_inspection_enabled": true,
+  "command_runtime": {
+    "max_settle_passes": 128,
+    "max_immediate_commands_per_settle": 8192,
+    "log_settle_usage_peaks": false,
+    "settle_warning_ratio": 0.75
+  }
 }
 ```
 
@@ -81,6 +89,27 @@ This is the project-level logical-action routing table. Area `input_targets` can
 ### `debug_inspection_enabled`
 
 Enables debug runtime features such as pausing simulation, stepping ticks, and output-scale adjustments.
+
+### `command_runtime`
+
+Optional command-runner safety and diagnostics settings.
+
+Current fields:
+
+- `max_settle_passes`
+  Maximum game-command settle passes before the runner treats the current
+  command cascade as an error.
+- `max_immediate_commands_per_settle`
+  Maximum immediate command executions allowed during one settle before the
+  runner treats the cascade as an error.
+- `log_settle_usage_peaks`
+  When `true`, logs the largest settle workload seen so far during the run.
+- `settle_warning_ratio`
+  Emits a warning when a settle reaches this fraction of either safety limit.
+
+These are safety fuses, not frame budgets. If the limit is reached, the engine
+does not quietly continue the rest of the ready work next tick; it logs a
+command error so the authored cascade can be fixed.
 
 ## Practical Advice
 

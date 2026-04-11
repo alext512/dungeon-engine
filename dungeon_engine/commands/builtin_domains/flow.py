@@ -334,11 +334,11 @@ def register_flow_commands(
         return ImmediateHandle()
 
     @registry.register(
-        "run_commands",
+        "run_sequence",
         deferred_params={"commands"},
         validation_mode="mixed",
     )
-    def run_commands(
+    def run_sequence(
         context: CommandContext,
         *,
         commands: list[dict[str, Any]] | dict[str, Any] | None = None,

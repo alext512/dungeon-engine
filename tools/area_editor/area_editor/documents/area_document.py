@@ -8,12 +8,12 @@ does not yet know about.
 
 from __future__ import annotations
 
-import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from area_editor.json_io import compose_json_file_text, load_json_data
 from area_editor.json_format import format_json_for_editor
 
 # ---------------------------------------------------------------------------
@@ -284,11 +284,19 @@ class AreaDocument:
 
 def load_area_document(file_path: Path) -> AreaDocument:
     """Read an area JSON file into a tool-owned document model."""
-    raw = json.loads(file_path.read_text(encoding="utf-8"))
+    raw = load_json_data(file_path)
     return AreaDocument.from_dict(raw)
 
 
 def save_area_document(file_path: Path, document: AreaDocument) -> None:
     """Write an area document back to JSON with preserved unknown fields."""
+    original_text = file_path.read_text(encoding="utf-8") if file_path.exists() else None
     text = format_json_for_editor(document.to_dict())
-    file_path.write_text(f"{text}\n", encoding="utf-8")
+    file_path.write_text(
+        compose_json_file_text(
+            text,
+            original_text=original_text,
+            add_default_header=original_text is None and file_path.suffix.lower() == ".json5",
+        ),
+        encoding="utf-8",
+    )

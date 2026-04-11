@@ -79,9 +79,27 @@ The repo's architecture docs and spirit docs consistently push toward:
 
 - areas use GID-based tilemaps
 - command flows are the main gameplay mutation path
+- command flows are eager: ready work settles in the same tick until it reaches
+  a real wait
 - project manifests define content roots and project-level settings
 - ids for typed content are derived from file paths
 - persistence is layered over authored content rather than replacing it
+
+## Simulation Tick Shape
+
+The play-mode tick is intentionally phase-based:
+
+1. settle ready runtime work
+2. advance simulation systems by one tick
+3. advance command/modal waits and settle newly unblocked runtime work
+4. process held input intent against the updated world state
+5. settle input-created runtime work
+6. advance visual/presentation systems
+7. apply scene-boundary changes such as area changes, save loads, and new-game
+   requests
+
+The command runner's safety limits are fuses for runaway immediate cascades,
+not frame budgets. Hitting one is a command/runtime error.
 
 ## Engine-Owned Sessions
 

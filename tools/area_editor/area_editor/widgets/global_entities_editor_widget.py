@@ -9,6 +9,8 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel, QPlainTextEdit, QVBoxLayout, QWidget
 
+from area_editor.json_io import compose_json_file_text, load_json_data, loads_json_data
+
 
 class GlobalEntitiesEditorWidget(QWidget):
     """Edit just the manifest's ``global_entities`` array."""
@@ -75,21 +77,28 @@ class GlobalEntitiesEditorWidget(QWidget):
             self._target_label.setText("Project Global Entities")
 
     def save_to_file(self) -> None:
-        array_data = json.loads(self.toPlainText())
+        array_data = loads_json_data(
+            self.toPlainText(),
+            source_name="project.json global_entities",
+        )
         if not isinstance(array_data, list):
             raise ValueError("global_entities must be a JSON array.")
-        manifest_data = json.loads(self._project_file.read_text(encoding="utf-8"))
+        original_text = self._project_file.read_text(encoding="utf-8")
+        manifest_data = load_json_data(self._project_file)
         if not isinstance(manifest_data, dict):
             raise ValueError("project.json must contain a JSON object.")
         manifest_data["global_entities"] = array_data
         self._project_file.write_text(
-            f"{json.dumps(manifest_data, indent=2, ensure_ascii=False)}\n",
+            compose_json_file_text(
+                json.dumps(manifest_data, indent=2, ensure_ascii=False),
+                original_text=original_text,
+            ),
             encoding="utf-8",
         )
         self._load()
 
     def _load(self) -> None:
-        manifest_data = json.loads(self._project_file.read_text(encoding="utf-8"))
+        manifest_data = load_json_data(self._project_file)
         if not isinstance(manifest_data, dict):
             raise ValueError("project.json must contain a JSON object.")
         array_data = manifest_data.get("global_entities", [])

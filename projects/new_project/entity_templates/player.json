@@ -61,69 +61,51 @@
     }
   ],
   "entity_commands": {
-    "move_up": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "run_project_command",
-          "command_id": "commands/player/move_one_tile",
-          "direction": "up",
-          "facing_visual": "up"
-        }
-      ]
-    },
-    "move_down": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "run_project_command",
-          "command_id": "commands/player/move_one_tile",
-          "direction": "down",
-          "facing_visual": "down"
-        }
-      ]
-    },
-    "move_left": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "run_project_command",
-          "command_id": "commands/player/move_one_tile",
-          "direction": "left",
-          "facing_visual": "side"
-        }
-      ]
-    },
-    "move_right": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "run_project_command",
-          "command_id": "commands/player/move_one_tile",
-          "direction": "right",
-          "facing_visual": "side"
-        }
-      ]
-    },
-    "interact": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "interact_facing",
-          "entity_id": "$self_id"
-        }
-      ]
-    },
-    "inventory": {
-      "enabled": true,
-      "commands": [
-        {
-          "type": "open_inventory_session",
-          "entity_id": "$self_id",
-          "wait": false
-        }
-      ]
-    }
+    "move_up": [
+      {
+        "type": "run_project_command",
+        "command_id": "commands/player/move_one_tile",
+        "direction": "up",
+        "facing_visual": "up"
+      }
+    ],
+    "move_down": [
+      {
+        "type": "run_project_command",
+        "command_id": "commands/player/move_one_tile",
+        "direction": "down",
+        "facing_visual": "down"
+      }
+    ],
+    "move_left": [
+      {
+        "type": "run_project_command",
+        "command_id": "commands/player/move_one_tile",
+        "direction": "left",
+        "facing_visual": "side"
+      }
+    ],
+    "move_right": [
+      {
+        "type": "run_project_command",
+        "command_id": "commands/player/move_one_tile",
+        "direction": "right",
+        "facing_visual": "side"
+      }
+    ],
+    "interact": [
+      {
+        "type": "interact_facing",
+        "entity_id": "$self_id"
+      }
+    ],
+    "inventory": [
+      {
+        "type": "open_inventory_session",
+        "entity_id": "$self_id",
+        "wait": false
+      }
+    ]
   },
   "render_order": 10
 }

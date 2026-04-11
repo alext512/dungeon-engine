@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,12 @@ from dungeon_engine.items import (
     ItemDefinitionValidationError,
     log_item_definition_validation_error,
     validate_project_items,
+)
+from dungeon_engine.json_io import (
+    JsonDataDecodeError,
+    iter_json_data_files,
+    json_data_path_candidates,
+    load_json_data,
 )
 from dungeon_engine.world.loader import (
     AreaValidationError,
@@ -168,8 +173,8 @@ def validate_project_static_references(project) -> None:
     issues: list[str] = []
     for file_path in _iter_static_reference_scan_files(project):
         try:
-            raw = json.loads(file_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+            raw = load_json_data(file_path)
+        except JsonDataDecodeError as exc:
             issues.append(
                 f"{file_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )
@@ -187,7 +192,7 @@ def validate_project_static_references(project) -> None:
 
     for area_path in project.list_area_files():
         try:
-            raw = json.loads(area_path.read_text(encoding="utf-8"))
+            raw = load_json_data(area_path)
             area, world = load_area_from_data(
                 raw,
                 source_name=str(area_path),
@@ -261,7 +266,7 @@ def log_command_authoring_validation_error(error: CommandAuthoringValidationErro
 
 
 def _iter_static_reference_scan_files(project) -> list[Path]:
-    files: list[Path] = [project.project_root / "project.json"]
+    files: list[Path] = [project.project_root / "project.json", project.project_root / "project.json5"]
     if project.shared_variables_path is not None and project.shared_variables_path.is_file():
         files.append(project.shared_variables_path.resolve())
     for root_list in (
@@ -274,10 +279,10 @@ def _iter_static_reference_scan_files(project) -> list[Path]:
         for root_dir in root_list:
             if not root_dir.is_dir():
                 continue
-            files.extend(path.resolve() for path in sorted(root_dir.rglob("*.json")))
+            files.extend(path.resolve() for path in iter_json_data_files(root_dir))
     dialogue_root = (project.project_root / "dialogues").resolve()
     if dialogue_root.is_dir():
-        files.extend(path.resolve() for path in sorted(dialogue_root.rglob("*.json")))
+        files.extend(path.resolve() for path in iter_json_data_files(dialogue_root))
 
     unique: list[Path] = []
     seen: set[Path] = set()
@@ -394,7 +399,9 @@ def _dialogue_reference_exists(project, reference: str) -> bool:
     resolved_path = Path(reference)
     if not resolved_path.is_absolute():
         resolved_path = (project.project_root / resolved_path).resolve()
-    return resolved_path.is_file()
+    if resolved_path.is_file():
+        return True
+    return any(candidate.is_file() for candidate in json_data_path_candidates(resolved_path))
 
 
 def _show_error_dialog(title: str, message: str) -> None:

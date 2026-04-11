@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import copy
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dungeon_engine.authored_command_validation import validate_authored_command_tree
+from dungeon_engine.json_io import JsonDataDecodeError, iter_json_data_files, load_json_data
 from dungeon_engine.logging_utils import get_logger
 
 if TYPE_CHECKING:
@@ -132,7 +132,7 @@ def _scan_project_command_database(
                 command_id,
                 command_path,
             )
-        except json.JSONDecodeError as exc:
+        except JsonDataDecodeError as exc:
             issues.append(
                 f"{command_path}: invalid JSON ({exc.msg} at line {exc.lineno}, column {exc.colno})."
             )
@@ -159,7 +159,7 @@ def _load_project_command_definition_from_path(
 
     cached = _COMMAND_CACHE.get(command_path)
     if cached is None:
-        cached = json.loads(command_path.read_text(encoding="utf-8"))
+        cached = load_json_data(command_path)
         _COMMAND_CACHE[command_path] = cached
     raw = copy.deepcopy(cached)
 
@@ -299,9 +299,9 @@ def _validate_literal_command_references(
     seen_missing_refs: set[tuple[Path, str, str]] = set()
     for source_path in _iter_command_reference_files(project):
         try:
-            raw = json.loads(source_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            if source_path.suffix.lower() == ".json" and not _path_is_under_roots(source_path, project.command_paths):
+            raw = load_json_data(source_path)
+        except JsonDataDecodeError as exc:
+            if not _path_is_under_roots(source_path, project.command_paths):
                 issues.append(
                     f"{source_path}: invalid JSON while validating project command references "
                     f"({exc.msg} at line {exc.lineno}, column {exc.colno})."
@@ -331,7 +331,7 @@ def _iter_command_reference_files(project: ProjectContext) -> list[Path]:
     def _add_files(root: Path) -> None:
         if not root.is_dir():
             return
-        for file_path in sorted(root.rglob("*.json")):
+        for file_path in iter_json_data_files(root):
             resolved = file_path.resolve()
             if resolved in seen:
                 continue

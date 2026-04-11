@@ -17,7 +17,7 @@ class GameSaveRuntimeMixin:
     """Provide save-slot dialogs plus save/load session restore helpers for ``Game``."""
 
     def request_load_game(self, save_path: str | None = None) -> None:
-        """Queue a save-slot load so it applies after the current command lane finishes."""
+        """Queue a save-slot load so it applies at the scene-boundary phase."""
         resolved_save_path = (
             self._resolve_save_slot_path(save_path)
             if save_path is not None
@@ -28,6 +28,7 @@ class GameSaveRuntimeMixin:
         self._pending_load_save_path = resolved_save_path
         self._pending_area_change_request = None
         self._pending_new_game_request = None
+        self._request_scene_boundary()
 
     def save_game(self, save_path: str | None = None) -> bool:
         """Open a project-scoped save dialog or write to an explicit save path."""
