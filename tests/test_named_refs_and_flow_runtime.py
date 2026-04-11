@@ -197,42 +197,26 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
         _, project = self._make_project(
             commands={
                 "player/move_one_tile.json": {
-                    "params": ["direction", "facing_visual"],
+                    "params": ["direction"],
                     "commands": [
                         {
                             "type": "set_entity_fields",
                             "entity_id": "$self_id",
                             "set": {
                                 "visuals": {
-                                    "down": {
-                                        "visible": {
-                                            "$any_in_collection": {
-                                                "value": ["$facing_visual"],
-                                                "op": "eq",
-                                                "match": "down",
+                                    "body": {
+                                        "current_frame": {
+                                            "$collection_item": {
+                                                "value": {
+                                                    "down": 0,
+                                                    "up": 1,
+                                                    "left": 2,
+                                                    "right": 2,
+                                                },
+                                                "key": "$direction",
+                                                "default": 0,
                                             }
                                         },
-                                        "current_frame": 0,
-                                    },
-                                    "up": {
-                                        "visible": {
-                                            "$any_in_collection": {
-                                                "value": ["$facing_visual"],
-                                                "op": "eq",
-                                                "match": "up",
-                                            }
-                                        },
-                                        "current_frame": 1,
-                                    },
-                                    "side": {
-                                        "visible": {
-                                            "$any_in_collection": {
-                                                "value": ["$facing_visual"],
-                                                "op": "eq",
-                                                "match": "side",
-                                            }
-                                        },
-                                        "current_frame": 2,
                                         "flip_x": {
                                             "$any_in_collection": {
                                                 "value": ["$direction"],
@@ -255,28 +239,12 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
             grid_y=0,
             visuals=[
                 EntityVisual(
-                    visual_id="down",
+                    visual_id="body",
                     path="assets/project/sprites/test.png",
                     frame_width=16,
                     frame_height=16,
-                    frames=[0],
+                    frames=[0, 1, 2],
                     visible=True,
-                ),
-                EntityVisual(
-                    visual_id="up",
-                    path="assets/project/sprites/test.png",
-                    frame_width=16,
-                    frame_height=16,
-                    frames=[1],
-                    visible=False,
-                ),
-                EntityVisual(
-                    visual_id="side",
-                    path="assets/project/sprites/test.png",
-                    frame_width=16,
-                    frame_height=16,
-                    frames=[2],
-                    visible=False,
                     flip_x=False,
                 ),
             ],
@@ -293,15 +261,12 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
                 "command_id": "commands/player/move_one_tile",
                 "source_entity_id": "player",
                 "direction": "left",
-                "facing_visual": "side",
             },
         )
         left_handle.update(0.0)
 
-        self.assertFalse(player.require_visual("down").visible)
-        self.assertFalse(player.require_visual("up").visible)
-        self.assertTrue(player.require_visual("side").visible)
-        self.assertTrue(player.require_visual("side").flip_x)
+        self.assertEqual(player.require_visual("body").current_frame, 2)
+        self.assertTrue(player.require_visual("body").flip_x)
 
         up_handle = execute_registered_command(
             registry,
@@ -311,15 +276,12 @@ class NamedRefsAndFlowRuntimeTests(unittest.TestCase):
                 "command_id": "commands/player/move_one_tile",
                 "source_entity_id": "player",
                 "direction": "up",
-                "facing_visual": "up",
             },
         )
         up_handle.update(0.0)
 
-        self.assertFalse(player.require_visual("down").visible)
-        self.assertTrue(player.require_visual("up").visible)
-        self.assertFalse(player.require_visual("side").visible)
-        self.assertFalse(player.require_visual("side").flip_x)
+        self.assertEqual(player.require_visual("body").current_frame, 1)
+        self.assertFalse(player.require_visual("body").flip_x)
 
     def test_run_sequence_propagates_named_entity_refs(self) -> None:
         _, project = self._make_project()

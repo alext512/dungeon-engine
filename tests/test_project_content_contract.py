@@ -749,7 +749,7 @@ class ProjectContentContractTests(unittest.TestCase):
                         {
                             "type": "play_animation",
                             "entity_id": "self",
-                            "frame_sequence": [1, 2],
+                            "animation": "open",
                         }
                     ],
                 }

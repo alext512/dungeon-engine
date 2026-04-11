@@ -30,7 +30,7 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 
 ## Animation, Audio, And Visuals
 
-- `play_animation` runs a frame sequence on an entity visual.
+- `play_animation` plays a named animation clip on an entity visual.
 - `wait_for_animation` waits for an entity animation to finish.
 - `stop_animation` stops an entity animation.
 - `set_visual_frame` forces one visual frame.

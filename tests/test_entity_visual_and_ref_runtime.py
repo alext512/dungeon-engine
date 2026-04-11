@@ -13,8 +13,9 @@ from dungeon_engine.commands.runner import (
     execute_registered_command,
 )
 from dungeon_engine.project_context import load_project
+from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.world.area import Area
-from dungeon_engine.world.entity import Entity, EntityVisual
+from dungeon_engine.world.entity import Entity, EntityVisual, VisualAnimationClip
 from dungeon_engine.world.world import World
 
 
@@ -49,6 +50,9 @@ def _make_runtime_entity(
                 frame_width=16,
                 frame_height=16,
                 frames=[0],
+                animations={
+                    "open": VisualAnimationClip(frames=[1, 2, 3]),
+                },
             )
         ]
         if with_visual
@@ -67,27 +71,28 @@ def _make_runtime_entity(
 
 class _RecordingAnimationSystem:
     def __init__(self) -> None:
-        self.started: list[tuple[str, list[int], str | None, int, bool]] = []
+        self.started: list[tuple[str, str, str | None, int | None, int | None]] = []
         self.queries: list[tuple[str, str | None]] = []
 
-    def start_frame_animation(
+    def play_animation(
         self,
         entity_id: str,
-        frame_sequence: list[int],
+        animation_id: str,
         *,
         visual_id: str | None = None,
-        frames_per_sprite_change: int = 1,
-        hold_last_frame: bool = True,
-    ) -> None:
+        frame_count: int | None = None,
+        duration_ticks: int | None = None,
+    ) -> bool:
         self.started.append(
             (
                 entity_id,
-                list(frame_sequence),
+                animation_id,
                 visual_id,
-                frames_per_sprite_change,
-                hold_last_frame,
+                frame_count,
+                duration_ticks,
             )
         )
+        return True
 
     def is_entity_animating(self, entity_id: str, *, visual_id: str | None = None) -> bool:
         self.queries.append((entity_id, visual_id))
@@ -266,9 +271,9 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                         "type": "play_animation",
                         "entity_id": "$ref_ids.caller",
                         "visual_id": "main",
-                        "frame_sequence": [1, 2, 3],
-                        "frames_per_sprite_change": 2,
-                        "hold_last_frame": False,
+                        "animation": "open",
+                        "frame_count": 2,
+                        "duration_ticks": 8,
                         "wait": False,
                     }
                 ],
@@ -297,9 +302,70 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
 
         self.assertEqual(
             animation_system.started,
-            [("lever", [1, 2, 3], "main", 2, False)],
+            [("lever", "open", "main", 2, 8)],
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
+
+    def test_animation_system_plays_named_clips_with_duration_and_phase(self) -> None:
+        visual = EntityVisual(
+            visual_id="body",
+            path="assets/project/sprites/player.png",
+            frame_width=16,
+            frame_height=16,
+            frames=[0],
+            animations={
+                "idle_left": VisualAnimationClip(frames=[2], flip_x=True),
+                "walk_down": VisualAnimationClip(frames=[0, 3, 6, 3], preserve_phase=True),
+            },
+        )
+        player = Entity(
+            entity_id="player",
+            kind="player",
+            grid_x=0,
+            grid_y=0,
+            visuals=[visual],
+        )
+        world = World()
+        world.add_entity(player)
+        animation_system = AnimationSystem(world)
+
+        self.assertTrue(
+            animation_system.play_animation(
+                "player",
+                "walk_down",
+                visual_id="body",
+                frame_count=2,
+                duration_ticks=4,
+            )
+        )
+        self.assertEqual(visual.current_frame, 0)
+        self.assertEqual(visual.animations["walk_down"].phase_index, 2)
+
+        for _ in range(4):
+            animation_system.update_tick(0.0)
+        self.assertEqual(visual.current_frame, 3)
+        self.assertTrue(animation_system.is_entity_animating("player", visual_id="body"))
+
+        animation_system.update_tick(0.0)
+        self.assertEqual(visual.current_frame, 3)
+        self.assertFalse(animation_system.is_entity_animating("player", visual_id="body"))
+
+        animation_system.play_animation(
+            "player",
+            "walk_down",
+            visual_id="body",
+            frame_count=2,
+            duration_ticks=4,
+        )
+        self.assertEqual(visual.current_frame, 6)
+        self.assertEqual(visual.animations["walk_down"].phase_index, 0)
+
+        self.assertFalse(
+            animation_system.play_animation("player", "idle_left", visual_id="body")
+        )
+        self.assertEqual(visual.current_frame, 2)
+        self.assertTrue(visual.flip_x)
+        self.assertFalse(animation_system.is_entity_animating("player", visual_id="body"))
 
     def test_move_entity_world_position_supports_named_ref_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")

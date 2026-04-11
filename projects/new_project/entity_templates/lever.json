@@ -12,6 +12,10 @@
       "frame_width": 16,
       "frame_height": 16,
       "frames": [0, 1, 2, 3],
+      "animations": {
+        "toggle_on": { "frames": [0, 1, 2, 3] },
+        "toggle_off": { "frames": [3, 2, 1, 0] }
+      },
       "visible": true
     }
   ],
@@ -50,8 +54,7 @@
             "type": "play_animation",
             "entity_id": "$self_id",
             "visual_id": "main",
-            "frame_sequence": [0, 1, 2, 3],
-            "hold_last_frame": true,
+            "animation": "toggle_on",
             "wait": false
           },
           {
@@ -85,8 +88,7 @@
                 "type": "play_animation",
                 "entity_id": "$self_id",
                 "visual_id": "main",
-                "frame_sequence": [3, 2, 1, 0],
-                "hold_last_frame": true,
+                "animation": "toggle_off",
                 "wait": false
               },
               {

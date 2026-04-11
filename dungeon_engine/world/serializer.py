@@ -367,23 +367,41 @@ def _serialize_visuals(entity: Any) -> list[dict[str, Any]]:
     """Serialize an entity's visuals list."""
     serialized: list[dict[str, Any]] = []
     for visual in entity.visuals:
-        serialized.append(
-            {
-                "id": visual.visual_id,
-                "path": visual.path,
-                "frame_width": visual.frame_width,
-                "frame_height": visual.frame_height,
-                "frames": list(visual.frames),
-                "animation_fps": visual.animation_fps,
-                "animate_when_moving": visual.animate_when_moving,
-                "flip_x": visual.flip_x,
-                "visible": visual.visible,
-                "tint": list(visual.tint),
-                "offset_x": _serialize_number(visual.offset_x),
-                "offset_y": _serialize_number(visual.offset_y),
-                "draw_order": visual.draw_order,
-            }
-        )
+        serialized_visual = {
+            "id": visual.visual_id,
+            "path": visual.path,
+            "frame_width": visual.frame_width,
+            "frame_height": visual.frame_height,
+            "frames": list(visual.frames),
+            "animation_fps": visual.animation_fps,
+            "animate_when_moving": visual.animate_when_moving,
+            "flip_x": visual.flip_x,
+            "visible": visual.visible,
+            "tint": list(visual.tint),
+            "offset_x": _serialize_number(visual.offset_x),
+            "offset_y": _serialize_number(visual.offset_y),
+            "draw_order": visual.draw_order,
+        }
+        if visual.default_animation is not None:
+            serialized_visual["default_animation"] = visual.default_animation
+        if visual.animations:
+            serialized_visual["animations"] = _serialize_visual_animations(visual)
+        serialized.append(serialized_visual)
+    return serialized
+
+
+def _serialize_visual_animations(visual: Any) -> dict[str, dict[str, Any]]:
+    """Serialize named visual animation clips."""
+    serialized: dict[str, dict[str, Any]] = {}
+    for animation_id, clip in visual.animations.items():
+        serialized_clip: dict[str, Any] = {
+            "frames": list(clip.frames),
+        }
+        if clip.flip_x is not None:
+            serialized_clip["flip_x"] = bool(clip.flip_x)
+        if bool(clip.preserve_phase):
+            serialized_clip["preserve_phase"] = True
+        serialized[str(animation_id)] = serialized_clip
     return serialized
 
 

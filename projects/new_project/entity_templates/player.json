@@ -17,47 +17,22 @@
   },
   "visuals": [
     {
-      "id": "down",
+      "id": "body",
       "path": "assets/used_tilesets_sprites/main_character.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frames": [
-        0,
-        3,
-        6
-      ],
-      "animation_fps": 12,
-      "animate_when_moving": true,
+      "default_animation": "idle_down",
+      "animations": {
+        "idle_down": { "frames": [0] },
+        "idle_up": { "frames": [1] },
+        "idle_right": { "frames": [2], "flip_x": false },
+        "idle_left": { "frames": [2], "flip_x": true },
+        "walk_down": { "frames": [0, 3, 6, 3], "preserve_phase": true },
+        "walk_up": { "frames": [1, 4, 7, 4], "preserve_phase": true },
+        "walk_right": { "frames": [2, 5, 8, 5], "flip_x": false, "preserve_phase": true },
+        "walk_left": { "frames": [2, 5, 8, 5], "flip_x": true, "preserve_phase": true }
+      },
       "visible": true
-    },
-    {
-      "id": "up",
-      "path": "assets/used_tilesets_sprites/main_character.png",
-      "frame_width": 16,
-      "frame_height": 16,
-      "frames": [
-        1,
-        4,
-        7
-      ],
-      "animation_fps": 12,
-      "animate_when_moving": true,
-      "visible": false
-    },
-    {
-      "id": "side",
-      "path": "assets/used_tilesets_sprites/main_character.png",
-      "frame_width": 16,
-      "frame_height": 16,
-      "frames": [
-        2,
-        5,
-        8
-      ],
-      "animation_fps": 12,
-      "animate_when_moving": true,
-      "visible": false,
-      "flip_x": false
     }
   ],
   "entity_commands": {
@@ -66,7 +41,8 @@
         "type": "run_project_command",
         "command_id": "commands/player/move_one_tile",
         "direction": "up",
-        "facing_visual": "up"
+        "walk_animation": "walk_up",
+        "idle_animation": "idle_up"
       }
     ],
     "move_down": [
@@ -74,7 +50,8 @@
         "type": "run_project_command",
         "command_id": "commands/player/move_one_tile",
         "direction": "down",
-        "facing_visual": "down"
+        "walk_animation": "walk_down",
+        "idle_animation": "idle_down"
       }
     ],
     "move_left": [
@@ -82,7 +59,8 @@
         "type": "run_project_command",
         "command_id": "commands/player/move_one_tile",
         "direction": "left",
-        "facing_visual": "side"
+        "walk_animation": "walk_left",
+        "idle_animation": "idle_left"
       }
     ],
     "move_right": [
@@ -90,7 +68,8 @@
         "type": "run_project_command",
         "command_id": "commands/player/move_one_tile",
         "direction": "right",
-        "facing_visual": "side"
+        "walk_animation": "walk_right",
+        "idle_animation": "idle_right"
       }
     ],
     "interact": [

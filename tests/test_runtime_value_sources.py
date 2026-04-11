@@ -166,6 +166,41 @@ class RuntimeValueSourceTests(unittest.TestCase):
         self.assertEqual(fixed_random.randint_calls, [(2, 6)])
         self.assertEqual(fixed_random.choice_calls, [["red", "blue", "green"]])
 
+    def test_arithmetic_value_sources_store_resolved_values(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("calculator", space="screen"))
+        registry, context = self._make_command_context(world=world)
+
+        arithmetic_specs = [
+            ("added", {"$add": [2, 3, 4]}, 9),
+            ("subtracted", {"$subtract": [10, 3, 2]}, 5),
+            ("multiplied", {"$multiply": [3, 4, 2]}, 24),
+            ("divided_evenly", {"$divide": [12, 2]}, 6),
+            ("divided_fraction", {"$divide": [5, 2]}, 2.5),
+        ]
+        for name, value, expected in arithmetic_specs:
+            with self.subTest(name=name):
+                execute_command_spec(
+                    registry,
+                    context,
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "calculator",
+                        "name": name,
+                        "value": value,
+                    },
+                ).update(0.0)
+                calculator = world.get_entity("calculator")
+                assert calculator is not None
+                self.assertEqual(calculator.variables[name], expected)
+
+        with self.assertRaisesRegex(KeyError, r"Unknown value source '\$sum'"):
+            _resolve_runtime_values({"$sum": [1, 2]}, context, {})
+        with self.assertRaisesRegex(KeyError, r"Unknown value source '\$product'"):
+            _resolve_runtime_values({"$product": [2, 3]}, context, {})
+        with self.assertRaisesRegex(ZeroDivisionError, r"\$divide value source cannot divide by zero"):
+            _resolve_runtime_values({"$divide": [1, 0]}, context, {})
+
     def test_explicit_movement_query_value_sources_resolve_cell_flags_and_blockers(self) -> None:
         area = Area(
             area_id="areas/test_room",
@@ -552,7 +587,7 @@ class RuntimeValueSourceTests(unittest.TestCase):
                 "entity_id": "dialogue_controller",
                 "name": "target_x",
                 "value": {
-                    "$sum": [
+                    "$add": [
                         "$self.self_ref.grid_x",
                         -1,
                     ]

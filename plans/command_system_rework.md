@@ -564,77 +564,82 @@ That means:
   style: a movement command and an animation command that share the same frame
   budget
 
-## Old-project-style sync model
+## Current sync model
 
-The old project did not need a generalized distance-driven animation system for
-the player walk cycle. It used two separate ideas:
+The active runtime now keeps sprite frame lists on named visual clips instead of
+repeating raw frame arrays inside every command. The command chooses which clip
+to play and how long this play should last.
 
-- movement had a known frame budget
-- animation had a known `frames_per_sprite_change`
-- both were started together
-- the numbers were chosen to line up exactly
-
-That model is now supported directly in the Python runtime too:
+That model is supported directly in the Python runtime:
 
 - movement commands accept `frames_needed`
-- `play_animation` accepts `frame_sequence` and `frames_per_sprite_change`
+- visual clips define reusable `frames`
+- `play_animation` accepts `animation`, `frame_count`, and `duration_ticks`
 - `play_animation` can be non-blocking, so the caller can immediately start a
   move command afterward
 
 ## Recommended command parameters
 
-Suggested parameters for the old-project-style animation primitive:
+Recommended parameters for entity animation playback:
 
 - `entity_id`
-- `frame_sequence`
-- `frames_per_sprite_change`
-- `hold_last_frame`
+- `visual_id`
+- `animation`
+- `frame_count`
+- `duration_ticks`
 - `wait`
 
 Where:
 
-- `frames_per_sprite_change = 8` means hold each sprite for 8 engine frames
+- `animation` is the named clip under the target visual's `animations` object
+- `frame_count` is how many sprite frames this play consumes
+- `duration_ticks` is the total simulation tick budget for this play
 - `wait = false` means "start playback, but do not block the command lane"
 
-Suggested parameters for movement commands:
+Recommended parameters for movement commands:
 
 - `duration`
 - `frames_needed`
 - `speed_px_per_second`
 
-`frames_needed` is the old-project-friendly option.
+`frames_needed` is the exact simulation-tick option.
 
 ## Example: exact synchronization with shared frame budget
 
 If:
 
 - a one-tile move uses `frames_needed = 16`
-- the animation uses `frame_sequence = [9, 10]`
-- `frames_per_sprite_change = 8`
+- the visual has a clip such as `"walk_left": { "frames": [9, 10, 11, 10], "preserve_phase": true }`
+- `play_animation` uses `frame_count = 2`
+- `play_animation` uses `duration_ticks = 16`
 
 Then:
 
 - the move finishes in 16 engine frames
-- the first sprite is shown for 8 frames
-- the second sprite is shown for 8 frames
+- the selected two sprite frames are distributed across those 16 simulation ticks
 - both the move and the animation end together
 
-That is the core sync mechanism the old project relied on.
+That is the core sync mechanism for authored movement/animation coordination.
 
 ## Walk-cycle continuity
 
-The old project carried a 4-frame walk cycle across repeated moves by
-alternating between two separate animation commands, for example:
+The runtime carries a 4-frame walk cycle across repeated moves with clip-local
+`preserve_phase`.
 
-- first move: `[9, 10]`
-- second move: `[11, 10]`
+Example clip:
 
-The Python runtime can support that same pattern without extra engine magic:
+```json
+{
+  "walk_left": {
+    "frames": [9, 10, 11, 10],
+    "flip_x": true,
+    "preserve_phase": true
+  }
+}
+```
 
-- the project can choose which `frame_sequence` to call next
-- a project variable can toggle between the first and second half-cycle
-
-This keeps the engine simple and stays faithful to the old workflow.
+If each tile step plays `frame_count: 2`, repeated plays consume `[9, 10]`,
+then `[11, 10]`, then `[9, 10]`, and so on.
 
 ### Important implementation note
 
@@ -643,7 +648,7 @@ This does not require movement to be authored as 16 tiny per-pixel commands.
 The split should be:
 
 - one primitive command starts a transform movement interpolation
-- one primitive command starts a frame-sequence animation clip
+- one primitive command starts a named visual animation clip
 - optional grid primitives handle reservation/sync
 - callers coordinate them by starting both with matching frame budgets
 
@@ -660,44 +665,26 @@ composite command. It is not current engine syntax.
   "params": ["actor", "direction"],
   "steps": [
     {
-      "type": "set_facing",
+      "type": "play_animation",
       "entity_id": "$actor",
-      "direction": "$direction"
+      "visual_id": "body",
+      "animation": "$walk_animation",
+      "frame_count": 2,
+      "duration_ticks": "$project.movement.ticks_per_tile",
+      "wait": false
     },
     {
-      "type": "can_move_one_tile",
+      "type": "move_in_direction",
       "entity_id": "$actor",
       "direction": "$direction",
-      "store_var": "move_allowed"
+      "frames_needed": "$project.movement.ticks_per_tile",
+      "wait": true
     },
     {
-      "type": "if_var",
-      "scope": "local",
-      "name": "move_allowed",
-      "op": "eq",
-      "value": true,
-      "then": [
-        {
-          "type": "play_animation",
-          "entity_id": "$actor",
-          "frame_sequence": "$walk_half_cycle",
-          "frames_per_sprite_change": 8,
-          "wait": false
-        },
-        {
-          "type": "move_entity_one_tile",
-          "entity_id": "$actor",
-          "direction": "$direction",
-          "frames_needed": 16
-        }
-      ],
-      "else": [
-        {
-          "type": "set_sprite_frame",
-          "entity_id": "$actor",
-          "frame": "$idle_frame"
-        }
-      ]
+      "type": "play_animation",
+      "entity_id": "$actor",
+      "visual_id": "body",
+      "animation": "$idle_animation"
     }
   ]
 }
@@ -709,8 +696,7 @@ composite command. It is not current engine syntax.
 - The animation primitive does not move the entity.
 - Exact sync is achieved because movement and animation share the same frame
   budget.
-- If the move is blocked, the actor still turns to face the direction, but does
-  not start walking.
+- A one-frame idle clip can be used as the final facing/idle state.
 
 ## Example: arbitrary non-grid movement
 
@@ -724,8 +710,10 @@ This is the kind of move the redesigned system should also support.
     {
       "type": "play_animation",
       "entity_id": "$actor",
-      "frame_sequence": [12, 13],
-      "frames_per_sprite_change": 6,
+      "visual_id": "body",
+      "animation": "slide",
+      "frame_count": 2,
+      "duration_ticks": 12,
       "wait": false
     },
     {

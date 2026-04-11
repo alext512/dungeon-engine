@@ -154,7 +154,7 @@ What is happening:
 - explicit authored replacement is now available through:
   - `"$entity_ref"` for runtime tile/facing data
   - `"$entities_at"` / `"$entity_at"` for tile lookup
-  - `"$sum"` for small coordinate math
+  - `"$add"` / `"$subtract"` for small coordinate math
   - explicit `run_event` for dispatch
 
 Why this might conflict with the spirit:

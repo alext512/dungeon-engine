@@ -12,38 +12,60 @@ class AnimationSystem:
     def __init__(self, world: World) -> None:
         self.world = world
 
-    def start_frame_animation(
+    def play_animation(
         self,
         entity_id: str,
-        frame_sequence: list[int],
+        animation_id: str,
         *,
         visual_id: str | None = None,
-        frames_per_sprite_change: int = 1,
-        hold_last_frame: bool = True,
-    ) -> None:
-        """Start a command-driven one-shot frame sequence on an entity visual."""
+        frame_count: int | None = None,
+        duration_ticks: int | None = None,
+    ) -> bool:
+        """Start a named command-driven animation clip on an entity visual."""
         entity = self.world.get_entity(entity_id)
         if entity is None:
             raise KeyError(f"Cannot animate missing entity '{entity_id}'.")
         if not entity.present:
-            return
-        if not frame_sequence:
-            raise ValueError("Animation frame sequence cannot be empty.")
-        if frames_per_sprite_change <= 0:
-            raise ValueError("frames_per_sprite_change must be positive.")
+            return False
 
         visual = _require_target_visual(entity, visual_id)
+        clip = visual.animations.get(str(animation_id))
+        if clip is None:
+            raise KeyError(
+                f"Visual '{visual.visual_id}' on entity '{entity_id}' has no animation '{animation_id}'."
+            )
+        frame_sequence = _select_animation_frames(clip, frame_count=frame_count)
+        if clip.flip_x is not None:
+            visual.flip_x = bool(clip.flip_x)
+
+        resolved_duration_ticks: int | None
+        if duration_ticks is None:
+            resolved_duration_ticks = None if len(frame_sequence) == 1 else len(frame_sequence)
+        else:
+            resolved_duration_ticks = int(duration_ticks)
+            if resolved_duration_ticks <= 0:
+                raise ValueError("duration_ticks must be positive.")
+            if resolved_duration_ticks < len(frame_sequence):
+                raise ValueError("duration_ticks must be greater than or equal to frame_count.")
+
+        visual.current_frame = frame_sequence[0]
         playback = visual.animation_playback
+        if resolved_duration_ticks is None:
+            playback.active = False
+            playback.frame_sequence = []
+            playback.duration_ticks = 0
+            playback.elapsed_ticks = 0
+            playback.current_sequence_index = 0
+            playback.started_this_tick = False
+            return False
+
         playback.active = True
-        playback.frame_sequence = [int(frame) for frame in frame_sequence]
-        playback.frames_per_sprite_change = int(frames_per_sprite_change)
+        playback.frame_sequence = list(frame_sequence)
+        playback.duration_ticks = resolved_duration_ticks
+        playback.elapsed_ticks = 0
         playback.current_sequence_index = 0
-        # Start at -1 so the first update tick displays the opening frame
-        # without immediately consuming one of its visible ticks.
-        playback.ticks_on_current_frame = -1
-        playback.time_accumulator = 0.0
-        playback.hold_last_frame = hold_last_frame
-        visual.current_frame = playback.frame_sequence[0]
+        playback.started_this_tick = True
+        return True
 
     def stop_animation(
         self,
@@ -62,8 +84,9 @@ class AnimationSystem:
         playback.active = False
         playback.frame_sequence = []
         playback.current_sequence_index = 0
-        playback.ticks_on_current_frame = 0
-        playback.time_accumulator = 0.0
+        playback.duration_ticks = 0
+        playback.elapsed_ticks = 0
+        playback.started_this_tick = False
         if reset_to_default and visual.frames:
             visual.current_frame = visual.frames[0]
 
@@ -117,31 +140,32 @@ class AnimationSystem:
             playback.active = False
             return False
 
-        visual.current_frame = playback.frame_sequence[
-            min(playback.current_sequence_index, len(playback.frame_sequence) - 1)
-        ]
-
         if config.FPS <= 0:
             playback.active = False
             return True
 
-        playback.ticks_on_current_frame += 1
-
-        if playback.ticks_on_current_frame < playback.frames_per_sprite_change:
-            return True
-
-        playback.ticks_on_current_frame = 0
-        playback.current_sequence_index += 1
-        if playback.current_sequence_index >= len(playback.frame_sequence):
+        if playback.duration_ticks <= 0:
             playback.active = False
-            playback.current_sequence_index = len(playback.frame_sequence) - 1
-            if playback.hold_last_frame:
-                visual.current_frame = playback.frame_sequence[-1]
-            elif visual.frames:
-                visual.current_frame = visual.frames[0]
             return True
 
-        visual.current_frame = playback.frame_sequence[playback.current_sequence_index]
+        frame_count = len(playback.frame_sequence)
+        frame_index = min(
+            (playback.elapsed_ticks * frame_count) // playback.duration_ticks,
+            frame_count - 1,
+        )
+        playback.current_sequence_index = frame_index
+        visual.current_frame = playback.frame_sequence[frame_index]
+
+        if playback.started_this_tick:
+            playback.started_this_tick = False
+            return True
+
+        playback.elapsed_ticks += 1
+        if playback.elapsed_ticks >= playback.duration_ticks:
+            playback.active = False
+            playback.current_sequence_index = frame_count - 1
+            visual.current_frame = playback.frame_sequence[-1]
+            return True
 
         return True
 
@@ -154,4 +178,27 @@ def _require_target_visual(entity, visual_id: str | None):
     if visual is None:
         raise KeyError(f"Entity '{entity.entity_id}' has no visuals to animate.")
     return visual
+
+
+def _select_animation_frames(clip, *, frame_count: int | None) -> list[int]:
+    """Return the clip frames this play should consume."""
+    if not clip.frames:
+        raise ValueError("Animation clip cannot be empty.")
+    resolved_frame_count = len(clip.frames) if frame_count is None else int(frame_count)
+    if resolved_frame_count <= 0:
+        raise ValueError("frame_count must be positive.")
+
+    if clip.preserve_phase:
+        start_index = clip.phase_index % len(clip.frames)
+        frames = [
+            clip.frames[(start_index + offset) % len(clip.frames)]
+            for offset in range(resolved_frame_count)
+        ]
+        clip.phase_index = (start_index + resolved_frame_count) % len(clip.frames)
+        return frames
+
+    return [
+        clip.frames[offset % len(clip.frames)]
+        for offset in range(resolved_frame_count)
+    ]
 

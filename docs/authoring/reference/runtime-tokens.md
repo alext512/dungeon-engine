@@ -66,6 +66,7 @@ Camera tokens currently expose:
 ## Structured Value Sources
 
 The runner also supports richer single-key value-source objects.
+Unknown single-key `$...` objects fail as unknown value sources, which helps catch typos early.
 
 Current sources include:
 
@@ -82,8 +83,10 @@ Current sources include:
 - `$inventory_item_count`
 - `$inventory_has_item`
 - `$collection_item`
-- `$sum`
-- `$product`
+- `$add`
+- `$subtract`
+- `$multiply`
+- `$divide`
 - `$join_text`
 - `$slice_collection`
 - `$wrap_index`
@@ -129,6 +132,16 @@ Current sources include:
   }
 }
 ```
+
+### Compute arithmetic values
+
+```json
+{
+  "$divide": ["$project.movement.ticks_per_tile", 2]
+}
+```
+
+The arithmetic helpers are `$add`, `$subtract`, `$multiply`, and `$divide`. Use these structured value sources instead of inline math strings.
 
 ## When To Reach For Value Sources
 

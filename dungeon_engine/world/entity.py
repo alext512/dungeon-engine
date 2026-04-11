@@ -46,11 +46,29 @@ class AnimationPlaybackState:
 
     active: bool = False
     frame_sequence: list[int] = field(default_factory=list)
-    frames_per_sprite_change: int = 1
+    duration_ticks: int = 0
+    elapsed_ticks: int = 0
     current_sequence_index: int = 0
-    ticks_on_current_frame: int = 0
-    time_accumulator: float = 0.0
-    hold_last_frame: bool = True
+    started_this_tick: bool = False
+
+
+@dataclass(slots=True)
+class VisualAnimationClip:
+    """One named animation clip authored under an entity visual."""
+
+    frames: list[int] = field(default_factory=list)
+    flip_x: bool | None = None
+    preserve_phase: bool = False
+    phase_index: int = 0
+
+    def clone(self) -> "VisualAnimationClip":
+        """Return a detached copy of this animation clip."""
+        return VisualAnimationClip(
+            frames=list(self.frames),
+            flip_x=self.flip_x,
+            preserve_phase=self.preserve_phase,
+            phase_index=self.phase_index,
+        )
 
 
 @dataclass(slots=True)
@@ -122,6 +140,8 @@ class EntityVisual:
     offset_x: float = 0.0
     offset_y: float = 0.0
     draw_order: int = 0
+    default_animation: str | None = None
+    animations: dict[str, VisualAnimationClip] = field(default_factory=dict)
     animation_playback: AnimationPlaybackState = field(default_factory=AnimationPlaybackState)
 
     def clone(self) -> "EntityVisual":
@@ -142,14 +162,18 @@ class EntityVisual:
             offset_x=self.offset_x,
             offset_y=self.offset_y,
             draw_order=self.draw_order,
+            default_animation=self.default_animation,
+            animations={
+                animation_id: clip.clone()
+                for animation_id, clip in self.animations.items()
+            },
             animation_playback=AnimationPlaybackState(
                 active=self.animation_playback.active,
                 frame_sequence=list(self.animation_playback.frame_sequence),
-                frames_per_sprite_change=self.animation_playback.frames_per_sprite_change,
+                duration_ticks=self.animation_playback.duration_ticks,
+                elapsed_ticks=self.animation_playback.elapsed_ticks,
                 current_sequence_index=self.animation_playback.current_sequence_index,
-                ticks_on_current_frame=self.animation_playback.ticks_on_current_frame,
-                time_accumulator=self.animation_playback.time_accumulator,
-                hold_last_frame=self.animation_playback.hold_last_frame,
+                started_this_tick=self.animation_playback.started_this_tick,
             ),
         )
 

@@ -24,18 +24,20 @@ from dungeon_engine.commands.runner_value_utils import (
     extract_collection_item,
     load_json_file,
     lookup_nested_value,
+    resolve_add_value,
     resolve_and_value,
     resolve_any_in_collection_value,
+    resolve_divide_value,
     resolve_find_in_collection_value,
     resolve_join_text_value,
     resolve_json_file_path,
+    resolve_multiply_value,
     resolve_not_value,
     resolve_or_value,
-    resolve_product_value,
     resolve_random_choice_value,
     resolve_random_int_value,
     resolve_slice_collection_value,
-    resolve_sum_value,
+    resolve_subtract_value,
     resolve_wrap_index_value,
 )
 
@@ -56,8 +58,10 @@ _VALUE_SOURCE_NAMES = {
     "$entities_query",
     "$entity_query",
     "$collection_item",
-    "$sum",
-    "$product",
+    "$add",
+    "$subtract",
+    "$multiply",
+    "$divide",
     "$join_text",
     "$slice_collection",
     "$wrap_index",
@@ -127,11 +131,17 @@ def resolve_runtime_value_source(
     if source_name == "$inventory_has_item":
         return resolve_inventory_has_item_value(context, resolved_source)
 
-    if source_name == "$sum":
-        return resolve_sum_value(resolved_source)
+    if source_name == "$add":
+        return resolve_add_value(resolved_source)
 
-    if source_name == "$product":
-        return resolve_product_value(resolved_source)
+    if source_name == "$subtract":
+        return resolve_subtract_value(resolved_source)
+
+    if source_name == "$multiply":
+        return resolve_multiply_value(resolved_source)
+
+    if source_name == "$divide":
+        return resolve_divide_value(resolved_source)
 
     if source_name == "$join_text":
         return resolve_join_text_value(resolved_source)
@@ -316,13 +326,16 @@ def resolve_runtime_values(
     if isinstance(value, dict):
         if len(value) == 1:
             source_name, source_value = next(iter(value.items()))
-            if isinstance(source_name, str) and source_name in _VALUE_SOURCE_NAMES:
-                return resolve_runtime_value_source(
-                    source_name,
-                    source_value,
-                    context,
-                    runtime_params,
-                )
+            if isinstance(source_name, str):
+                if source_name in _VALUE_SOURCE_NAMES:
+                    return resolve_runtime_value_source(
+                        source_name,
+                        source_value,
+                        context,
+                        runtime_params,
+                    )
+                if source_name.startswith("$"):
+                    raise KeyError(f"Unknown value source '{source_name}'.")
         return {
             key: resolve_runtime_values(item, context, runtime_params)
             for key, item in value.items()

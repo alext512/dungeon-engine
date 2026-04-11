@@ -4,6 +4,33 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Named Visual Animation Clips
+
+- Added named per-visual animation clips with `default_animation`,
+  `animations`, clip-level `flip_x`, and clip-local `preserve_phase`
+- Changed entity `play_animation` to call named clips with `animation`,
+  optional `frame_count`, optional `duration_ticks`, and optional `wait`
+  instead of accepting raw `frame_sequence` command payloads
+- Added exact simulation-tick animation timing so selected sprite frames are
+  distributed across `duration_ticks`
+- Updated the sample project player to use one `body` visual with explicit
+  `walk_*` and `idle_*` clips, including left/right clips instead of a shared
+  `side` visual
+- Migrated sample project levers, gates, falling objects, and hole-fill
+  animations to named clips
+- Updated authoring/reference docs and tests for the named-clip animation API
+
+## Arithmetic Value Sources
+
+- Replaced the older `$sum` / `$product` value-source names with clearer
+  `$add` / `$multiply` names, without keeping legacy aliases
+- Added `$subtract` and `$divide` value sources for explicit authored numeric
+  math such as gameplay-tick animation timing
+- Changed unknown single-key `$...` value-source objects to fail immediately
+  instead of passing through as ordinary dictionaries
+- Updated authoring/reference docs and runtime tests for the new arithmetic
+  value-source surface
+
 ## Command Runner Settling And Tick Phases
 
 - Added guarded eager command settling so ready command chains continue in the

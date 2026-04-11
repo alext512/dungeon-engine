@@ -74,29 +74,29 @@ class AnimationCommandHandle(CommandHandle):
         )
 
 
-def _play_exact_animation(
+def _play_entity_animation(
     *,
     require_exact_entity: Callable[[Any, str], Any],
     world: Any,
     animation_system: Any,
     entity_id: str,
     visual_id: str | None = None,
-    frame_sequence: list[int],
-    frames_per_sprite_change: int = 1,
-    hold_last_frame: bool = True,
+    animation: str,
+    frame_count: int | None = None,
+    duration_ticks: int | None = None,
     wait: bool = True,
     **_: Any,
 ) -> CommandHandle:
-    """Start one exact entity animation and optionally wait for it to finish."""
+    """Start one named entity animation and optionally wait for it to finish."""
     resolved_id = require_exact_entity(world, entity_id).entity_id
-    animation_system.start_frame_animation(
+    animation_system.play_animation(
         resolved_id,
-        frame_sequence,
+        str(animation),
         visual_id=visual_id,
-        frames_per_sprite_change=frames_per_sprite_change,
-        hold_last_frame=hold_last_frame,
+        frame_count=frame_count,
+        duration_ticks=duration_ticks,
     )
-    if not wait:
+    if not wait or not animation_system.is_entity_animating(resolved_id, visual_id=visual_id):
         return ImmediateHandle()
     return AnimationCommandHandle(animation_system, [resolved_id], visual_id=visual_id)
 
@@ -377,22 +377,22 @@ def register_presentation_commands(
         *,
         entity_id: str,
         visual_id: str | None = None,
-        frame_sequence: list[int],
-        frames_per_sprite_change: int = 1,
-        hold_last_frame: bool = True,
+        animation: str,
+        frame_count: int | None = None,
+        duration_ticks: int | None = None,
         wait: bool = True,
         **_: Any,
     ) -> CommandHandle:
-        """Play a one-shot sprite frame sequence on an entity."""
-        return _play_exact_animation(
+        """Play a named animation clip on an entity visual."""
+        return _play_entity_animation(
             require_exact_entity=require_exact_entity,
             world=world,
             animation_system=animation_system,
             entity_id=entity_id,
             visual_id=visual_id,
-            frame_sequence=frame_sequence,
-            frames_per_sprite_change=frames_per_sprite_change,
-            hold_last_frame=hold_last_frame,
+            animation=animation,
+            frame_count=frame_count,
+            duration_ticks=duration_ticks,
             wait=wait,
         )
 

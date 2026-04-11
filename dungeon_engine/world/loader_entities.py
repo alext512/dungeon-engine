@@ -22,6 +22,7 @@ from dungeon_engine.world.entity import (
     EntityVisual,
     InventoryStack,
     InventoryState,
+    VisualAnimationClip,
 )
 
 logger = get_logger(__name__)
@@ -432,12 +433,37 @@ def _parse_entity_visuals(
             raise ValueError(f"{source_name} uses duplicate visual id '{visual_id}'.")
         seen_visual_ids.add(visual_id)
 
-        raw_frames = raw_visual.get("frames", [0])
+        raw_animations = raw_visual.get("animations", {})
+        if raw_animations is None:
+            raw_animations = {}
+        if not isinstance(raw_animations, dict):
+            raise ValueError(
+                f"{source_name} visuals[{index}] field 'animations' must be a JSON object."
+            )
+        animations = _parse_visual_animations(
+            raw_animations,
+            source_name=f"{source_name} visuals[{index}]",
+        )
+
+        raw_frames = raw_visual.get("frames")
+        if raw_frames is None:
+            raw_frames = _default_visual_frames_from_animations(
+                animations,
+                default_animation=raw_visual.get("default_animation"),
+            )
+        if raw_frames is None:
+            raw_frames = [0]
         if not isinstance(raw_frames, list):
             raise ValueError(f"{source_name} visuals[{index}] field 'frames' must be a JSON array.")
         frames = [int(frame) for frame in raw_frames]
         if not frames:
             raise ValueError(f"{source_name} visuals[{index}] field 'frames' must not be empty.")
+
+        default_animation = _parse_optional_visual_animation_id(
+            raw_visual.get("default_animation"),
+            animations=animations,
+            source_name=f"{source_name} visuals[{index}]",
+        )
 
         frame_width = int(raw_visual.get("frame_width", tile_size))
         frame_height = int(raw_visual.get("frame_height", tile_size))
@@ -445,6 +471,13 @@ def _parse_entity_visuals(
             raise ValueError(f"{source_name} visuals[{index}] frame dimensions must be positive.")
 
         tint = _parse_color(raw_visual.get("tint"))
+        current_frame = int(frames[0])
+        flip_x = bool(raw_visual.get("flip_x", False))
+        if default_animation is not None:
+            default_clip = animations[default_animation]
+            current_frame = default_clip.frames[0]
+            if default_clip.flip_x is not None:
+                flip_x = bool(default_clip.flip_x)
         visuals.append(
             EntityVisual(
                 visual_id=visual_id,
@@ -458,17 +491,95 @@ def _parse_entity_visuals(
                 frames=frames,
                 animation_fps=float(raw_visual.get("animation_fps", 0.0)),
                 animate_when_moving=bool(raw_visual.get("animate_when_moving", False)),
-                current_frame=int(frames[0]),
-                flip_x=bool(raw_visual.get("flip_x", False)),
+                current_frame=current_frame,
+                flip_x=flip_x,
                 visible=bool(raw_visual.get("visible", True)),
                 tint=tint,
                 offset_x=float(raw_visual.get("offset_x", 0.0)),
                 offset_y=float(raw_visual.get("offset_y", 0.0)),
                 draw_order=int(raw_visual.get("draw_order", index)),
+                default_animation=default_animation,
+                animations=animations,
             )
         )
 
     return visuals
+
+
+def _parse_visual_animations(
+    raw_animations: dict[str, Any],
+    *,
+    source_name: str,
+) -> dict[str, VisualAnimationClip]:
+    """Parse named visual animation clips."""
+    animations: dict[str, VisualAnimationClip] = {}
+    for raw_animation_id, raw_clip in raw_animations.items():
+        animation_id = str(raw_animation_id).strip()
+        if not animation_id:
+            raise ValueError(f"{source_name} uses an empty animation id.")
+        if not isinstance(raw_clip, dict):
+            raise ValueError(f"{source_name} animations.{animation_id} must be a JSON object.")
+        raw_frames = raw_clip.get("frames")
+        if not isinstance(raw_frames, list):
+            raise ValueError(
+                f"{source_name} animations.{animation_id} field 'frames' must be a JSON array."
+            )
+        frames = [int(frame) for frame in raw_frames]
+        if not frames:
+            raise ValueError(
+                f"{source_name} animations.{animation_id} field 'frames' must not be empty."
+            )
+        raw_flip_x = raw_clip.get("flip_x")
+        if raw_flip_x is not None and not isinstance(raw_flip_x, bool):
+            raise ValueError(
+                f"{source_name} animations.{animation_id} field 'flip_x' must be a boolean."
+            )
+        raw_preserve_phase = raw_clip.get("preserve_phase", False)
+        if not isinstance(raw_preserve_phase, bool):
+            raise ValueError(
+                f"{source_name} animations.{animation_id} field 'preserve_phase' must be a boolean."
+            )
+        animations[animation_id] = VisualAnimationClip(
+            frames=frames,
+            flip_x=None if raw_flip_x is None else bool(raw_flip_x),
+            preserve_phase=raw_preserve_phase,
+        )
+    return animations
+
+
+def _default_visual_frames_from_animations(
+    animations: dict[str, VisualAnimationClip],
+    *,
+    default_animation: Any,
+) -> list[int] | None:
+    """Return fallback visual frames when a clip-only visual omits top-level frames."""
+    if not animations:
+        return None
+    if default_animation is not None:
+        animation_id = str(default_animation).strip()
+        if animation_id in animations:
+            return list(animations[animation_id].frames)
+    first_animation_id = sorted(animations)[0]
+    return list(animations[first_animation_id].frames)
+
+
+def _parse_optional_visual_animation_id(
+    raw_animation_id: Any,
+    *,
+    animations: dict[str, VisualAnimationClip],
+    source_name: str,
+) -> str | None:
+    """Validate an optional default animation id."""
+    if raw_animation_id is None:
+        return None
+    animation_id = str(raw_animation_id).strip()
+    if not animation_id:
+        raise ValueError(f"{source_name} field 'default_animation' must not be empty.")
+    if animation_id not in animations:
+        raise ValueError(
+            f"{source_name} field 'default_animation' references unknown animation '{animation_id}'."
+        )
+    return animation_id
 
 
 def list_entity_template_ids(project: ProjectContext) -> list[str]:

@@ -525,6 +525,8 @@ Each `visuals[]` entry currently uses:
 - `frame_width`
 - `frame_height`
 - `frames`
+- `default_animation`
+- `animations`
 - `animation_fps`
 - `animate_when_moving`
 - `flip_x`
@@ -533,6 +535,51 @@ Each `visuals[]` entry currently uses:
 - `offset_x`
 - `offset_y`
 - `draw_order`
+
+`frames` is the visual's default/free-running frame list. When a visual is
+driven by named clips, `frames` may be omitted and the loader will derive it
+from `default_animation` or the first authored clip.
+
+Named clips live under `animations`:
+
+```json
+{
+  "id": "body",
+  "path": "assets/used_tilesets_sprites/main_character.png",
+  "frame_width": 16,
+  "frame_height": 16,
+  "default_animation": "idle_down",
+  "animations": {
+    "idle_down": { "frames": [0] },
+    "idle_up": { "frames": [1] },
+    "idle_right": { "frames": [2], "flip_x": false },
+    "idle_left": { "frames": [2], "flip_x": true },
+    "walk_down": { "frames": [0, 3, 6, 3], "preserve_phase": true },
+    "walk_up": { "frames": [1, 4, 7, 4], "preserve_phase": true },
+    "walk_right": { "frames": [2, 5, 8, 5], "flip_x": false, "preserve_phase": true },
+    "walk_left": { "frames": [2, 5, 8, 5], "flip_x": true, "preserve_phase": true }
+  }
+}
+```
+
+Clip fields:
+
+- `frames`
+  Required. Sprite frame indexes inside the visual's sprite sheet.
+- `flip_x`
+  Optional. When present, `play_animation` applies this horizontal flip before
+  playback. This lets `walk_left` reuse right-facing frames without a special
+  engine concept like `side`.
+- `preserve_phase`
+  Optional boolean. When `true`, repeated plays of this clip continue from the
+  next clip-local frame instead of restarting from the first frame. This is
+  useful for walk cycles such as `[0, 3, 6, 3]`, where each tile step may only
+  consume two sprite frames but the next step should use the opposite leg.
+
+For gameplay-coupled animation timing, prefer command `duration_ticks` plus
+structured value sources such as `$divide` over `animation_fps`. Free-running
+`animation_fps` remains useful for decorative loops that do not need to align
+with command or movement timing.
 
 ### Entity Commands
 
@@ -698,7 +745,7 @@ There are four important authored JSON shapes:
 - runtime token strings
   These look like `$self_id` or `$project.dialogue.max_lines` and resolve to a value at runtime.
 - structured value sources
-  These are single-key objects like `{"$sum": [...]}` or `{"$entity_ref": {...}}` that compute or query a value before a primitive command runs.
+  These are single-key objects like `{"$add": [...]}` or `{"$entity_ref": {...}}` that compute or query a value before a primitive command runs.
 
 Example:
 
@@ -708,7 +755,7 @@ Example:
   "entity_id": "$self_id",
   "name": "next_x",
   "value": {
-    "$sum": [
+    "$add": [
       "$self.current_x",
       1
     ]
@@ -722,8 +769,8 @@ How to read it:
   This is the primary engine-handled command being executed.
 - `"entity_id": "$self_id"`
   `$self_id` resolves from the current runtime context.
-- `"value": { "$sum": [...] }`
-  `"$sum"` is a helper that computes the value before `set_entity_var` runs.
+- `"value": { "$add": [...] }`
+  `"$add"` is a helper that computes the value before `set_entity_var` runs.
 
 When one command chain needs to call another JSON command file, use `run_project_command` and pass the project command params as ordinary extra fields on that command object.
 
@@ -815,6 +862,7 @@ Current camera token state exposes:
 ## Structured Value Sources
 
 Structured value sources are single-key objects that the runner resolves before primitive execution.
+If a single-key object uses a `$`-prefixed key that is not listed here, the runner treats it as an unknown value source and raises an error.
 
 Current value sources:
 
@@ -831,8 +879,10 @@ Current value sources:
 - `$inventory_item_count`
 - `$inventory_has_item`
 - `$collection_item`
-- `$sum`
-- `$product`
+- `$add`
+- `$subtract`
+- `$multiply`
+- `$divide`
 - `$join_text`
 - `$slice_collection`
 - `$wrap_index`
@@ -1268,25 +1318,34 @@ or:
 }
 ```
 
-### `$sum`
+### Arithmetic value sources
 
-Returns the numeric sum of a small value list.
+Arithmetic helpers resolve numeric values before a primitive command runs. Inline math strings such as `"$project.movement.ticks_per_tile / 2"` are not supported; use these structured value sources instead.
 
-Example:
-
-```json
-{ "$sum": ["$self.grid_x", 1] }
-```
-
-### `$product`
-
-Returns the numeric product of a small value list.
-
-Example:
+Examples:
 
 ```json
-{ "$product": ["$offset_x", "$area.tile_size"] }
+{ "$add": ["$self.grid_x", 1] }
 ```
+
+```json
+{ "$subtract": ["$self.grid_x", 1] }
+```
+
+```json
+{ "$multiply": ["$offset_x", "$area.tile_size"] }
+```
+
+```json
+{ "$divide": ["$project.movement.ticks_per_tile", 2] }
+```
+
+Notes:
+- `$add` accepts zero or more numbers and returns their sum
+- `$subtract` runs left-to-right and requires at least two numbers
+- `$multiply` requires at least one number and returns their product
+- `$divide` runs left-to-right, requires at least two numbers, and rejects division by zero
+- prefer `$divide` over FPS when a clip should align to gameplay ticks, such as splitting `$project.movement.ticks_per_tile` across a fixed number of animation frames
 
 ### `$join_text`
 
@@ -1329,7 +1388,7 @@ Shape:
 {
   "$wrap_index": {
     "value": {
-      "$sum": ["$self.dialogue_choice_index", "$delta"]
+      "$add": ["$self.dialogue_choice_index", "$delta"]
     },
     "count": "$self.dialogue_current_option_count",
     "default": 0
@@ -1581,7 +1640,7 @@ Current inventory rules:
 
 ### Animation, Audio, And Entity Visuals
 
-- `play_animation(entity_id, visual_id?, frame_sequence, frames_per_sprite_change?, hold_last_frame?, wait?)`
+- `play_animation(entity_id, visual_id?, animation, frame_count?, duration_ticks?, wait?)`
 - `wait_for_animation(entity_id, visual_id?)`
 - `stop_animation(entity_id, visual_id?, reset_to_default?)`
 - `set_visual_frame(entity_id, visual_id?, frame)`
@@ -1595,6 +1654,55 @@ Current inventory rules:
 - `set_music_volume(volume)`
 
 Notes:
+- `play_animation` plays a named clip from the target visual's `animations`
+  object. It does not accept raw `frame_sequence`; author frame lists once on
+  the visual clip and call them by name.
+- `frame_count` limits how many sprite frames are consumed by this play. When
+  omitted, the full clip is consumed.
+- `duration_ticks` is the total simulation ticks this play should last. The
+  engine distributes the selected sprite frames across that duration. If
+  omitted, multi-frame clips use one simulation tick per selected frame, and a
+  one-frame clip is applied immediately without becoming an active wait.
+- `wait` defaults to `true` for active multi-tick playback. If the chosen clip
+  resolves immediately, such as a one-frame idle clip with no `duration_ticks`,
+  the command completes immediately either way.
+- if the clip has `preserve_phase: true`, the next play starts where the
+  previous play left off inside that clip
+- use `$divide`, `$multiply`, `$add`, and `$subtract` value sources for timing
+  math; inline math strings are not supported
+
+Example movement-oriented command chain:
+
+```json
+{
+  "params": ["direction", "walk_animation", "idle_animation"],
+  "commands": [
+    {
+      "type": "play_animation",
+      "entity_id": "$self_id",
+      "visual_id": "body",
+      "animation": "$walk_animation",
+      "frame_count": 2,
+      "duration_ticks": "$project.movement.ticks_per_tile",
+      "wait": false
+    },
+    {
+      "type": "move_in_direction",
+      "entity_id": "$self_id",
+      "direction": "$direction",
+      "frames_needed": "$project.movement.ticks_per_tile",
+      "wait": true
+    },
+    {
+      "type": "play_animation",
+      "entity_id": "$self_id",
+      "visual_id": "body",
+      "animation": "$idle_animation"
+    }
+  ]
+}
+```
+
 - `play_audio` is one-shot sound-effect playback
 - `set_sound_volume` affects future `play_audio` calls
 - `play_music` uses the dedicated music channel and defaults to `loop = true`

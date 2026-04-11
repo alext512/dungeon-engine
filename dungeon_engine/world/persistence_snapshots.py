@@ -9,7 +9,7 @@ from typing import Any
 from dungeon_engine.inventory import clone_inventory_state, serialize_inventory_state
 from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area
-from dungeon_engine.world.entity import Entity, EntityVisual
+from dungeon_engine.world.entity import Entity, EntityVisual, VisualAnimationClip
 from dungeon_engine.world.persistence_data import (
     PersistentAreaState,
     PersistentEntityState,
@@ -425,24 +425,42 @@ def _serialize_persistent_visuals(entity: Entity) -> list[dict[str, Any]]:
     """Serialize full runtime visual state for saves and persistent diffs."""
     serialized: list[dict[str, Any]] = []
     for visual in entity.visuals:
-        serialized.append(
-            {
-                "id": visual.visual_id,
-                "path": visual.path,
-                "frame_width": visual.frame_width,
-                "frame_height": visual.frame_height,
-                "frames": list(visual.frames),
-                "animation_fps": visual.animation_fps,
-                "animate_when_moving": visual.animate_when_moving,
-                "current_frame": visual.current_frame,
-                "flip_x": visual.flip_x,
-                "visible": visual.visible,
-                "tint": list(visual.tint),
-                "offset_x": visual.offset_x,
-                "offset_y": visual.offset_y,
-                "draw_order": visual.draw_order,
-            }
-        )
+        serialized_visual = {
+            "id": visual.visual_id,
+            "path": visual.path,
+            "frame_width": visual.frame_width,
+            "frame_height": visual.frame_height,
+            "frames": list(visual.frames),
+            "animation_fps": visual.animation_fps,
+            "animate_when_moving": visual.animate_when_moving,
+            "current_frame": visual.current_frame,
+            "flip_x": visual.flip_x,
+            "visible": visual.visible,
+            "tint": list(visual.tint),
+            "offset_x": visual.offset_x,
+            "offset_y": visual.offset_y,
+            "draw_order": visual.draw_order,
+        }
+        if visual.default_animation is not None:
+            serialized_visual["default_animation"] = visual.default_animation
+        if visual.animations:
+            serialized_visual["animations"] = _serialize_persistent_visual_animations(visual)
+        serialized.append(serialized_visual)
+    return serialized
+
+
+def _serialize_persistent_visual_animations(visual: EntityVisual) -> dict[str, dict[str, Any]]:
+    """Serialize named animation clips for persistent visual snapshots."""
+    serialized: dict[str, dict[str, Any]] = {}
+    for animation_id, clip in visual.animations.items():
+        serialized_clip: dict[str, Any] = {
+            "frames": list(clip.frames),
+            "preserve_phase": bool(clip.preserve_phase),
+            "phase_index": int(clip.phase_index),
+        }
+        if clip.flip_x is not None:
+            serialized_clip["flip_x"] = bool(clip.flip_x)
+        serialized[str(animation_id)] = serialized_clip
     return serialized
 
 
@@ -457,6 +475,12 @@ def _deserialize_persistent_visuals(raw_visuals: Any) -> list[EntityVisual]:
         frames = [int(frame) for frame in raw_visual.get("frames", [0])]
         if not frames:
             frames = [0]
+        animations = _deserialize_persistent_visual_animations(
+            raw_visual.get("animations", {}),
+        )
+        default_animation = raw_visual.get("default_animation")
+        if default_animation is not None:
+            default_animation = str(default_animation).strip() or None
         visuals.append(
             EntityVisual(
                 visual_id=str(raw_visual.get("id", "")).strip() or f"visual_{index}",
@@ -477,9 +501,34 @@ def _deserialize_persistent_visuals(raw_visuals: Any) -> list[EntityVisual]:
                 offset_x=float(raw_visual.get("offset_x", 0.0)),
                 offset_y=float(raw_visual.get("offset_y", 0.0)),
                 draw_order=int(raw_visual.get("draw_order", index)),
+                default_animation=default_animation,
+                animations=animations,
             )
         )
     return visuals
+
+
+def _deserialize_persistent_visual_animations(raw_animations: Any) -> dict[str, VisualAnimationClip]:
+    """Parse saved visual animation clips."""
+    if raw_animations is None:
+        return {}
+    if not isinstance(raw_animations, dict):
+        raise ValueError("Persistent visual animations override must be a JSON object.")
+    animations: dict[str, VisualAnimationClip] = {}
+    for raw_animation_id, raw_clip in raw_animations.items():
+        if not isinstance(raw_clip, dict):
+            continue
+        frames = [int(frame) for frame in raw_clip.get("frames", [])]
+        if not frames:
+            continue
+        raw_flip_x = raw_clip.get("flip_x")
+        animations[str(raw_animation_id)] = VisualAnimationClip(
+            frames=frames,
+            flip_x=None if raw_flip_x is None else bool(raw_flip_x),
+            preserve_phase=bool(raw_clip.get("preserve_phase", False)),
+            phase_index=int(raw_clip.get("phase_index", 0)),
+        )
+    return animations
 
 
 def _deserialize_inventory_state(raw_inventory: Any) -> Any:

@@ -11,6 +11,10 @@
       "frame_width": 16,
       "frame_height": 16,
       "frames": [0, 1, 2, 3, 4, 5],
+      "animations": {
+        "open": { "frames": [0, 1, 2, 3, 4, 5] },
+        "close": { "frames": [5, 4, 3, 2, 1, 0] }
+      },
       "visible": true
     }
   ],
@@ -147,8 +151,7 @@
             "type": "play_animation",
             "entity_id": "$self_id",
             "visual_id": "main",
-            "frame_sequence": [0, 1, 2, 3, 4, 5],
-            "hold_last_frame": true,
+            "animation": "open",
             "wait": false
           }
         ]
@@ -182,8 +185,7 @@
             "type": "play_animation",
             "entity_id": "$self_id",
             "visual_id": "main",
-            "frame_sequence": [5, 4, 3, 2, 1, 0],
-            "hold_last_frame": true,
+            "animation": "close",
             "wait": false
           }
         ]

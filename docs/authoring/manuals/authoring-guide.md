@@ -658,6 +658,8 @@ Each visual can define:
 - `frame_width`
 - `frame_height`
 - `frames`
+- `default_animation`
+- `animations`
 - `animation_fps`
 - `animate_when_moving`
 - `flip_x`
@@ -666,6 +668,49 @@ Each visual can define:
 - `offset_x`
 - `offset_y`
 - `draw_order`
+
+For command-driven animation, prefer one visual with named clips:
+
+```json
+{
+  "id": "body",
+  "path": "assets/used_tilesets_sprites/main_character.png",
+  "frame_width": 16,
+  "frame_height": 16,
+  "default_animation": "idle_down",
+  "animations": {
+    "idle_down": { "frames": [0] },
+    "idle_up": { "frames": [1] },
+    "idle_right": { "frames": [2], "flip_x": false },
+    "idle_left": { "frames": [2], "flip_x": true },
+    "walk_down": { "frames": [0, 3, 6, 3], "preserve_phase": true },
+    "walk_up": { "frames": [1, 4, 7, 4], "preserve_phase": true },
+    "walk_right": { "frames": [2, 5, 8, 5], "flip_x": false, "preserve_phase": true },
+    "walk_left": { "frames": [2, 5, 8, 5], "flip_x": true, "preserve_phase": true }
+  }
+}
+```
+
+Then call clips by name:
+
+```json
+{
+  "type": "play_animation",
+  "entity_id": "$self_id",
+  "visual_id": "body",
+  "animation": "walk_left",
+  "frame_count": 2,
+  "duration_ticks": "$project.movement.ticks_per_tile",
+  "wait": false
+}
+```
+
+Use one-frame clips such as `idle_left` for idle/facing states. `preserve_phase`
+is clip-local; it lets repeated plays continue through that clip's frame list
+instead of restarting every tile step. For gameplay-coupled animation timing,
+prefer `duration_ticks` and arithmetic value sources such as `$divide` over
+`animation_fps`. `animation_fps` is still available for decorative free-running
+loops that do not need to align with commands.
 
 If you still author `sprite`, loading fails on purpose.
 
@@ -758,13 +803,13 @@ Example:
       "type": "move_entity_world_position",
       "entity_id": "$self_id",
       "x": {
-        "$product": [
+        "$multiply": [
           "$offset_x",
           "$area.tile_size"
         ]
       },
       "y": {
-        "$product": [
+        "$multiply": [
           "$offset_y",
           "$area.tile_size"
         ]
@@ -821,7 +866,8 @@ There are four important JSON shapes in authored command files:
 - runtime token strings
   These look like `$self_id` or `$project.movement.ticks_per_tile` and read a value at runtime.
 - structured value sources
-  These are single-key objects like `{"$sum": [...]}` or `{"$entity_ref": {...}}` that compute or query a value before a primitive command runs.
+  These are single-key objects like `{"$add": [...]}` or `{"$entity_ref": {...}}` that compute or query a value before a primitive command runs.
+  Unknown single-key `$...` objects fail early, so typos do not silently pass through as ordinary data.
 
 Example:
 
@@ -831,7 +877,7 @@ Example:
   "entity_id": "$self_id",
   "name": "next_x",
   "value": {
-    "$sum": [
+    "$add": [
       "$self.current_x",
       1
     ]
@@ -845,8 +891,8 @@ How to read it:
   This is the engine-handled primitive command being executed.
 - `"entity_id": "$self_id"`
   `$self_id` resolves to the current source entity id at runtime.
-- `"value": { "$sum": [...] }`
-  `"$sum"` is a helper that computes the value before `set_entity_var` runs.
+- `"value": { "$add": [...] }`
+  `"$add"` is a helper that computes the value before `set_entity_var` runs.
 
 One more important rule:
 
@@ -1299,14 +1345,17 @@ Generic tile-query value sources are also available for explicit spatial lookup:
 - `{"$entity_at": {"x": ..., "y": ..., "index": 0, "where": {...}, "select": {...}, "default": null}}`
 - `{"$entities_query": {"where": {...}, "select": {...}}}`
 - `{"$entity_query": {"where": {...}, "index": 0, "select": {...}, "default": null}}`
-- `{"$sum": [base_x, delta_x]}`
+- `{"$add": [base_x, delta_x]}`
+- `{"$subtract": [base_x, delta_x]}`
+- `{"$multiply": [offset, "$area.tile_size"]}`
+- `{"$divide": ["$project.movement.ticks_per_tile", 2]}`
 
 `$entity_ref` returns one selected plain runtime snapshot for an explicit entity id.
 `$entities_at` returns a stable list of selected plain entity refs for that tile.
 `$entity_at` returns one selected ref from the same stable ordering, including negative indexes such as `-1` for the last item.
 `$entities_query` returns a stable list of selected plain entity refs from one filtered world scan.
 `$entity_query` returns one selected ref from the same stable query ordering.
-`$sum` is a small numeric helper for explicit authored coordinate math.
+These small arithmetic helpers support explicit authored coordinate and timing math. Prefer structured helpers like `$divide` over inline math strings when you need gameplay-tick timing such as half of `$project.movement.ticks_per_tile`.
 
 Current entity-query helpers all require a `select` block. Example:
 
@@ -1589,13 +1638,13 @@ For simple movement execution, prefer relative primitives over manually computin
   "type": "move_entity_world_position",
   "entity_id": "$self_id",
   "x": {
-    "$product": [
+    "$multiply": [
       "$offset_x",
       "$area.tile_size"
     ]
   },
   "y": {
-    "$product": [
+    "$multiply": [
       "$offset_y",
       "$area.tile_size"
     ]

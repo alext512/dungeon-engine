@@ -1185,7 +1185,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "entity_id": "$self_id",
                             "name": "interact_target_x",
                             "value": {
-                                "$sum": [
+                                "$add": [
                                     "$self.interact_self_position.grid_x",
                                     "$self.interact_offset.x",
                                 ]
@@ -1196,7 +1196,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "entity_id": "$self_id",
                             "name": "interact_target_y",
                             "value": {
-                                "$sum": [
+                                "$add": [
                                     "$self.interact_self_position.grid_y",
                                     "$self.interact_offset.y",
                                 ]

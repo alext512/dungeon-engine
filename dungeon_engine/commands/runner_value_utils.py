@@ -139,29 +139,61 @@ def coerce_integer_value(value: Any, *, source_name: str, field_name: str) -> in
     return int(numeric_value)
 
 
-def resolve_sum_value(resolved_source: Any) -> int | float:
+def resolve_add_value(resolved_source: Any) -> int | float:
     """Return the numeric sum of a small authored value list."""
     if not isinstance(resolved_source, (list, tuple)):
-        raise TypeError("$sum value source requires a list or tuple.")
-    numeric_values = [coerce_numeric_value(value, source_name="$sum") for value in resolved_source]
+        raise TypeError("$add value source requires a list or tuple.")
+    numeric_values = [coerce_numeric_value(value, source_name="$add") for value in resolved_source]
     if any(isinstance(value, float) for value in numeric_values):
         return float(sum(float(value) for value in numeric_values))
     return int(sum(int(value) for value in numeric_values))
 
 
-def resolve_product_value(resolved_source: Any) -> int | float:
+def resolve_subtract_value(resolved_source: Any) -> int | float:
+    """Return the left-to-right numeric difference of an authored value list."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$subtract value source requires a list or tuple.")
+    numeric_values = [coerce_numeric_value(value, source_name="$subtract") for value in resolved_source]
+    if len(numeric_values) < 2:
+        raise ValueError("$subtract value source requires at least two values.")
+    result: int | float = numeric_values[0]
+    for value in numeric_values[1:]:
+        result -= value
+    if any(isinstance(value, float) for value in numeric_values):
+        return float(result)
+    return int(result)
+
+
+def resolve_multiply_value(resolved_source: Any) -> int | float:
     """Return the numeric product of a small authored value list."""
     if not isinstance(resolved_source, (list, tuple)):
-        raise TypeError("$product value source requires a list or tuple.")
-    numeric_values = [coerce_numeric_value(value, source_name="$product") for value in resolved_source]
+        raise TypeError("$multiply value source requires a list or tuple.")
+    numeric_values = [coerce_numeric_value(value, source_name="$multiply") for value in resolved_source]
     if not numeric_values:
-        raise ValueError("$product value source requires at least one value.")
+        raise ValueError("$multiply value source requires at least one value.")
     product: int | float = 1
     for value in numeric_values:
         product *= value
     if any(isinstance(value, float) for value in numeric_values):
         return float(product)
     return int(product)
+
+
+def resolve_divide_value(resolved_source: Any) -> int | float:
+    """Return the left-to-right numeric quotient of an authored value list."""
+    if not isinstance(resolved_source, (list, tuple)):
+        raise TypeError("$divide value source requires a list or tuple.")
+    numeric_values = [coerce_numeric_value(value, source_name="$divide") for value in resolved_source]
+    if len(numeric_values) < 2:
+        raise ValueError("$divide value source requires at least two values.")
+    result = float(numeric_values[0])
+    for value in numeric_values[1:]:
+        if value == 0:
+            raise ZeroDivisionError("$divide value source cannot divide by zero.")
+        result /= float(value)
+    if any(isinstance(value, float) for value in numeric_values) or not result.is_integer():
+        return float(result)
+    return int(result)
 
 
 def resolve_join_text_value(resolved_source: Any) -> str:

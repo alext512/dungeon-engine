@@ -22,6 +22,9 @@
       "frame_width": 16,
       "frame_height": 16,
       "frames": [0, 1, 2, 3],
+      "animations": {
+        "fall": { "frames": [0, 1, 2, 3] }
+      },
       "visible": false
     }
   ],
@@ -62,8 +65,7 @@
             "type": "play_animation",
             "entity_id": "$self_id",
             "visual_id": "fall",
-            "frame_sequence": [0, 1, 2, 3],
-            "hold_last_frame": true,
+            "animation": "fall",
             "wait": false
           },
           {
