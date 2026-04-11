@@ -114,8 +114,9 @@ The area canvas now includes a separate screen pane to the right of the world gr
 
 ## Canvas Tool Notes
 
-- The main area tools are exposed in the top toolbar and mirrored in the `Edit`
-  menu: `Paint`, `Entity Select`, `Tile Select`, and `Cell Flags`.
+- The main area tools live in the canvas tool strip above the viewport and are
+  mirrored in the `Edit` menu: `Paint`, `Entity Select`, `Tile Select`, and
+  `Cell Flags`.
 - `Paint` uses the active tile or entity-template brush. Right-click erases
   tiles or deletes world-space entities.
 - `Entity Select` clicks entity instances on the canvas. Repeated clicks cycle
@@ -127,14 +128,15 @@ The area canvas now includes a separate screen pane to the right of the world gr
 ## Cell Flag Notes
 
 - `Cell Flags` mode uses the brush selected in the Area Tools `Cell Flags` tab.
-- Built-in presets include setting or clearing `blocked`. The brush can also
-  paint custom flag names with ordinary JSON-compatible values.
-- Left-click paints the selected brush. Right-click clears that brush's flag:
-  for `blocked` it paints `blocked = false`, and for custom flags it removes
-  the selected key.
-- The runtime gives built-in meaning to selected flags such as `blocked`, while
-  custom cell metadata remains available through value sources such as
-  `$cell_flags_at`.
+- The built-in preset paints `blocked = true`.
+- Custom flags let you pick a flag name (usually `tags`) and enter a JSON value.
+  For `tags`, the value should be a JSON list of strings such as
+  `["water", "slow"]`.
+- Left-click places the selected flag. Right-click removes it. For `blocked`,
+  right-click paints `blocked = false`. For other flags, right-click removes
+  the selected key entirely.
+- The runtime gives built-in meaning to `blocked`. All other metadata is read
+  through value sources such as `$cell_flags_at`.
 
 ## Tile Selection Notes
 
