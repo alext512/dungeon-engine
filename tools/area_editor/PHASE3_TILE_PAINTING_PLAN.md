@@ -44,7 +44,7 @@ mode in the same family. Only one edit mode can be active at a time.
 |---|---|---|---|
 | **Navigate** (default) | — | — | Pan |
 | **Paint Tiles** | Place selected GID | Erase (GID->0) | Pan |
-| **Edit Cell Flags** | Set walkable | Set blocked | Pan |
+| **Edit Cell Flags** | Paint blocked | Clear blocked | Pan |
 
 ---
 

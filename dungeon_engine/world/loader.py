@@ -260,7 +260,7 @@ def _parse_cell_flags(
     width: int,
     height: int,
 ) -> list[list[dict[str, Any]]]:
-    """Parse explicit cell flags or fall back to all-unblocked cells."""
+    """Parse explicit cell flags or fall back to cells with no flags."""
     raw_flags = raw_data.get("cell_flags")
     if raw_flags is not None:
         if len(raw_flags) != height or any(len(row) != width for row in raw_flags):
@@ -271,36 +271,21 @@ def _parse_cell_flags(
             for cell in row:
                 if isinstance(cell, dict):
                     parsed_row.append(_normalize_cell_flags_dict(cell))
-                elif isinstance(cell, bool):
-                    parsed_row.append({
-                        "blocked": not cell,
-                        "walkable": cell,
-                    })
                 elif cell is None:
-                    parsed_row.append({
-                        "blocked": False,
-                        "walkable": True,
-                    })
+                    parsed_row.append({"blocked": False})
                 else:
-                    raise ValueError("cell_flags values must be booleans, objects, or null.")
+                    raise ValueError("cell_flags values must be objects or null.")
             parsed_flags.append(parsed_row)
         return parsed_flags
 
-    return [[{"blocked": False, "walkable": True} for _ in range(width)] for _ in range(height)]
+    return [[{"blocked": False} for _ in range(width)] for _ in range(height)]
 
 
 def _normalize_cell_flags_dict(raw_cell: dict[str, Any]) -> dict[str, Any]:
-    """Normalize one authored cell-flags object to expose both blocked and walkable."""
+    """Normalize one authored cell-flags object with engine-known defaults."""
     normalized = dict(raw_cell)
-    has_blocked = "blocked" in normalized
-    has_walkable = "walkable" in normalized
-    if has_blocked and not has_walkable:
-        normalized["walkable"] = not bool(normalized.get("blocked", False))
-    elif has_walkable and not has_blocked:
-        normalized["blocked"] = not bool(normalized.get("walkable", True))
-    elif not has_blocked and not has_walkable:
+    if "blocked" not in normalized:
         normalized["blocked"] = False
-        normalized["walkable"] = True
     return normalized
 
 

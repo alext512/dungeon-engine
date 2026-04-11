@@ -14,7 +14,7 @@ Phase 0 (docs/planning) is complete. This plan covers **Phase 1: read-only proje
 
 ```
 tools/area_editor/                # Portable root (can be copied standalone)
-    requirements.txt              # PySide6>=6.6
+    requirements.txt              # PySide6>=6.6 plus JSON5 support
     Run_Editor.cmd                # Windows launcher
     (existing .md docs)
     area_editor/                  # Python package (python -m area_editor)
@@ -52,7 +52,7 @@ The Python package is `area_editor/` (inside `tools/area_editor/`). All internal
 ## Portability
 
 The editor folder must be **fully self-contained and portable** — copyable to another location and usable standalone. This means:
-- `tools/area_editor/requirements.txt` with `PySide6>=6.6`
+- `tools/area_editor/requirements.txt` with `PySide6>=6.6` plus JSON5 support
 - `tools/area_editor/Run_Editor.cmd` — Windows launcher script (finds/uses a local or system Python)
 - No imports from `dungeon_engine` or any sibling package
 - No relative imports above `tools/area_editor/`

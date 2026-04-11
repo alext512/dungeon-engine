@@ -23,18 +23,18 @@
     }
   ],
   "cell_flags": [
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false],
-    [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
+    [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}]
   ],
   "enter_commands": [
     {

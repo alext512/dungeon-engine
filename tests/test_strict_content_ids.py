@@ -104,7 +104,7 @@ def _minimal_area() -> dict[str, object]:
                 "grid": [[1]],
             }
         ],
-        "cell_flags": [[True]],
+        "cell_flags": [[{"blocked": False}]],
         "entities": [],
     }
 
@@ -1051,7 +1051,7 @@ class StrictContentIdTests(unittest.TestCase):
                 TileLayer(name="front_wall", grid=[[1]], render_order=10, y_sort=True, stack_order=0),
                 TileLayer(name="roof", grid=[[1]], render_order=20, y_sort=False, stack_order=0),
             ],
-            cell_flags=[[{"walkable": True}]],
+            cell_flags=[[{"blocked": False}]],
         )
         world = World()
         player = _make_runtime_entity("player", kind="player")
@@ -2080,7 +2080,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entities": [
                         {"id": "player", "kind": "player", "grid_x": 0, "grid_y": 0},
                         {
@@ -2097,7 +2097,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entry_points": {"landing": {"grid_x": 2, "grid_y": 0}},
                     "entities": [],
                 },
@@ -2145,7 +2145,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entities": [
                         {"id": "player", "kind": "player", "grid_x": 0, "grid_y": 0},
                         {
@@ -2162,7 +2162,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entry_points": {"landing": {"grid_x": 2, "grid_y": 0}},
                     "entities": [],
                 },
@@ -2171,7 +2171,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entities": [],
                 },
             },
@@ -2219,7 +2219,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0]]}],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entities": [
                         {"id": "crate", "kind": "crate", "grid_x": 0, "grid_y": 0, "facing": "down"},
                     ],
@@ -2229,7 +2229,7 @@ class StrictContentIdTests(unittest.TestCase):
                     "variables": {},
                     "tilesets": [],
                     "tile_layers": [{"name": "ground", "render_order": 0, "grid": [[0, 0, 0], [0, 0, 0]]}],
-                    "cell_flags": [[True, True, True], [True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}], [{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entities": [
                         {
                             "id": "spawn_marker",
@@ -2837,7 +2837,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "grid": [[0]],
                         }
                     ],
-                    "cell_flags": [[True]],
+                    "cell_flags": [[{"blocked": False}]],
                     "entities": [
                         {
                             "id": "player",
@@ -2858,7 +2858,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "grid": [[0]],
                         }
                     ],
-                    "cell_flags": [[True]],
+                    "cell_flags": [[{"blocked": False}]],
                     "entities": [
                         {
                             "id": "player",
@@ -3594,7 +3594,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "grid": [[0]],
                         }
                     ],
-                    "cell_flags": [[True]],
+                    "cell_flags": [[{"blocked": False}]],
                     "entities": [
                         {
                             "id": "player",
@@ -3692,7 +3692,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "grid": [[0]],
                         }
                     ],
-                    "cell_flags": [[True]],
+                    "cell_flags": [[{"blocked": False}]],
                     "entities": [
                         {
                             "id": "player",
@@ -4078,7 +4078,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "grid": [[0, 0, 0]],
                         }
                     ],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entities": [
                         {
                             "id": "player",
@@ -4105,7 +4105,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "grid": [[0, 0, 0]],
                         }
                     ],
-                    "cell_flags": [[True, True, True]],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
                     "entry_points": {
                         "landing": {
                             "grid_x": 2,
@@ -4151,5 +4151,6 @@ class StrictContentIdTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

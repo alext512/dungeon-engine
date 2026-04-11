@@ -313,7 +313,7 @@ Example structure:
 - `tile_layers`
   Visual tile layers.
 - `cell_flags`
-  Walkability grid.
+  Cell metadata grid (movement blocking plus any custom per-cell metadata).
 - `enter_commands`
   Optional command chain that runs immediately after the area loads.
 - `entities`
@@ -408,15 +408,11 @@ The preferred current authored form is an object with `blocked`:
 ]
 ```
 
-Boolean cells are still accepted in authored area data as a concise older style:
+`blocked` is the only engine-known key. Other keys are just metadata. A common
+convention is:
 
-```json
-"cell_flags": [
-  [false, false, false, false],
-  [false, true,  true,  false],
-  [false, false, false, false]
-]
-```
+- `tags`: a list of strings used by authored logic, for example
+  `{"tags": ["water", "slow"]}`
 
 Area dimensions (`$area.width`, `$area.height`) are auto-computed from the first tile layer's grid. Do not author width or height fields.
 

@@ -16,6 +16,7 @@ from area_editor.catalogs.template_catalog import VisualInfo
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
 from area_editor.documents.area_document import AreaDocument, EntityDocument, TileLayerDocument
+from area_editor.operations.cell_flags import CellFlagBrush
 from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.widgets.tile_canvas import BrushType, TileCanvas, _SCENE_EDGE_PADDING
 
@@ -55,7 +56,7 @@ def _make_area() -> AreaDocument:
                 grid=[[0, 0], [0, 0]],
             )
         ],
-        cell_flags=[[True, False], [True, True]],
+        cell_flags=[[{}, {}], [{}, {}]],
         entry_points={},
         entities=[],
         camera={},
@@ -77,17 +78,72 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         canvas.set_area(area, catalog, None)
         canvas.set_cell_flags_edit_mode(True)
 
-        edits: list[tuple[int, int, bool]] = []
+        edits: list[tuple[int, int, CellFlagBrush]] = []
         canvas.cell_flag_edited.connect(
-            lambda col, row, walkable: edits.append((col, row, walkable))
+            lambda col, row, brush: edits.append((col, row, brush))
         )
 
-        changed = canvas.apply_cell_flag_brush(1, 0, True)
+        changed = canvas.apply_cell_flag_brush(1, 0, CellFlagBrush("blocked", True))
 
         self.assertTrue(changed)
-        self.assertTrue(area.cell_flags[0][1])
-        self.assertEqual(edits, [(1, 0, True)])
+        self.assertEqual(area.cell_flags[0][1]["blocked"], True)
+        self.assertEqual(edits, [(1, 0, CellFlagBrush("blocked", True))])
         self.assertEqual(len(canvas._cell_flag_group.childItems()), 0)
+
+    def test_cell_flag_pointer_left_blocks_and_right_clears(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_cell_flags_edit_mode(True)
+
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(0, 0),
+            button=Qt.MouseButton.LeftButton,
+        )
+        with patch.object(canvas, "mapToScene", return_value=QPointF(1, 1)):
+            self.assertTrue(canvas._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton))
+
+        self.assertEqual(area.cell_flags[0][0]["blocked"], True)
+
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(0, 0),
+            button=Qt.MouseButton.RightButton,
+        )
+        with patch.object(canvas, "mapToScene", return_value=QPointF(1, 1)):
+            self.assertTrue(canvas._handle_edit_pointer_event(event, Qt.MouseButton.RightButton))
+
+        self.assertEqual(area.cell_flags[0][0]["blocked"], False)
+
+    def test_cell_flag_pointer_paints_selected_custom_brush(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_cell_flags_edit_mode(True)
+        canvas.set_cell_flag_brush(CellFlagBrush("tags", ["water"]))
+
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(0, 0),
+            button=Qt.MouseButton.LeftButton,
+        )
+        with patch.object(canvas, "mapToScene", return_value=QPointF(1, 1)):
+            self.assertTrue(canvas._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton))
+
+        self.assertEqual(area.cell_flags[0][0]["tags"], ["water"])
+
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(0, 0),
+            button=Qt.MouseButton.RightButton,
+        )
+        with patch.object(canvas, "mapToScene", return_value=QPointF(1, 1)):
+            self.assertTrue(canvas._handle_edit_pointer_event(event, Qt.MouseButton.RightButton))
+
+        self.assertNotIn("tags", area.cell_flags[0][0])
 
     def test_unified_render_order_interleaves_y_sorted_layer_and_entities(self):
         area = AreaDocument(
@@ -111,7 +167,7 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
                     grid=[[1]],
                 ),
             ],
-            cell_flags=[[True]],
+            cell_flags=[[{}]],
             entry_points={},
             entities=[
                 EntityDocument(

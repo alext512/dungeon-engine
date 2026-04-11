@@ -17,7 +17,7 @@ The docs site is also the permanent home for the public long-form manuals. Root-
 Runtime features already in active use include:
 
 - manifest-driven projects through `project.json`
-- tile-based areas with independent tile layers and walkability flags
+- tile-based areas with independent tile layers and cell flags
 - path-derived ids for areas, templates, commands, and items
 - reusable entity templates with per-instance parameters
 - command-driven interaction, movement, animation, area changes, and persistence

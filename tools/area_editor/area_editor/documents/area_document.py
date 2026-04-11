@@ -13,14 +13,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from area_editor.json_io import compose_json_file_text, load_json_data
+from area_editor.json_io import compose_json_file_text, is_json_data_file, load_json_data
 from area_editor.json_format import format_json_for_editor
 
 # ---------------------------------------------------------------------------
 # Leaf documents
 # ---------------------------------------------------------------------------
 
-CellFlag = bool | dict[str, Any] | None
+CellFlag = dict[str, Any] | None
+
+
+def _validate_cell_flags(cell_flags: list[list[CellFlag]]) -> list[list[CellFlag]]:
+    for row in cell_flags:
+        if row is None:
+            continue
+        for cell in row:
+            if isinstance(cell, bool):
+                raise ValueError("cell_flags values must be objects or null; booleans are no longer supported.")
+    return cell_flags
 
 
 def _normalize_entity_space(space: str) -> str:
@@ -244,7 +254,7 @@ class AreaDocument:
             tile_size=d.pop("tile_size", 16),
             tilesets=tilesets,
             tile_layers=tile_layers,
-            cell_flags=d.pop("cell_flags", []),
+            cell_flags=_validate_cell_flags(d.pop("cell_flags", [])),
             entry_points=d.pop("entry_points", {}),
             entities=entities,
             camera=d.pop("camera", {}),
@@ -296,7 +306,7 @@ def save_area_document(file_path: Path, document: AreaDocument) -> None:
         compose_json_file_text(
             text,
             original_text=original_text,
-            add_default_header=original_text is None and file_path.suffix.lower() == ".json5",
+            add_default_header=original_text is None and is_json_data_file(file_path),
         ),
         encoding="utf-8",
     )

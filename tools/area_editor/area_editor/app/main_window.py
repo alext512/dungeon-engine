@@ -12,14 +12,17 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QTransform
 from PySide6.QtWidgets import (
+    QDialog,
     QDockWidget,
     QFileDialog,
     QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from area_editor.app.main_window_dialogs import (
@@ -102,8 +105,11 @@ from area_editor.operations.entities import (
     place_screen_entity,
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
+from area_editor.widgets.area_entity_list_panel import AreaEntityListPanel
 from area_editor.widgets.area_start_panel import AreaStartPanel
 from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
+from area_editor.widgets.canvas_tool_strip import CanvasToolStrip
+from area_editor.widgets.cell_flag_brush_panel import CellFlagBrushPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
@@ -156,6 +162,7 @@ class MainWindow(
         self._manifest: ProjectManifest | None = None
         self._catalog: TilesetCatalog | None = None
         self._templates: TemplateCatalog | None = None
+        self._project_entity_id_cache: set[str] | None = None
         # Per-tab area documents keyed by content_id
         self._area_docs: dict[str, AreaDocument] = {}
         self._connected_canvas: TileCanvas | None = None
@@ -173,7 +180,14 @@ class MainWindow(
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
-        self.setCentralWidget(self._tab_widget)
+        self._canvas_tool_strip = CanvasToolStrip()
+        central_container = QWidget()
+        central_layout = QVBoxLayout(central_container)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self._canvas_tool_strip)
+        central_layout.addWidget(self._tab_widget, 1)
+        self.setCentralWidget(central_container)
 
         # Dock panels — left side: project content browser tabs
         self._area_panel = AreaListPanel()
@@ -250,6 +264,8 @@ class MainWindow(
 
         # Right side: area-tools workspace on top, render + tileset below
         self._layer_panel = LayerListPanel()
+        self._area_entity_list_panel = AreaEntityListPanel()
+        self._cell_flag_brush_panel = CellFlagBrushPanel()
         self._area_start_panel = AreaStartPanel()
         self._area_start_panel.set_picker_callbacks(
             entity_picker=self._browse_project_entity_id,
@@ -272,6 +288,18 @@ class MainWindow(
             key="area_start",
             title="Area Start",
             widget=self._area_start_panel,
+        )
+        self._area_workspace.add_page(
+            row=1,
+            key="entities",
+            title="Entities",
+            widget=self._area_entity_list_panel,
+        )
+        self._area_workspace.add_page(
+            row=2,
+            key="cell_flags",
+            title="Cell Flags",
+            widget=self._cell_flag_brush_panel,
         )
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._area_workspace)
 
@@ -334,6 +362,7 @@ class MainWindow(
 
         # Menus
         self._build_menus()
+        self._build_tool_bar()
 
         # Signals — side panel open requests (double-click / context menu)
         self._area_panel.area_open_requested.connect(self._on_area_open_requested)
@@ -514,6 +543,10 @@ class MainWindow(
             lambda index: self._on_move_tile_layer_requested(index, 1)
         )
         self._area_start_panel.commands_applied.connect(self._on_area_start_commands_applied)
+        self._area_entity_list_panel.entity_selected.connect(
+            self._on_area_entity_list_selected
+        )
+        self._cell_flag_brush_panel.brush_changed.connect(self._on_cell_flag_brush_changed)
         self._render_panel.properties_changed.connect(self._on_render_properties_changed)
         self._entity_instance_panel.apply_requested.connect(self._on_apply_entity_instance_json)
         self._entity_instance_panel.revert_requested.connect(self._on_revert_entity_instance_json)
@@ -550,6 +583,7 @@ class MainWindow(
         except Exception as exc:
             QMessageBox.critical(self, "Error", f"Failed to load project:\n{exc}")
             return
+        self._invalidate_project_entity_id_cache()
 
         # Remember this project for next time
         self._settings.setValue(
@@ -580,6 +614,8 @@ class MainWindow(
         self._layer_panel.clear_layers()
         self._render_panel.clear_target()
         self._entity_instance_panel.clear_entity()
+        self._area_entity_list_panel.clear()
+        self._cell_flag_brush_panel.clear()
         self._template_panel.set_brush_active(None)
         self._tileset_panel.clear_tilesets()
         self._entities_visibility_action.blockSignals(True)
@@ -598,6 +634,8 @@ class MainWindow(
         self._command_panel.populate(self._manifest.command_paths)
         self._asset_panel.populate(self._manifest.asset_paths)
         self._update_project_content_actions()
+        self._get_project_entity_id_cache()
+        self._get_project_entity_id_cache()
 
         project_name = self._manifest.project_root.name
         self.setWindowTitle(f"Area Editor - {project_name}")
@@ -668,13 +706,19 @@ class MainWindow(
         self._paint_tiles_action.setCheckable(True)
         self._paint_tiles_action.setEnabled(False)
         self._paint_tiles_action.setShortcut(QKeySequence("P"))
+        self._paint_tiles_action.setStatusTip(
+            "Paint tiles or entity brushes; right-click erases."
+        )
         self._paint_tiles_action.toggled.connect(self._on_paint_tiles_toggled)
         edit_menu.addAction(self._paint_tiles_action)
 
-        self._select_action = QAction("&Select", self)
+        self._select_action = QAction("Entity &Select", self)
         self._select_action.setCheckable(True)
         self._select_action.setEnabled(False)
         self._select_action.setShortcut(QKeySequence("S"))
+        self._select_action.setStatusTip(
+            "Select entity instances; repeated clicks cycle stacked entities."
+        )
         self._select_action.toggled.connect(self._on_select_toggled)
         edit_menu.addAction(self._select_action)
 
@@ -682,6 +726,9 @@ class MainWindow(
         self._tile_select_action.setCheckable(True)
         self._tile_select_action.setEnabled(False)
         self._tile_select_action.setShortcut(QKeySequence("T"))
+        self._tile_select_action.setStatusTip(
+            "Drag-select tiles on the active layer for copy, cut, paste, or delete."
+        )
         self._tile_select_action.toggled.connect(self._on_tile_select_toggled)
         edit_menu.addAction(self._tile_select_action)
 
@@ -691,9 +738,12 @@ class MainWindow(
         self._enable_json_editing_action.toggled.connect(self._on_toggle_json_editing)
         edit_menu.addAction(self._enable_json_editing_action)
 
-        self._cell_flags_action = QAction("Edit Cell &Flags", self)
+        self._cell_flags_action = QAction("Cell &Flags", self)
         self._cell_flags_action.setCheckable(True)
         self._cell_flags_action.setEnabled(False)
+        self._cell_flags_action.setStatusTip(
+            "Paint the selected cell-flag brush."
+        )
         self._cell_flags_action.toggled.connect(self._on_cell_flags_toggled)
         edit_menu.addAction(self._cell_flags_action)
 
@@ -884,6 +934,17 @@ class MainWindow(
             lambda: self._on_change_area_extent("remove_right_columns")
         )
         area_menu.addAction(self._remove_right_columns_action)
+
+    def _build_tool_bar(self) -> None:
+        """Expose the main canvas tools near the document area."""
+        self._canvas_tool_strip.set_actions(
+            [
+                self._paint_tiles_action,
+                self._select_action,
+                self._tile_select_action,
+                self._cell_flags_action,
+            ]
+        )
 
     # ------------------------------------------------------------------
     # Slots — file dialog
@@ -1270,6 +1331,8 @@ class MainWindow(
                 self._status_zoom.setText(f"{canvas.zoom_level:.0%}")
                 self._refresh_render_properties_target()
                 self._refresh_entity_instance_panel()
+                self._refresh_area_entity_list_panel()
+                self._refresh_cell_flag_brush_panel()
                 self._sync_json_edit_actions()
                 self._refresh_layer_action_state()
                 self._refresh_tile_selection_actions()
@@ -1302,6 +1365,8 @@ class MainWindow(
             self._render_panel.clear_target()
             self._active_instance_entity_id = None
             self._entity_instance_panel.clear_entity()
+            self._area_entity_list_panel.clear()
+            self._cell_flag_brush_panel.clear()
             self._sync_json_edit_actions()
             self._refresh_layer_action_state()
             self._refresh_tile_selection_actions()
@@ -1335,6 +1400,8 @@ class MainWindow(
             self._render_panel.clear_target()
             self._active_instance_entity_id = None
             self._entity_instance_panel.clear_entity()
+            self._area_entity_list_panel.clear()
+            self._cell_flag_brush_panel.clear()
             self._sync_json_edit_actions()
             self._refresh_layer_action_state()
             self._refresh_tile_selection_actions()
@@ -1395,6 +1462,7 @@ class MainWindow(
             )
             return
         self._manifest = refreshed
+        self._invalidate_project_entity_id_cache()
         resolver = AssetResolver(self._manifest.asset_paths)
         self._catalog = TilesetCatalog(resolver)
         self._templates = TemplateCatalog()
@@ -1807,11 +1875,7 @@ class MainWindow(
         root_dir = _root_dir_for_content_file(source_file_path, area_roots)
         if root_dir is None:
             root_dir = self._default_area_root()
-        default_suffix = explicit_suffix or (
-            source_file_path.suffix
-            if is_json_data_file(source_file_path)
-            else ".json5"
-        )
+        default_suffix = explicit_suffix or ".json5"
         new_file_path = with_json_data_suffix(
             root_dir / Path(normalized_relative_name),
             default_suffix=default_suffix,
@@ -2341,10 +2405,12 @@ class MainWindow(
             self._update_paint_status()
         canvas.set_cell_flags_edit_mode(enabled)
         if enabled:
+            self._area_workspace.set_current_page("cell_flags")
             self.statusBar().showMessage(
-                "Cell flag edit mode: left-click walkable, right-click blocked.",
+                "Cell Flags mode: left-click paints the selected flag brush, right-click clears that flag.",
                 4000,
             )
+        self._update_paint_status()
         self._refresh_tile_selection_actions()
 
     def _on_tile_selected(self, gid: int) -> None:
@@ -2636,14 +2702,14 @@ class MainWindow(
     def _on_zoom_changed(self, zoom: float) -> None:
         self._status_zoom.setText(f"{zoom:.0%}")
 
-    def _on_cell_flag_edited(self, col: int, row: int, walkable: bool) -> None:
+    def _on_cell_flag_edited(self, col: int, row: int, brush: object) -> None:
         info = self._tab_widget.active_info()
         if info is None or info.content_type != ContentType.AREA:
             return
         self._tab_widget.set_dirty(info.content_id, True)
-        state = "walkable" if walkable else "blocked"
+        description = getattr(brush, "label", "cell flags")
         self.statusBar().showMessage(
-            f"Set cell ({col}, {row}) to {state}.",
+            f"Edited cell ({col}, {row}): {description}.",
             2500,
         )
 
@@ -2668,6 +2734,7 @@ class MainWindow(
             self._set_render_target_layer(self._layer_panel.active_layer)
             self._active_instance_entity_id = None
         self._refresh_entity_instance_panel()
+        self._area_entity_list_panel.select_entity(entity_id or None)
         self._sync_json_edit_actions()
         self._update_paint_status()
         if not entity_id:
@@ -2716,7 +2783,9 @@ class MainWindow(
             render_order=self._entity_render_order(template_id),
             y_sort=True,
         )
-        canvas.refresh_scene_contents()
+        self._register_project_entity_id(created.id)
+        canvas.refresh_entity_items()
+        self._refresh_area_entity_list_panel()
         self._tab_widget.set_dirty(content_id, True)
         self.statusBar().showMessage(
             f"Placed {created.id} at ({col}, {row}).",
@@ -2743,11 +2812,13 @@ class MainWindow(
             render_order=self._entity_render_order(template_id),
             y_sort=False,
         )
-        canvas.refresh_scene_contents()
+        self._register_project_entity_id(created.id)
+        canvas.refresh_entity_items()
         canvas.set_selected_entity(created.id, cycle_position=1, cycle_total=1, emit=False)
         self._active_instance_entity_id = created.id
         self._set_render_target_entity(created.id)
         self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
         self._tab_widget.set_dirty(content_id, True)
         self._update_paint_status()
         self.statusBar().showMessage(
@@ -2763,10 +2834,15 @@ class MainWindow(
         deleted_id = self._delete_world_entity_at(doc, col, row)
         if deleted_id is None:
             return
+        self._unregister_project_entity_id(deleted_id)
         if canvas.selected_entity_id == deleted_id:
             canvas.clear_selected_entity(emit=False)
             self._set_render_target_layer(self._layer_panel.active_layer)
-        canvas.refresh_scene_contents()
+        if self._active_instance_entity_id == deleted_id:
+            self._active_instance_entity_id = None
+            self._entity_instance_panel.clear_entity()
+        canvas.refresh_entity_items()
+        self._refresh_area_entity_list_panel()
         self._tab_widget.set_dirty(content_id, True)
         self._update_paint_status()
         self.statusBar().showMessage(
@@ -2785,9 +2861,13 @@ class MainWindow(
         deleted_id = delete_entity_by_id(doc, selected_id)
         if deleted_id is None:
             return
+        self._unregister_project_entity_id(deleted_id)
+        self._active_instance_entity_id = None
         canvas.clear_selected_entity(emit=False)
         self._set_render_target_layer(self._layer_panel.active_layer)
-        canvas.refresh_scene_contents()
+        canvas.refresh_entity_items()
+        self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
         self._tab_widget.set_dirty(content_id, True)
         self._update_paint_status()
         self.statusBar().showMessage(f"Deleted {deleted_id}.", 2500)
@@ -2937,6 +3017,7 @@ class MainWindow(
         canvas.set_selected_entity(selected_id, cycle_position=1, cycle_total=1, emit=False)
         self._set_render_target_entity(selected_id)
         canvas.refresh_scene_contents()
+        self._refresh_area_entity_list_panel()
         self._tab_widget.set_dirty(content_id, True)
         self._update_paint_status()
         entity = entity_by_id(doc, selected_id)
@@ -3286,7 +3367,31 @@ class MainWindow(
         return usages
 
     def _project_used_entity_ids(self) -> set[str]:
-        return {usage.entity_id for usage in self._project_entity_id_usages()}
+        return set(self._get_project_entity_id_cache())
+
+    def _get_project_entity_id_cache(self) -> set[str]:
+        if self._project_entity_id_cache is None:
+            self._project_entity_id_cache = {
+                usage.entity_id for usage in self._project_entity_id_usages()
+            }
+        return self._project_entity_id_cache
+
+    def _invalidate_project_entity_id_cache(self) -> None:
+        self._project_entity_id_cache = None
+
+    def _register_project_entity_id(self, entity_id: str) -> None:
+        if self._project_entity_id_cache is None:
+            return
+        normalized = str(entity_id).strip()
+        if normalized:
+            self._project_entity_id_cache.add(normalized)
+
+    def _unregister_project_entity_id(self, entity_id: str) -> None:
+        if self._project_entity_id_cache is None:
+            return
+        normalized = str(entity_id).strip()
+        if normalized:
+            self._project_entity_id_cache.discard(normalized)
 
     def _generate_project_unique_entity_id(
         self,
@@ -3298,7 +3403,7 @@ class MainWindow(
         return generate_entity_id(
             doc,
             template_id,
-            existing_ids=self._project_used_entity_ids(),
+            existing_ids=self._get_project_entity_id_cache(),
         )
 
     def _find_project_entity_id_conflict(
@@ -3795,6 +3900,13 @@ class MainWindow(
             self._status_gid.setText("Tile Select")
             return
 
+        if self._cell_flags_action.isChecked():
+            self._status_layer.setText("")
+            self._status_gid.setText(
+                f"Cell Flags: {self._cell_flag_brush_panel.current_brush.label}"
+            )
+            return
+
         if self._active_brush_type in {BrushType.TILE, BrushType.ERASER}:
             self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
         else:
@@ -3934,6 +4046,61 @@ class MainWindow(
         self._entity_instance_panel.set_area_bounds(doc.width, doc.height)
         self._entity_instance_panel.load_entity(entity)
 
+    def _refresh_area_entity_list_panel(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            self._area_entity_list_panel.clear()
+            return
+        content_id, doc, canvas = context
+        selected_entity_id = self._active_instance_entity_id or canvas.selected_entity_id
+        self._area_entity_list_panel.load_area(
+            content_id,
+            doc.entities,
+            selected_entity_id=selected_entity_id,
+            effective_space_for=self._entity_effective_space,
+        )
+
+    def _refresh_cell_flag_brush_panel(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            self._cell_flag_brush_panel.clear()
+            return
+        content_id, doc, canvas = context
+        self._cell_flag_brush_panel.load_area(content_id, doc)
+        canvas.set_cell_flag_brush(self._cell_flag_brush_panel.current_brush)
+
+    def _on_cell_flag_brush_changed(self, brush: object) -> None:
+        canvas = self._active_canvas()
+        if canvas is not None and hasattr(canvas, "set_cell_flag_brush"):
+            canvas.set_cell_flag_brush(brush)
+        self._update_paint_status()
+
+    def _on_area_entity_list_selected(self, entity_id: str) -> None:
+        context = self._active_area_context()
+        if context is None:
+            self._area_entity_list_panel.select_entity(None)
+            return
+        _content_id, doc, canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            self._refresh_area_entity_list_panel()
+            return
+        if not self._prepare_for_entity_instance_target_change(entity_id):
+            self._area_entity_list_panel.select_entity(self._active_instance_entity_id)
+            return
+        self._active_instance_entity_id = entity_id
+        canvas.set_selected_entity(entity_id, cycle_position=1, cycle_total=1, emit=False)
+        self._set_render_target_entity(entity_id)
+        self._refresh_entity_instance_panel()
+        self._area_entity_list_panel.select_entity(entity_id)
+        self._sync_json_edit_actions()
+        self._update_paint_status()
+        template = entity.template.rsplit("/", 1)[-1] if entity.template else "entity"
+        self.statusBar().showMessage(
+            f"Selected {entity.id} [{template}] from entity list.",
+            2500,
+        )
+
     def _on_area_start_commands_applied(self, commands: object) -> None:
         context = self._active_area_context()
         if context is None or not isinstance(commands, list):
@@ -4012,6 +4179,7 @@ class MainWindow(
         self._tab_widget.set_dirty(content_id, True)
         self._refresh_render_properties_target()
         self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
         self._sync_json_edit_actions()
         self._update_paint_status()
         self.statusBar().showMessage(status_message, 2500)
@@ -4143,9 +4311,12 @@ class MainWindow(
         if visual is None:
             return None
         frame_index = visual.frames[0] if visual.frames else 0
-        return self._catalog.get_sprite_frame(
+        pixmap = self._catalog.get_sprite_frame(
             visual.path,
             visual.frame_width,
             visual.frame_height,
             frame_index,
         )
+        if pixmap is not None and visual.flip_x:
+            return pixmap.transformed(QTransform().scale(-1, 1))
+        return pixmap

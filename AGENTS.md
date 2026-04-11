@@ -115,6 +115,23 @@ dungeon_engine/
 - **Project JSON data**: Reusable dialogue/menu data is now just ordinary project-relative JSON. The sample project keeps it under `dialogues/`, but that folder is conventional rather than a manifest-indexed content category.
 - **Authoring contract**: JSON area/entity/template files are the stable contract for the runtime and any future external tooling.
 - **Entity templates**: Entities are defined in JSON templates and can be specialized with per-instance parameters using `$variable` substitution.
+- **JSON notes headers**: When creating an authored JSON data file (`.json` or
+  `.json5`), start it with the standard file-level notes header:
+
+  ```json5
+  /*
+    NOTES
+
+    Add file-level notes here.
+  */
+  ```
+
+  The engine/editor JSON loader accepts file-level comments for both `.json`
+  and `.json5` authored data. Use that header, and other file-level comments,
+  the way you would use comments in source code: explain intent, non-obvious
+  decisions, and useful authoring context. If a user removes those comments,
+  respect that choice; do not force the header back into existing files unless
+  asked.
 
 ## Common Tasks
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QTransform
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.catalogs.tileset_catalog import TilesetCatalog
@@ -90,6 +90,8 @@ class TemplateListPanel(FileTreePanel):
                     frame_index,
                 )
                 if pm is not None:
+                    if visual.flip_x:
+                        pm = pm.transformed(QTransform().scale(-1, 1))
                     scaled = pm.scaled(
                         QSize(24, 24),
                         Qt.AspectRatioMode.KeepAspectRatio,

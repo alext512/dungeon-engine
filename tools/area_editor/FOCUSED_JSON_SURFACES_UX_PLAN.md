@@ -212,7 +212,7 @@ The first structured template editor should have:
 1. Summary / identity fields if useful
 2. Focused `visuals` JSON block
 3. Optional `variables` JSON block later if it proves useful
-4. Full raw JSON tab always available
+4. Full raw JSON section tab always available beside the focused sections
 
 ### Template visuals block
 

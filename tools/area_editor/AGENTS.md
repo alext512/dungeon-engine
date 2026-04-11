@@ -60,6 +60,28 @@ Follow these rules unless the user explicitly changes them:
 8. Build around the curated template-driven workflow first; do not assume the editor must visually expose every arbitrary JSON possibility.
 9. If a feature would require copying large parts of the runtime, stop and reconsider the design.
 
+## JSON Authoring Notes
+
+When creating authored JSON data files (`.json` or `.json5`), start them with
+the standard file-level notes header:
+
+```json5
+/*
+  NOTES
+
+  Add file-level notes here.
+*/
+```
+
+The engine/editor JSON loader accepts file-level comments for both `.json` and
+`.json5` authored data. Treat that notes area like source-code comments: add
+brief explanations for intent, non-obvious choices, and authoring context when
+that would help the next human or agent.
+
+Do not force comments back into existing files. If a user deletes the notes
+header or removes comments, preserve that choice unless they explicitly ask you
+to add comments again.
+
 ## Read Order
 
 Read these files in this order:

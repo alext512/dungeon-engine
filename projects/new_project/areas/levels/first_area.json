@@ -180,7 +180,7 @@
       "template": "entity_templates/area_transition",
       "parameters": {
         "target_area": "areas/start",
-        "destination_entity_id": "from_first_area_marker"
+        "destination_entity_id": "starting_position"
       }
     }
   ],

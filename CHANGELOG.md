@@ -4,6 +4,26 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## External Editor Dependency And Preview Catch-Up
+
+- Added the editor's `json5` dependency to its own requirements file and
+  launcher dependency check so a fresh or existing editor venv can recover
+  before startup
+- Added a visible canvas-tools strip for `Paint`, `Entity Select`,
+  `Tile Select`, and `Cell Flags`
+- Added an Area Tools `Cell Flags` brush panel so authors can choose which
+  blocked or custom cell-flag operation canvas clicks paint
+- Added an Area Tools `Entities` list for selecting active-area entity
+  instances, including hard-to-click screen-space entities
+- Updated external editor template previews, brush previews, and canvas sprites
+  to honor visual `default_animation` frames and clip-level `flip_x`
+- Flattened the external editor template surface so `Raw JSON` sits beside
+  `Visuals` and `Persistence` instead of behind a second top-level tab
+- Ensured new editor-created area JSON data files get the standard file-level
+  notes header, while existing files are left alone
+- Added editor tests covering default-animation preview selection and
+  clip-only visual previews
+
 ## Named Visual Animation Clips
 
 - Added named per-visual animation clips with `default_animation`,

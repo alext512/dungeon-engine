@@ -134,13 +134,7 @@ class Area:
         if not self.in_bounds(grid_x, grid_y):
             return True
         cell_flags = self.cell_flags_at(grid_x, grid_y)
-        if "blocked" in cell_flags:
-            return bool(cell_flags.get("blocked", False))
-        return not bool(cell_flags.get("walkable", True))
-
-    def is_walkable(self, grid_x: int, grid_y: int) -> bool:
-        """Use cell flags, not tile art, to determine walkability."""
-        return not self.is_blocked(grid_x, grid_y)
+        return bool(cell_flags.get("blocked", False))
 
     def cell_tags_at(self, grid_x: int, grid_y: int) -> list[str]:
         """Return the cell tags for the requested tile coordinate."""

@@ -37,7 +37,8 @@ The current editor can:
 - show an offset screen pane sized from the project's configured display dimensions
 - toggle tile-layer visibility, grid visibility, and entity visibility
 - zoom, pan, and show hovered world-cell or screen-pixel coordinates
-- edit `cell_flags` on area tabs through a dedicated edit mode
+- edit `cell_flags` on area tabs through a dedicated `Cell Flags` tool and
+  selectable flag brush
 - paint tiles on the active layer
 - use a dedicated `Tile Select` tool to select a rectangular region on the active
   layer, then clear/delete, copy, cut, or paste it
@@ -46,16 +47,20 @@ The current editor can:
 - duplicate areas either as a `Full Copy` or as a stripped `Layout Copy`
 - place and delete world-space entities with the template brush
 - place screen-space entities with a screen-space template brush in the screen pane
-- select stacked world entities by cell and select screen-space entities from the screen pane
+- select stacked world entities by cell, select screen-space entities from the
+  screen pane, or select any active-area instance from the `Entities` list
 - nudge selected world entities by tiles and selected screen-space entities by pixels
 - use a tabbed right-side area workspace so `Layers` stays focused and area
-  startup behavior lives in a dedicated `Area Start` tab
+  startup behavior, entity selection, and cell-flag brush selection live in
+  dedicated `Area Start`, `Entities`, and `Cell Flags` tabs
 - edit area `enter_commands` through helper insertions plus direct JSON, including
   common actions like `route_inputs_to_entity`, `run_entity_command`,
   `open_dialogue_session`, `set_camera_follow`, and `play_music`
 - edit selected entity instances through a structured Fields tab or guarded raw JSON tab
-- edit entity templates, items, project manifest fields, shared variables, and
-  global entities through structured tabs plus guarded raw JSON fallbacks
+- edit entity templates through one focused tab with `Visuals`, `Persistence`,
+  and `Raw JSON` sections
+- edit items, project manifest fields, shared variables, and global entities
+  through structured tabs plus guarded raw JSON fallbacks
 - edit layer/entity render properties from a shared dock
 - edit dialogue/template/command JSON through guarded viewer tabs
 - rename/move areas, templates, items, dialogues, commands, and assets with
@@ -67,6 +72,12 @@ The current editor can:
 - save edited area files back to JSON with unknown-field preservation
 - write known dense JSON matrices such as tile grids in a more readable compact form
 - run focused automated tests around manifest loading, canvas interaction, editor panels, and document round-tripping
+
+When the editor creates a new authored JSON area file, it writes the standard
+file-level notes header at the top of the file. New areas use `.json5` by
+default unless the user explicitly types another JSON data suffix. Existing
+JSON/JSON5 files are left as authored; if a user removes a notes header, the
+raw JSON viewer does not force it back in.
 
 What is still not implemented:
 
@@ -96,12 +107,38 @@ The area canvas now includes a separate screen pane to the right of the world gr
 - Its size comes from the project's configured shared variables display size, with runtime-matching defaults when that data is absent.
 - Existing screen-space entities can be selected, nudged, and deleted there.
 - Screen-space templates can be placed there by selecting a screen-space template brush and clicking in the pane.
+- If a screen-space entity is hard to click directly, use the Area Tools
+  `Entities` tab and filter to `Screen entities`.
 - Richer direct manipulation in that pane is still a future improvement.
 - `global_entities` from `project.json` are not shown in the area canvas yet.
 
+## Canvas Tool Notes
+
+- The main area tools are exposed in the top toolbar and mirrored in the `Edit`
+  menu: `Paint`, `Entity Select`, `Tile Select`, and `Cell Flags`.
+- `Paint` uses the active tile or entity-template brush. Right-click erases
+  tiles or deletes world-space entities.
+- `Entity Select` clicks entity instances on the canvas. Repeated clicks cycle
+  stacked entities.
+- The Area Tools `Entities` tab lists active-area entity instances. Use it when
+  entities overlap, are screen-space UI elements, or are otherwise awkward to
+  click directly.
+
+## Cell Flag Notes
+
+- `Cell Flags` mode uses the brush selected in the Area Tools `Cell Flags` tab.
+- Built-in presets include setting or clearing `blocked`. The brush can also
+  paint custom flag names with ordinary JSON-compatible values.
+- Left-click paints the selected brush. Right-click clears that brush's flag:
+  for `blocked` it paints `blocked = false`, and for custom flags it removes
+  the selected key.
+- The runtime gives built-in meaning to selected flags such as `blocked`, while
+  custom cell metadata remains available through value sources such as
+  `$cell_flags_at`.
+
 ## Tile Selection Notes
 
-- `Tile Select` is a separate tool from entity `Select`.
+- `Tile Select` is a separate tool from `Entity Select`.
 - It works on the active tile layer only.
 - Drag on the canvas to select a rectangle.
 - `Delete` clears the selected tiles.

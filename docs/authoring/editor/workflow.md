@@ -46,9 +46,14 @@ Current tile workflows include:
 
 Cell flags are edited in a dedicated mode rather than as a side effect of tile painting.
 
+Use the `Cell Flags` tab in Area Tools to choose the current brush before
+painting. The built-in presets set or clear `blocked`; the custom brush can
+paint any other cell-flag key with a JSON-compatible value. Left-click paints
+the selected brush; right-click clears that brush's flag.
+
 This is important because:
 
-- walkability and tile art are separate systems
+- blocked flags and tile art are separate systems
 - the engine only gives built-in meaning to selected flags such as `blocked`
 - areas may still carry custom cell metadata
 

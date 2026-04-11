@@ -56,6 +56,51 @@ class TestTemplateCatalog(unittest.TestCase):
 
         self.assertIsNone(visual)
 
+    def test_default_animation_drives_visual_preview_frame_and_flip(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/player"] = {
+            "visuals": [
+                {
+                    "path": "assets/project/sprites/player.png",
+                    "frame_width": 16,
+                    "frame_height": 16,
+                    "default_animation": "idle_left",
+                    "animations": {
+                        "idle_down": {"frames": [0]},
+                        "idle_left": {"frames": [2], "flip_x": True},
+                    },
+                }
+            ]
+        }
+
+        visual = catalog.get_first_visual("entity_templates/player")
+
+        self.assertIsNotNone(visual)
+        assert visual is not None
+        self.assertEqual(visual.frames, [2])
+        self.assertTrue(visual.flip_x)
+
+    def test_clip_only_visual_without_default_uses_first_animation_for_preview(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/effect"] = {
+            "visuals": [
+                {
+                    "path": "assets/project/sprites/effect.png",
+                    "frame_width": 16,
+                    "frame_height": 16,
+                    "animations": {
+                        "spark": {"frames": [5, 6]},
+                    },
+                }
+            ]
+        }
+
+        visual = catalog.get_first_visual("entity_templates/effect")
+
+        self.assertIsNotNone(visual)
+        assert visual is not None
+        self.assertEqual(visual.frames, [5, 6])
+
     def test_get_template_parameter_names_discovers_expected_variables(self):
         catalog = TemplateCatalog()
         catalog._templates["entity_templates/sign"] = {

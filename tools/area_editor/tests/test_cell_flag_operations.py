@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from area_editor.documents.area_document import AreaDocument, TileLayerDocument
-from area_editor.operations.cell_flags import cell_is_walkable, set_cell_walkable
+from area_editor.operations.cell_flags import cell_is_blocked, set_cell_blocked
 
 
 def _make_area(*, cell_flags=None) -> AreaDocument:
@@ -33,30 +33,28 @@ def _make_area(*, cell_flags=None) -> AreaDocument:
 
 
 class TestCellFlagOperations(unittest.TestCase):
-    def test_missing_grid_defaults_to_walkable(self):
+    def test_missing_grid_defaults_to_unblocked(self):
         area = _make_area(cell_flags=[])
-        self.assertTrue(cell_is_walkable(area, 0, 0))
+        self.assertFalse(cell_is_blocked(area, 0, 0))
 
-    def test_setting_default_walkable_cell_to_walkable_is_noop(self):
+    def test_setting_default_unblocked_cell_to_unblocked_is_noop(self):
         area = _make_area(cell_flags=[])
-        changed = set_cell_walkable(area, 0, 0, True)
+        changed = set_cell_blocked(area, 0, 0, False)
         self.assertFalse(changed)
         self.assertEqual(area.cell_flags, [])
 
-    def test_setting_default_walkable_cell_to_blocked_materializes_grid(self):
+    def test_setting_default_unblocked_cell_to_blocked_materializes_grid(self):
         area = _make_area(cell_flags=[])
-        changed = set_cell_walkable(area, 1, 0, False)
+        changed = set_cell_blocked(area, 1, 0, True)
         self.assertTrue(changed)
-        self.assertFalse(cell_is_walkable(area, 1, 0))
-        self.assertTrue(cell_is_walkable(area, 0, 0))
+        self.assertTrue(cell_is_blocked(area, 1, 0))
+        self.assertFalse(cell_is_blocked(area, 0, 0))
 
     def test_dict_cell_preserves_unknown_keys(self):
-        area = _make_area(
-            cell_flags=[[{"walkable": False, "terrain": "water"}, True]]
-        )
-        changed = set_cell_walkable(area, 0, 0, True)
+        area = _make_area(cell_flags=[[{"blocked": True, "tags": ["water"]}, {}]])
+        changed = set_cell_blocked(area, 0, 0, False)
         self.assertTrue(changed)
         self.assertEqual(
             area.cell_flags[0][0],
-            {"walkable": True, "terrain": "water"},
+            {"blocked": False, "tags": ["water"]},
         )

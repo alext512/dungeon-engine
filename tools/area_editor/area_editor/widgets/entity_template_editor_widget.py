@@ -101,6 +101,7 @@ class _TemplateVisualsEditor(QWidget):
     apply_requested = Signal()
     revert_requested = Signal()
     dirty_changed = Signal(bool)
+    section_changed = Signal(int)
 
     def __init__(self, template_id: str, parent=None) -> None:
         super().__init__(parent)
@@ -110,6 +111,7 @@ class _TemplateVisualsEditor(QWidget):
         self._editing_enabled = False
         self._current_data: dict[str, Any] | None = None
         self._persistence_editable = True
+        self._raw_json_tab_index: int | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -127,13 +129,14 @@ class _TemplateVisualsEditor(QWidget):
         self._sections_tabs = QTabWidget()
         self._sections_tabs.setDocumentMode(True)
         configure_tab_widget_overflow(self._sections_tabs)
+        self._sections_tabs.currentChanged.connect(self.section_changed.emit)
         layout.addWidget(self._sections_tabs, 1)
 
         visuals_tab = QWidget()
         visuals_layout = QVBoxLayout(visuals_tab)
         visuals_layout.setContentsMargins(0, 0, 0, 0)
 
-        note = QLabel("Edit the template's `visuals` array here. Use the Raw JSON tab for the full file.")
+        note = QLabel("Edit the template's `visuals` array here. Use Raw JSON for the full file.")
         note.setWordWrap(True)
         note.setStyleSheet("color: #666; font-style: italic;")
         visuals_layout.addWidget(note)
@@ -192,10 +195,10 @@ class _TemplateVisualsEditor(QWidget):
         self._sections_tabs.addTab(persistence_tab, "Persistence")
 
         buttons = QHBoxLayout()
-        self._apply_button = QPushButton("Apply")
+        self._apply_button = QPushButton("Apply Structured Edits")
         self._apply_button.clicked.connect(self.apply_requested.emit)
         buttons.addWidget(self._apply_button)
-        self._revert_button = QPushButton("Revert")
+        self._revert_button = QPushButton("Revert Structured Edits")
         self._revert_button.clicked.connect(self.revert_requested.emit)
         buttons.addWidget(self._revert_button)
         buttons.addStretch(1)
@@ -210,6 +213,15 @@ class _TemplateVisualsEditor(QWidget):
     @property
     def visuals_text(self) -> str:
         return self._visuals_text.toPlainText()
+
+    def add_raw_json_tab(self, widget: QWidget) -> None:
+        self._raw_json_tab_index = self._sections_tabs.addTab(widget, "Raw JSON")
+
+    def is_raw_json_tab_index(self, index: int) -> bool:
+        return self._raw_json_tab_index is not None and index == self._raw_json_tab_index
+
+    def section_labels(self) -> list[str]:
+        return [self._sections_tabs.tabText(index) for index in range(self._sections_tabs.count())]
 
     def set_editing_enabled(self, enabled: bool) -> None:
         self._editing_enabled = enabled
@@ -299,7 +311,7 @@ class _TemplateVisualsEditor(QWidget):
 
 
 class EntityTemplateEditorWidget(QWidget):
-    """Central-tab template editor with focused visuals and raw JSON."""
+    """Central-tab template editor with structured sections and raw JSON."""
 
     dirty_changed = Signal(bool)
     editing_enabled_changed = Signal(bool)
@@ -314,20 +326,16 @@ class EntityTemplateEditorWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._tabs = QTabWidget()
-        configure_tab_widget_overflow(self._tabs)
-        layout.addWidget(self._tabs)
-
         self._fields_editor = _TemplateVisualsEditor(content_id)
         self._raw_json = JsonViewerWidget(file_path)
-        self._tabs.addTab(self._fields_editor, "Template Editor")
-        self._tabs.addTab(self._raw_json, "Raw JSON")
+        self._fields_editor.add_raw_json_tab(self._raw_json)
+        layout.addWidget(self._fields_editor)
 
         self._fields_editor.apply_requested.connect(self._on_apply_fields)
         self._fields_editor.revert_requested.connect(self._on_revert_fields)
         self._fields_editor.dirty_changed.connect(self._on_surface_dirty_changed)
+        self._fields_editor.section_changed.connect(self._on_section_tab_changed)
         self._raw_json.dirty_changed.connect(self._on_surface_dirty_changed)
-        self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._reload_fields_from_saved_file()
 
@@ -418,8 +426,8 @@ class EntityTemplateEditorWidget(QWidget):
     def _on_surface_dirty_changed(self, *_args) -> None:
         self._set_dirty(self._raw_json.is_dirty or self._fields_editor.is_dirty)
 
-    def _on_tab_changed(self, index: int) -> None:
-        if index != 0:
+    def _on_section_tab_changed(self, index: int) -> None:
+        if self._fields_editor.is_raw_json_tab_index(index):
             return
         if self._fields_editor.is_dirty:
             return

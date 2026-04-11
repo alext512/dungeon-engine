@@ -115,7 +115,7 @@ That means a repo-local project is just a convenient versioned project, not a sp
 An area is a playable map with:
 
 - tile layers
-- walkability data
+- cell-flag data
 - placed entities
 - local variables
 - transitions to other areas
@@ -297,7 +297,7 @@ Early authoring scope:
 - create a room
 - resize a room
 - paint tiles
-- toggle walkability
+- toggle blocked flags
 - place and remove entities
 - select an entity
 - edit a small set of important properties

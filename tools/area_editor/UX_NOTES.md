@@ -14,7 +14,7 @@ The tool should support that path efficiently.
 2. Choose an area.
 3. View the area with visible layers and entities.
 4. Paint tiles on the active layer.
-5. Toggle cell flags such as walkability.
+5. Toggle cell flags such as blocked.
 6. Place or move entities.
 7. Select an entity and edit key values.
 8. Save.

@@ -82,7 +82,7 @@ class JsonViewerWidget(QPlainTextEdit):
     def _load(self) -> None:
         try:
             text = self._file_path.read_text(encoding="utf-8")
-            # Re-indent JSON for consistent display
+            # Re-indent JSON for consistent display.
             if self._file_path.suffix.lower() == ".json":
                 try:
                     data = loads_json_data(text, source_name=str(self._file_path))

@@ -14,6 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from area_editor.app.main_window import MainWindow
+from area_editor.json_io import DEFAULT_JSON5_FILE_HEADER, load_json_data
 from area_editor.widgets.document_tab_widget import ContentType
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from main_window_test_support import (
@@ -90,8 +91,9 @@ class TestMainWindowContentManagement(unittest.TestCase):
             ):
                 window._on_duplicate_area("areas/demo", source_path)
 
-            new_path = project_file.parent / "areas" / "rooms" / "demo_copy.json"
+            new_path = project_file.parent / "areas" / "rooms" / "demo_copy.json5"
             self.assertTrue(new_path.is_file())
+            self.assertTrue(new_path.read_text(encoding="utf-8").startswith(DEFAULT_JSON5_FILE_HEADER))
             self.assertEqual(
                 window._tab_widget.active_info().content_id,
                 "areas/rooms/demo_copy",
@@ -121,6 +123,18 @@ class TestMainWindowContentManagement(unittest.TestCase):
             self.assertIsInstance(widget, JsonViewerWidget)
             assert isinstance(widget, JsonViewerWidget)
             self.assertIn('"tile_layers"', widget.toPlainText())
+
+    def test_raw_json_viewer_does_not_inject_missing_json5_notes_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file_path = Path(tmp) / "template.json5"
+            authored_text = "{name: 'plain json5'}\n"
+            file_path.write_text(authored_text, encoding="utf-8")
+
+            widget = JsonViewerWidget(file_path)
+            self.addCleanup(widget.close)
+
+            self.assertEqual(widget.toPlainText(), authored_text)
+            self.assertFalse(widget.is_dirty)
 
     def test_file_tree_open_labels_match_surface_type(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -180,7 +194,9 @@ class TestMainWindowContentManagement(unittest.TestCase):
             )
 
             self.assertEqual(new_content_id, "areas/copies/demo_full")
-            saved = json.loads(new_path.read_text(encoding="utf-8"))
+            self.assertEqual(new_path.suffix, ".json5")
+            self.assertTrue(new_path.read_text(encoding="utf-8").startswith(DEFAULT_JSON5_FILE_HEADER))
+            saved = load_json_data(new_path)
             self.assertEqual(len(saved["entities"]), 2)
             switch = next(entity for entity in saved["entities"] if entity.get("kind") == "switch")
             relay = next(entity for entity in saved["entities"] if entity.get("kind") == "relay")
@@ -207,7 +223,9 @@ class TestMainWindowContentManagement(unittest.TestCase):
             )
 
             self.assertEqual(new_content_id, "areas/copies/demo_layout")
-            saved = json.loads(new_path.read_text(encoding="utf-8"))
+            self.assertEqual(new_path.suffix, ".json5")
+            self.assertTrue(new_path.read_text(encoding="utf-8").startswith(DEFAULT_JSON5_FILE_HEADER))
+            saved = load_json_data(new_path)
             self.assertEqual(saved["tile_size"], 16)
             self.assertIn("tile_layers", saved)
             self.assertEqual(saved["entities"], [])

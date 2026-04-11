@@ -273,7 +273,7 @@ class TestSaveAreaDocument(unittest.TestCase):
                     "grid": [[0, 1, 2], [3, 4, 5]],
                 }
             ],
-            "cell_flags": [[None, {"solid": True}], [False, None]],
+            "cell_flags": [[None, {"solid": True}], [{"blocked": False}, None]],
         }
         doc = AreaDocument.from_dict(raw)
 
@@ -284,7 +284,7 @@ class TestSaveAreaDocument(unittest.TestCase):
 
         self.assertIn('"grid": [\n        [0, 1, 2],\n        [3, 4, 5]\n      ]', saved)
         self.assertIn(
-            '"cell_flags": [\n    [null, {"solid": true}],\n    [false, null]\n  ]',
+            '"cell_flags": [\n    [null, {"solid": true}],\n    [{"blocked": false}, null]\n  ]',
             saved,
         )
 
@@ -302,13 +302,13 @@ class TestEditorJsonFormatting(unittest.TestCase):
                         "grid": [[1, 2], [3, 4]],
                     }
                 ],
-                "cell_flags": [[None, True], [False, {"solid": True}]],
+                "cell_flags": [[None, {"blocked": True}], [{"blocked": False}, {"solid": True}]],
             }
         )
 
         self.assertIn('"grid": [\n        [1, 2],\n        [3, 4]\n      ]', text)
         self.assertIn(
-            '"cell_flags": [\n    [null, true],\n    [false, {"solid": true}]\n  ]',
+            '"cell_flags": [\n    [null, {"blocked": true}],\n    [{"blocked": false}, {"solid": true}]\n  ]',
             text,
         )
 

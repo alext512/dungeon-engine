@@ -31,7 +31,7 @@ if not defined PYTHON_EXE (
 )
 
 echo Checking editor dependencies...
-"%PYTHON_EXE%" -c "import PySide6, area_editor" >nul 2>&1
+"%PYTHON_EXE%" -c "import PySide6, json5, area_editor" >nul 2>&1
 if errorlevel 1 (
     echo Installing editor dependencies...
     "%PYTHON_EXE%" -m pip install -r requirements.txt

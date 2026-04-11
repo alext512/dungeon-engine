@@ -239,7 +239,7 @@ Keep the current focused template surface modest:
 - `visuals` JSON block
 - `persistence.entity_state` checkbox
 - `persistence.variables` JSON block
-- raw JSON tab remains available
+- raw JSON remains available as a sibling section tab
 
 This keeps the editor aligned with the "focused surface + raw JSON fallback"
 direction rather than turning template editing into a giant bespoke form.

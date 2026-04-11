@@ -51,7 +51,7 @@ def _minimal_area() -> dict[str, object]:
                 "grid": [[1]],
             }
         ],
-        "cell_flags": [[True]],
+        "cell_flags": [[{"blocked": False}]],
         "entities": [],
     }
 

@@ -54,7 +54,7 @@ class CollisionSystem:
         *,
         ignore_entity_id: str | None = None,
     ) -> bool:
-        """Return True when the target cell is not blocked by terrain or solid entities."""
+        """Return True when the target cell is not blocked by tiles or solid entities."""
         if self.area.is_blocked(grid_x, grid_y):
             return False
         return self.get_blocking_entity(

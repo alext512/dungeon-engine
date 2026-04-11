@@ -115,17 +115,11 @@ def _serialize_entry_point(entry_point: Any) -> dict[str, Any]:
     return data
 
 
-def _serialize_cell_flags(cell_flags: dict[str, Any]) -> bool | dict[str, Any]:
+def _serialize_cell_flags(cell_flags: dict[str, Any]) -> dict[str, Any]:
     """Keep simple cells concise while preferring the new blocked terminology."""
-    if set(cell_flags.keys()) <= {"blocked", "walkable"}:
-        return {
-            "blocked": bool(cell_flags.get("blocked", not bool(cell_flags.get("walkable", True))))
-        }
-    serialized = dict(cell_flags)
-    if "blocked" in serialized and "walkable" in serialized:
-        if bool(serialized["walkable"]) == (not bool(serialized["blocked"])):
-            serialized.pop("walkable", None)
-    return serialized
+    if set(cell_flags.keys()) <= {"blocked"}:
+        return {"blocked": bool(cell_flags.get("blocked", False))}
+    return dict(cell_flags)
 
 
 def serialize_entity_instance(

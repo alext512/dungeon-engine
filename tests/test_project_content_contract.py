@@ -54,7 +54,7 @@ def _minimal_area() -> dict[str, object]:
                 "grid": [[1]],
             }
         ],
-        "cell_flags": [[True]],
+        "cell_flags": [[{"blocked": False}]],
         "entities": [],
     }
 
@@ -391,11 +391,11 @@ class ProjectContentContractTests(unittest.TestCase):
         self.assertEqual(custom_render["sort_y_offset"], 5)
         self.assertEqual(custom_render["stack_order"], 9)
 
-    def test_area_loader_normalizes_blocked_and_walkable_cell_flags(self) -> None:
+    def test_area_loader_normalizes_blocked_cell_flags(self) -> None:
         _, project = self._make_project()
         raw_area = _minimal_area()
         raw_area["cell_flags"] = [
-            [False, {"blocked": True, "tags": ["wall"]}],
+            [{"tags": ["wall"]}, {"blocked": True}],
         ]
         raw_area["tile_layers"] = [
             {
@@ -408,17 +408,16 @@ class ProjectContentContractTests(unittest.TestCase):
         area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
 
         self.assertTrue(area.is_blocked(1, 0))
-        self.assertFalse(area.is_walkable(1, 0))
-        self.assertEqual(area.cell_flags_at(0, 0), {"blocked": True, "walkable": False})
+        self.assertEqual(area.cell_flags_at(0, 0), {"tags": ["wall"], "blocked": False})
         self.assertEqual(
             area.cell_flags_at(1, 0),
-            {"blocked": True, "tags": ["wall"], "walkable": False},
+            {"blocked": True},
         )
 
         serialized = serialize_area(area, world, project=project)
         self.assertEqual(
             serialized["cell_flags"],
-            [[{"blocked": True}, {"blocked": True, "tags": ["wall"]}]],
+            [[{"tags": ["wall"], "blocked": False}, {"blocked": True}]],
         )
 
     def test_loader_supports_new_top_level_physics_and_interaction_fields(self) -> None:

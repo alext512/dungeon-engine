@@ -17,8 +17,10 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QTabBar
 
 from area_editor.app.main_window import MainWindow
+from area_editor.json_io import DEFAULT_JSON5_FILE_HEADER, load_json_data
 from area_editor.widgets.document_tab_widget import ContentType
 from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
+from area_editor.widgets.canvas_tool_strip import CanvasToolStrip
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
@@ -89,9 +91,34 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.addCleanup(window.close)
             window.open_project(project_file)
 
-            self.assertEqual(window._area_workspace.row_titles(1), ["Layers", "Area Start"])
-            self.assertEqual(window._area_workspace.row_titles(2), [])
+            self.assertEqual(window._area_workspace.row_titles(1), ["Layers", "Area Start", "Entities"])
+            self.assertEqual(window._area_workspace.row_titles(2), ["Cell Flags"])
             self.assertEqual(window._area_start_panel._target_label.text(), "Area Start: areas/demo")
+
+    def test_canvas_tool_strip_exposes_main_edit_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            strip = window.findChild(CanvasToolStrip, "CanvasToolStrip")
+            self.assertIsNotNone(strip)
+            assert strip is not None
+            action_labels = [
+                action.text().replace("&", "")
+                for action in (
+                    window._paint_tiles_action,
+                    window._select_action,
+                    window._tile_select_action,
+                    window._cell_flags_action,
+                )
+            ]
+
+            self.assertEqual(
+                action_labels,
+                ["Paint", "Entity Select", "Tile Select", "Cell Flags"],
+            )
 
     def test_area_start_panel_apply_updates_area_enter_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -586,6 +613,31 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertFalse(fields._pixel_x_row.isHidden())
             self.assertFalse(fields._pixel_y_row.isHidden())
 
+    def test_area_entity_list_selects_screen_space_instances(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            panel = window._area_entity_list_panel
+            self.assertEqual(panel.entity_ids(), ["house_door", "title_backdrop"])
+
+            panel._filter_combo.setCurrentIndex(2)
+            QApplication.processEvents()
+            self.assertEqual(panel.entity_ids(), ["title_backdrop"])
+
+            panel._list.setCurrentRow(0)
+            QApplication.processEvents()
+
+            self.assertEqual(canvas.selected_entity_id, "title_backdrop")
+            self.assertEqual(window._entity_instance_panel.entity_id, "title_backdrop")
+            self.assertEqual(window._render_target_ref, "title_backdrop")
+
     def test_open_project_passes_display_size_into_screen_pane(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_fields_project(Path(tmp))
@@ -650,6 +702,10 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             widget = window._tab_widget.active_widget()
             self.assertIsInstance(widget, EntityTemplateEditorWidget)
             assert isinstance(widget, EntityTemplateEditorWidget)
+            self.assertEqual(
+                widget.fields_editor.section_labels(),
+                ["Visuals", "Persistence", "Raw JSON"],
+            )
             self.assertTrue(widget.raw_json_widget.isReadOnly())
             self.assertFalse(window._enable_json_editing_action.isChecked())
 
@@ -784,7 +840,11 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             )
 
             self.assertEqual(area_id, "areas/title_screen")
+            self.assertEqual(file_path.suffix, ".json5")
             self.assertTrue(file_path.is_file())
+            saved = file_path.read_text(encoding="utf-8")
+            self.assertTrue(saved.startswith(DEFAULT_JSON5_FILE_HEADER))
+            self.assertEqual(load_json_data(file_path)["tile_size"], 16)
 
             window._refresh_area_panel()
             entries = [content_id for content_id, _path in self._panel_file_entries(window._area_panel)]

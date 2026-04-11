@@ -45,6 +45,7 @@ class VisualInfo:
     frames: list[int]
     offset_x: float = 0
     offset_y: float = 0
+    flip_x: bool = False
 
 
 class TemplateCatalog:
@@ -85,9 +86,9 @@ class TemplateCatalog:
             return None
         frame_width = v.get("frame_width", 16)
         frame_height = v.get("frame_height", 16)
-        frames = v.get("frames", [0])
         if not isinstance(frame_width, int) or not isinstance(frame_height, int):
             return None
+        frames, flip_x = self._resolve_preview_frames_and_flip(v)
         if not isinstance(frames, list) or not all(isinstance(frame, int) for frame in frames):
             return None
         return VisualInfo(
@@ -97,6 +98,7 @@ class TemplateCatalog:
             frames=frames,
             offset_x=v.get("offset_x", 0),
             offset_y=v.get("offset_y", 0),
+            flip_x=flip_x,
         )
 
     def get_template_space(self, template_id: str) -> str | None:
@@ -181,6 +183,34 @@ class TemplateCatalog:
     @staticmethod
     def _contains_unresolved_tokens(value: str) -> bool:
         return _EMBEDDED_TOKEN_RE.search(value) is not None
+
+    @staticmethod
+    def _resolve_preview_frames_and_flip(visual: dict[str, Any]) -> tuple[Any, bool]:
+        """Mirror the runtime's visual default-frame selection for previews."""
+        frames = visual.get("frames")
+        flip_x = bool(visual.get("flip_x", False))
+
+        animations = visual.get("animations")
+        if isinstance(animations, dict) and animations:
+            default_animation = visual.get("default_animation")
+            clip = None
+            if isinstance(default_animation, str) and default_animation.strip() in animations:
+                clip = animations[default_animation.strip()]
+            elif frames is None:
+                first_animation_id = sorted(animations.keys(), key=str)[0]
+                clip = animations.get(first_animation_id)
+
+            if isinstance(clip, dict):
+                clip_frames = clip.get("frames")
+                if isinstance(clip_frames, list):
+                    frames = clip_frames
+                clip_flip = clip.get("flip_x")
+                if isinstance(clip_flip, bool):
+                    flip_x = clip_flip
+
+        if frames is None:
+            frames = [0]
+        return frames, flip_x
 
     @staticmethod
     def _collect_variable_names(value: Any, found: set[str]) -> None:

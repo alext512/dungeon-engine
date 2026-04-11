@@ -242,7 +242,7 @@ Current area file fields:
 - `variables: object`
 - `tilesets: object[]`
 - `tile_layers: object[]`
-- `cell_flags: (boolean | object | null)[][]`
+- `cell_flags: (object | null)[][]`
 - `enter_commands: command[]`
 - `entry_points: object`
 - `camera: object`
@@ -292,19 +292,18 @@ Current authored meaning:
 ### `cell_flags`
 
 Each cell can currently be:
-- `true` / `false`
-- an object like `{ "blocked": true, "terrain": "water" }`
+- an object like `{ "blocked": true, "tags": ["water"] }`
 - `null`
 
 The engine currently gives built-in meaning to:
-- `blocked`
+- `blocked` (whether the cell blocks movement)
 
-Boolean cell values are still accepted as a concise older authored style:
+Conventions:
+- `tags` is an optional list of strings intended for authored logic.
+- Other keys are stored as ordinary cell metadata (but only `blocked` and `tags`
+  are part of the recommended authored contract).
 
-- `true` = unblocked
-- `false` = blocked
-
-Other keys are stored as ordinary cell metadata.
+`null` is treated the same as an empty object (`{"blocked": false}`).
 
 ### `entry_points`
 

@@ -689,6 +689,7 @@ class MainWindowProjectRefactorMixin:
             )
         self._refresh_render_properties_target()
         self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
         self._sync_json_edit_actions()
         self._update_paint_status()
         self.statusBar().showMessage(status_message, 2500)

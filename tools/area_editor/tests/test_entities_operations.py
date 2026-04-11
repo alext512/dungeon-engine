@@ -22,7 +22,7 @@ def _make_area() -> AreaDocument:
                 grid=[[0, 0], [0, 0]],
             )
         ],
-        cell_flags=[[True, True], [True, True]],
+        cell_flags=[[{}, {}], [{}, {}]],
         entry_points={},
         entities=[],
         camera={},
