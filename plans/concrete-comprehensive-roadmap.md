@@ -579,6 +579,13 @@ and which validation paths matter after a refactor.
 - Maintenance burden stays lower after the deeper changes.
 - Knowledge is stored in the repo, not only in discussion history.
 
+### Current Status
+
+Completed for the current documentation baseline. `AGENTS.md`, `README.md`,
+`docs/development/engine-in-10-minutes.md`, and
+`docs/development/for-coding-agents.md` now point maintainers and agents at the
+canonical sample coverage map.
+
 ## Cross-Phase Decision Rules
 
 When tradeoffs come up, use these rules:
