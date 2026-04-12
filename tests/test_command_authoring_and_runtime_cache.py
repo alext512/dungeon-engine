@@ -144,6 +144,33 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         )
         return registry, context
 
+    def test_registry_exposes_builtin_command_contract_snapshots(self) -> None:
+        registry = CommandRegistry()
+        register_builtin_commands(registry)
+
+        contracts = {contract.name: contract for contract in registry.iter_command_contracts()}
+
+        open_dialogue = contracts["open_dialogue_session"]
+        self.assertEqual(open_dialogue.validation_mode, "strict")
+        self.assertTrue(open_dialogue.accepts_runtime_kwargs)
+        self.assertEqual(
+            open_dialogue.deferred_param_shapes,
+            {
+                "dialogue_on_start": "command_payload",
+                "dialogue_on_end": "command_payload",
+                "segment_hooks": "dialogue_segment_hooks",
+            },
+        )
+        self.assertIn("segment_hooks", open_dialogue.allowed_authored_params)
+
+        run_sequence = contracts["run_sequence"]
+        self.assertEqual(run_sequence.validation_mode, "mixed")
+        self.assertTrue(run_sequence.accepts_runtime_kwargs)
+        self.assertEqual(
+            run_sequence.deferred_param_shapes,
+            {"commands": "command_payload"},
+        )
+
     def test_command_audit_reports_unknown_strict_fields_in_project_commands(self) -> None:
         _, project = self._make_project(
             commands={
@@ -324,6 +351,52 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
             any(
                 "enter_commands[0].segment_hooks[0].option_commands_by_id.continue[0]" in issue
                 and "persitent" in issue
+                for issue in issues
+            )
+        )
+
+    def test_command_audit_scans_project_command_deferred_command_payloads(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "call_hook.json": {
+                    "params": ["hook"],
+                    "deferred_param_shapes": {
+                        "hook": "command_payload",
+                    },
+                    "commands": [
+                        {
+                            "type": "run_sequence",
+                            "commands": "$hook",
+                        }
+                    ],
+                },
+                "entry.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "run_project_command",
+                            "command_id": "commands/call_hook",
+                            "hook": [
+                                {
+                                    "type": "set_visible",
+                                    "entity_id": "gate",
+                                    "visible": False,
+                                    "persitent": True,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "commands[0].hook[0]" in issue
+                and "command 'set_visible' contains unknown field(s): persitent."
+                in issue
                 for issue in issues
             )
         )

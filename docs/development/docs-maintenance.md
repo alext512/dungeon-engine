@@ -19,6 +19,7 @@ These explain boundaries, direction, and architecture:
 
 - `docs/project/project-spirit.md`
 - `docs/project/architecture-direction.md`
+- `docs/development/engine-contract-truth-map.md`
 - `docs/development/editor-architecture.md`
 
 ### Planning docs

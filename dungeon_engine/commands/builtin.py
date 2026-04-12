@@ -31,7 +31,7 @@ from dungeon_engine.commands.runner import (
     load_area_owned_snapshot,
 )
 from dungeon_engine.world.entity import DIRECTION_VECTORS
-from dungeon_engine.world.loader import instantiate_entity
+from dungeon_engine.world.loader_entities import instantiate_entity
 
 logger = logging.getLogger(__name__)
 
@@ -1047,7 +1047,11 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     @registry.register(
         "open_dialogue_session",
-        deferred_params={"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
+        deferred_param_shapes={
+            "dialogue_on_start": "command_payload",
+            "dialogue_on_end": "command_payload",
+            "segment_hooks": "dialogue_segment_hooks",
+        },
     )
     def open_dialogue_session(
         context: CommandContext,

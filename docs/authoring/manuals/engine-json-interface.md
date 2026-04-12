@@ -27,9 +27,10 @@ For the philosophy behind this interface, see [Project Spirit](../../project/pro
 - This applies to area `enter_commands`, entity-command bodies, project-command bodies, `if.then`, `if.else`, and child command lists under flow/orchestration commands.
 - Use `run_parallel` only when child commands should start together.
 - Use `run_sequence` only when you want to execute a command-list value explicitly, for example one stored in a variable or passed as a parameter.
-- Project command files may declare `deferred_params: string[]` when specific params should remain raw command/data payloads until a later explicit execution step.
-- Startup validation also validates known command-bearing JSON surfaces for strict-command key mismatches before launch.
-- Strict primitive commands now fail startup on unknown top-level keys, while mixed flow/helper commands intentionally keep accepting caller-supplied runtime params.
+- Project command files may declare `deferred_param_shapes` when specific params should remain raw command/data payloads until a later explicit execution step.
+- Startup validation validates known command-bearing JSON surfaces for strict-command key mismatches before launch.
+- Strict primitive commands fail startup on unknown top-level keys, while mixed flow/helper commands intentionally accept caller-supplied runtime params.
+- Builtin command validation mode, allowed authored fields, and deferred nested command payload shapes are defined by the command registry registrations in runtime code.
 
 ## Content Roots And Path-Derived IDs
 
@@ -115,10 +116,10 @@ Minimal example:
 
 Notes:
 - Projects are not required to define a `dialogue_controller` global entity.
-- The newer engine-owned dialogue path opens sessions directly through
+- The engine-owned dialogue path opens sessions directly through
   `open_dialogue_session`.
-- Older authored projects may still keep a `dialogue_controller` because that
-  remains a valid authored pattern.
+- Projects may use a `dialogue_controller` when they want a controller-authored
+  dialogue/menu flow.
 
 ### `command_runtime`
 
@@ -165,7 +166,7 @@ Special current use:
 
 These influence the runtime internal display size if present.
 
-For the newer engine-owned dialogue runtime, `dialogue_ui.presets` is the
+For the engine-owned dialogue runtime, `dialogue_ui.presets` is the
 current shared-variable convention for named dialogue UI layouts. Current
 choice-layout presets may define:
 
@@ -316,9 +317,9 @@ Each entry point object currently uses:
 - `pixel_y`
 
 Notes:
-- `entry_points` remain supported, but newer authored
-  projects should prefer destination marker entities plus
-  `destination_entity_id` on `change_area` / `new_game`.
+- Prefer destination marker entities plus `destination_entity_id` on
+  `change_area` / `new_game` when a transfer should land on a specific entity.
+- Use `entry_points` when the area needs named coordinate/facing entry data.
 - `facing` on an area entry point remains supported.
 - On arrival, the runtime maps that value into the traveler's top-level `facing`.
 
@@ -636,7 +637,7 @@ The engine routes a logical action to an entity through `input_targets`, then us
 Project command files are JSON objects with:
 
 - `params: string[]`
-- `deferred_params: string[]`
+- `deferred_param_shapes: object`
 - `commands: command[]`
 
 Example:
@@ -657,9 +658,16 @@ Example:
 Current rules:
 - command id is a path-derived typed id from the file path, for example `commands/dialogue/open`
 - file must not declare `id`
+- unknown top-level fields fail project-command validation
 - `params` is optional and defaults to `[]`
-- `deferred_params` is optional and defaults to `[]`
+- `deferred_param_shapes` is optional and defaults to `{}`
 - `commands` is required
+
+`deferred_param_shapes` maps a project-command param name to one of these shapes:
+
+- `raw_data` - keep the parameter raw during `run_project_command` resolution without treating it as a command-bearing payload
+- `command_payload` - keep the parameter raw and audit it as one command object or a list of command objects
+- `dialogue_segment_hooks` - keep the parameter raw and audit it as a dialogue segment-hook list
 
 ## Ordinary Project JSON Data
 
@@ -1598,8 +1606,9 @@ Practical note:
 - inline option `commands` are appropriate for simple direct actions, including queued built-ins such as `new_game`, `load_game`, and `quit_game`
 - `dialogue_on_end` is better when you need one shared post-close branch or cleanup after the session is fully closed
 
-Older controller-owned dialogue flows are still valid authored content, but
-they are no longer the only dialogue path.
+Controller-owned dialogue flows are valid advanced authored content for
+projects that want custom orchestration. Engine-owned sessions are the standard
+low-boilerplate path.
 
 Movement timing precedence for interpolated move commands is:
 - `frames_needed`
@@ -1956,7 +1965,12 @@ Terms:
 
 Some command params intentionally defer nested command specs instead of resolving all nested `$...` values immediately.
 
-Current deferred command params:
+Builtin deferred command fields are declared in the command registry with an explicit payload shape:
+
+- `command_payload` - the value is one command object or a list of command objects
+- `dialogue_segment_hooks` - the value is a dialogue segment-hook list with command-bearing hook fields
+
+Deferred builtin command params with `command_payload` shape:
 
 - `spawn_flow.commands`
 - `run_sequence.commands`
@@ -1964,18 +1978,17 @@ Current deferred command params:
 - `run_commands_for_collection.commands`
 - `if.then`
 - `if.else`
+- `run_entity_command.dialogue_on_start`
+- `run_entity_command.dialogue_on_end`
+- `open_dialogue_session.dialogue_on_start`
+- `open_dialogue_session.dialogue_on_end`
 
-Current special deferred params on `run_entity_command`:
-- `dialogue_on_start`
-- `dialogue_on_end`
-- `segment_hooks`
+Deferred builtin command params with `dialogue_segment_hooks` shape:
 
-Those are part of the current dialogue/controller surface.
+- `run_entity_command.segment_hooks`
+- `open_dialogue_session.segment_hooks`
 
-Current special deferred params on `open_dialogue_session`:
-- `dialogue_on_start`
-- `dialogue_on_end`
-- `segment_hooks`
+These are part of the active dialogue/controller surface.
 
 ## Current Engine-Known Special Fields
 

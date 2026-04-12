@@ -212,7 +212,7 @@ def compose_json_file_text(
 
 
 def dumps_for_clone(value: Any) -> Any:
-    """Return a JSON-compatible deep copy for simple authored data values."""
+    """Return a JSON-serializable deep copy for simple authored data values."""
 
     return json.loads(json.dumps(value))
 

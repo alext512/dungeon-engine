@@ -36,7 +36,7 @@ from dungeon_engine.world.entity import (
     InventoryStack,
     InventoryState,
 )
-from dungeon_engine.world.loader import instantiate_entity
+from dungeon_engine.world.loader_entities import instantiate_entity
 from dungeon_engine.world.serializer import serialize_area
 from dungeon_engine.world.world import World
 

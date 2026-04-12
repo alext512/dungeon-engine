@@ -50,23 +50,27 @@ from dungeon_engine.startup_validation import (
 )
 from dungeon_engine.world.loader import (
     AreaValidationError,
-    EntityTemplateValidationError,
-    instantiate_entity,
     load_area_from_data,
     validate_project_areas,
+)
+from dungeon_engine.world.loader_entities import (
+    EntityTemplateValidationError,
+    instantiate_entity,
     validate_project_entity_templates,
 )
 from dungeon_engine.world.serializer import serialize_area
-from dungeon_engine.world.persistence import (
-    PersistenceRuntime,
+from dungeon_engine.world.persistence import PersistenceRuntime
+from dungeon_engine.world.persistence_data import (
+    save_data_from_dict,
+    save_data_to_dict,
+)
+from dungeon_engine.world.persistence_snapshots import (
     apply_area_travelers,
     apply_current_global_state,
     apply_persistent_global_state,
     apply_persistent_area_state,
     capture_current_global_state,
     capture_current_area_state,
-    save_data_from_dict,
-    save_data_to_dict,
 )
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.input_handler import InputHandler
@@ -2300,7 +2304,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {
                     "type": "set_entity_var",
                     "entity_id": "controller",
-                    "name": "legacy_phase",
+                    "name": "stored_phase",
                     "value": "$world.phase",
                 },
             ).update(0.0)
@@ -2527,19 +2531,38 @@ class StrictContentIdTests(unittest.TestCase):
         assert controller is not None
         self.assertEqual(controller.variables["mode"], "nested_dialogue")
 
-    def test_registry_declares_deferred_params_for_orchestration_commands(self) -> None:
+    def test_registry_declares_deferred_param_shapes_for_orchestration_commands(self) -> None:
         registry = CommandRegistry()
         register_builtin_commands(registry)
 
-        self.assertEqual(registry.get_deferred_params("run_sequence"), {"commands"})
-        self.assertEqual(registry.get_deferred_params("spawn_flow"), {"commands"})
-        self.assertEqual(registry.get_deferred_params("run_parallel"), {"commands"})
-        self.assertEqual(registry.get_deferred_params("run_commands_for_collection"), {"commands"})
         self.assertEqual(
-            registry.get_deferred_params("run_entity_command"),
-            {"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
+            registry.get_deferred_param_shapes("run_sequence"),
+            {"commands": "command_payload"},
         )
-        self.assertEqual(registry.get_deferred_params("if"), {"then", "else"})
+        self.assertEqual(
+            registry.get_deferred_param_shapes("spawn_flow"),
+            {"commands": "command_payload"},
+        )
+        self.assertEqual(
+            registry.get_deferred_param_shapes("run_parallel"),
+            {"commands": "command_payload"},
+        )
+        self.assertEqual(
+            registry.get_deferred_param_shapes("run_commands_for_collection"),
+            {"commands": "command_payload"},
+        )
+        self.assertEqual(
+            registry.get_deferred_param_shapes("run_entity_command"),
+            {
+                "dialogue_on_start": "command_payload",
+                "dialogue_on_end": "command_payload",
+                "segment_hooks": "dialogue_segment_hooks",
+            },
+        )
+        self.assertEqual(
+            registry.get_deferred_param_shapes("if"),
+            {"then": "command_payload", "else": "command_payload"},
+        )
 
     def test_append_and_pop_entity_var_support_nested_dialogue_snapshots(self) -> None:
         world = World()
@@ -2817,13 +2840,13 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(still_running)
 
-    def test_save_data_ignores_removed_legacy_session_fields(self) -> None:
+    def test_save_data_ignores_removed_session_fields(self) -> None:
         save_data = save_data_from_dict(
             {
-                "active_entity": "legacy_player",
+                "active_entity": "removed_player",
                 "session": {
-                    "current_area_path": "legacy/room",
-                    "active_entity_id": "legacy_player",
+                    "current_area_path": "removed/room",
+                    "active_entity_id": "removed_player",
                 }
             }
         )

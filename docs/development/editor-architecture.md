@@ -8,7 +8,7 @@ Status: active architecture note for the current standalone editor.
 The editor has moved well beyond the earliest phase-1 slice. Editing, saving,
 focused validation, project-level surfaces, and reference-aware file workflows
 are implemented. The main remaining planned areas are runtime handoff/launch
-integration, broader structured coverage for newer engine-owned fields, richer
+integration, broader structured coverage for engine-owned fields, richer
 direct-manipulation workflows, and continued internal decomposition as the tool
 grows.
 
@@ -35,7 +35,7 @@ Current slices:
 
 Planned later slices:
 
-- broader structured coverage for newer engine-owned fields and workflows
+- broader structured coverage for engine-owned fields and workflows
 - richer direct-manipulation workflows, especially for screen-space content
 - runtime handoff / launch integration
 - tool-owned settings
@@ -158,6 +158,6 @@ Earlier implementation phases covered:
 The next recommended order is:
 
 8. continue splitting large editor modules into clearer services/helpers
-9. broaden structured editing for newer engine-owned entity/workflow fields
+9. broaden structured editing for engine-owned entity/workflow fields
 10. improve direct-manipulation workflows such as drag editing and richer screen-space placement polish
 11. add runtime launch/handoff integration

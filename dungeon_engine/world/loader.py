@@ -17,18 +17,13 @@ from dungeon_engine.logging_utils import get_logger
 from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area, AreaEntryPoint, TileLayer, Tileset
 from dungeon_engine.world.loader_entities import (
-    EntityTemplateValidationError,
     _coerce_int,
     _coerce_required_int,
     _require_non_empty_string,
-    extract_template_parameter_names,
-    instantiate_entity,
-    list_entity_template_ids,
-    load_entity_template,
-    log_entity_template_validation_error,
-    validate_project_entity_templates,
+    instantiate_entity as _instantiate_entity,
 )
-from dungeon_engine.world.persistence import PersistentAreaState, apply_persistent_area_state
+from dungeon_engine.world.persistence_data import PersistentAreaState
+from dungeon_engine.world.persistence_snapshots import apply_persistent_area_state
 from dungeon_engine.world.world import World
 
 logger = get_logger(__name__)
@@ -134,7 +129,7 @@ def load_area_from_data(
     world = World(default_input_targets=resolved_input_targets)
     world.variables = copy.deepcopy(variables)
     for index, entity_instance in enumerate(raw_entities):
-        entity = instantiate_entity(
+        entity = _instantiate_entity(
             entity_instance,
             area.tile_size,
             project=project,
@@ -515,7 +510,7 @@ def _validate_project_global_entities(project: ProjectContext) -> tuple[set[str]
     for index, entity_data in enumerate(project.global_entities):
         source_name = f"project.json global_entities[{index}]"
         try:
-            entity = instantiate_entity(
+            entity = _instantiate_entity(
                 {
                     **copy.deepcopy(entity_data),
                     "scope": "global",

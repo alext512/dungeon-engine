@@ -71,6 +71,10 @@ Key files:
 
 The registry also treats those service-backed accessors as injectable command parameters. That means a command can still ask for `world`, `area`, `camera`, `persistence_runtime`, or `request_area_change` explicitly, but the data is resolved from the shared bundle instead of being stored twice on the context.
 
+The registry is also the source of truth for builtin command authoring contracts. Each registration records its validation mode, inferred authored parameters, explicitly allowed authored parameters, runtime-kwargs support, and deferred nested command payload shapes. Startup command-surface validation and runtime command resolution both read that registry contract instead of hardcoding nested command fields by name.
+
+Command-service assembly has two paths by design. `build_command_services(...)` is the flexible helper for focused tests and partial command contexts. Play mode uses `build_play_command_services(...)`, which constructs all production service bundles explicitly; modal runtimes are then attached through `attach_modal_command_services(...)` after they receive the command context they need.
+
 ## Architectural Principles
 
 The repo's architecture docs and spirit docs consistently push toward:
@@ -134,5 +138,6 @@ The external editor intentionally has its own project-layout interpreter and sho
 ## Deeper References
 
 - [Architecture Direction](../project/architecture-direction.md)
+- [Engine Contract Truth Map](engine-contract-truth-map.md)
 - [Project Spirit](../project/project-spirit.md)
 - [AGENTS.md](https://github.com/alext512/dungeon-engine/blob/main/AGENTS.md)

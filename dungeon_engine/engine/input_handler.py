@@ -126,10 +126,6 @@ class InputHandler:
 
         return result
 
-    def enqueue_held_movement_if_idle(self) -> None:
-        """No-op shim retained for the unified held-repeat path."""
-        return
-
     def update_held_direction_repeat(self, dt: float) -> None:
         """Repeat held directional input with an initial pause and steady interval."""
         if dt <= 0:

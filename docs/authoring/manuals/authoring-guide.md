@@ -13,7 +13,7 @@ It focuses on:
 - entity template JSON
 - project command JSON
 - dialogue JSON
-- both the newer engine-owned dialogue runtime and the older controller-owned
+- both the engine-owned dialogue runtime and the controller-authored
   dialogue/menu pattern
 
 Use this guide for authoring patterns. Use [Engine JSON Interface](engine-json-interface.md) when you need the exact current command/value-source surface.
@@ -327,7 +327,7 @@ Important notes:
 - do not author `player_id`; the engine now uses explicit input routing, transition payloads, and camera defaults instead
 - project-level global entities belong in `project.json`, not inside `entities`
 - area `camera` defaults are just initial runtime state; commands can replace them later
-- newer projects should prefer destination marker entities plus `destination_entity_id`
+- prefer destination marker entities plus `destination_entity_id`
   instead of relying on authored `entry_points`
 - if you want explicit area-enter behavior such as routing inputs, opening
   dialogue, setting camera follow, or starting music, prefer `enter_commands`
@@ -823,14 +823,17 @@ Notes:
 - project command ids are path-derived typed ids from file location, for example `commands/walk_one_tile`
 - do not author a top-level `id`
 - use `run_project_command` to call them
-- declare `deferred_params` when a specific parameter should remain raw data until a later explicit execution step, such as dialogue hook command arrays
+- declare `deferred_param_shapes` when a specific parameter should remain raw data until a later explicit execution step, such as dialogue hook command arrays
 
 Example with deferred hook params:
 
 ```json
 {
   "params": ["dialogue_on_start", "dialogue_on_end"],
-  "deferred_params": ["dialogue_on_start", "dialogue_on_end"],
+  "deferred_param_shapes": {
+    "dialogue_on_start": "command_payload",
+    "dialogue_on_end": "command_payload"
+  },
   "commands": [
     {
       "type": "set_entity_var",
@@ -847,7 +850,7 @@ Example with deferred hook params:
 }
 ```
 
-`deferred_params` keeps the passed hook payloads raw while the project command is instantiated. `value_mode: "raw"` keeps a setter from recursively resolving nested command data when you want to store that payload for later execution.
+`deferred_param_shapes` keeps the passed hook payloads raw while the project command is instantiated. Use `command_payload` for a single command object or command list, `dialogue_segment_hooks` for dialogue hook arrays, and `raw_data` for deferred non-command data. `value_mode: "raw"` keeps a setter from recursively resolving nested command data when you want to store that payload for later execution.
 
 ### How To Read Command JSON
 
@@ -915,10 +918,10 @@ This is a general rule: both `run_project_command` and `run_entity_command` forw
 Important nuance:
 
 - do not assume every command object accepts arbitrary extra fields
-- startup validation now fails on unknown top-level keys for strict primitive commands
+- startup validation fails on unknown top-level keys for strict primitive commands
 - commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_sequence`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `move_in_direction`, `push_facing`, and `interact_facing`
 
-So a typo like `"persitent": true` on `set_visible` is now a startup validation failure, while a field like `"reward_item": "items/key"` on `run_sequence` is still valid when child commands need to read `$reward_item`.
+So a typo like `"persitent": true` on `set_visible` is a startup validation failure, while a field like `"reward_item": "items/key"` on `run_sequence` is valid when child commands need to read `$reward_item`.
 
 ## Runtime References and Tokens
 
@@ -1156,13 +1159,13 @@ The engine-owned runtime currently expects:
 - choice layout rules inside the chosen preset, including `choices.mode`
   (`inline` or `separate_panel`) and `choices.overflow` such as `marquee`
 
-Older controller-owned pattern:
+Controller-authored pattern:
 
 1. call `run_entity_command` on the dialogue controller entity
 2. let that entity command load JSON dialogue data and store the session state on the controller entity
 3. let controller-owned project commands redraw the UI and react to later input
 
-Detailed lifecycle for the older controller-owned pattern:
+Detailed lifecycle for the controller-authored pattern:
 
 1. when opening an outermost session, the controller borrows the needed logical inputs through `push_input_routes` and `route_inputs_to_entity`
 2. the controller loads ordinary JSON dialogue data into entity variables and resets its current segment/page/choice state
@@ -1278,8 +1281,8 @@ Controller-path example caller command:
 
 Each `segment_hooks` entry matches one dialogue segment by index.
 
-They are used by the older controller-owned path today, and they are also the
-current caller-hook surface for the newer engine-owned `open_dialogue_session`
+They are used by controller-authored dialogue flows, and they are also the
+current caller-hook surface for the engine-owned `open_dialogue_session`
 runtime.
 
 A hook object can define:
@@ -1716,22 +1719,21 @@ Examples:
 
 ### Treat Dialogue As Session State
 
-There are now two valid dialogue models:
+The engine supports two valid dialogue models:
 
-1. the newer engine-owned session runtime opened through
+1. the engine-owned session runtime opened through
    `open_dialogue_session`
-2. the older controller-owned path still used by the older sample projects
+2. the controller-authored path for command-level UI control
 
-For new content, prefer the engine-owned runtime when:
+Prefer the engine-owned runtime when:
 
 - you want a standard modal dialogue or menu
 - you want engine-owned paging, choice selection, timer advance, and cancel
   behavior
 - you want dialogue UI presets from `shared_variables.json`
 
-The older controller-owned path is still useful when:
+Use the controller-authored path when:
 
-- you are working in an older authored project that already uses it heavily
 - you want to keep the dialogue flow explicitly authored in project commands
 
 That means dialogue/menu logic can currently be built from either:
@@ -1772,7 +1774,8 @@ Rules:
 
 - use `destination_entity_id` to land on a destination marker entity in the
   target area
-- `entry_id` remains supported for older authored content
+- use `entry_id` when the target area should place the transfer at a named
+  entry point
 - use `transfer_entity_ids` when the live entity itself should travel to the new area
 - `camera_follow.mode` can be `entity`, `input_target`, or `none`
 - `camera_follow.entity_id` supports symbolic `self` / `actor` / `caller` in these high-level transition commands

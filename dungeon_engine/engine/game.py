@@ -13,7 +13,8 @@ from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import build_project_command_database
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.context_services import (
-    build_command_services,
+    attach_modal_command_services,
+    build_play_command_services,
 )
 from dungeon_engine.commands.runner import AreaTransitionRequest, CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
@@ -299,7 +300,7 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
             self.persistence_runtime,
         )
         self.animation_system = AnimationSystem(self.world)
-        command_services = build_command_services(
+        command_services = build_play_command_services(
             area=self.area,
             world=self.world,
             collision_system=self.collision_system,
@@ -342,10 +343,11 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
             text_renderer=self.renderer.text_renderer,
             command_context=command_context,
         )
-        if command_services.ui is None:
-            raise RuntimeError("Play runtime command services are missing the UI service bundle.")
-        command_services.ui.dialogue_runtime = self.dialogue_runtime
-        command_services.ui.inventory_runtime = self.inventory_runtime
+        attach_modal_command_services(
+            command_services,
+            dialogue_runtime=self.dialogue_runtime,
+            inventory_runtime=self.inventory_runtime,
+        )
         self.input_handler = InputHandler(
             self.command_runner,
             self.world,

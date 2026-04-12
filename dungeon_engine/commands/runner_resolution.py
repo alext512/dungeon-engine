@@ -429,7 +429,7 @@ def resolve_run_project_command_spec(
             from dungeon_engine.commands.library import load_project_command_definition
 
             definition = load_project_command_definition(context.project, resolved_command_id)
-            deferred_keys = set(definition.deferred_params)
+            deferred_keys = set(definition.deferred_param_shapes)
         except Exception:
             deferred_keys = set()
 

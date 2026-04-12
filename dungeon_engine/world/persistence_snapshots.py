@@ -206,7 +206,7 @@ def _instantiate_saved_entity(
     project: ProjectContext,
 ) -> Entity:
     """Create an entity instance from saved serialized entity data."""
-    from dungeon_engine.world.loader import instantiate_entity
+    from dungeon_engine.world.loader_entities import instantiate_entity
 
     return instantiate_entity(
         copy.deepcopy(entity_data),

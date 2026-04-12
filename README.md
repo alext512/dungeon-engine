@@ -69,7 +69,7 @@ The current engine already supports:
 - Inventory V1 with entity-owned stack inventories, authored item definitions,
   `add_inventory_item` / `remove_inventory_item` / `use_inventory_item`,
   inventory value sources, and the first engine-owned inventory UI session
-- dialogue and menu flow handled either by controller entities or by the newer
+- dialogue and menu flow handled either by controller entities or by the
   engine-owned dialogue session runtime
 - area changes through authored entry points
 - camera follow, bounds, deadzones, and saved camera state
@@ -93,13 +93,13 @@ It now supports active authoring workflows such as:
 - reference-aware `Rename/Move...` for file-backed project content
 - guarded raw JSON editing for the supported document types
 
-The editor is still not fully caught up with every newer runtime-facing workflow,
+The editor is still not fully caught up with every runtime-facing workflow,
 but it has moved well beyond the earlier area-only slice. The main remaining gaps
 are things like runtime handoff/launch integration, richer screen-space
 direct-manipulation workflows, drag-to-move entity manipulation, and broader
-structured editing for newer engine-owned fields.
+structured editing for engine-owned fields.
 
-The older built-in editor is archived under [archived_editor](./archived_editor/)
+The archived built-in editor is kept under [archived_editor](./archived_editor/)
 for reference only.
 
 ## Repo-Local Example Projects
@@ -306,13 +306,10 @@ Other useful docs:
   remains authored on the target's normal `interact` command.
 - Inventory now has two layers:
   - gameplay/data through item definitions plus inventory builtins
-  - a newer engine-owned inventory session opened through
-    `open_inventory_session`
+  - an engine-owned inventory session opened through `open_inventory_session`
 - Dialogue now has two valid authoring paths:
-  - the newer engine-owned session runtime, opened through
-    `open_dialogue_session`
-  - the older controller-owned authored flow still supported for projects that
-    prefer it
+  - the engine-owned session runtime, opened through `open_dialogue_session`
+  - a controller-authored flow for projects that need command-level UI control
 - Projects can route different logical inputs to different entities at runtime.
 - Save data stores the current area, current routed input targets, camera state,
   traveler state, visited-area persistent diffs, and the current diff of the
@@ -324,24 +321,25 @@ Useful commands during development:
 
 ```text
 .venv/Scripts/python -m unittest discover -s tests -v
+.venv/Scripts/python tools/validate_projects.py
 .venv/Scripts/python run_game.py --project path/to/project --headless --max-frames 2
 cd tools/area_editor
 ..\..\.venv/Scripts/python -m unittest discover -s tests -v
 ```
 
-Startup validation now also audits known command-bearing JSON surfaces for
+Startup validation audits known command-bearing JSON surfaces for
 strict-command key mismatches and validates statically resolvable dialogue and
 asset references before launch.
 
 If you keep repo-local example projects under `projects/`, validate each
-present `project.json` directly after command-surface or content-authoring
-changes.
+present `project.json` after command-surface or content-authoring changes with
+`tools/validate_projects.py`.
 
 ## Current Limits
 
 - save/load UX works, but is still basic
 - external PNG import workflow is not finished
-- the external area editor still has a few important gaps, especially runtime handoff, richer screen-space direct-manipulation workflows, drag-to-move entity manipulation, and broader structured editing for some newer engine-owned fields
+- the external area editor still has a few important gaps, especially runtime handoff, richer screen-space direct-manipulation workflows, drag-to-move entity manipulation, and broader structured editing for some engine-owned fields
 - movement/render feel should still be checked periodically on real hardware as
   the project grows
 
@@ -349,7 +347,7 @@ changes.
 
 - build more real project content and let that pressure guide engine changes
 - expand dialogue/menu authoring support
-- continue turning the external editor into a fuller authoring tool, especially around runtime handoff, richer screen-space direct manipulation, drag manipulation, and broader structured editing of newer engine-owned fields
+- continue turning the external editor into a fuller authoring tool, especially around runtime handoff, richer screen-space direct manipulation, drag manipulation, and broader structured editing of engine-owned fields
 - keep improving movement/render quality
 
 ## License

@@ -24,12 +24,14 @@ from dungeon_engine.json_io import (
 )
 from dungeon_engine.world.loader import (
     AreaValidationError,
-    EntityTemplateValidationError,
-    instantiate_entity,
     load_area_from_data,
     log_area_validation_error,
-    log_entity_template_validation_error,
     validate_project_areas,
+)
+from dungeon_engine.world.loader_entities import (
+    EntityTemplateValidationError,
+    instantiate_entity,
+    log_entity_template_validation_error,
     validate_project_entity_templates,
 )
 from dungeon_engine.logging_utils import get_logger

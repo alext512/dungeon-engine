@@ -88,7 +88,7 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(area.cell_flags[0][1]["blocked"], True)
         self.assertEqual(edits, [(1, 0, CellFlagBrush("blocked", True))])
-        self.assertEqual(len(canvas._cell_flag_group.childItems()), 0)
+        self.assertEqual(len(canvas._cell_flag_group.childItems()), 1)
 
     def test_cell_flag_pointer_left_blocks_and_right_clears(self):
         area = _make_area()

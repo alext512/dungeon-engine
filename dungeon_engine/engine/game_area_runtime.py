@@ -7,13 +7,16 @@ from pathlib import Path
 
 from dungeon_engine.commands.runner import AreaTransitionRequest, execute_registered_command
 from dungeon_engine.json_io import json_data_path_candidates
-from dungeon_engine.world.loader import instantiate_entity, load_area, load_area_from_data
-from dungeon_engine.world.persistence import (
-    PersistenceRuntime,
+from dungeon_engine.world.loader import load_area, load_area_from_data
+from dungeon_engine.world.loader_entities import instantiate_entity
+from dungeon_engine.world.persistence import PersistenceRuntime
+from dungeon_engine.world.persistence_data import (
     ResetRequest,
+    get_persistent_area_state,
+)
+from dungeon_engine.world.persistence_snapshots import (
     apply_area_travelers,
     apply_persistent_global_state,
-    get_persistent_area_state,
     select_entity_ids_by_tags,
 )
 from dungeon_engine.world.serializer import serialize_area

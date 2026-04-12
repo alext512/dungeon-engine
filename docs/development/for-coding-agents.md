@@ -22,6 +22,7 @@ If the change touches the editor, also read:
 If you want the fast mental model first, read:
 
 - [Engine In 10 Minutes](engine-in-10-minutes.md)
+- [Engine Contract Truth Map](engine-contract-truth-map.md)
 
 ## What Is Canonical
 
@@ -29,6 +30,7 @@ For current behavior, trust these first:
 
 - implementation
 - [Engine JSON Interface](../authoring/manuals/engine-json-interface.md) for the exact JSON contract
+- [Engine Contract Truth Map](engine-contract-truth-map.md) for contract ownership and cross-file update expectations
 - [Authoring Guide](../authoring/manuals/authoring-guide.md) for current author-facing workflows
 - `README.md` for the project summary and current capabilities
 

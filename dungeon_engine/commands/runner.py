@@ -206,9 +206,7 @@ def execute_command_spec(
     if command_name == "run_project_command":
         spec = _resolve_run_project_command_spec(raw_spec, context, inherited_params)
     else:
-        deferred_keys = set()
-        if hasattr(registry, "get_deferred_params"):
-            deferred_keys = registry.get_deferred_params(command_name)
+        deferred_keys = set(registry.get_deferred_param_shapes(command_name))
         deferred_keys |= _dynamic_deferred_keys_for_spec(command_name, raw_spec)
         if deferred_keys:
             spec = {

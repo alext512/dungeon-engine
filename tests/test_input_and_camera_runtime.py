@@ -683,7 +683,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(raised.exception.__cause__)
         self.assertIn("Unknown command 'set_camera_follow_player'", str(raised.exception.__cause__))
 
-    def test_legacy_camera_commands_are_removed(self) -> None:
+    def test_removed_camera_commands_raise_unknown_command(self) -> None:
         world = World()
         registry, context = self._make_command_context(world=world)
         context.services.ui.camera = _RecordingCamera()

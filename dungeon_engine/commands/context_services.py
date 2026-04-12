@@ -277,6 +277,79 @@ def build_command_services(
     return services
 
 
+def build_play_command_services(
+    *,
+    area: Area,
+    world: World,
+    collision_system: CollisionSystem,
+    movement_system: MovementSystem,
+    interaction_system: InteractionSystem,
+    animation_system: AnimationSystem,
+    text_renderer: TextRendererLike,
+    screen_manager: ScreenElementManagerLike,
+    camera: CameraLike,
+    audio_player: AudioPlayerLike,
+    persistence_runtime: PersistenceRuntimeLike,
+    request_area_change: Callable[[Any], None],
+    request_new_game: Callable[[Any], None],
+    request_load_game: Callable[[str | None], None],
+    save_game: Callable[[str | None], bool],
+    request_quit: Callable[[], None],
+    set_simulation_paused: Callable[[bool], None],
+    get_simulation_paused: Callable[[], bool],
+    request_step_simulation_tick: Callable[[], None],
+    adjust_output_scale: Callable[[int], None],
+    debug_inspection_enabled: bool = False,
+) -> CommandServices:
+    """Build the strict service bundle used by the play-mode runtime."""
+
+    return CommandServices(
+        world=CommandWorldServices(
+            area=area,
+            world=world,
+            collision_system=collision_system,
+            movement_system=movement_system,
+            interaction_system=interaction_system,
+            animation_system=animation_system,
+        ),
+        ui=CommandUiServices(
+            text_renderer=text_renderer,
+            screen_manager=screen_manager,
+            camera=camera,
+        ),
+        audio=CommandAudioServices(audio_player=audio_player),
+        persistence=CommandPersistenceServices(
+            persistence_runtime=persistence_runtime,
+        ),
+        runtime=CommandRuntimeServices(
+            request_area_change=request_area_change,
+            request_new_game=request_new_game,
+            request_load_game=request_load_game,
+            save_game=save_game,
+            request_quit=request_quit,
+            set_simulation_paused=set_simulation_paused,
+            get_simulation_paused=get_simulation_paused,
+            request_step_simulation_tick=request_step_simulation_tick,
+            adjust_output_scale=adjust_output_scale,
+            debug_inspection_enabled=bool(debug_inspection_enabled),
+        ),
+    )
+
+
+def attach_modal_command_services(
+    services: CommandServices,
+    *,
+    dialogue_runtime: DialogueRuntimeLike,
+    inventory_runtime: InventoryRuntimeLike,
+) -> None:
+    """Attach modal runtimes after they receive the command context they need."""
+
+    if services.ui is None:
+        raise RuntimeError("Cannot attach modal runtimes without a UI service bundle.")
+    services.ui.dialogue_runtime = dialogue_runtime
+    services.ui.inventory_runtime = inventory_runtime
+
+
 __all__ = [
     "COMMAND_SERVICE_INJECTION_NAMES",
     "CommandAudioServices",
@@ -285,6 +358,8 @@ __all__ = [
     "CommandServices",
     "CommandUiServices",
     "CommandWorldServices",
+    "attach_modal_command_services",
     "build_command_services",
+    "build_play_command_services",
     "resolve_service_injection",
 ]

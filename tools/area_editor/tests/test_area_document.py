@@ -79,7 +79,7 @@ class TestUnknownFieldPreservation(unittest.TestCase):
     """Unknown keys must survive a from_dict -> to_dict round-trip."""
 
     def test_area_name_field_is_rejected(self):
-        raw = {"name": "legacy", "tile_size": 16}
+        raw = {"name": "removed", "tile_size": 16}
         with self.assertRaises(ValueError) as raised:
             AreaDocument.from_dict(raw)
         self.assertIn("must not declare 'name'", str(raised.exception))

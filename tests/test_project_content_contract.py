@@ -15,9 +15,11 @@ from dungeon_engine.project_context import load_project
 from dungeon_engine.world.entity import Entity
 from dungeon_engine.world.loader import (
     AreaValidationError,
-    EntityTemplateValidationError,
     load_area_from_data,
     validate_project_areas,
+)
+from dungeon_engine.world.loader_entities import (
+    EntityTemplateValidationError,
     validate_project_entity_templates,
 )
 from dungeon_engine.world.serializer import serialize_area
@@ -677,7 +679,7 @@ class ProjectContentContractTests(unittest.TestCase):
     def test_entity_template_validation_rejects_removed_sprite_field(self) -> None:
         _, project = self._make_project(
             entity_templates={
-                "legacy_sign.json": {
+                "removed_sprite_sign.json": {
                     "kind": "sign",
                     "sprite": {
                         "path": "assets/project/sprites/sign.png",
@@ -710,6 +712,43 @@ class ProjectContentContractTests(unittest.TestCase):
         self.assertTrue(
             any("must not declare 'id'" in issue for issue in raised.exception.issues)
         )
+
+    def test_project_command_validation_rejects_unknown_top_level_fields(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "call_hook.json": {
+                    "params": ["hook"],
+                    "deferred_params": ["hook"],
+                    "commands": [],
+                }
+            }
+        )
+
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
+
+        self.assertTrue(
+            any(
+                "contains unknown top-level field(s): deferred_params" in issue
+                for issue in raised.exception.issues
+            )
+        )
+
+    def test_project_command_validation_accepts_deferred_param_shapes(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "call_hook.json": {
+                    "params": ["hook", "raw_blob"],
+                    "deferred_param_shapes": {
+                        "hook": "command_payload",
+                        "raw_blob": "raw_data",
+                    },
+                    "commands": [],
+                }
+            }
+        )
+
+        validate_project_commands(project)
 
     def test_project_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
         _, project = self._make_project(
@@ -795,7 +834,7 @@ class ProjectContentContractTests(unittest.TestCase):
             )
         )
 
-    def test_area_validation_rejects_legacy_interact_commands(self) -> None:
+    def test_area_validation_rejects_removed_interact_commands_field(self) -> None:
         _, project = self._make_project(
             areas={
                 "test_room.json": {

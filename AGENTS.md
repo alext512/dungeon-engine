@@ -15,7 +15,7 @@ Gameplay logic lives in JSON command chains, not hardcoded Python scripts.
 
 Project content lives outside the runtime package. Runtime code is under `dungeon_engine/`, while versioned project folders can live alongside it, for example `projects/my_game/`. Projects can still live elsewhere too; the important separation is that the engine reads a `project.json` manifest instead of depending on hardcoded bundled content.
 
-The previous built-in editor implementation has been archived under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and already supports active area editing plus broader project-authoring workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, project manifest and shared-variable editing, item/global-entity editing, and guarded JSON editing. The main remaining gaps are broader coverage for some newer engine-owned fields, richer reference pickers, stronger screen-space direct manipulation, and runtime handoff.
+The archived built-in editor implementation lives under `archived_editor/` and is no longer part of the active codebase. A new external editor now lives under `tools/area_editor/` and already supports active area editing plus broader project-authoring workflows such as tile painting, cell-flag editing, entity placement/nudging, render-property editing, project manifest and shared-variable editing, item/global-entity editing, and guarded JSON editing. The main remaining gaps are broader coverage for some engine-owned fields, richer reference pickers, stronger screen-space direct manipulation, and runtime handoff.
 
 ## How to Run
 
@@ -38,6 +38,7 @@ Or double-click `Run_Game.cmd`.
 | `docs/authoring/manuals/authoring-guide.md` | JSON-focused guide for building projects, rooms, entities, commands, and dialogue without reading code |
 | `docs/authoring/manuals/engine-json-interface.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
 | `docs/project/architecture-direction.md` | Design principles and medium-term architectural direction |
+| `docs/development/engine-contract-truth-map.md` | Active contract ownership map across runtime, validation, editor, docs, tests, and sample content |
 | `CONTRIBUTING.md` | Working rules and project direction |
 | `CHANGELOG.md` | Reverse-chronological history of functionality changes |
 
@@ -134,7 +135,7 @@ dungeon_engine/
 
 ## Common Tasks
 
-**Adding a new command type**: Keep `commands/builtin.py` as the public registration entry point, but prefer placing clustered command implementations in a focused module under `commands/builtin_domains/` when a domain already exists. Use `@registry.register("name")` in the relevant registration helper and wire that helper through `register_builtin_commands()`.
+**Adding a new command type**: Keep `commands/builtin.py` as the public registration entry point, but prefer placing clustered command implementations in a focused module under `commands/builtin_domains/` when a domain already exists. Use `@registry.register("name")` in the relevant registration helper, declare `deferred_param_shapes` for nested command-bearing params, and wire that helper through `register_builtin_commands()`.
 
 **Adding a new entity template**: Create a JSON file in the active project's `entity_templates/` folder (or another configured entity-template path), then reference it from authored area data.
 
@@ -175,23 +176,10 @@ do **all** of the following before declaring the change safe:
 
 If you change `tools/area_editor/`, also run the editor's own unittest suite from inside that folder so package-relative imports and tool-local assumptions match the intended workflow.
 
-Recommended direct validation snippet:
+Recommended direct project validation:
 
 ```text
-@'
-from pathlib import Path
-from dungeon_engine.project_context import load_project
-from dungeon_engine.commands.library import validate_project_commands
-
-project_manifests = sorted(Path("projects").glob("*/project.json"))
-if not project_manifests:
-    print("No repo-local project manifests found under projects/.")
-else:
-    for project_json in project_manifests:
-        project = load_project(project_json)
-        validate_project_commands(project)
-        print(f"{project.project_root.name}: project command validation OK")
-'@ | .venv/Scripts/python -
+.venv/Scripts/python tools/validate_projects.py
 ```
 
 Why this matters:
@@ -206,7 +194,7 @@ Why this matters:
 ## Gotchas
 
 - The project uses `pygame-ce` (Community Edition), not vanilla `pygame`.
-- Runtime code lives under `dungeon_engine/`. The external editor lives under `tools/area_editor/`. The previous built-in editor lives under `archived_editor/` as disconnected reference material.
+- Runtime code lives under `dungeon_engine/`. The external editor lives under `tools/area_editor/`. The archived built-in editor lives under `archived_editor/` as disconnected reference material.
 - Tilesets are discovered recursively through the active project's `asset_paths`; folders under `assets/` are organizational, not restrictive.
 - Tile layers and walkability are independent systems. A tile can exist without a walk flag and vice versa.
 - World rendering now uses a unified model across tile layers and entities: `render_order` is the coarse band, `y_sort` controls vertical interleaving inside a band, `sort_y_offset` adjusts the sort pivot, and `stack_order` is the local tie-breaker.

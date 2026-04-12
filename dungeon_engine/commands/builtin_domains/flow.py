@@ -310,7 +310,7 @@ def register_flow_commands(
 
     @registry.register(
         "spawn_flow",
-        deferred_params={"commands"},
+        deferred_param_shapes={"commands": "command_payload"},
         validation_mode="mixed",
     )
     def spawn_flow(
@@ -344,7 +344,7 @@ def register_flow_commands(
 
     @registry.register(
         "run_sequence",
-        deferred_params={"commands"},
+        deferred_param_shapes={"commands": "command_payload"},
         validation_mode="mixed",
     )
     def run_sequence(
@@ -374,7 +374,7 @@ def register_flow_commands(
 
     @registry.register(
         "run_parallel",
-        deferred_params={"commands"},
+        deferred_param_shapes={"commands": "command_payload"},
         validation_mode="mixed",
     )
     def run_parallel(
@@ -406,7 +406,7 @@ def register_flow_commands(
 
     @registry.register(
         "run_commands_for_collection",
-        deferred_params={"commands"},
+        deferred_param_shapes={"commands": "command_payload"},
         validation_mode="mixed",
     )
     def run_commands_for_collection(
@@ -448,7 +448,10 @@ def register_flow_commands(
 
     @registry.register(
         "if",
-        deferred_params={"then", "else"},
+        deferred_param_shapes={
+            "then": "command_payload",
+            "else": "command_payload",
+        },
         validation_mode="mixed",
     )
     def if_command(
@@ -476,7 +479,11 @@ def register_flow_commands(
 
     @registry.register(
         "run_entity_command",
-        deferred_params={"dialogue_on_start", "dialogue_on_end", "segment_hooks"},
+        deferred_param_shapes={
+            "dialogue_on_start": "command_payload",
+            "dialogue_on_end": "command_payload",
+            "segment_hooks": "dialogue_segment_hooks",
+        },
         validation_mode="mixed",
     )
     def run_entity_command(

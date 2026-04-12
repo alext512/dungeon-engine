@@ -14,7 +14,7 @@ from dungeon_engine.commands.runner_value_utils import (
 from dungeon_engine.inventory import inventory_has_item, inventory_item_count, serialize_inventory_state
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.loader import load_area
-from dungeon_engine.world.persistence import get_persistent_area_state
+from dungeon_engine.world.persistence_data import get_persistent_area_state
 from dungeon_engine.world.world import World
 
 

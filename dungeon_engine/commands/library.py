@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from dungeon_engine.authored_command_validation import validate_authored_command_tree
 from dungeon_engine.json_io import JsonDataDecodeError, iter_json_data_files, load_json_data
@@ -17,6 +17,26 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+ProjectCommandDeferredPayloadShape = Literal[
+    "raw_data",
+    "command_payload",
+    "dialogue_segment_hooks",
+]
+_PROJECT_COMMAND_DEFERRED_PAYLOAD_SHAPES = frozenset(
+    {
+        "raw_data",
+        "command_payload",
+        "dialogue_segment_hooks",
+    }
+)
+_PROJECT_COMMAND_DEFINITION_KEYS = frozenset(
+    {
+        "params",
+        "deferred_param_shapes",
+        "commands",
+    }
+)
+
 
 @dataclass(slots=True)
 class ProjectCommandDefinition:
@@ -24,7 +44,7 @@ class ProjectCommandDefinition:
 
     command_id: str
     params: list[str]
-    deferred_params: list[str]
+    deferred_param_shapes: dict[str, ProjectCommandDeferredPayloadShape]
     commands: list[dict[str, Any]]
     source_path: Path
 
@@ -171,6 +191,14 @@ def _load_project_command_definition_from_path(
         raise ValueError(
             f"Command definition '{expected_id}' must not declare 'id'; command ids are path-derived."
         )
+    unknown_top_level_keys = sorted(
+        key for key in raw.keys() if key not in _PROJECT_COMMAND_DEFINITION_KEYS
+    )
+    if unknown_top_level_keys:
+        formatted = ", ".join(unknown_top_level_keys)
+        raise ValueError(
+            f"Command definition '{expected_id}' contains unknown top-level field(s): {formatted}."
+        )
     resolved_id = expected_id
 
     raw_params = raw.get("params", [])
@@ -184,25 +212,38 @@ def _load_project_command_definition_from_path(
                 f"Command definition '{resolved_id}' must use non-empty strings inside 'params'."
             )
 
-    raw_deferred_params = raw.get("deferred_params", [])
-    if raw_deferred_params is None:
-        raw_deferred_params = []
-    if not isinstance(raw_deferred_params, list):
-        raise ValueError(f"Command definition '{resolved_id}' must use a list for 'deferred_params'.")
-    for deferred_param in raw_deferred_params:
-        if not isinstance(deferred_param, str) or not deferred_param.strip():
+    param_names = {str(param) for param in raw_params}
+    raw_deferred_param_shapes = raw.get("deferred_param_shapes", {})
+    if raw_deferred_param_shapes is None:
+        raw_deferred_param_shapes = {}
+    if not isinstance(raw_deferred_param_shapes, dict):
+        raise ValueError(
+            f"Command definition '{resolved_id}' must use an object for 'deferred_param_shapes'."
+        )
+    deferred_param_shapes: dict[str, ProjectCommandDeferredPayloadShape] = {}
+    for raw_name, raw_shape in raw_deferred_param_shapes.items():
+        if not isinstance(raw_name, str) or not raw_name.strip():
             raise ValueError(
-                f"Command definition '{resolved_id}' must use non-empty strings inside 'deferred_params'."
+                f"Command definition '{resolved_id}' must use non-empty strings as "
+                "'deferred_param_shapes' keys."
+        )
+        name = raw_name.strip()
+        if name not in param_names:
+            deferred_param_shapes[name] = "raw_data"
+            continue
+        if not isinstance(raw_shape, str) or raw_shape not in _PROJECT_COMMAND_DEFERRED_PAYLOAD_SHAPES:
+            raise ValueError(
+                f"Command definition '{resolved_id}' uses unknown deferred payload shape "
+                f"'{raw_shape}' for parameter '{name}'."
             )
+        deferred_param_shapes[name] = raw_shape
     unknown_deferred = sorted(
-        str(name)
-        for name in raw_deferred_params
-        if str(name) not in {str(param) for param in raw_params}
+        name for name in deferred_param_shapes if name not in param_names
     )
     if unknown_deferred:
         formatted = ", ".join(unknown_deferred)
         raise ValueError(
-            f"Command definition '{resolved_id}' uses unknown deferred parameter(s): {formatted}."
+            f"Command definition '{resolved_id}' uses unknown deferred parameter shape(s): {formatted}."
         )
 
     raw_commands = raw.get("commands")
@@ -222,7 +263,7 @@ def _load_project_command_definition_from_path(
     return ProjectCommandDefinition(
         command_id=resolved_id,
         params=[str(param) for param in raw_params],
-        deferred_params=[str(param) for param in raw_deferred_params],
+        deferred_param_shapes=dict(deferred_param_shapes),
         commands=[dict(command) for command in raw_commands],
         source_path=command_path,
     )

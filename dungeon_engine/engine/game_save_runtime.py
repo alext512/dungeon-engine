@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from dungeon_engine.world.persistence import (
+from dungeon_engine.world.persistence_snapshots import (
     apply_current_global_state,
     apply_persistent_area_state,
     capture_current_area_state,

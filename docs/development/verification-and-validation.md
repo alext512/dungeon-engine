@@ -33,20 +33,7 @@ Headless mode still exercises startup validation, project loading, command-libra
 If you changed command ids, command references, authoring conventions, or repo-local project content, validate each repo-local project manifest directly.
 
 ```text
-@'
-from pathlib import Path
-from dungeon_engine.project_context import load_project
-from dungeon_engine.commands.library import validate_project_commands
-
-project_manifests = sorted(Path("projects").glob("*/project.json"))
-if not project_manifests:
-    print("No repo-local project manifests found under projects/.")
-else:
-    for project_json in project_manifests:
-        project = load_project(project_json)
-        validate_project_commands(project)
-        print(f"{project.project_root.name}: project command validation OK")
-'@ | .venv/Scripts/python -
+.venv/Scripts/python tools/validate_projects.py
 ```
 
 ## Docs Site Commands

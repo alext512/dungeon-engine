@@ -1,4 +1,4 @@
-"""Warning-only audit helpers for authored command surfaces."""
+"""Startup validation helpers for authored command surfaces."""
 
 from __future__ import annotations
 
@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.library import load_project_command_definition
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.json_io import iter_json_data_files, load_json_data
 
 
 def audit_project_command_surfaces(project) -> list[str]:
-    """Return non-blocking command-authoring warnings for one project's JSON surfaces."""
+    """Return command-authoring validation issues for one project's JSON surfaces."""
     registry = CommandRegistry()
     register_builtin_commands(registry)
 
@@ -24,6 +25,7 @@ def audit_project_command_surfaces(project) -> list[str]:
             _audit_command_list(
                 raw.get("commands"),
                 registry,
+                project=project,
                 source_name=str(command_path),
                 location="commands",
             )
@@ -37,6 +39,7 @@ def audit_project_command_surfaces(project) -> list[str]:
             _audit_command_list(
                 raw.get("use_commands"),
                 registry,
+                project=project,
                 source_name=str(item_path),
                 location="use_commands",
             )
@@ -50,6 +53,7 @@ def audit_project_command_surfaces(project) -> list[str]:
             _audit_entity_command_map(
                 raw.get("entity_commands"),
                 registry,
+                project=project,
                 source_name=str(template_path),
             )
         )
@@ -62,6 +66,7 @@ def audit_project_command_surfaces(project) -> list[str]:
             _audit_command_list(
                 raw.get("enter_commands"),
                 registry,
+                project=project,
                 source_name=str(area_path),
                 location="enter_commands",
             )
@@ -75,6 +80,7 @@ def audit_project_command_surfaces(project) -> list[str]:
                     _audit_entity_command_map(
                         entity_data.get("entity_commands"),
                         registry,
+                        project=project,
                         source_name=f"{area_path} entities[{index}]",
                     )
                 )
@@ -86,6 +92,7 @@ def audit_project_command_surfaces(project) -> list[str]:
             _audit_entity_command_map(
                 entity_data.get("entity_commands"),
                 registry,
+                project=project,
                 source_name=f"project.json global_entities[{index}]",
             )
         )
@@ -100,6 +107,7 @@ def audit_project_command_surfaces(project) -> list[str]:
                 _audit_dialogue_payload(
                     raw,
                     registry,
+                    project=project,
                     source_name=str(dialogue_path),
                 )
             )
@@ -122,6 +130,7 @@ def _audit_entity_command_map(
     raw_entity_commands: Any,
     registry: CommandRegistry,
     *,
+    project: Any,
     source_name: str,
 ) -> list[str]:
     """Audit one entity_commands object and every contained command list."""
@@ -134,6 +143,7 @@ def _audit_entity_command_map(
                 _audit_command_list(
                     raw_command,
                     registry,
+                    project=project,
                     source_name=source_name,
                     location=f"entity_commands.{command_id}",
                 )
@@ -144,6 +154,7 @@ def _audit_entity_command_map(
                 _audit_command_list(
                     raw_command.get("commands"),
                     registry,
+                    project=project,
                     source_name=source_name,
                     location=f"entity_commands.{command_id}.commands",
                 )
@@ -155,6 +166,7 @@ def _audit_dialogue_payload(
     raw_dialogue: dict[str, Any],
     registry: CommandRegistry,
     *,
+    project: Any,
     source_name: str,
 ) -> list[str]:
     """Audit known inline command surfaces inside one dialogue JSON payload."""
@@ -171,6 +183,7 @@ def _audit_dialogue_payload(
             _audit_command_list(
                 raw_segment.get("on_start"),
                 registry,
+                project=project,
                 source_name=source_name,
                 location=f"{segment_location}.on_start",
             )
@@ -179,6 +192,7 @@ def _audit_dialogue_payload(
             _audit_command_list(
                 raw_segment.get("on_end"),
                 registry,
+                project=project,
                 source_name=source_name,
                 location=f"{segment_location}.on_end",
             )
@@ -193,6 +207,7 @@ def _audit_dialogue_payload(
                 _audit_command_list(
                     raw_option.get("commands"),
                     registry,
+                    project=project,
                     source_name=source_name,
                     location=f"{segment_location}.options[{option_index}].commands",
                 )
@@ -204,6 +219,7 @@ def _audit_command_list(
     raw_commands: Any,
     registry: CommandRegistry,
     *,
+    project: Any,
     source_name: str,
     location: str,
 ) -> list[str]:
@@ -220,6 +236,7 @@ def _audit_command_list(
             _audit_command_spec(
                 raw_command,
                 registry,
+                project=project,
                 source_name=source_name,
                 location=command_location,
             )
@@ -231,6 +248,7 @@ def _audit_command_spec(
     raw_command: dict[str, Any],
     registry: CommandRegistry,
     *,
+    project: Any,
     source_name: str,
     location: str,
 ) -> list[str]:
@@ -255,25 +273,43 @@ def _audit_command_spec(
             f"{unknown_list}."
         )
 
-    for deferred_param in registry.get_deferred_params(command_name):
+    if command_name == "run_project_command":
+        issues.extend(
+            _audit_run_project_command_payloads(
+                raw_command,
+                registry,
+                project=project,
+                source_name=source_name,
+                location=location,
+            )
+        )
+
+    for deferred_param, payload_shape in registry.get_deferred_param_shapes(command_name).items():
         if deferred_param not in raw_command:
             continue
         deferred_value = raw_command.get(deferred_param)
         deferred_location = f"{location}.{deferred_param}"
-        if deferred_param == "segment_hooks":
+        if payload_shape == "dialogue_segment_hooks":
             issues.extend(
                 _audit_segment_hooks(
                     deferred_value,
                     registry,
+                    project=project,
                     source_name=source_name,
                     location=deferred_location,
                 )
             )
             continue
+        if payload_shape != "command_payload":
+            raise ValueError(
+                f"Command '{command_name}' declares unsupported deferred payload shape "
+                f"'{payload_shape}' for '{deferred_param}'."
+            )
         issues.extend(
             _audit_command_payload(
                 deferred_value,
                 registry,
+                project=project,
                 source_name=source_name,
                 location=deferred_location,
             )
@@ -285,6 +321,7 @@ def _audit_command_payload(
     payload: Any,
     registry: CommandRegistry,
     *,
+    project: Any,
     source_name: str,
     location: str,
 ) -> list[str]:
@@ -295,6 +332,7 @@ def _audit_command_payload(
         return _audit_command_spec(
             payload,
             registry,
+            project=project,
             source_name=source_name,
             location=location,
         )
@@ -302,16 +340,76 @@ def _audit_command_payload(
         return _audit_command_list(
             payload,
             registry,
+            project=project,
             source_name=source_name,
             location=location,
         )
     return []
 
 
+def _audit_run_project_command_payloads(
+    raw_command: dict[str, Any],
+    registry: CommandRegistry,
+    *,
+    project: Any,
+    source_name: str,
+    location: str,
+) -> list[str]:
+    """Audit shaped deferred payload params on one literal project-command call."""
+    raw_command_id = raw_command.get("command_id")
+    if not isinstance(raw_command_id, str):
+        return []
+    command_id = raw_command_id.replace("\\", "/").strip()
+    if not command_id or command_id.startswith("$"):
+        return []
+
+    try:
+        definition = load_project_command_definition(project, command_id)
+    except Exception:
+        return []
+
+    issues: list[str] = []
+    for param_name, payload_shape in definition.deferred_param_shapes.items():
+        if param_name not in raw_command:
+            continue
+        payload = raw_command.get(param_name)
+        payload_location = f"{location}.{param_name}"
+        if payload_shape == "raw_data":
+            continue
+        if payload_shape == "dialogue_segment_hooks":
+            issues.extend(
+                _audit_segment_hooks(
+                    payload,
+                    registry,
+                    project=project,
+                    source_name=source_name,
+                    location=payload_location,
+                )
+            )
+            continue
+        if payload_shape == "command_payload":
+            issues.extend(
+                _audit_command_payload(
+                    payload,
+                    registry,
+                    project=project,
+                    source_name=source_name,
+                    location=payload_location,
+                )
+            )
+            continue
+        raise ValueError(
+            f"Project command '{definition.command_id}' declares unsupported deferred payload "
+            f"shape '{payload_shape}' for '{param_name}'."
+        )
+    return issues
+
+
 def _audit_segment_hooks(
     raw_hooks: Any,
     registry: CommandRegistry,
     *,
+    project: Any,
     source_name: str,
     location: str,
 ) -> list[str]:
@@ -328,6 +426,7 @@ def _audit_segment_hooks(
             _audit_command_list(
                 raw_hook.get("on_start"),
                 registry,
+                project=project,
                 source_name=source_name,
                 location=f"{hook_location}.on_start",
             )
@@ -336,6 +435,7 @@ def _audit_segment_hooks(
             _audit_command_list(
                 raw_hook.get("on_end"),
                 registry,
+                project=project,
                 source_name=source_name,
                 location=f"{hook_location}.on_end",
             )
@@ -347,6 +447,7 @@ def _audit_segment_hooks(
                     _audit_command_payload(
                         option_commands,
                         registry,
+                        project=project,
                         source_name=source_name,
                         location=f"{hook_location}.option_commands[{option_index}]",
                     )
@@ -358,6 +459,7 @@ def _audit_segment_hooks(
                     _audit_command_payload(
                         option_commands,
                         registry,
+                        project=project,
                         source_name=source_name,
                         location=f"{hook_location}.option_commands_by_id.{option_id}",
                     )

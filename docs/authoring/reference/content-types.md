@@ -84,7 +84,7 @@ Project command files are reusable command-chain definitions discovered through 
 Current file shape:
 
 - `params`
-- `deferred_params`
+- `deferred_param_shapes`
 - `commands`
 
 Use project commands when logic is:
