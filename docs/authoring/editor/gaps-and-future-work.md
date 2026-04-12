@@ -36,10 +36,12 @@ Based on the current roadmap and future-features notes, the next valuable steps 
 - runtime launch or handoff from the editor
 - richer content editing for dialogue and commands
 
-Recent correctness-focused progress already moved `scope` into the structured
-entity-instance and template editing surfaces, so the remaining structured-field
-gap is now more about fields like `input_map`, `entity_commands`, `inventory`,
-and other workflow-heavy authored blocks.
+Recent correctness-focused progress already moved `scope`, `color`, `input_map`,
+`inventory`, `entity_commands`, and common template defaults into the structured
+entity-instance and template editing surfaces, so there are no remaining
+runtime-known authored entity fields that require whole-file raw JSON editing.
+The remaining command-related gap is richer command-builder assistance on top
+of the focused entity-command JSON surface.
 
 ## Longer-Term Future Features
 

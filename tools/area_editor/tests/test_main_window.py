@@ -674,7 +674,17 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             fields._facing_combo.setCurrentText("left")
             fields._interactable_check.setChecked(True)
             fields._interaction_priority_spin.setValue(4)
+            fields._color_check.setChecked(True)
+            fields._color_red_spin.setValue(160)
+            fields._color_green_spin.setValue(120)
+            fields._color_blue_spin.setValue(80)
+            fields._input_map_text.setPlainText('{\n  "interact": "interact"\n}')
             fields._variables_text.setPlainText('{\n  "opened": false,\n  "key": "copper"\n}')
+            fields._inventory_check.setChecked(True)
+            fields._inventory_max_stacks_spin.setValue(1)
+            fields._inventory_stacks_text.setPlainText(
+                '[{"item_id": "items/copper_key", "quantity": 1}]'
+            )
             fields._visuals_text.setPlainText(
                 '[\n'
                 '  {\n'
@@ -716,7 +726,16 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual(entity._extra["facing"], "left")
             self.assertTrue(entity._extra["interactable"])
             self.assertEqual(entity._extra["interaction_priority"], 4)
+            self.assertEqual(entity._extra["color"], [160, 120, 80])
+            self.assertEqual(entity._extra["input_map"], {"interact": "interact"})
             self.assertEqual(entity._extra["variables"], {"opened": False, "key": "copper"})
+            self.assertEqual(
+                entity._extra["inventory"],
+                {
+                    "max_stacks": 1,
+                    "stacks": [{"item_id": "items/copper_key", "quantity": 1}],
+                },
+            )
             self.assertEqual(
                 entity._extra["visuals"],
                 [
@@ -842,7 +861,15 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             assert isinstance(widget, EntityTemplateEditorWidget)
             self.assertEqual(
                 widget.fields_editor.section_labels(),
-                ["Visuals", "Persistence", "Raw JSON"],
+                [
+                    "Basics",
+                    "Visuals",
+                    "Input Map",
+                    "Entity Commands",
+                    "Inventory",
+                    "Persistence",
+                    "Raw JSON",
+                ],
             )
             self.assertTrue(widget.raw_json_widget.isReadOnly())
             self.assertFalse(window._enable_json_editing_action.isChecked())
@@ -901,6 +928,158 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             saved = template_path.read_text(encoding="utf-8")
             self.assertIn('"id": "main"', saved)
             self.assertIn('"path": "assets/base.png"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
+
+    def test_template_fields_editor_updates_basics_and_saves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._kind_edit.setText("guide")
+            widget.fields_editor._space_combo.setCurrentText("screen")
+            widget.fields_editor._tags_edit.setText("friendly, tutorial")
+            widget.fields_editor._interactable_check.setChecked(True)
+            widget.fields_editor._interaction_priority_spin.setValue(5)
+            widget.fields_editor._color_check.setChecked(True)
+            widget.fields_editor._color_red_spin.setValue(120)
+            widget.fields_editor._color_green_spin.setValue(90)
+            widget.fields_editor._color_blue_spin.setValue(40)
+            widget.fields_editor._render_order_spin.setValue(8)
+            widget.fields_editor._y_sort_check.setChecked(True)
+            widget.fields_editor._sort_y_offset_spin.setValue(1.5)
+            widget.fields_editor._stack_order_spin.setValue(2)
+            widget.fields_editor._variables_text.setPlainText('{"met": false}')
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"kind": "guide"', saved)
+            self.assertIn('"space": "screen"', saved)
+            self.assertIn('"friendly"', saved)
+            self.assertIn('"interactable": true', saved)
+            self.assertIn('"interaction_priority": 5', saved)
+            self.assertIn('"color"', saved)
+            self.assertIn("120", saved)
+            self.assertIn("90", saved)
+            self.assertIn("40", saved)
+            self.assertIn('"render_order": 8', saved)
+            self.assertIn('"y_sort": true', saved)
+            self.assertIn('"sort_y_offset": 1.5', saved)
+            self.assertIn('"stack_order": 2', saved)
+            self.assertIn('"met": false', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
+
+    def test_template_fields_editor_updates_input_map_and_saves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._input_map_text.setPlainText(
+                '{\n  "interact": "interact",\n  "menu": "menu"\n}'
+            )
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"input_map"', saved)
+            self.assertIn('"interact": "interact"', saved)
+            self.assertIn('"menu": "menu"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
+
+    def test_template_fields_editor_updates_entity_commands_and_saves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._entity_commands_text.setPlainText(
+                '{\n'
+                '  "interact": [\n'
+                '    {"type": "run_project_command", "command_id": "commands/system/open_gate"}\n'
+                "  ]\n"
+                "}"
+            )
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"entity_commands"', saved)
+            self.assertIn('"interact"', saved)
+            self.assertIn('"command_id": "commands/system/open_gate"', saved)
+            self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
+
+    def test_template_fields_editor_updates_inventory_and_saves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            assert isinstance(widget, EntityTemplateEditorWidget)
+
+            window._enable_json_editing_action.setChecked(True)
+            widget.fields_editor._inventory_check.setChecked(True)
+            widget.fields_editor._inventory_max_stacks_spin.setValue(2)
+            widget.fields_editor._inventory_stacks_text.setPlainText(
+                '[\n'
+                '  {"item_id": "items/copper_key", "quantity": 1},\n'
+                '  {"item_id": "items/light_orb", "quantity": 2}\n'
+                ']'
+            )
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
+            window._on_save_active()
+
+            saved = template_path.read_text(encoding="utf-8")
+            self.assertIn('"inventory"', saved)
+            self.assertIn('"max_stacks": 2', saved)
+            self.assertIn('"item_id": "items/copper_key"', saved)
+            self.assertIn('"item_id": "items/light_orb"', saved)
             self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
 
     def test_template_fields_editor_updates_persistence_and_saves(self):

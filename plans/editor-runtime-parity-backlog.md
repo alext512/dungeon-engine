@@ -33,12 +33,32 @@ editor code.
   its owned fields without dropping runtime-control manifest data that still
   lives in raw JSON.
 - Added focused entity-instance and template regression coverage proving the
-  structured editors can apply owned fields without dropping raw-only
-  engine-owned fields such as `entity_commands`, `inventory`, `input_map`,
-  `scope`, and `color`.
+  structured editors can apply owned fields without dropping engine-owned fields
+  that were later promoted into structured surfaces.
 - Promoted `scope` into the structured entity-instance and template editor
   surfaces so one high-impact engine-owned field no longer depends on raw JSON
   editing alone.
+- Promoted `color` into the structured entity-instance and template editor
+  surfaces, with focused warnings/preservation when authored data falls outside
+  the supported RGB array shape.
+- Promoted `input_map` into the structured entity-instance and template editor
+  surfaces, with focused warnings/preservation when authored data falls outside
+  the supported object-of-strings shape.
+- Promoted `entity_commands` into the structured entity-instance and template
+  editor surfaces as a focused guarded JSON object, with focused
+  warnings/preservation when authored data falls outside the supported
+  entity-command object shape.
+- Promoted `inventory` into the structured entity-instance and template editor
+  surfaces, with focused warnings/preservation when authored data falls outside
+  the supported inventory object shape.
+- Added an editor-side runtime-known entity field ownership map plus regression
+  coverage, so future entity-field changes must be categorized as structured,
+  render-panel-owned, read-only, or raw-JSON-only.
+- Promoted common entity-template defaults into the structured template
+  `Basics` section: `kind`, `space`, tags, physics/interaction/visibility
+  defaults, and `variables`.
+- Promoted template render defaults into the structured template `Basics`
+  section: `render_order`, `y_sort`, `sort_y_offset`, and `stack_order`.
 - Added focused shared-variable editor coverage proving display/movement edits
   do not drop other engine-used sections such as `dialogue_ui`,
   `inventory_ui`, or custom project data.
@@ -56,12 +76,13 @@ editor code.
 
 ## Next High-Value Gaps
 
-- Audit engine-known entity fields against the structured entity instance and
-  template editors.
+- Keep the entity field ownership map current so newly added runtime entity
+  fields must be categorized immediately instead of becoming hidden raw-only
+  debt.
 - Add parity or round-trip tests for any field that the runtime treats as
   engine-owned and the editor edits through a focused widget.
-- Improve command/reference pickers for authored fields that currently depend on
-  raw JSON editing.
+- Improve command/reference pickers and command-builder assistance for focused
+  JSON surfaces such as `entity_commands`.
 - Add runtime handoff from the editor by saving first and launching
   `run_game.py` externally with project and area ids.
 

@@ -185,6 +185,110 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.assertEqual(updated.parameters, ["not", "a", "dict"])
 
+    def test_invalid_input_map_shows_warning_and_preserves_original_value(self):
+        entity = EntityDocument(
+            id="controller",
+            grid_x=0,
+            grid_y=0,
+            template="entity_templates/reference_panel",
+            _extra={
+                "input_map": {"interact": 1},
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertFalse(fields._input_map_warning.isHidden())
+        self.assertTrue(fields._input_map_text.isReadOnly())
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["input_map"], {"interact": 1})
+
+    def test_invalid_entity_commands_shows_warning_and_preserves_original_value(self):
+        entity = EntityDocument(
+            id="controller",
+            grid_x=0,
+            grid_y=0,
+            template="entity_templates/reference_panel",
+            _extra={
+                "entity_commands": {
+                    "interact": {
+                        "commands": [{"type": "show_message", "text": "Hi"}],
+                    },
+                },
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertFalse(fields._entity_commands_warning.isHidden())
+        self.assertTrue(fields._entity_commands_text.isReadOnly())
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["entity_commands"],
+            {
+                "interact": {
+                    "commands": [{"type": "show_message", "text": "Hi"}],
+                },
+            },
+        )
+
+    def test_invalid_inventory_shows_warning_and_preserves_original_value(self):
+        entity = EntityDocument(
+            id="carrier",
+            grid_x=0,
+            grid_y=0,
+            template="entity_templates/reference_panel",
+            _extra={
+                "inventory": {
+                    "max_stacks": 1,
+                    "stacks": [{"item_id": "items/copper_key", "quantity": 0}],
+                },
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertFalse(fields._inventory_warning.isHidden())
+        self.assertTrue(fields._inventory_stacks_text.isReadOnly())
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["inventory"],
+            {
+                "max_stacks": 1,
+                "stacks": [{"item_id": "items/copper_key", "quantity": 0}],
+            },
+        )
+
+    def test_invalid_color_shows_warning_and_preserves_original_value(self):
+        entity = EntityDocument(
+            id="tinted",
+            grid_x=0,
+            grid_y=0,
+            template="entity_templates/reference_panel",
+            _extra={
+                "color": [255, "warm", 160],
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertFalse(fields._color_warning.isHidden())
+        self.assertFalse(fields._color_check.isEnabled())
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["color"], [255, "warm", 160])
+
     def test_build_entity_from_fields_updates_common_engine_fields_and_variables(self):
         entity = EntityDocument(
             id="crate_1",
@@ -226,6 +330,10 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         fields._present_check.setChecked(False)
         fields._visible_check.setChecked(False)
         fields._entity_commands_enabled_check.setChecked(False)
+        fields._color_check.setChecked(True)
+        fields._color_red_spin.setValue(120)
+        fields._color_green_spin.setValue(90)
+        fields._color_blue_spin.setValue(40)
         fields._variables_text.setPlainText('{\n  "opened": true,\n  "uses": 3\n}')
         fields._visuals_text.setPlainText(
             '[\n'
@@ -253,6 +361,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         self.assertFalse(updated._extra["present"])
         self.assertFalse(updated._extra["visible"])
         self.assertFalse(updated._extra["entity_commands_enabled"])
+        self.assertEqual(updated._extra["color"], [120, 90, 40])
         self.assertEqual(updated._extra["variables"], {"opened": True, "uses": 3})
         self.assertEqual(
             updated._extra["visuals"],
@@ -283,7 +392,157 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.assertEqual(updated._extra["scope"], "global")
 
-    def test_build_entity_from_fields_preserves_raw_only_engine_owned_fields(self):
+    def test_build_entity_from_fields_updates_input_map(self):
+        entity = EntityDocument(
+            id="controller",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+            _extra={
+                "input_map": {
+                    "interact": "interact",
+                }
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._input_map_text.setPlainText(
+            '{\n  "interact": "use_terminal",\n  "menu": "open_menu"\n}'
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["input_map"],
+            {
+                "interact": "use_terminal",
+                "menu": "open_menu",
+            },
+        )
+
+    def test_build_entity_from_fields_updates_entity_commands(self):
+        entity = EntityDocument(
+            id="controller",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+            _extra={
+                "entity_commands": {
+                    "interact": [
+                        {
+                            "type": "run_project_command",
+                            "command_id": "commands/system/old",
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._entity_commands_text.setPlainText(
+            '{\n'
+            '  "interact": [\n'
+            '    {"type": "run_project_command", "command_id": "commands/system/open_gate"}\n'
+            "  ],\n"
+            '  "disabled_example": {\n'
+            '    "enabled": false,\n'
+            '    "commands": []\n'
+            "  }\n"
+            "}"
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["entity_commands"],
+            {
+                "interact": [
+                    {
+                        "type": "run_project_command",
+                        "command_id": "commands/system/open_gate",
+                    }
+                ],
+                "disabled_example": {
+                    "enabled": False,
+                    "commands": [],
+                },
+            },
+        )
+
+    def test_build_entity_from_fields_updates_inventory(self):
+        entity = EntityDocument(
+            id="carrier",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._inventory_check.setChecked(True)
+        fields._inventory_max_stacks_spin.setValue(2)
+        fields._inventory_stacks_text.setPlainText(
+            '[\n'
+            '  {"item_id": "items/copper_key", "quantity": 1},\n'
+            '  {"item_id": "items/light_orb", "quantity": 2}\n'
+            ']'
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["inventory"],
+            {
+                "max_stacks": 2,
+                "stacks": [
+                    {"item_id": "items/copper_key", "quantity": 1},
+                    {"item_id": "items/light_orb", "quantity": 2},
+                ],
+            },
+        )
+
+    def test_build_entity_from_fields_preserves_inventory_extra_keys(self):
+        entity = EntityDocument(
+            id="carrier",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+            _extra={
+                "inventory": {
+                    "max_stacks": 1,
+                    "stacks": [
+                        {
+                            "item_id": "items/copper_key",
+                            "quantity": 1,
+                            "note": "starter",
+                        }
+                    ],
+                    "custom_inventory_key": "keep-me",
+                },
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._inventory_max_stacks_spin.setValue(2)
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["inventory"]["custom_inventory_key"], "keep-me")
+        self.assertEqual(
+            updated._extra["inventory"]["stacks"],
+            [
+                {
+                    "item_id": "items/copper_key",
+                    "quantity": 1,
+                    "note": "starter",
+                }
+            ],
+        )
+
+    def test_build_entity_from_fields_preserves_engine_owned_fields(self):
         entity = EntityDocument(
             id="terminal_1",
             grid_x=4,

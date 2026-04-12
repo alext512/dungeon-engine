@@ -25,7 +25,7 @@ entire runtime authoring surface. The earlier catch-up pass for items, project-l
 config, `global_entities`, reference-aware content reorganization, and safer layer
 management is now in place. The main remaining gaps are richer screen-space
 manipulation workflows, drag-to-move manipulation, runtime handoff, and broader
-structured editing for some newer engine-owned fields.
+structured editing for workflow-heavy authored blocks.
 
 The current editor can:
 
@@ -57,10 +57,12 @@ The current editor can:
   common actions like `route_inputs_to_entity`, `run_entity_command`,
   `open_dialogue_session`, `set_camera_follow`, and `play_music`
 - edit selected entity instances through a structured Fields tab that covers
-  identity, scope, common engine fields, variables, visuals, persistence, and
-  a guarded raw JSON tab for the rest
-- edit entity templates through one focused surface with summary controls for
-  `scope`, plus `Visuals`, `Persistence`, and `Raw JSON` sections
+  identity, scope, common engine fields, `color`, `input_map`,
+  `entity_commands`, variables, `inventory`, visuals, persistence, and a
+  guarded raw JSON tab for the rest
+- edit entity templates through one focused surface with `Basics`, `Visuals`,
+  `Input Map`, `Entity Commands`, `Inventory`, `Persistence`, and `Raw JSON`
+  sections
 - edit items, project manifest fields, shared variables, and global entities
   through structured tabs plus guarded raw JSON fallbacks
 - edit layer/entity render properties from a shared dock
@@ -76,16 +78,22 @@ The current editor can:
 - run focused automated tests around manifest loading, canvas interaction, editor panels, and document round-tripping
 
 For correctness, focused editors are expected to preserve engine-used data they
-do not surface directly. Fields such as `entity_commands`, `inventory`,
-`input_map`, `scope`, and `color`, plus shared-variable sections such as
-`dialogue_ui` or `inventory_ui`, and raw-only item fields such as
-`use_commands`, plus non-global-entity parts of `project.json`, may still live
-in raw JSON today. Likewise, editing area `enter_commands` should not disturb
-other area-owned surfaces such as `camera`, `input_targets`, or unrelated root
-data. The shared render-properties dock follows the same rule: changing layer
-render controls should not drop unrelated layer metadata, and changing entity
-render controls should not strip authored fields such as `kind`, `variables`,
-or `entity_commands`.
+do not fully model as custom UI. For entity instances and templates, `color`,
+`input_map`, `inventory`, `persistence`, and `entity_commands` now live in the
+structured editor surfaces. Entity commands are edited as a guarded JSON object
+inside the focused editor, not through whole-file raw JSON. Template basics such
+as `kind`, `space`, tags, physics/interaction/visibility defaults, and
+`variables` are in the `Basics` section, along with render defaults such as
+`render_order`, `y_sort`, `sort_y_offset`, and `stack_order`.
+Shared-variable sections such as `dialogue_ui` or `inventory_ui`, raw-only item
+fields such as `use_commands`, and non-global-entity parts of `project.json`
+may also still live in raw JSON today.
+Likewise, editing area `enter_commands` should not disturb other area-owned
+surfaces such as `camera`, `input_targets`, or unrelated root data. The shared
+render-properties dock follows the same rule: changing layer render controls
+should not drop unrelated layer metadata, and changing entity render controls
+should not strip authored fields such as `kind`, `variables`, or
+`entity_commands`.
 
 When the editor creates a new authored JSON area file, it writes the standard
 file-level notes header at the top of the file. New areas use `.json5` by
@@ -97,7 +105,7 @@ What is still not implemented:
 
 - richer screen-space direct manipulation such as drag-style placement/editing polish
 - drag-to-move entity manipulation
-- broader structured editing for newer engine-owned entity fields and exposed workflow variables
+- broader structured editing for workflow-heavy authored blocks such as entity commands and exposed workflow variables
 - runtime handoff / launch integration
 
 ## Expected Responsibilities

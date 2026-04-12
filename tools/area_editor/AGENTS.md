@@ -25,7 +25,8 @@ runtime-facing authoring surface:
 
 - better placed-entity configuration through exposed fields and parameters
 - richer screen-space placement/manipulation workflows
-- broader structured coverage for newer engine-owned fields
+- richer command-builder help for workflow-heavy authored blocks such as
+  `entity_commands`
 - stronger contextual reference pickers
 - runtime launch/handoff integration
 
@@ -38,13 +39,18 @@ advanced users.
 `tools/area_editor/` is the home of the external authoring tool. Its scope covers:
 
 - area editing: tile painting, cell flags, entity placement
-- entity instance editing: exposed engine-known fields, parameters, variables, visuals
+- entity instance/template editing: exposed engine-known fields, color, parameters, variables, input routing, entity commands, inventory, persistence, visuals
 - content editing: supported items, dialogues/menus, and new areas
 - project configuration: selected settings such as global entities, input routing, shared variables, and UI presets
 - reference pickers: entity, template, area, item, dialogue, and asset references
 - runtime integration: external launch for quick testing later
 
 It is not part of the runtime package.
+
+The editor/runtime entity-field ownership map lives in
+`area_editor/entity_field_coverage.py`. If the runtime adds or removes authored
+entity fields in `dungeon_engine/world/loader_entities.py`, update that map and
+its regression tests in `tests/test_entity_field_coverage.py`.
 
 ## Hard Rules
 

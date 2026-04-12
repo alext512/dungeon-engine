@@ -73,7 +73,7 @@ Current reality note:
   `global_entities` are now implemented in structured form
 - the next practical work is the remaining catch-up slice: better direct
   manipulation, richer reference pickers, broader structured coverage for
-  newer engine-owned fields, and runtime launch/handoff
+  workflow-heavy authored blocks, and runtime launch/handoff
 
 ## Phase 4: Placed Entity Catch-Up
 
@@ -88,9 +88,13 @@ Current status:
 - substantially implemented through structured entity-instance editing,
   template-parameter editing, variable editing, render-property editing, and
   guarded raw JSON fallback tabs
-- the main remaining gaps are broader structured coverage for newer
-  engine-owned fields plus better direct manipulation workflows such as drag to
-  move and richer screen-space editing polish
+- structured entity instance/template editing now covers `scope`, `color`,
+  `input_map`, `entity_commands`, `inventory`, visuals, variables, common
+  template defaults, and persistence, while preserving authored blocks when
+  they are outside a focused surface
+- the main remaining gaps are richer command/reference assistance on top of
+  the focused JSON surfaces plus better direct manipulation workflows such as
+  drag to move and richer screen-space editing polish
 
 Deliverables:
 
@@ -111,6 +115,11 @@ Add structured widgets for the most commonly authored entity fields:
 - `present`
 - `visible`
 - `entity_commands_enabled`
+- `color`
+- `input_map`
+- `entity_commands`
+- `inventory`
+- `persistence`
 - existing render-order fields
 
 Keep the current raw JSON tab as the escape hatch for anything deeper.

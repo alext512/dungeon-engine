@@ -27,35 +27,30 @@ from PySide6.QtWidgets import (
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
+from area_editor.entity_field_coverage import ENTITY_INSTANCE_FIELDS_TAB_EXTRA_FIELDS
 from area_editor.json_io import JsonDataDecodeError, loads_json_data
+from area_editor.widgets.entity_structured_fields import (
+    DEFAULT_ENTITY_COLOR,
+    ENTITY_BOOL_DEFAULTS,
+    ENTITY_FACING_VALUES,
+    ENTITY_INT_DEFAULTS,
+    build_input_map,
+    build_entity_commands,
+    build_inventory,
+    build_persistence_policy,
+    parse_color,
+    parse_entity_commands,
+    parse_tag_list,
+    parse_input_map,
+    parse_inventory,
+    parse_persistence_policy,
+)
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
-_ENTITY_BOOL_DEFAULTS = {
-    "solid": False,
-    "pushable": False,
-    "interactable": False,
-    "present": True,
-    "visible": True,
-    "entity_commands_enabled": True,
-}
-_ENTITY_INT_DEFAULTS = {
-    "weight": 1,
-    "push_strength": 0,
-    "collision_push_strength": 0,
-    "interaction_priority": 0,
-}
-_MANAGED_EXTRA_KEYS = {
-    "kind",
-    "scope",
-    "tags",
-    "facing",
-    *list(_ENTITY_BOOL_DEFAULTS.keys()),
-    *list(_ENTITY_INT_DEFAULTS.keys()),
-    "variables",
-    "visuals",
-    "persistence",
-}
+_ENTITY_BOOL_DEFAULTS = ENTITY_BOOL_DEFAULTS
+_ENTITY_INT_DEFAULTS = ENTITY_INT_DEFAULTS
+_MANAGED_EXTRA_KEYS = set(ENTITY_INSTANCE_FIELDS_TAB_EXTRA_FIELDS)
 
 _ENTITY_REFERENCE_PARAMETER_NAMES = {
     "entity_id",
@@ -112,83 +107,12 @@ def _parse_parameter_text(text: str):
     return text, True
 
 
-def _parse_tag_list(text: str) -> list[str]:
-    return [part.strip() for part in text.split(",") if part.strip()]
-
-
 def _filtered_unmanaged_extra(extra: dict[str, object]) -> dict[str, object]:
     return {
         key: value
         for key, value in extra.items()
         if key not in _MANAGED_EXTRA_KEYS
     }
-
-
-def _parse_persistence_policy(
-    raw_persistence: object,
-) -> tuple[bool, dict[str, bool]]:
-    if raw_persistence is None:
-        return False, {}
-    if not isinstance(raw_persistence, dict):
-        raise ValueError("Persistence must be a JSON object.")
-
-    raw_entity_state = raw_persistence.get("entity_state", False)
-    if not isinstance(raw_entity_state, bool):
-        raise ValueError("Persistence 'entity_state' must be true or false.")
-
-    raw_variables = raw_persistence.get("variables", {})
-    if raw_variables is None:
-        raw_variables = {}
-    if not isinstance(raw_variables, dict):
-        raise ValueError("Persistence 'variables' must be a JSON object.")
-
-    variables: dict[str, bool] = {}
-    for raw_name, raw_value in raw_variables.items():
-        name = str(raw_name).strip()
-        if not name:
-            raise ValueError("Persistence variable overrides must not use blank names.")
-        if not isinstance(raw_value, bool):
-            raise ValueError(
-                f"Persistence variable '{name}' must be true or false."
-            )
-        variables[name] = raw_value
-    return bool(raw_entity_state), variables
-
-
-def _build_persistence_policy(
-    *,
-    entity_state: bool,
-    variables_text: str,
-) -> dict[str, object] | None:
-    raw_variables_text = variables_text.strip()
-    variables: dict[str, bool] = {}
-    if raw_variables_text:
-        try:
-            parsed = loads_json_data(
-                raw_variables_text,
-                source_name="Persistence variables",
-            )
-        except JsonDataDecodeError as exc:
-            raise ValueError(f"Persistence variables must be valid JSON.\n{exc}") from exc
-        if not isinstance(parsed, dict):
-            raise ValueError("Persistence variables must be a JSON object.")
-        for raw_name, raw_value in parsed.items():
-            name = str(raw_name).strip()
-            if not name:
-                raise ValueError("Persistence variables must not use blank names.")
-            if not isinstance(raw_value, bool):
-                raise ValueError(
-                    f"Persistence variable '{name}' must be true or false."
-                )
-            variables[name] = raw_value
-
-    if not entity_state and not variables:
-        return None
-
-    payload: dict[str, object] = {"entity_state": bool(entity_state)}
-    if variables:
-        payload["variables"] = variables
-    return payload
 
 
 def _parameter_reference_kind(name: str) -> str | None:
@@ -421,7 +345,7 @@ class _EntityInstanceFieldsEditor(QWidget):
 
         self._facing_label = QLabel("facing")
         self._facing_combo = QComboBox()
-        self._facing_combo.addItems(["down", "up", "left", "right"])
+        self._facing_combo.addItems(list(ENTITY_FACING_VALUES))
         self._form.addRow(self._facing_label, self._facing_combo)
 
         self._form.addRow(_section_label("Physics / Interaction"))
@@ -481,10 +405,97 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._entity_commands_enabled_check,
         )
 
+        self._form.addRow(_section_label("Color / Tint"))
+        self._color_warning = QLabel("")
+        self._color_warning.setWordWrap(True)
+        self._color_warning.setStyleSheet("color: #a25b00;")
+        self._color_warning.hide()
+        self._form.addRow(self._color_warning)
+
+        self._color_check_label = QLabel("color")
+        self._color_check = QCheckBox("Use custom RGB color")
+        self._form.addRow(self._color_check_label, self._color_check)
+
+        self._color_rgb_label = QLabel("rgb")
+        self._color_rgb_row = QWidget()
+        color_layout = QHBoxLayout(self._color_rgb_row)
+        color_layout.setContentsMargins(0, 0, 0, 0)
+        self._color_red_spin = QSpinBox()
+        self._color_red_spin.setRange(0, 255)
+        self._color_red_spin.setPrefix("R ")
+        self._color_green_spin = QSpinBox()
+        self._color_green_spin.setRange(0, 255)
+        self._color_green_spin.setPrefix("G ")
+        self._color_blue_spin = QSpinBox()
+        self._color_blue_spin.setRange(0, 255)
+        self._color_blue_spin.setPrefix("B ")
+        color_layout.addWidget(self._color_red_spin)
+        color_layout.addWidget(self._color_green_spin)
+        color_layout.addWidget(self._color_blue_spin)
+        self._form.addRow(self._color_rgb_label, self._color_rgb_row)
+
         self._render_note = QLabel("Render properties are in the Render Properties panel ->")
         self._render_note.setStyleSheet("color: #666; font-style: italic;")
         self._render_note.setWordWrap(True)
         self._form.addRow(self._render_note)
+
+        self._form.addRow(_section_label("Input Routing"))
+        self._input_map_warning = QLabel("")
+        self._input_map_warning.setWordWrap(True)
+        self._input_map_warning.setStyleSheet("color: #a25b00;")
+        self._input_map_warning.hide()
+        self._form.addRow(self._input_map_warning)
+
+        self._input_map_note = QLabel(
+            "Optional JSON object mapping logical actions to entity-command names."
+        )
+        self._input_map_note.setWordWrap(True)
+        self._input_map_note.setStyleSheet("color: #666; font-style: italic;")
+        self._form.addRow(self._input_map_note)
+
+        self._input_map_text = QPlainTextEdit()
+        self._input_map_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._input_map_text.setFixedHeight(100)
+        self._input_map_text.setPlaceholderText(
+            '{\n'
+            '  "interact": "interact",\n'
+            '  "menu": "menu"\n'
+            '}'
+        )
+        input_map_font = QFont("Consolas", 10)
+        input_map_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._input_map_text.setFont(input_map_font)
+        self._form.addRow(self._input_map_text)
+
+        self._form.addRow(_section_label("Entity Commands"))
+        self._entity_commands_warning = QLabel("")
+        self._entity_commands_warning.setWordWrap(True)
+        self._entity_commands_warning.setStyleSheet("color: #a25b00;")
+        self._entity_commands_warning.hide()
+        self._form.addRow(self._entity_commands_warning)
+
+        self._entity_commands_note = QLabel(
+            "Optional JSON object mapping entity-command names to command arrays "
+            "or {enabled, commands} objects."
+        )
+        self._entity_commands_note.setWordWrap(True)
+        self._entity_commands_note.setStyleSheet("color: #666; font-style: italic;")
+        self._form.addRow(self._entity_commands_note)
+
+        self._entity_commands_text = QPlainTextEdit()
+        self._entity_commands_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._entity_commands_text.setFixedHeight(140)
+        self._entity_commands_text.setPlaceholderText(
+            '{\n'
+            '  "interact": [\n'
+            '    {"type": "run_project_command", "command_id": "commands/example"}\n'
+            "  ]\n"
+            "}"
+        )
+        entity_commands_font = QFont("Consolas", 10)
+        entity_commands_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._entity_commands_text.setFont(entity_commands_font)
+        self._form.addRow(self._entity_commands_text)
 
         self._form.addRow(_section_label("Parameters"))
         self._parameter_warning = QLabel("")
@@ -510,6 +521,48 @@ class _EntityInstanceFieldsEditor(QWidget):
         variables_font.setStyleHint(QFont.StyleHint.Monospace)
         self._variables_text.setFont(variables_font)
         self._form.addRow(self._variables_text)
+
+        self._form.addRow(_section_label("Inventory"))
+        self._inventory_warning = QLabel("")
+        self._inventory_warning.setWordWrap(True)
+        self._inventory_warning.setStyleSheet("color: #a25b00;")
+        self._inventory_warning.hide()
+        self._form.addRow(self._inventory_warning)
+
+        self._inventory_check_label = QLabel("inventory")
+        self._inventory_check = QCheckBox("Define entity-owned inventory")
+        self._form.addRow(self._inventory_check_label, self._inventory_check)
+
+        self._inventory_max_stacks_label = QLabel("max_stacks")
+        self._inventory_max_stacks_spin = QSpinBox()
+        self._inventory_max_stacks_spin.setRange(0, 999999)
+        self._form.addRow(
+            self._inventory_max_stacks_label,
+            self._inventory_max_stacks_spin,
+        )
+
+        self._inventory_stacks_note = QLabel(
+            "Optional stack array. Each stack needs item_id and quantity."
+        )
+        self._inventory_stacks_note.setWordWrap(True)
+        self._inventory_stacks_note.setStyleSheet("color: #666; font-style: italic;")
+        self._form.addRow("stacks", self._inventory_stacks_note)
+
+        self._inventory_stacks_text = QPlainTextEdit()
+        self._inventory_stacks_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._inventory_stacks_text.setFixedHeight(120)
+        self._inventory_stacks_text.setPlaceholderText(
+            "[\n"
+            "  {\n"
+            '    "item_id": "items/light_orb",\n'
+            '    "quantity": 1\n'
+            "  }\n"
+            "]"
+        )
+        inventory_font = QFont("Consolas", 10)
+        inventory_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._inventory_stacks_text.setFont(inventory_font)
+        self._form.addRow(self._inventory_stacks_text)
 
         self._form.addRow(_section_label("Visuals"))
         self._visuals_note = QLabel(
@@ -614,6 +667,10 @@ class _EntityInstanceFieldsEditor(QWidget):
             "command": None,
         }
         self._parameters_editable = True
+        self._color_editable = True
+        self._input_map_editable = True
+        self._entity_commands_editable = True
+        self._inventory_editable = True
         self._persistence_editable = True
 
         self._id_edit.textChanged.connect(self._on_field_changed)
@@ -637,7 +694,16 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._present_check.toggled.connect(self._on_field_changed)
         self._visible_check.toggled.connect(self._on_field_changed)
         self._entity_commands_enabled_check.toggled.connect(self._on_field_changed)
+        self._color_check.toggled.connect(self._on_color_check_toggled)
+        self._color_red_spin.valueChanged.connect(self._on_field_changed)
+        self._color_green_spin.valueChanged.connect(self._on_field_changed)
+        self._color_blue_spin.valueChanged.connect(self._on_field_changed)
+        self._input_map_text.textChanged.connect(self._on_field_changed)
+        self._entity_commands_text.textChanged.connect(self._on_field_changed)
         self._variables_text.textChanged.connect(self._on_field_changed)
+        self._inventory_check.toggled.connect(self._on_inventory_check_toggled)
+        self._inventory_max_stacks_spin.valueChanged.connect(self._on_field_changed)
+        self._inventory_stacks_text.textChanged.connect(self._on_field_changed)
         self._visuals_text.textChanged.connect(self._on_field_changed)
         self._persistence_entity_state_check.toggled.connect(self._on_field_changed)
         self._persistence_variables_text.textChanged.connect(self._on_field_changed)
@@ -645,6 +711,9 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._set_buttons_enabled(False)
         self._clear_parameter_rows()
         self._set_extra_visible(False)
+        self._set_color_controls_enabled(True)
+        self._set_entity_commands_controls_enabled(True)
+        self._set_inventory_controls_enabled(True)
         self._sync_pixel_spin_enabled()
 
     @property
@@ -704,7 +773,16 @@ class _EntityInstanceFieldsEditor(QWidget):
             QSignalBlocker(self._present_check),
             QSignalBlocker(self._visible_check),
             QSignalBlocker(self._entity_commands_enabled_check),
+            QSignalBlocker(self._color_check),
+            QSignalBlocker(self._color_red_spin),
+            QSignalBlocker(self._color_green_spin),
+            QSignalBlocker(self._color_blue_spin),
+            QSignalBlocker(self._input_map_text),
+            QSignalBlocker(self._entity_commands_text),
             QSignalBlocker(self._variables_text),
+            QSignalBlocker(self._inventory_check),
+            QSignalBlocker(self._inventory_max_stacks_spin),
+            QSignalBlocker(self._inventory_stacks_text),
             QSignalBlocker(self._visuals_text),
             QSignalBlocker(self._persistence_entity_state_check),
             QSignalBlocker(self._persistence_variables_text),
@@ -738,7 +816,16 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._present_check.setChecked(True)
         self._visible_check.setChecked(True)
         self._entity_commands_enabled_check.setChecked(True)
+        self._color_check.setChecked(False)
+        self._color_red_spin.setValue(DEFAULT_ENTITY_COLOR[0])
+        self._color_green_spin.setValue(DEFAULT_ENTITY_COLOR[1])
+        self._color_blue_spin.setValue(DEFAULT_ENTITY_COLOR[2])
+        self._input_map_text.clear()
+        self._entity_commands_text.clear()
         self._variables_text.clear()
+        self._inventory_check.setChecked(False)
+        self._inventory_max_stacks_spin.setValue(0)
+        self._inventory_stacks_text.clear()
         self._visuals_text.clear()
         self._persistence_entity_state_check.setChecked(False)
         self._persistence_variables_text.clear()
@@ -748,7 +835,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         raw_persistence: object,
     ) -> tuple[bool, dict[str, bool], str | None]:
         try:
-            entity_state, variables = _parse_persistence_policy(raw_persistence)
+            entity_state, variables = parse_persistence_policy(raw_persistence)
             self._persistence_editable = True
             return entity_state, variables, None
         except ValueError as exc:
@@ -759,6 +846,70 @@ class _EntityInstanceFieldsEditor(QWidget):
             )
             return False, {}, warning
 
+    def _load_input_map_ui_state(
+        self,
+        raw_input_map: object,
+    ) -> tuple[dict[str, str], str | None]:
+        try:
+            input_map = parse_input_map(raw_input_map)
+            self._input_map_editable = True
+            return input_map, None
+        except ValueError as exc:
+            self._input_map_editable = False
+            warning = (
+                "Input map is not using the supported object-of-strings shape. "
+                f"Use the JSON tab to edit it.\n{exc}"
+            )
+            return {}, warning
+
+    def _load_entity_commands_ui_state(
+        self,
+        raw_entity_commands: object,
+    ) -> tuple[dict[str, object], str | None]:
+        try:
+            entity_commands = parse_entity_commands(raw_entity_commands)
+            self._entity_commands_editable = True
+            return entity_commands, None
+        except ValueError as exc:
+            self._entity_commands_editable = False
+            warning = (
+                "Entity commands are not using the supported object shape. "
+                f"Use the JSON tab to edit them.\n{exc}"
+            )
+            return {}, warning
+
+    def _load_inventory_ui_state(
+        self,
+        raw_inventory: object,
+    ) -> tuple[dict[str, object] | None, str | None]:
+        try:
+            inventory = parse_inventory(raw_inventory)
+            self._inventory_editable = True
+            return inventory, None
+        except ValueError as exc:
+            self._inventory_editable = False
+            warning = (
+                "Inventory is not using the supported object shape. "
+                f"Use the JSON tab to edit it.\n{exc}"
+            )
+            return None, warning
+
+    def _load_color_ui_state(
+        self,
+        raw_color: object,
+    ) -> tuple[tuple[int, int, int] | None, str | None]:
+        try:
+            color = parse_color(raw_color)
+            self._color_editable = True
+            return color, None
+        except ValueError as exc:
+            self._color_editable = False
+            warning = (
+                "Color is not using the supported RGB array shape. "
+                f"Use the JSON tab to edit it.\n{exc}"
+            )
+            return None, warning
+
     def _populate_field_values(
         self,
         entity: EntityDocument,
@@ -766,6 +917,10 @@ class _EntityInstanceFieldsEditor(QWidget):
         tag_text: str,
         has_pixel_x: bool,
         has_pixel_y: bool,
+        color: tuple[int, int, int] | None,
+        input_map: dict[str, str],
+        entity_commands: dict[str, object],
+        inventory: dict[str, object] | None,
         raw_variables: object,
         has_visuals_override: bool,
         raw_visuals: object,
@@ -802,8 +957,34 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity_commands_enabled_check.setChecked(
             bool(entity._extra.get("entity_commands_enabled", True))
         )
+        has_color = color is not None
+        red, green, blue = color or DEFAULT_ENTITY_COLOR
+        self._color_check.setChecked(has_color)
+        self._color_red_spin.setValue(red)
+        self._color_green_spin.setValue(green)
+        self._color_blue_spin.setValue(blue)
+        self._input_map_text.setPlainText(
+            json.dumps(input_map, indent=2, ensure_ascii=False)
+            if input_map
+            else ""
+        )
+        self._entity_commands_text.setPlainText(
+            json.dumps(entity_commands, indent=2, ensure_ascii=False)
+            if entity_commands
+            else ""
+        )
         self._variables_text.setPlainText(
             json.dumps(raw_variables, indent=2, ensure_ascii=False)
+        )
+        has_inventory = inventory is not None
+        self._inventory_check.setChecked(has_inventory)
+        self._inventory_max_stacks_spin.setValue(
+            int(inventory.get("max_stacks", 0)) if inventory else 0
+        )
+        self._inventory_stacks_text.setPlainText(
+            json.dumps(inventory.get("stacks", []), indent=2, ensure_ascii=False)
+            if inventory
+            else ""
         )
         self._visuals_text.setPlainText(
             json.dumps(raw_visuals, indent=2, ensure_ascii=False)
@@ -830,6 +1011,34 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._persistence_warning.show()
         else:
             self._persistence_warning.hide()
+
+    def _apply_input_map_warning(self, warning: str | None) -> None:
+        if warning:
+            self._input_map_warning.setText(warning)
+            self._input_map_warning.show()
+        else:
+            self._input_map_warning.hide()
+
+    def _apply_entity_commands_warning(self, warning: str | None) -> None:
+        if warning:
+            self._entity_commands_warning.setText(warning)
+            self._entity_commands_warning.show()
+        else:
+            self._entity_commands_warning.hide()
+
+    def _apply_inventory_warning(self, warning: str | None) -> None:
+        if warning:
+            self._inventory_warning.setText(warning)
+            self._inventory_warning.show()
+        else:
+            self._inventory_warning.hide()
+
+    def _apply_color_warning(self, warning: str | None) -> None:
+        if warning:
+            self._color_warning.setText(warning)
+            self._color_warning.show()
+        else:
+            self._color_warning.hide()
 
     def _current_position_fields(self) -> tuple[str, int, int, int | None, int | None]:
         assert self._entity is not None
@@ -913,6 +1122,18 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._parameter_warning.hide()
         self._parameters_widget.show()
         self._parameters_editable = True
+        self._color_warning.hide()
+        self._color_editable = True
+        self._set_color_controls_enabled(True)
+        self._input_map_warning.hide()
+        self._input_map_editable = True
+        self._set_input_map_controls_enabled(True)
+        self._entity_commands_warning.hide()
+        self._entity_commands_editable = True
+        self._set_entity_commands_controls_enabled(True)
+        self._inventory_warning.hide()
+        self._inventory_editable = True
+        self._set_inventory_controls_enabled(True)
         self._persistence_warning.hide()
         self._persistence_editable = True
         self._set_persistence_controls_enabled(True)
@@ -929,9 +1150,18 @@ class _EntityInstanceFieldsEditor(QWidget):
         has_pixel_y = entity.pixel_y is not None
         raw_tags = entity._extra.get("tags", [])
         tag_text = ", ".join(str(tag) for tag in raw_tags) if isinstance(raw_tags, list) else ""
+        color, color_warning = self._load_color_ui_state(entity._extra.get("color"))
+        raw_input_map = entity._extra.get("input_map")
+        raw_entity_commands = entity._extra.get("entity_commands")
         raw_variables = entity._extra.get("variables", {})
+        raw_inventory = entity._extra.get("inventory")
         has_visuals_override = "visuals" in entity._extra
         raw_visuals = entity._extra.get("visuals", [])
+        input_map, input_map_warning = self._load_input_map_ui_state(raw_input_map)
+        entity_commands, entity_commands_warning = self._load_entity_commands_ui_state(
+            raw_entity_commands
+        )
+        inventory, inventory_warning = self._load_inventory_ui_state(raw_inventory)
         raw_persistence = entity._extra.get("persistence")
         persistence_entity_state, persistence_variables, persistence_warning = (
             self._load_persistence_ui_state(raw_persistence)
@@ -944,6 +1174,10 @@ class _EntityInstanceFieldsEditor(QWidget):
                 tag_text=tag_text,
                 has_pixel_x=has_pixel_x,
                 has_pixel_y=has_pixel_y,
+                color=color,
+                input_map=input_map,
+                entity_commands=entity_commands,
+                inventory=inventory,
                 raw_variables=raw_variables,
                 has_visuals_override=has_visuals_override,
                 raw_visuals=raw_visuals,
@@ -958,6 +1192,14 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._sync_pixel_spin_enabled()
         self._rebuild_parameter_rows(entity)
         self._show_unmanaged_extra(_filtered_unmanaged_extra(entity._extra))
+        self._apply_color_warning(color_warning)
+        self._set_color_controls_enabled(self._color_editable)
+        self._apply_input_map_warning(input_map_warning)
+        self._set_input_map_controls_enabled(self._input_map_editable)
+        self._apply_entity_commands_warning(entity_commands_warning)
+        self._set_entity_commands_controls_enabled(self._entity_commands_editable)
+        self._apply_inventory_warning(inventory_warning)
+        self._set_inventory_controls_enabled(self._inventory_editable)
         self._apply_persistence_warning(persistence_warning)
         self._set_persistence_controls_enabled(self._persistence_editable)
         self._set_dirty(False)
@@ -985,7 +1227,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             default="area",
         )
 
-        tags = _parse_tag_list(self._tags_edit.text())
+        tags = parse_tag_list(self._tags_edit.text())
         if tags:
             extra["tags"] = tags
 
@@ -999,6 +1241,32 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._apply_toggle_extra_values(extra)
         self._apply_numeric_extra_values(extra)
 
+        if self._color_editable:
+            if self._color_check.isChecked():
+                extra["color"] = [
+                    int(self._color_red_spin.value()),
+                    int(self._color_green_spin.value()),
+                    int(self._color_blue_spin.value()),
+                ]
+        elif "color" in self._entity._extra:
+            extra["color"] = self._entity._extra["color"]
+
+        if self._input_map_editable:
+            input_map_value = build_input_map(self._input_map_text.toPlainText())
+            if input_map_value is not None:
+                extra["input_map"] = input_map_value
+        elif "input_map" in self._entity._extra:
+            extra["input_map"] = self._entity._extra["input_map"]
+
+        if self._entity_commands_editable:
+            entity_commands_value = build_entity_commands(
+                self._entity_commands_text.toPlainText()
+            )
+            if entity_commands_value is not None:
+                extra["entity_commands"] = entity_commands_value
+        elif "entity_commands" in self._entity._extra:
+            extra["entity_commands"] = self._entity._extra["entity_commands"]
+
         variables_value = self._parse_optional_json_block(
             self._variables_text.toPlainText(),
             label="Variables",
@@ -1007,6 +1275,18 @@ class _EntityInstanceFieldsEditor(QWidget):
         )
         if variables_value:
             extra["variables"] = variables_value
+
+        if self._inventory_editable:
+            inventory_value = build_inventory(
+                enabled=bool(self._inventory_check.isChecked()),
+                max_stacks=int(self._inventory_max_stacks_spin.value()),
+                stacks_text=self._inventory_stacks_text.toPlainText(),
+                base_inventory=self._entity._extra.get("inventory"),
+            )
+            if inventory_value is not None:
+                extra["inventory"] = inventory_value
+        elif "inventory" in self._entity._extra:
+            extra["inventory"] = self._entity._extra["inventory"]
 
         visuals_value = self._parse_optional_json_block(
             self._visuals_text.toPlainText(),
@@ -1018,7 +1298,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             extra["visuals"] = visuals_value
 
         if self._persistence_editable:
-            persistence_value = _build_persistence_policy(
+            persistence_value = build_persistence_policy(
                 entity_state=bool(self._persistence_entity_state_check.isChecked()),
                 variables_text=self._persistence_variables_text.toPlainText(),
             )
@@ -1168,6 +1448,25 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._persistence_entity_state_check.setEnabled(enabled)
         self._persistence_variables_text.setReadOnly(not enabled)
 
+    def _set_color_controls_enabled(self, enabled: bool) -> None:
+        active = enabled and self._color_check.isChecked()
+        self._color_check.setEnabled(enabled)
+        self._color_red_spin.setEnabled(active)
+        self._color_green_spin.setEnabled(active)
+        self._color_blue_spin.setEnabled(active)
+
+    def _set_input_map_controls_enabled(self, enabled: bool) -> None:
+        self._input_map_text.setReadOnly(not enabled)
+
+    def _set_entity_commands_controls_enabled(self, enabled: bool) -> None:
+        self._entity_commands_text.setReadOnly(not enabled)
+
+    def _set_inventory_controls_enabled(self, enabled: bool) -> None:
+        active = enabled and self._inventory_check.isChecked()
+        self._inventory_check.setEnabled(enabled)
+        self._inventory_max_stacks_spin.setEnabled(active)
+        self._inventory_stacks_text.setReadOnly(not active)
+
     def _on_pick_parameter_value(self, name: str) -> None:
         edit = self._parameter_edits.get(name)
         if edit is None:
@@ -1186,6 +1485,18 @@ class _EntityInstanceFieldsEditor(QWidget):
         if self._loading:
             return
         self._sync_pixel_spin_enabled()
+        self._set_dirty(True)
+
+    def _on_color_check_toggled(self) -> None:
+        if self._loading:
+            return
+        self._set_color_controls_enabled(self._color_editable)
+        self._set_dirty(True)
+
+    def _on_inventory_check_toggled(self) -> None:
+        if self._loading:
+            return
+        self._set_inventory_controls_enabled(self._inventory_editable)
         self._set_dirty(True)
 
     def _sync_pixel_spin_enabled(self) -> None:

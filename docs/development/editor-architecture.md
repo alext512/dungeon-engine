@@ -28,8 +28,9 @@ Current slices:
 - world-space entity placement plus basic screen-space placement, selection,
   and nudging support
 - structured editors for project manifest, shared variables, items, templates,
-  global entities, and entity instances, including structured scope editing for
-  template and instance surfaces
+  global entities, and entity instances, including structured scope, `color`,
+  and `input_map`/`inventory` editing for template and instance surfaces plus
+  common template defaults through the template `Basics` section
 - reference-aware file/folder reorganization for file-backed content
 - project I/O discovery helpers for runtime-aligned area, template, command,
   item, and global-entity ids
@@ -127,15 +128,40 @@ That likely means each tool-owned document keeps:
 Focused editors should follow the same rule even when they only own part of a
 JSON object. For example, editing template visuals, entity-instance fields, or
 shared variable basics must not strip raw-only engine-used subtrees such as
-`entity_commands`, `inventory`, `input_map`, `dialogue_ui`, `inventory_ui`, or
-item `use_commands`. The same rule applies to area-focused surfaces such as
-editing `enter_commands`: those saves must not disturb `camera`,
+`entity_commands`, `dialogue_ui`, `inventory_ui`, or item `use_commands`.
+The same rule applies to area-focused surfaces such as editing `enter_commands`:
+those saves must not disturb `camera`,
 `input_targets`, or unrelated area root data. It also applies to the shared
 render-properties surface: layer render edits must preserve unrelated layer
 metadata, and entity render edits must preserve authored entity fields outside
 the render subset.
 
 Without this, the tool will become dangerous as soon as runtime content evolves.
+
+## Entity Field Coverage
+
+The current runtime-known authored entity fields are tracked in
+`tools/area_editor/area_editor/entity_field_coverage.py`, with regression tests
+in `tools/area_editor/tests/test_entity_field_coverage.py`. Update that map
+whenever `dungeon_engine/world/loader_entities.py` adds or removes authored
+entity fields.
+
+Current entity-instance ownership:
+
+- structured Fields tab: identity/position fields, template parameters, common
+  physics/interaction/visibility fields, tags, `color`, variables, visuals,
+  `scope`, `input_map`, `entity_commands`, `inventory`, and `persistence`
+- shared Render Properties dock: `render_order`, `y_sort`, `sort_y_offset`,
+  and `stack_order`
+- raw JSON only today: none of the runtime-known authored entity fields
+
+Current entity-template ownership:
+
+- structured template editor: `kind`, `space`, `scope`, tags, common
+  physics/interaction/visibility defaults, `color`, render defaults,
+  `variables`, `visuals`, `input_map`, `entity_commands`, `inventory`, and
+  `persistence`
+- raw JSON only today: none of the runtime-known authored entity fields
 
 ## Validation Strategy
 
