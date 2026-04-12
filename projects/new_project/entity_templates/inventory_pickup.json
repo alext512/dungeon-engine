@@ -1,0 +1,106 @@
+/*
+  NOTES
+
+  Generic interactable item pickup for the canonical sample project. It adds an
+  item to the interacting entity and only removes itself when something was
+  actually added.
+*/
+{
+  "kind": "inventory_pickup",
+  "solid": false,
+  "interactable": true,
+  "interaction_priority": 20,
+  "render_order": 10,
+  "y_sort": true,
+  "parameters": {
+    "item_id": "",
+    "quantity": 1,
+    "pickup_message": "Picked up an item."
+  },
+  "variables": {
+    "picked_up": false,
+    "pickup_inventory_result": null
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/used_tilesets_sprites/tiles.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frame": 571,
+      "visible": true
+    }
+  ],
+  "entity_commands": {
+    "interact": [
+      {
+        "type": "if",
+        "left": "$self.picked_up",
+        "op": "eq",
+        "right": false,
+        "then": [
+          {
+            "type": "add_inventory_item",
+            "entity_id": "$ref_ids.instigator",
+            "item_id": "$item_id",
+            "quantity": "$quantity",
+            "quantity_mode": "partial",
+            "source_entity_id": "$self_id",
+            "result_var_name": "pickup_inventory_result",
+            "persistent": true
+          },
+          {
+            "type": "if",
+            "left": "$self.pickup_inventory_result.changed_quantity",
+            "op": "gt",
+            "right": 0,
+            "then": [
+              {
+                "type": "set_entity_var",
+                "entity_id": "$self_id",
+                "name": "picked_up",
+                "value": true,
+                "persistent": true
+              },
+              {
+                "type": "show_screen_text",
+                "element_id": "sample_pickup_message",
+                "text": "$pickup_message",
+                "x": 128,
+                "y": 94,
+                "layer": 110,
+                "anchor": "center",
+                "color": [
+                  245,
+                  232,
+                  190
+                ]
+              },
+              {
+                "type": "destroy_entity",
+                "entity_id": "$self_id",
+                "persistent": true
+              }
+            ],
+            "else": [
+              {
+                "type": "show_screen_text",
+                "element_id": "sample_pickup_message",
+                "text": "Inventory is full.",
+                "x": 128,
+                "y": 94,
+                "layer": 110,
+                "anchor": "center",
+                "color": [
+                  245,
+                  160,
+                  120
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -24,6 +24,9 @@ for what the sample proves today and what it still does not prove.
 - per-entity input routing through the player `input_map`
 - entity command dispatch for movement, interaction, and inventory
 - inventory session opening through `open_inventory_session`
+- item-definition loading, pickup, and item use through
+  `items/consumables/glimmer_berry.json` and
+  `entity_templates/inventory_pickup.json`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
 - entity templates with parameters, visuals, render order, collision, pushing,
@@ -43,6 +46,9 @@ Use these files as the first examples when checking sample behavior:
   command loading and command composition
 - `projects/new_project/entity_templates/player.json` for player input,
   inventory session opening, collision, movement, and rendering
+- `projects/new_project/items/consumables/glimmer_berry.json` and
+  `projects/new_project/entity_templates/inventory_pickup.json` for the sample
+  item pickup/use workflow
 - `projects/new_project/entity_templates/area_transition.json` and
   `projects/new_project/entity_templates/area_transition_target.json` for
   area-change handoff behavior
@@ -75,7 +81,6 @@ For engine-contract changes, also run the focused or full runtime test suite.
 `projects/new_project` does not yet deliberately prove every high-value
 authored workflow. The next useful sample-content expansions are:
 
-- an inventory item pickup/use flow using repo-local item definitions
 - a save/load restoration scenario with visible state restoration
 - a dialogue or menu path that exercises segment hooks
 - a camera-default or camera-state example tied to an area transition

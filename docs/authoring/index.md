@@ -65,6 +65,7 @@ The repo currently includes `projects/new_project/`, which is useful because it 
 - multiple authored areas
 - reusable entity templates
 - dialogue JSON
+- an item definition plus an interactable pickup
 - assets, fonts, and UI art
 
 Good first files to inspect:
@@ -72,6 +73,7 @@ Good first files to inspect:
 - `projects/new_project/project.json`
 - `projects/new_project/areas/start.json`
 - `projects/new_project/entity_templates/player.json`
+- `projects/new_project/items/consumables/glimmer_berry.json`
 - `projects/new_project/dialogues/system/title_menu.json`
 
 ## What To Expect

@@ -11,6 +11,9 @@
   "command_paths": [
     "commands/"
   ],
+  "item_paths": [
+    "items/"
+  ],
   "shared_variables_path": "shared_variables.json",
   "global_entities": [],
   "startup_area": "areas/title_screen",

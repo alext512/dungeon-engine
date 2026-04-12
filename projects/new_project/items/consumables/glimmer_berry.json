@@ -1,0 +1,35 @@
+/*
+  NOTES
+
+  Small usable item for the canonical sample project. It proves that repo-local
+  sample content can load item definitions and run item use commands.
+*/
+{
+  "name": "Glimmer Berry",
+  "description": "A tiny cave fruit that leaves a warm glow when used.",
+  "max_stack": 4,
+  "consume_quantity_on_use": 1,
+  "use_commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$ref_ids.instigator",
+      "name": "last_used_item",
+      "value": "items/consumables/glimmer_berry",
+      "persistent": true
+    },
+    {
+      "type": "show_screen_text",
+      "element_id": "sample_item_use_message",
+      "text": "The glimmer berry hums softly.",
+      "x": 128,
+      "y": 104,
+      "layer": 110,
+      "anchor": "center",
+      "color": [
+        245,
+        232,
+        190
+      ]
+    }
+  ]
+}

@@ -86,6 +86,17 @@
       "template": "entity_templates/area_transition_target"
     },
     {
+      "id": "sample_glimmer_berry_pickup",
+      "grid_x": 2,
+      "grid_y": 3,
+      "template": "entity_templates/inventory_pickup",
+      "parameters": {
+        "item_id": "items/consumables/glimmer_berry",
+        "quantity": 1,
+        "pickup_message": "Picked up a glimmer berry."
+      }
+    },
+    {
       "id": "transition_to_cave",
       "grid_x": 2,
       "grid_y": 1,
