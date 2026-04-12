@@ -10,14 +10,15 @@ from dungeon_engine.commands.runner import CommandContext, execute_registered_co
 from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.inventory import inventory_item_count
 from dungeon_engine.items import load_item_definition
+from dungeon_engine.json_io import load_json_data
 from dungeon_engine.project_context import load_project
+from dungeon_engine.world.loader import load_area
 from dungeon_engine.world.persistence import PersistenceRuntime
 from dungeon_engine.world.persistence_data import (
     get_persistent_area_state,
     save_data_from_dict,
     save_data_to_dict,
 )
-from dungeon_engine.world.loader import load_area
 
 
 def _repo_root() -> Path:
@@ -49,6 +50,8 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(area_path)
         assert area_path is not None
         area, world = load_area(area_path, project=project)
+        self.assertEqual(area.camera_defaults["follow"]["entity_id"], "player_1")
+        self.assertEqual(area.camera_defaults["deadzone"]["space"], "viewport_pixel")
         player = world.get_entity("player_1")
         pickup = world.get_entity("sample_glimmer_berry_pickup")
         self.assertIsNotNone(player)
@@ -129,6 +132,10 @@ class SampleProjectWorkflowTests(unittest.TestCase):
             "items/consumables/glimmer_berry",
         )
         self.assertIsNone(restored_world.get_entity("sample_glimmer_berry_pickup"))
+
+        title_menu = load_json_data(project_root / "dialogues" / "system" / "title_menu.json")
+        new_game_command = title_menu["segments"][0]["options"][0]["commands"][0]
+        self.assertEqual(new_game_command["camera_follow"]["entity_id"], "player_1")
 
 
 if __name__ == "__main__":

@@ -71,6 +71,21 @@
     [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}],
     [{"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}, {"blocked": true}]
   ],
+  "camera": {
+    "follow": {
+      "mode": "entity",
+      "entity_id": "player_1",
+      "offset_x": 0,
+      "offset_y": 0
+    },
+    "deadzone": {
+      "x": 96,
+      "y": 48,
+      "width": 64,
+      "height": 32,
+      "space": "viewport_pixel"
+    }
+  },
   "entities": [
     {
       "id": "player_1",

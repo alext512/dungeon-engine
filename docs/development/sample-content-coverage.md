@@ -29,6 +29,8 @@ for what the sample proves today and what it still does not prove.
   `entity_templates/inventory_pickup.json`
 - persistent restoration of the sample pickup/item-use result through
   `tests/test_sample_project_workflows.py`
+- authored camera defaults in `areas/start.json` plus transition camera follow
+  in `dialogues/system/title_menu.json`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
 - entity templates with parameters, visuals, render order, collision, pushing,
@@ -43,7 +45,7 @@ Use these files as the first examples when checking sample behavior:
 - `projects/new_project/project.json` for manifest paths, startup area, input
   targets, title-screen state, and runtime UI defaults
 - `projects/new_project/dialogues/system/title_menu.json` for dialogue/menu data
-  and runtime-control commands
+  plus runtime-control and transition camera-follow commands
 - `projects/new_project/commands/player/move_one_tile.json` for reusable project
   command loading and command composition
 - `projects/new_project/entity_templates/player.json` for player input,
@@ -57,7 +59,7 @@ Use these files as the first examples when checking sample behavior:
   area-change handoff behavior
 - `projects/new_project/areas/start.json` and
   `projects/new_project/areas/levels/first_area.json` for tile layers,
-  template-backed entities, transitions, and puzzle objects
+  template-backed entities, camera defaults, transitions, and puzzle objects
 
 ## Verification Coverage
 
@@ -87,7 +89,6 @@ For engine-contract changes, also run the focused or full runtime test suite.
 authored workflow. The next useful sample-content expansions are:
 
 - a dialogue or menu path that exercises segment hooks
-- a camera-default or camera-state example tied to an area transition
 - a small global-entity example that persists across area changes
 
 ## Expansion Rule

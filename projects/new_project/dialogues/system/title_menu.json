@@ -9,7 +9,13 @@
           "commands": [
             {
               "type": "new_game",
-              "area_id": "areas/start"
+              "area_id": "areas/start",
+              "camera_follow": {
+                "mode": "entity",
+                "entity_id": "player_1",
+                "offset_x": 0,
+                "offset_y": 0
+              }
             }
           ]
         },
