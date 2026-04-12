@@ -18,6 +18,7 @@ from dungeon_engine.commands.library import (
     ProjectCommandValidationError,
     validate_project_commands,
 )
+from dungeon_engine.commands.context_types import AreaTransitionRequest
 from dungeon_engine.inventory import inventory_item_count
 from dungeon_engine.items import (
     ItemDefinitionValidationError,
@@ -26,7 +27,6 @@ from dungeon_engine.items import (
 )
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
-    AreaTransitionRequest,
     CommandRunner,
     CommandExecutionError,
     CommandContext,

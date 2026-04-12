@@ -16,7 +16,8 @@ from dungeon_engine.commands.context_services import (
     attach_modal_command_services,
     build_play_command_services,
 )
-from dungeon_engine.commands.runner import AreaTransitionRequest, CommandContext, CommandRunner
+from dungeon_engine.commands.context_types import AreaTransitionRequest
+from dungeon_engine.commands.runner import CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
 from dungeon_engine.engine.game_area_runtime import GameAreaRuntimeMixin

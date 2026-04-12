@@ -13,7 +13,7 @@ The bias of this roadmap is:
   public contract later
 - treat runtime, validation, docs, editor behavior, and sample content as one
   system
-- eliminate compatibility and legacy paths rather than preserving them
+- remove retired paths and alternate import surfaces rather than preserving them
 - favor the most effective refactor path even when it is heavier
 
 ## North Star
@@ -47,7 +47,7 @@ These rules apply across every phase:
 - Every phase should leave the docs better than they were before.
 - Every phase should add or tighten verification, not just move code around.
 - Treat repo-local projects as contract fixtures, not as optional demos.
-- Remove compatibility and legacy surfaces instead of keeping them around.
+- Remove retired paths and alternate import surfaces instead of keeping them around.
 - Do not let refactor difficulty push us into weaker, less effective outcomes.
 
 ## Recommended Execution Order
@@ -273,6 +273,10 @@ invalid service states are harder to construct accidentally.
 - Replace remaining broad hook signatures such as `Callable[[Any], None]` with
   specific intent-bearing types where possible.
 - Clarify what data each hook accepts and which runtime component owns it.
+- Keep command-visible request payloads in `dungeon_engine/commands/context_types.py`
+  so service typing does not depend on runner internals.
+- Use named callback aliases for runtime actions such as load, save, quit,
+  debug pause, simulation stepping, and output scaling.
 
 #### 3. Tighten service bundle semantics
 
@@ -307,7 +311,7 @@ invalid service states are harder to construct accidentally.
 - Runtime tests pass.
 - Focused tests for command injection/service construction pass.
 - Repo-local project validation still passes.
-- No compatibility-style backsliding is reintroduced.
+- No alternate-path backsliding is reintroduced.
 
 ### Done Means
 
@@ -341,6 +345,8 @@ contract or command-surface changes.
   workflow.
 - Decide whether it should remain a documented snippet, become a test helper,
   or become a dedicated validation command.
+- Keep the dedicated validation command covered by focused tests so its
+  startup-validation behavior and exit codes stay reliable.
 
 #### 2. Expand startup-style checks
 
@@ -361,6 +367,8 @@ contract or command-surface changes.
   - area transitions
   - save/load restoration
   - runtime handoff points
+- Keep the documented headless startup command covered by a smoke test for
+  repo-local canonical content where practical.
 
 #### 4. Make verification expectations more visible
 
@@ -417,6 +425,7 @@ important engine-owned fields, and support a healthier authoring workflow.
 - Compare runtime and editor handling of:
   - manifest search roots
   - area/entity/item/shared-variable discovery
+  - command discovery
   - engine-known fields
   - validation assumptions
 - Turn mismatches into a named parity backlog.
@@ -587,7 +596,7 @@ reason for a phase:
 - large elegance-only refactors with weak user-facing payoff
 - polishing archived/history/planning docs before active surfaces are aligned
 - license work for now
-- preserving compatibility shims or legacy paths
+- preserving retired paths or transitional adapter layers
 
 ## Suggested Implementation Cadence
 

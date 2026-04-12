@@ -59,7 +59,7 @@ Key files:
 - `registry.py` for command registration
 - `runner.py` for command execution
 - `context_services.py` for the grouped runtime service bundle available to commands
-- `context_types.py` for protocol-style typing of command-visible runtime surfaces
+- `context_types.py` for protocol-style typing of command-visible runtime surfaces and transition request payloads
 - `runner_resolution.py` for token and lookup resolution
 - `runner_value_utils.py` for general value helpers
 - `runner_query_values.py` for entity, area, and inventory queries
@@ -69,11 +69,13 @@ Key files:
 
 `CommandServices` is the source of truth for command-facing runtime dependencies. `CommandContext` keeps project/runner state plus that service bundle. Registry injection resolves explicit command parameters from `services.world`, `services.ui`, `services.audio`, `services.persistence`, and `services.runtime` without mirroring those references onto `CommandContext` itself.
 
-The registry also treats those service-backed accessors as injectable command parameters. That means a command can still ask for `world`, `area`, `camera`, `persistence_runtime`, or `request_area_change` explicitly, but the data is resolved from the shared bundle instead of being stored twice on the context.
+The registry also treats those service-backed accessors as injectable command parameters. That means a command can still ask for `world`, `area`, `camera`, `persistence_runtime`, or `request_area_change` explicitly, but the data is resolved from the shared bundle instead of being stored twice on the context. The advertised injection-name set is derived from the same mapping that `resolve_service_injection(...)` uses, so registration metadata and runtime lookup stay aligned.
 
 The registry is also the source of truth for builtin command authoring contracts. Each registration records its validation mode, inferred authored parameters, explicitly allowed authored parameters, runtime-kwargs support, and deferred nested command payload shapes. Startup command-surface validation and runtime command resolution both read that registry contract instead of hardcoding nested command fields by name.
 
-Command-service assembly has two paths by design. `build_command_services(...)` is the flexible helper for focused tests and partial command contexts. Play mode uses `build_play_command_services(...)`, which constructs all production service bundles explicitly; modal runtimes are then attached through `attach_modal_command_services(...)` after they receive the command context they need.
+Transition requests are command-visible service payloads. `AreaTransitionRequest` and `CameraFollowRequest` live in `context_types.py`, while the runner stays focused on command execution state. Runtime callbacks such as load, save, quit, debug pause, simulation step, and output scaling also use named callback aliases from `context_types.py` so command implementations do not have to treat service hooks as untyped callables.
+
+Command-service assembly has two paths by design. `build_command_services(...)` is the flexible helper for focused tests and partial command contexts. Play mode uses `build_play_command_services(...)`, which constructs all production service bundles explicitly and rejects missing required services immediately. Modal runtimes are then attached through `attach_modal_command_services(...)` after they receive the command context they need.
 
 ## Architectural Principles
 

@@ -30,6 +30,8 @@ Current slices:
 - structured editors for project manifest, shared variables, items, templates,
   global entities, and entity instances
 - reference-aware file/folder reorganization for file-backed content
+- project I/O discovery helpers for runtime-aligned area, template, command,
+  item, and global-entity ids
 - UI layer
 - tests
 

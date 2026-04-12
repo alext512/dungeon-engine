@@ -12,6 +12,7 @@ from pathlib import Path
 
 from area_editor.project_io.project_manifest import (
     discover_areas,
+    discover_commands,
     discover_entity_templates,
     discover_global_entities,
     discover_items,
@@ -125,6 +126,17 @@ class TestItemDiscovery(unittest.TestCase):
         ids = [entry.item_id for entry in items]
         self.assertIn("items/apple", ids)
         self.assertIn("items/copper_key", ids)
+
+
+class TestCommandDiscovery(unittest.TestCase):
+    def test_discovers_commands_from_command_paths(self) -> None:
+        assert _FIXTURE is not None
+        manifest = load_manifest(_FIXTURE.project_file)
+        commands = discover_commands(manifest)
+
+        self.assertTrue(len(commands) > 0)
+        ids = [entry.command_id for entry in commands]
+        self.assertIn("commands/system/do_thing", ids)
 
 
 class TestManifestFallback(unittest.TestCase):

@@ -11,7 +11,7 @@ round-tripping, or repo-local sample content.
 
 The project direction is:
 
-- no transitional shims
+- no transitional adapter layers
 - no retired entry points
 - no hidden alternate import surfaces
 - no weaker design just because a refactor is larger
@@ -34,8 +34,8 @@ validation, editor behavior, docs, tests, and sample content in the same work.
 | Builtin command names and invocation shapes | `dungeon_engine/commands/builtin.py`, `dungeon_engine/commands/builtin_domains/`, `dungeon_engine/commands/registry.py` | `dungeon_engine/commands/registry.py`, `dungeon_engine/startup_validation.py` | command/reference authoring UI where present | `docs/authoring/manuals/engine-json-interface.md`, `docs/authoring/reference/builtin-commands.md` |
 | Runtime tokens | `dungeon_engine/commands/runner_resolution.py` | command startup validation and command runtime tests | JSON editing guardrails where present | `docs/authoring/manuals/engine-json-interface.md`, `docs/authoring/reference/runtime-tokens.md` |
 | Structured value sources | `dungeon_engine/commands/runner_resolution.py`, `dungeon_engine/commands/runner_value_utils.py`, `dungeon_engine/commands/runner_query_values.py` | startup validation and focused value-source tests | JSON editing guardrails where present | `docs/authoring/manuals/engine-json-interface.md` |
-| Command/runtime service boundary | `dungeon_engine/commands/context_services.py`, `dungeon_engine/commands/runner.py`, `dungeon_engine/commands/registry.py`, `dungeon_engine/engine/game.py` | command injection and runtime tests | not editor-owned | `docs/development/runtime-architecture.md` |
-| Startup validation pipeline | `dungeon_engine/startup_validation.py`, `run_game.py` | runtime tests and repo-local project validation | editor author feedback where present | `docs/authoring/startup-checks.md`, `docs/development/verification-and-validation.md` |
+| Command/runtime service boundary | `dungeon_engine/commands/context_services.py`, `dungeon_engine/commands/context_types.py`, `dungeon_engine/commands/runner.py`, `dungeon_engine/commands/registry.py`, `dungeon_engine/engine/game.py` | command injection and runtime tests | not editor-owned | `docs/development/runtime-architecture.md` |
+| Startup validation pipeline | `dungeon_engine/startup_validation.py`, `run_game.py` | runtime tests, repo-local project validation, and headless startup smoke | editor author feedback where present | `docs/authoring/startup-checks.md`, `docs/development/verification-and-validation.md` |
 | Runtime-owned dialogue and inventory sessions | `dungeon_engine/engine/dialogue_runtime.py`, `dungeon_engine/engine/inventory_runtime.py`, command domains | runtime tests | editor docs and structured field support where present | `docs/authoring/manuals/authoring-guide.md`, `docs/authoring/manuals/engine-json-interface.md` |
 | Persistence and save-data behavior | `dungeon_engine/world/persistence.py`, `dungeon_engine/world/persistence_data.py`, `dungeon_engine/world/persistence_snapshots.py`, `dungeon_engine/world/persistence_travelers.py` | persistence and startup tests | editor field support where present | `docs/project/architecture-direction.md`, `docs/authoring/manuals/engine-json-interface.md` |
 | External editor project interpretation | runtime/editor contract is shared by file format, not imports | parity tests | `tools/area_editor/area_editor/project_io/project_manifest.py` | `docs/development/editor-data-boundary.md`, `docs/development/editor-architecture.md` |
@@ -62,8 +62,8 @@ These are the surfaces most likely to fall out of sync:
 | Runtime tokens and value sources | Tokens/value-source behavior is split across resolver modules and docs. | Audit docs against resolver behavior and add focused tests where the docs rely on subtle runtime behavior. |
 | Engine-known entity fields | Loader, serializer, editor widgets, and docs all need to agree on authored versus runtime-owned fields. | Inventory fields, label ownership, and tighten round-trip expectations. |
 | Project manifest parity | Runtime and editor intentionally interpret the same manifest without importing each other. | Keep parity tests focused on every manifest key with behavior beyond simple path storage. |
-| Command service injection | Production runtime wiring and test-friendly partial contexts can blur together. | Add stricter production assembly helpers while keeping test helpers explicit. |
-| Startup validation coverage | Unit tests can pass while actual repo-local projects still contain broken references. | Keep `tools/validate_projects.py` aligned with startup validation and run it for contract-sensitive changes. |
+| Command service injection | Production runtime wiring and test-friendly partial contexts can blur together. | Keep production assembly strict, and keep command-visible runtime payload types in `context_types.py`. |
+| Startup validation coverage | Unit tests can pass while actual repo-local projects still contain broken references. | Keep `tools/validate_projects.py` aligned with startup validation, covered by `tests/test_project_validation_tool.py`, and run it for contract-sensitive changes. |
 | Sample content coverage | Example content may not exercise every important authored surface. | Treat canonical sample projects as living contract fixtures. |
 | Authoring docs language | Time-relative terms can hide whether a feature is active, advanced, or slated for removal. | Reword active docs to use current architectural categories, or remove the feature if it is truly retired. |
 
@@ -79,7 +79,7 @@ When changing the contract, update every applicable row:
 | Item/inventory fields | `dungeon_engine/items.py`, `dungeon_engine/inventory.py`, item editor surfaces, inventory runtime tests, `docs/authoring/manuals/engine-json-interface.md` |
 | Builtin command shape | `dungeon_engine/commands/builtin.py`, `dungeon_engine/commands/builtin_domains/`, `dungeon_engine/commands/registry.py`, `dungeon_engine/commands/audit.py`, startup validation tests, `docs/authoring/manuals/engine-json-interface.md` |
 | Runtime tokens or value sources | `dungeon_engine/commands/runner_resolution.py`, `dungeon_engine/commands/runner_value_utils.py`, `dungeon_engine/commands/runner_query_values.py`, focused value-source tests, `docs/authoring/manuals/engine-json-interface.md` |
-| Command runtime services | `dungeon_engine/commands/context_services.py`, `dungeon_engine/commands/registry.py`, `dungeon_engine/commands/runner.py`, `dungeon_engine/engine/game.py`, runtime architecture docs |
+| Command runtime services | `dungeon_engine/commands/context_services.py`, `dungeon_engine/commands/context_types.py`, `dungeon_engine/commands/registry.py`, `dungeon_engine/commands/runner.py`, `dungeon_engine/engine/game.py`, runtime architecture docs |
 | Startup checks | `dungeon_engine/startup_validation.py`, `run_game.py`, `tests/test_command_authoring_and_runtime_cache.py`, `docs/authoring/startup-checks.md`, `docs/development/verification-and-validation.md` |
 | Editor project interpretation | `tools/area_editor/area_editor/project_io/project_manifest.py`, editor tests, `tests/test_project_layout_parity.py`, editor architecture/data-boundary docs |
 
@@ -115,7 +115,7 @@ When feasible, also smoke the startup path:
 Based on the current map, the next high-value implementation targets are:
 
 1. use command contract snapshots where they improve docs checks, validation coverage, or editor command assistance
-2. tighten `CommandServices` production construction and runtime hook typing
+2. keep tightening command-visible service contracts where callbacks still use broad types
 3. audit engine-known entity fields across loader, serializer, editor widgets, and docs
 4. expand repo-local project validation coverage where it catches real content-facing regressions
 5. reword or remove active docs that describe current behavior as time-relative or retired

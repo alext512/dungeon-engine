@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from dungeon_engine.commands.runner import AreaTransitionRequest, execute_registered_command
+from dungeon_engine.commands.context_types import AreaTransitionRequest
+from dungeon_engine.commands.runner import execute_registered_command
 from dungeon_engine.json_io import json_data_path_candidates
 from dungeon_engine.world.loader import load_area, load_area_from_data
 from dungeon_engine.world.loader_entities import instantiate_entity

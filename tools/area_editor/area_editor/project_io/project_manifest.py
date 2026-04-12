@@ -23,6 +23,7 @@ from area_editor.json_io import (
 
 AREA_ID_PREFIX = "areas"
 TEMPLATE_ID_PREFIX = "entity_templates"
+COMMAND_ID_PREFIX = "commands"
 ITEM_ID_PREFIX = "items"
 
 
@@ -35,6 +36,12 @@ class AreaEntry:
 @dataclass
 class TemplateEntry:
     template_id: str
+    file_path: Path
+
+
+@dataclass
+class CommandEntry:
+    command_id: str
     file_path: Path
 
 
@@ -249,6 +256,27 @@ def discover_entity_templates(manifest: ProjectManifest) -> list[TemplateEntry]:
             )
             entries.append(TemplateEntry(template_id=template_id, file_path=f))
     return sorted(entries, key=lambda e: e.template_id)
+
+
+def discover_commands(manifest: ProjectManifest) -> list[CommandEntry]:
+    """Scan all command paths and return discovered project-command entries."""
+    entries: list[CommandEntry] = []
+    seen: set[Path] = set()
+    for directory in manifest.command_paths:
+        if not directory.is_dir():
+            continue
+        for f in iter_json_data_files(directory):
+            resolved = f.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            command_id = _prefixed_content_id(
+                f,
+                manifest.command_paths,
+                prefix=COMMAND_ID_PREFIX,
+            )
+            entries.append(CommandEntry(command_id=command_id, file_path=f))
+    return sorted(entries, key=lambda e: e.command_id)
 
 
 def discover_items(manifest: ProjectManifest) -> list[ItemEntry]:

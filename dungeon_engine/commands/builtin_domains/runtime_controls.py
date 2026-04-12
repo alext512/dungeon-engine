@@ -6,9 +6,19 @@ from collections.abc import Callable
 from logging import Logger
 from typing import Any
 
-from dungeon_engine.commands.runner import (
+from dungeon_engine.commands.context_types import (
+    AreaTransitionCallback,
     AreaTransitionRequest,
     CameraFollowRequest,
+    LoadGameRequestCallback,
+    OutputScaleAdjustCallback,
+    RuntimeQuitCallback,
+    SaveGameCallback,
+    SimulationPauseGetter,
+    SimulationPauseSetter,
+    SimulationStepRequestCallback,
+)
+from dungeon_engine.commands.runner import (
     CommandHandle,
     ImmediateHandle,
 )
@@ -80,7 +90,7 @@ def register_runtime_control_commands(
 
     @registry.register("change_area")
     def change_area(
-        request_area_change: Any | None,
+        request_area_change: AreaTransitionCallback | None,
         *,
         area_id: str = "",
         entry_id: str | None = None,
@@ -155,7 +165,7 @@ def register_runtime_control_commands(
 
     @registry.register("new_game")
     def new_game(
-        request_new_game: Any | None,
+        request_new_game: AreaTransitionCallback | None,
         *,
         area_id: str = "",
         entry_id: str | None = None,
@@ -208,7 +218,7 @@ def register_runtime_control_commands(
 
     @registry.register("load_game")
     def load_game(
-        request_load_game: Any | None,
+        request_load_game: LoadGameRequestCallback | None,
         *,
         save_path: str | None = None,
         **_: Any,
@@ -221,7 +231,7 @@ def register_runtime_control_commands(
 
     @registry.register("save_game")
     def save_game(
-        save_game: Any | None,
+        save_game: SaveGameCallback | None,
         *,
         save_path: str | None = None,
         **_: Any,
@@ -234,7 +244,7 @@ def register_runtime_control_commands(
 
     @registry.register("quit_game")
     def quit_game(
-        request_quit: Any | None,
+        request_quit: RuntimeQuitCallback | None,
         **_: Any,
     ) -> CommandHandle:
         """Request that the runtime close the game window."""
@@ -246,7 +256,7 @@ def register_runtime_control_commands(
     @registry.register("set_simulation_paused")
     def set_simulation_paused(
         debug_inspection_enabled: bool,
-        set_simulation_paused: Any | None,
+        set_simulation_paused: SimulationPauseSetter | None,
         *,
         paused: bool,
         **_: Any,
@@ -262,8 +272,8 @@ def register_runtime_control_commands(
     @registry.register("toggle_simulation_paused")
     def toggle_simulation_paused(
         debug_inspection_enabled: bool,
-        get_simulation_paused: Any | None,
-        set_simulation_paused: Any | None,
+        get_simulation_paused: SimulationPauseGetter | None,
+        set_simulation_paused: SimulationPauseSetter | None,
         **_: Any,
     ) -> CommandHandle:
         """Toggle debug simulation pause when debug inspection is allowed."""
@@ -277,7 +287,7 @@ def register_runtime_control_commands(
     @registry.register("step_simulation_tick")
     def step_simulation_tick(
         debug_inspection_enabled: bool,
-        request_step_simulation_tick: Any | None,
+        request_step_simulation_tick: SimulationStepRequestCallback | None,
         **_: Any,
     ) -> CommandHandle:
         """Request one debug simulation tick when debug inspection is allowed."""
@@ -291,7 +301,7 @@ def register_runtime_control_commands(
     @registry.register("adjust_output_scale")
     def adjust_output_scale(
         debug_inspection_enabled: bool,
-        adjust_output_scale: Any | None,
+        adjust_output_scale: OutputScaleAdjustCallback | None,
         *,
         delta: int,
         **_: Any,

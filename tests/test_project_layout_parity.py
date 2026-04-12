@@ -17,6 +17,7 @@ if str(_EDITOR_PACKAGE_ROOT) not in sys.path:
 
 from area_editor.project_io.project_manifest import (  # type: ignore[import-not-found]
     discover_areas,
+    discover_commands,
     discover_entity_templates,
     discover_global_entities,
     discover_items,
@@ -37,6 +38,7 @@ class ProjectLayoutParityTests(unittest.TestCase):
         shared_variables: dict[str, object] | None = None,
         area_files: dict[str, dict[str, object]] | None = None,
         template_files: dict[str, dict[str, object]] | None = None,
+        command_files: dict[str, dict[str, object]] | None = None,
         item_files: dict[str, dict[str, object]] | None = None,
     ) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
@@ -50,6 +52,8 @@ class ProjectLayoutParityTests(unittest.TestCase):
             _write_json(project_root / "areas" / relative_path, payload)
         for relative_path, payload in (template_files or {}).items():
             _write_json(project_root / "entity_templates" / relative_path, payload)
+        for relative_path, payload in (command_files or {}).items():
+            _write_json(project_root / "commands" / relative_path, payload)
         for relative_path, payload in (item_files or {}).items():
             _write_json(project_root / "items" / relative_path, payload)
         return project_root
@@ -115,11 +119,12 @@ class ProjectLayoutParityTests(unittest.TestCase):
         self.assertEqual(runtime.internal_width, editor.display_width)
         self.assertEqual(runtime.internal_height, editor.display_height)
 
-    def test_runtime_and_editor_discover_same_area_template_and_item_ids(self) -> None:
+    def test_runtime_and_editor_discover_same_area_template_command_and_item_ids(self) -> None:
         project_root = self._make_project(
             project_payload={
                 "area_paths": ["content/areas/"],
                 "entity_template_paths": ["content/templates/"],
+                "command_paths": ["content/commands/"],
                 "item_paths": ["content/items/"],
             },
             area_files={
@@ -129,6 +134,10 @@ class ProjectLayoutParityTests(unittest.TestCase):
             template_files={
                 "npc/shopkeeper.json": {"kind": "npc"},
                 "props/sign.json": {"kind": "sign"},
+            },
+            command_files={
+                "system/open_gate.json": {"commands": []},
+                "ui/show_title.json": {"commands": []},
             },
             item_files={
                 "consumables/apple.json": {"name": "Apple"},
@@ -140,10 +149,12 @@ class ProjectLayoutParityTests(unittest.TestCase):
         (project_root / "content").mkdir(exist_ok=True)
         (project_root / "content" / "areas").mkdir(parents=True, exist_ok=True)
         (project_root / "content" / "templates").mkdir(parents=True, exist_ok=True)
+        (project_root / "content" / "commands").mkdir(parents=True, exist_ok=True)
         (project_root / "content" / "items").mkdir(parents=True, exist_ok=True)
         for source_root, target_root in (
             (project_root / "areas", project_root / "content" / "areas"),
             (project_root / "entity_templates", project_root / "content" / "templates"),
+            (project_root / "commands", project_root / "content" / "commands"),
             (project_root / "items", project_root / "content" / "items"),
         ):
             for file_path in source_root.rglob("*.json"):
@@ -162,6 +173,10 @@ class ProjectLayoutParityTests(unittest.TestCase):
         self.assertEqual(
             runtime.list_entity_template_ids(),
             [entry.template_id for entry in discover_entity_templates(editor)],
+        )
+        self.assertEqual(
+            [runtime.command_id(path) for path in runtime.list_command_files()],
+            [entry.command_id for entry in discover_commands(editor)],
         )
         self.assertEqual(
             runtime.list_item_ids(),

@@ -44,28 +44,6 @@ class CommandContext:
     command_execution_budget_remaining: int | None = None
 
 
-@dataclass(slots=True)
-class CameraFollowRequest:
-    """Requested camera follow state to apply after a transition completes."""
-
-    mode: str = "preserve"
-    entity_id: str | None = None
-    action: str | None = None
-    offset_x: float = 0.0
-    offset_y: float = 0.0
-
-
-@dataclass(slots=True)
-class AreaTransitionRequest:
-    """One deferred area transition plus optional entity/camera transfer data."""
-
-    area_id: str
-    entry_id: str | None = None
-    destination_entity_id: str | None = None
-    transfer_entity_ids: list[str] = field(default_factory=list)
-    camera_follow: CameraFollowRequest | None = None
-
-
 class CommandHandle:
     """Base handle for commands that may take more than one frame to finish."""
 

@@ -27,6 +27,8 @@ This is a fast way to confirm that a project loads through the normal startup pa
 ```
 
 Headless mode still exercises startup validation, project loading, command-library loading, and early runtime wiring.
+The repo-local `new_project` version of this smoke is covered by
+`tests/test_startup_smoke.py` when that fixture is present.
 
 ## Repo-Local Project Validation
 
@@ -35,6 +37,10 @@ If you changed command ids, command references, authoring conventions, or repo-l
 ```text
 .venv/Scripts/python tools/validate_projects.py
 ```
+
+The validation command itself is covered by `tests/test_project_validation_tool.py`
+so changes to its input handling or exit-code behavior stay visible in the
+runtime suite.
 
 ## Docs Site Commands
 

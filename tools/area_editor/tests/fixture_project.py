@@ -121,6 +121,12 @@ def create_editor_fixture_project(root: Path) -> FixtureProject:
             "max_stack": 1,
         },
     )
+    _write_json(
+        project_root / "commands" / "system" / "do_thing.json",
+        {
+            "commands": [],
+        },
+    )
 
     base_tileset = {
         "firstgid": 1,

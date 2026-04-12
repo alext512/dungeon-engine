@@ -2,7 +2,41 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+
+@dataclass(slots=True)
+class CameraFollowRequest:
+    """Requested camera follow state to apply after a transition completes."""
+
+    mode: str = "preserve"
+    entity_id: str | None = None
+    action: str | None = None
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+
+@dataclass(slots=True)
+class AreaTransitionRequest:
+    """One deferred area transition plus optional entity/camera transfer data."""
+
+    area_id: str
+    entry_id: str | None = None
+    destination_entity_id: str | None = None
+    transfer_entity_ids: list[str] = field(default_factory=list)
+    camera_follow: CameraFollowRequest | None = None
+
+
+AreaTransitionCallback = Callable[[AreaTransitionRequest], None]
+LoadGameRequestCallback = Callable[[str | None], None]
+SaveGameCallback = Callable[[str | None], bool]
+RuntimeQuitCallback = Callable[[], None]
+SimulationPauseSetter = Callable[[bool], None]
+SimulationPauseGetter = Callable[[], bool]
+SimulationStepRequestCallback = Callable[[], None]
+OutputScaleAdjustCallback = Callable[[int], None]
 
 
 class TextRendererLike(Protocol):
