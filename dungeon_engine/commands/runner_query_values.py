@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from dungeon_engine.commands.context_types import PersistenceRuntimeLike
+
 from dungeon_engine.commands.runner_value_utils import (
     extract_collection_item,
     lookup_nested_value,
@@ -391,7 +393,7 @@ def load_area_owned_snapshot(
     *,
     project: Any,
     area_id: str,
-    persistence_runtime: Any | None = None,
+    persistence_runtime: PersistenceRuntimeLike | None = None,
     asset_manager: Any | None = None,
     include_persistent: bool = True,
 ) -> tuple[Area, World]:

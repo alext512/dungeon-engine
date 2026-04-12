@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from dungeon_engine.commands.context_services import CommandServices
+
+from dungeon_engine.commands.context_types import CameraLike
+
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandHandle, ImmediateHandle
 
@@ -12,7 +16,7 @@ from dungeon_engine.commands.runner import CommandHandle, ImmediateHandle
 class CameraCommandHandle(CommandHandle):
     """Wait until an interpolated camera move finishes."""
 
-    def __init__(self, camera: Any) -> None:
+    def __init__(self, camera: CameraLike | None) -> None:
         super().__init__()
         self.camera = camera
         self.update(0.0)
@@ -20,6 +24,29 @@ class CameraCommandHandle(CommandHandle):
     def update(self, dt: float) -> None:
         """Mark the command complete when the camera stops moving."""
         self.complete = self.camera is None or not self.camera.is_moving()
+
+
+def _resolve_camera(
+    *,
+    services: CommandServices | None,
+    camera: CameraLike | None,
+) -> CameraLike | None:
+    """Return the active camera, preferring command services when available."""
+    if services is not None and services.ui is not None:
+        return services.ui.camera
+    return camera
+
+
+def _resolve_world_and_area(
+    *,
+    services: CommandServices | None,
+    world: Any,
+    area: Any,
+) -> tuple[Any, Any]:
+    """Return the world and area, preferring command services when available."""
+    if services is not None and services.world is not None:
+        return services.world.world, services.world.area
+    return world, area
 
 
 def register_camera_commands(
@@ -32,36 +59,43 @@ def register_camera_commands(
 
     @registry.register("set_camera_follow")
     def set_camera_follow(
+        services: CommandServices | None,
         world: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         *,
         follow: dict[str, Any],
         **_: Any,
     ) -> CommandHandle:
         """Replace the current follow policy with one explicit structured follow spec."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot change camera follow without an active camera.")
+        resolved_world, _ = _resolve_world_and_area(
+            services=services,
+            world=world,
+            area=None,
+        )
         follow_spec = normalize_camera_follow_spec(
             follow,
             command_name="set_camera_follow",
-            world=world,
+            world=resolved_world,
             require_exact_entity=True,
         )
         if follow_spec["mode"] == "entity":
-            camera.follow_entity(
+            resolved_camera.follow_entity(
                 str(follow_spec["entity_id"]),
                 offset_x=float(follow_spec.get("offset_x", 0.0)),
                 offset_y=float(follow_spec.get("offset_y", 0.0)),
             )
         elif follow_spec["mode"] == "input_target":
-            camera.follow_input_target(
+            resolved_camera.follow_input_target(
                 str(follow_spec["action"]),
                 offset_x=float(follow_spec.get("offset_x", 0.0)),
                 offset_y=float(follow_spec.get("offset_y", 0.0)),
             )
         else:
-            camera.clear_follow()
-        camera.update(world, advance_tick=False)
+            resolved_camera.clear_follow()
+        resolved_camera.update(resolved_world, advance_tick=False)
         return ImmediateHandle()
 
     @registry.register(
@@ -69,14 +103,21 @@ def register_camera_commands(
         additional_authored_params={"follow", "bounds", "deadzone", "source_entity_id"},
     )
     def set_camera_state(
+        services: CommandServices | None,
         world: Any,
         area: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         **runtime_params: Any,
     ) -> CommandHandle:
         """Apply one validated partial camera state update atomically."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot change camera state without an active camera.")
+        resolved_world, resolved_area = _resolve_world_and_area(
+            services=services,
+            world=world,
+            area=area,
+        )
 
         allowed_keys = {
             "follow",
@@ -89,7 +130,7 @@ def register_camera_commands(
             unknown_list = ", ".join(sorted(unknown_keys))
             raise ValueError(f"set_camera_state contains unknown field(s): {unknown_list}.")
 
-        next_state = camera.to_state_dict()
+        next_state = resolved_camera.to_state_dict()
         if "follow" in runtime_params:
             raw_follow = runtime_params.get("follow")
             if raw_follow is None:
@@ -98,7 +139,7 @@ def register_camera_commands(
                 next_state["follow"] = normalize_camera_follow_spec(
                     raw_follow,
                     command_name="set_camera_state",
-                    world=world,
+                    world=resolved_world,
                     require_exact_entity=True,
                 )
         if "bounds" in runtime_params:
@@ -107,7 +148,7 @@ def register_camera_commands(
                 next_state.pop("bounds", None)
             else:
                 next_state["bounds"] = normalize_camera_rect_spec(
-                    area,
+                    resolved_area,
                     raw_bounds,
                     command_name="set_camera_state",
                     rect_name="bounds",
@@ -120,7 +161,7 @@ def register_camera_commands(
                 next_state.pop("deadzone", None)
             else:
                 next_state["deadzone"] = normalize_camera_rect_spec(
-                    area,
+                    resolved_area,
                     raw_deadzone,
                     command_name="set_camera_state",
                     rect_name="deadzone",
@@ -128,37 +169,47 @@ def register_camera_commands(
                     grid_space_name="viewport_grid",
                 )
 
-        camera.apply_state_dict(next_state, world)
+        resolved_camera.apply_state_dict(next_state, resolved_world)
         return ImmediateHandle()
 
     @registry.register("push_camera_state")
     def push_camera_state(
-        camera: Any | None,
+        services: CommandServices | None,
+        camera: CameraLike | None,
         **_: Any,
     ) -> CommandHandle:
         """Push the current camera state onto the runtime camera-state stack."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot push camera state without an active camera.")
-        camera.push_state()
+        resolved_camera.push_state()
         return ImmediateHandle()
 
     @registry.register("pop_camera_state")
     def pop_camera_state(
+        services: CommandServices | None,
         world: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         **_: Any,
     ) -> CommandHandle:
         """Restore the most recently pushed camera state."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot pop camera state without an active camera.")
-        camera.pop_state(world)
+        resolved_world, _ = _resolve_world_and_area(
+            services=services,
+            world=world,
+            area=None,
+        )
+        resolved_camera.pop_state(resolved_world)
         return ImmediateHandle()
 
     @registry.register("set_camera_bounds")
     def set_camera_bounds(
+        services: CommandServices | None,
         world: Any,
         area: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         *,
         x: int | float,
         y: int | float,
@@ -168,10 +219,16 @@ def register_camera_commands(
         **_: Any,
     ) -> CommandHandle:
         """Clamp camera movement and follow to one world-space rectangle."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot set camera bounds without an active camera.")
+        resolved_world, resolved_area = _resolve_world_and_area(
+            services=services,
+            world=world,
+            area=area,
+        )
         rect = normalize_camera_rect_spec(
-            area,
+            resolved_area,
             {
                 "x": x,
                 "y": y,
@@ -184,15 +241,16 @@ def register_camera_commands(
             pixel_space_name="world_pixel",
             grid_space_name="world_grid",
         )
-        camera.set_bounds_rect(rect["x"], rect["y"], rect["width"], rect["height"])
-        camera.update(world, advance_tick=False)
+        resolved_camera.set_bounds_rect(rect["x"], rect["y"], rect["width"], rect["height"])
+        resolved_camera.update(resolved_world, advance_tick=False)
         return ImmediateHandle()
 
     @registry.register("set_camera_deadzone")
     def set_camera_deadzone(
+        services: CommandServices | None,
         world: Any,
         area: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         *,
         x: int | float,
         y: int | float,
@@ -202,10 +260,16 @@ def register_camera_commands(
         **_: Any,
     ) -> CommandHandle:
         """Keep followed targets inside one viewport-space deadzone rectangle."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot set a camera deadzone without an active camera.")
+        resolved_world, resolved_area = _resolve_world_and_area(
+            services=services,
+            world=world,
+            area=area,
+        )
         rect = normalize_camera_rect_spec(
-            area,
+            resolved_area,
             {
                 "x": x,
                 "y": y,
@@ -218,14 +282,15 @@ def register_camera_commands(
             pixel_space_name="viewport_pixel",
             grid_space_name="viewport_grid",
         )
-        camera.set_deadzone_rect(rect["x"], rect["y"], rect["width"], rect["height"])
-        camera.update(world, advance_tick=False)
+        resolved_camera.set_deadzone_rect(rect["x"], rect["y"], rect["width"], rect["height"])
+        resolved_camera.update(resolved_world, advance_tick=False)
         return ImmediateHandle()
 
     @registry.register("move_camera")
     def move_camera(
+        services: CommandServices | None,
         area: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         *,
         x: int | float,
         y: int | float,
@@ -237,8 +302,14 @@ def register_camera_commands(
         **_: Any,
     ) -> CommandHandle:
         """Move the camera in world pixel/grid space, absolute or relative."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot move camera without an active camera.")
+        _, resolved_area = _resolve_world_and_area(
+            services=services,
+            world=None,
+            area=area,
+        )
         if space not in {"world_pixel", "world_grid"}:
             raise ValueError("move_camera space must be 'world_pixel' or 'world_grid'.")
         if mode not in {"absolute", "relative"}:
@@ -247,27 +318,28 @@ def register_camera_commands(
         target_x = float(x)
         target_y = float(y)
         if space == "world_grid":
-            target_x *= area.tile_size
-            target_y *= area.tile_size
+            target_x *= resolved_area.tile_size
+            target_y *= resolved_area.tile_size
         if mode == "relative":
-            target_x += camera.x
-            target_y += camera.y
+            target_x += resolved_camera.x
+            target_y += resolved_camera.y
 
-        camera.start_move_to(
+        resolved_camera.start_move_to(
             target_x,
             target_y,
             duration=duration,
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,
         )
-        if not camera.is_moving():
+        if not resolved_camera.is_moving():
             return ImmediateHandle()
-        return CameraCommandHandle(camera)
+        return CameraCommandHandle(resolved_camera)
 
     @registry.register("teleport_camera")
     def teleport_camera(
+        services: CommandServices | None,
         area: Any,
-        camera: Any | None,
+        camera: CameraLike | None,
         *,
         x: int | float,
         y: int | float,
@@ -276,8 +348,14 @@ def register_camera_commands(
         **_: Any,
     ) -> CommandHandle:
         """Move the camera instantly in world pixel/grid space."""
-        if camera is None:
+        resolved_camera = _resolve_camera(services=services, camera=camera)
+        if resolved_camera is None:
             raise ValueError("Cannot teleport camera without an active camera.")
+        _, resolved_area = _resolve_world_and_area(
+            services=services,
+            world=None,
+            area=area,
+        )
         if space not in {"world_pixel", "world_grid"}:
             raise ValueError("teleport_camera space must be 'world_pixel' or 'world_grid'.")
         if mode not in {"absolute", "relative"}:
@@ -286,13 +364,13 @@ def register_camera_commands(
         target_x = float(x)
         target_y = float(y)
         if space == "world_grid":
-            target_x *= area.tile_size
-            target_y *= area.tile_size
+            target_x *= resolved_area.tile_size
+            target_y *= resolved_area.tile_size
         if mode == "relative":
-            target_x += camera.x
-            target_y += camera.y
+            target_x += resolved_camera.x
+            target_y += resolved_camera.y
 
-        camera.teleport_to(target_x, target_y)
+        resolved_camera.teleport_to(target_x, target_y)
         return ImmediateHandle()
 
 

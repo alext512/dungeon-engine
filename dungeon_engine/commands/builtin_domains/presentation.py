@@ -11,6 +11,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from dungeon_engine.commands.context_services import CommandServices
+from dungeon_engine.commands.context_types import AudioPlayerLike, ScreenElementManagerLike
+
 from dungeon_engine import config
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandHandle, ImmediateHandle, WaitFramesHandle
@@ -19,7 +22,7 @@ from dungeon_engine.commands.runner import CommandHandle, ImmediateHandle, WaitF
 class ScreenAnimationCommandHandle(CommandHandle):
     """Wait until a screen-space animation finishes playback."""
 
-    def __init__(self, screen_manager: Any, element_id: str) -> None:
+    def __init__(self, screen_manager: ScreenElementManagerLike | None, element_id: str) -> None:
         super().__init__()
         self.screen_manager = screen_manager
         self.element_id = element_id
@@ -74,9 +77,48 @@ class AnimationCommandHandle(CommandHandle):
         )
 
 
+def _resolve_audio_player(
+    *,
+    services: CommandServices | None,
+    audio_player: AudioPlayerLike | None,
+) -> AudioPlayerLike | None:
+    """Return the active audio player, preferring command services when available."""
+    if services is not None and services.audio is not None:
+        return services.audio.audio_player
+    return audio_player
+
+
+def _require_screen_manager(
+    *,
+    services: CommandServices | None,
+    screen_manager: ScreenElementManagerLike | None,
+    error_message: str,
+) -> ScreenElementManagerLike:
+    """Return the screen manager or raise a clear error."""
+    resolved = screen_manager
+    if services is not None and services.ui is not None:
+        resolved = services.ui.screen_manager
+    if resolved is None:
+        raise ValueError(error_message)
+    return resolved
+
+
+def _resolve_world_and_animation(
+    *,
+    services: CommandServices | None,
+    world: Any,
+    animation_system: Any,
+) -> tuple[Any, Any]:
+    """Return the world and animation system, preferring command services."""
+    if services is not None and services.world is not None:
+        return services.world.world, services.world.animation_system
+    return world, animation_system
+
+
 def _play_entity_animation(
     *,
     require_exact_entity: Callable[[Any, str], Any],
+    services: CommandServices | None,
     world: Any,
     animation_system: Any,
     entity_id: str,
@@ -88,17 +130,22 @@ def _play_entity_animation(
     **_: Any,
 ) -> CommandHandle:
     """Start one named entity animation and optionally wait for it to finish."""
-    resolved_id = require_exact_entity(world, entity_id).entity_id
-    animation_system.play_animation(
+    resolved_world, resolved_animation = _resolve_world_and_animation(
+        services=services,
+        world=world,
+        animation_system=animation_system,
+    )
+    resolved_id = require_exact_entity(resolved_world, entity_id).entity_id
+    resolved_animation.play_animation(
         resolved_id,
         str(animation),
         visual_id=visual_id,
         frame_count=frame_count,
         duration_ticks=duration_ticks,
     )
-    if not wait or not animation_system.is_entity_animating(resolved_id, visual_id=visual_id):
+    if not wait or not resolved_animation.is_entity_animating(resolved_id, visual_id=visual_id):
         return ImmediateHandle()
-    return AnimationCommandHandle(animation_system, [resolved_id], visual_id=visual_id)
+    return AnimationCommandHandle(resolved_animation, [resolved_id], visual_id=visual_id)
 
 
 def register_presentation_commands(
@@ -110,34 +157,39 @@ def register_presentation_commands(
 
     @registry.register("play_audio")
     def play_audio(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         *,
         path: str,
         volume: int | float | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Play a one-shot audio asset from the active project's assets."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.play_audio(str(path), volume=volume)
+        resolved_audio.play_audio(str(path), volume=volume)
         return ImmediateHandle()
 
     @registry.register("set_sound_volume")
     def set_sound_volume(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         *,
         volume: int | float,
         **_: Any,
     ) -> CommandHandle:
         """Set the default sound-effect volume for future one-shot playback."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.set_sound_volume(float(volume))
+        resolved_audio.set_sound_volume(float(volume))
         return ImmediateHandle()
 
     @registry.register("play_music")
     def play_music(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         *,
         path: str,
         loop: bool = True,
@@ -146,9 +198,10 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Start or resume one dedicated background music track."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.play_music(
+        resolved_audio.play_music(
             str(path),
             loop=bool(loop),
             volume=None if volume is None else float(volume),
@@ -158,55 +211,64 @@ def register_presentation_commands(
 
     @registry.register("stop_music")
     def stop_music(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         *,
         fade_seconds: int | float = 0.0,
         **_: Any,
     ) -> CommandHandle:
         """Stop the current background music track."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.stop_music(fade_seconds=float(fade_seconds))
+        resolved_audio.stop_music(fade_seconds=float(fade_seconds))
         return ImmediateHandle()
 
     @registry.register("pause_music")
     def pause_music(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         **_: Any,
     ) -> CommandHandle:
         """Pause the current background music track."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.pause_music()
+        resolved_audio.pause_music()
         return ImmediateHandle()
 
     @registry.register("resume_music")
     def resume_music(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         **_: Any,
     ) -> CommandHandle:
         """Resume the paused background music track."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.resume_music()
+        resolved_audio.resume_music()
         return ImmediateHandle()
 
     @registry.register("set_music_volume")
     def set_music_volume(
-        audio_player: Any | None,
+        services: CommandServices | None,
+        audio_player: AudioPlayerLike | None,
         *,
         volume: int | float,
         **_: Any,
     ) -> CommandHandle:
         """Set the dedicated music-channel volume."""
-        if audio_player is None:
+        resolved_audio = _resolve_audio_player(services=services, audio_player=audio_player)
+        if resolved_audio is None:
             return ImmediateHandle()
-        audio_player.set_music_volume(float(volume))
+        resolved_audio.set_music_volume(float(volume))
         return ImmediateHandle()
 
     @registry.register("show_screen_image")
     def show_screen_image(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         element_id: str,
         path: str,
@@ -223,9 +285,12 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Create or replace a screen-space image element."""
-        if screen_manager is None:
-            raise ValueError("Cannot show a screen image without a screen manager.")
-        screen_manager.show_image(
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot show a screen image without a screen manager.",
+        )
+        resolved_screen_manager.show_image(
             element_id=str(element_id),
             asset_path=str(path),
             x=float(x),
@@ -243,7 +308,8 @@ def register_presentation_commands(
 
     @registry.register("show_screen_text")
     def show_screen_text(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         element_id: str,
         text: str,
@@ -258,9 +324,12 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Create or replace a screen-space text element."""
-        if screen_manager is None:
-            raise ValueError("Cannot show screen text without a screen manager.")
-        screen_manager.show_text(
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot show screen text without a screen manager.",
+        )
+        resolved_screen_manager.show_text(
             element_id=str(element_id),
             text=str(text),
             x=float(x),
@@ -276,47 +345,60 @@ def register_presentation_commands(
 
     @registry.register("set_screen_text")
     def set_screen_text(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         element_id: str,
         text: str,
         **_: Any,
     ) -> CommandHandle:
         """Replace the text content of an existing screen-space text element."""
-        if screen_manager is None:
-            raise ValueError("Cannot set screen text without a screen manager.")
-        screen_manager.set_text(str(element_id), str(text))
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot set screen text without a screen manager.",
+        )
+        resolved_screen_manager.set_text(str(element_id), str(text))
         return ImmediateHandle()
 
     @registry.register("remove_screen_element")
     def remove_screen_element(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         element_id: str,
         **_: Any,
     ) -> CommandHandle:
         """Remove one screen-space element."""
-        if screen_manager is None:
-            raise ValueError("Cannot remove a screen element without a screen manager.")
-        screen_manager.remove(str(element_id))
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot remove a screen element without a screen manager.",
+        )
+        resolved_screen_manager.remove(str(element_id))
         return ImmediateHandle()
 
     @registry.register("clear_screen_elements")
     def clear_screen_elements(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         layer: int | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Clear all screen-space elements, optionally only one layer."""
-        if screen_manager is None:
-            raise ValueError("Cannot clear screen elements without a screen manager.")
-        screen_manager.clear(layer=layer)
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot clear screen elements without a screen manager.",
+        )
+        resolved_screen_manager.clear(layer=layer)
         return ImmediateHandle()
 
     @registry.register("play_screen_animation")
     def play_screen_animation(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         element_id: str,
         frame_sequence: list[int],
@@ -326,9 +408,12 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Start a one-shot frame animation on an existing screen image."""
-        if screen_manager is None:
-            raise ValueError("Cannot play a screen animation without a screen manager.")
-        screen_manager.start_animation(
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot play a screen animation without a screen manager.",
+        )
+        resolved_screen_manager.start_animation(
             element_id=str(element_id),
             frame_sequence=[int(frame) for frame in frame_sequence],
             ticks_per_frame=int(ticks_per_frame),
@@ -336,21 +421,25 @@ def register_presentation_commands(
         )
         if not wait:
             return ImmediateHandle()
-        return ScreenAnimationCommandHandle(screen_manager, str(element_id))
+        return ScreenAnimationCommandHandle(resolved_screen_manager, str(element_id))
 
     @registry.register("wait_for_screen_animation")
     def wait_for_screen_animation(
-        screen_manager: Any | None,
+        services: CommandServices | None,
+        screen_manager: ScreenElementManagerLike | None,
         *,
         element_id: str,
         **_: Any,
     ) -> CommandHandle:
         """Block until the requested screen-space animation finishes."""
-        if screen_manager is None:
-            raise ValueError("Cannot wait for a screen animation without a screen manager.")
-        if not screen_manager.is_animating(str(element_id)):
+        resolved_screen_manager = _require_screen_manager(
+            services=services,
+            screen_manager=screen_manager,
+            error_message="Cannot wait for a screen animation without a screen manager.",
+        )
+        if not resolved_screen_manager.is_animating(str(element_id)):
             return ImmediateHandle()
-        return ScreenAnimationCommandHandle(screen_manager, str(element_id))
+        return ScreenAnimationCommandHandle(resolved_screen_manager, str(element_id))
 
     @registry.register("wait_frames")
     def wait_frames(
@@ -372,6 +461,7 @@ def register_presentation_commands(
 
     @registry.register("play_animation")
     def play_animation(
+        services: CommandServices | None,
         world: Any,
         animation_system: Any,
         *,
@@ -386,6 +476,7 @@ def register_presentation_commands(
         """Play a named animation clip on an entity visual."""
         return _play_entity_animation(
             require_exact_entity=require_exact_entity,
+            services=services,
             world=world,
             animation_system=animation_system,
             entity_id=entity_id,
@@ -398,6 +489,7 @@ def register_presentation_commands(
 
     @registry.register("wait_for_animation")
     def wait_for_animation(
+        services: CommandServices | None,
         world: Any,
         animation_system: Any,
         *,
@@ -406,13 +498,19 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Block the command lane until the requested entity stops animating."""
-        resolved_id = require_exact_entity(world, entity_id).entity_id
-        if not animation_system.is_entity_animating(resolved_id, visual_id=visual_id):
+        resolved_world, resolved_animation = _resolve_world_and_animation(
+            services=services,
+            world=world,
+            animation_system=animation_system,
+        )
+        resolved_id = require_exact_entity(resolved_world, entity_id).entity_id
+        if not resolved_animation.is_entity_animating(resolved_id, visual_id=visual_id):
             return ImmediateHandle()
-        return AnimationCommandHandle(animation_system, [resolved_id], visual_id=visual_id)
+        return AnimationCommandHandle(resolved_animation, [resolved_id], visual_id=visual_id)
 
     @registry.register("stop_animation")
     def stop_animation(
+        services: CommandServices | None,
         world: Any,
         animation_system: Any,
         *,
@@ -422,8 +520,13 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Stop command-driven animation playback on an entity."""
-        resolved_id = require_exact_entity(world, entity_id).entity_id
-        animation_system.stop_animation(
+        resolved_world, resolved_animation = _resolve_world_and_animation(
+            services=services,
+            world=world,
+            animation_system=animation_system,
+        )
+        resolved_id = require_exact_entity(resolved_world, entity_id).entity_id
+        resolved_animation.stop_animation(
             resolved_id,
             visual_id=visual_id,
             reset_to_default=reset_to_default,
@@ -432,6 +535,7 @@ def register_presentation_commands(
 
     @registry.register("set_visual_frame")
     def set_visual_frame(
+        services: CommandServices | None,
         world: Any,
         *,
         entity_id: str,
@@ -440,7 +544,12 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Set the currently displayed visual frame directly."""
-        entity = require_exact_entity(world, entity_id)
+        resolved_world, _ = _resolve_world_and_animation(
+            services=services,
+            world=world,
+            animation_system=None,
+        )
+        entity = require_exact_entity(resolved_world, entity_id)
         visual = entity.require_visual(visual_id) if visual_id is not None else entity.get_primary_visual()
         if visual is None:
             raise KeyError(f"Entity '{entity.entity_id}' has no visual to set a frame on.")
@@ -449,6 +558,7 @@ def register_presentation_commands(
 
     @registry.register("set_visual_flip_x")
     def set_visual_flip_x(
+        services: CommandServices | None,
         world: Any,
         *,
         entity_id: str,
@@ -457,7 +567,12 @@ def register_presentation_commands(
         **_: Any,
     ) -> CommandHandle:
         """Set whether an entity's visual should be mirrored horizontally."""
-        entity = require_exact_entity(world, entity_id)
+        resolved_world, _ = _resolve_world_and_animation(
+            services=services,
+            world=world,
+            animation_system=None,
+        )
+        entity = require_exact_entity(resolved_world, entity_id)
         visual = entity.require_visual(visual_id) if visual_id is not None else entity.get_primary_visual()
         if visual is None:
             raise KeyError(f"Entity '{entity.entity_id}' has no visual to set flip_x on.")

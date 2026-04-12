@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from dungeon_engine.commands.context_types import DialogueRuntimeLike
 from dungeon_engine.commands.runner import CommandContext, CommandHandle, SequenceCommandHandle
 from dungeon_engine.json_io import json_data_path_candidates, load_json_data
 
@@ -34,7 +35,7 @@ def _normalize_segment_hooks(segment_hooks: Any) -> list[Any]:
 class DialogueSessionWaitHandle(CommandHandle):
     """Wait until one specific dialogue session fully closes."""
 
-    def __init__(self, runtime: "DialogueRuntime", session: "DialogueSession") -> None:
+    def __init__(self, runtime: DialogueRuntimeLike, session: "DialogueSession") -> None:
         super().__init__()
         self.runtime = runtime
         self.session = session

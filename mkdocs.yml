@@ -89,6 +89,7 @@ nav:
       - Runtime Architecture: development/runtime-architecture.md
       - Editor Architecture: development/editor-architecture.md
       - Editor Data Boundary: development/editor-data-boundary.md
+      - Engine In 10 Minutes: development/engine-in-10-minutes.md
       - For Coding Agents: development/for-coding-agents.md
       - Docs Maintenance: development/docs-maintenance.md
       - Publishing: development/publishing.md

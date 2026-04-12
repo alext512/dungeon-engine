@@ -19,6 +19,10 @@ If the change touches the editor, also read:
 - [Editor Architecture](editor-architecture.md)
 - [Editor Data Boundary](editor-data-boundary.md)
 
+If you want the fast mental model first, read:
+
+- [Engine In 10 Minutes](engine-in-10-minutes.md)
+
 ## What Is Canonical
 
 For current behavior, trust these first:

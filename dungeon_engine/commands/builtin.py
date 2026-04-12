@@ -11,6 +11,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from dungeon_engine.commands.context_types import PersistenceRuntimeLike
+
 from dungeon_engine.commands.builtin_domains.camera import register_camera_commands
 from dungeon_engine.commands.builtin_domains.entity_state import register_entity_state_commands
 from dungeon_engine.commands.builtin_domains.flow import register_flow_commands
@@ -132,7 +134,7 @@ def _require_exact_entity_variables(world: Any, entity_id: str) -> dict[str, Any
 
 
 def _persist_current_area_variable_value(
-    persistence_runtime: Any | None,
+    persistence_runtime: PersistenceRuntimeLike | None,
     *,
     name: str,
     value: Any,
@@ -147,7 +149,7 @@ def _persist_exact_entity_variable_value(
     *,
     world: Any,
     area: Any,
-    persistence_runtime: Any | None,
+    persistence_runtime: PersistenceRuntimeLike | None,
     entity_id: str,
     name: str,
     value: Any,
@@ -166,10 +168,10 @@ def _persist_exact_entity_variable_value(
 
 
 def _require_cross_area_persistence_runtime(
-    persistence_runtime: Any | None,
+    persistence_runtime: PersistenceRuntimeLike | None,
     *,
     command_name: str,
-) -> Any:
+) -> PersistenceRuntimeLike:
     """Return the active persistence runtime or raise a clear error for cross-area state APIs."""
     if persistence_runtime is None:
         raise ValueError(f"{command_name} requires an active persistence runtime.")
@@ -219,7 +221,7 @@ def _resolve_authored_area_entity_snapshot(
 def _persist_entity_field(
     *,
     area: Any,
-    persistence_runtime: Any | None,
+    persistence_runtime: PersistenceRuntimeLike | None,
     entity_id: str,
     field_name: str,
     value: Any,
@@ -240,7 +242,7 @@ def _persist_entity_field(
 def _persist_entity_command_enabled(
     *,
     area: Any,
-    persistence_runtime: Any | None,
+    persistence_runtime: PersistenceRuntimeLike | None,
     entity_id: str,
     command_id: str,
     enabled: bool,
@@ -782,7 +784,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext | None,
         world: Any,
         area: Any,
-        persistence_runtime: Any | None,
+        persistence_runtime: PersistenceRuntimeLike | None,
         entity_id: str,
         field_name: str,
         value: Any,
@@ -819,7 +821,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         context: CommandContext | None,
         world: Any,
         area: Any,
-        persistence_runtime: Any | None,
+        persistence_runtime: PersistenceRuntimeLike | None,
         entity_id: str,
         set_payload: dict[str, Any],
         persistent: bool | None = None,

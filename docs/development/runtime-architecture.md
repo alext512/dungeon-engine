@@ -58,12 +58,16 @@ Key files:
 
 - `registry.py` for command registration
 - `runner.py` for command execution
+- `context_services.py` for the grouped runtime service bundle available to commands
+- `context_types.py` for protocol-style typing of command-visible runtime surfaces
 - `runner_resolution.py` for token and lookup resolution
 - `runner_value_utils.py` for general value helpers
 - `runner_query_values.py` for entity, area, and inventory queries
 - `builtin.py` for public builtin registration
 - `builtin_domains/` for grouped builtin implementations
 - `library.py` for project command loading and validation
+
+Command implementations can request `services: CommandServices | None` alongside the usual context fields, which lets them work against a narrow, typed runtime surface while still supporting fallbacks to the older context properties.
 
 ## Architectural Principles
 

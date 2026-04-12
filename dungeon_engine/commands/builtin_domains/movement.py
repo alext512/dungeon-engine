@@ -6,6 +6,8 @@ from collections.abc import Callable
 from logging import Logger
 from typing import Any
 
+from dungeon_engine.commands.context_services import CommandServices
+
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, CommandHandle, ImmediateHandle
 from dungeon_engine.world.entity import DIRECTION_VECTORS
@@ -44,6 +46,27 @@ class MovementCommandHandle(CommandHandle):
             float(movement.target_pixel_y),
             int(movement.total_ticks),
         )
+
+
+def _resolve_world_services(
+    *,
+    services: CommandServices | None,
+    world: Any,
+    area: Any,
+    movement_system: Any,
+    collision_system: Any,
+    interaction_system: Any,
+) -> tuple[Any, Any, Any, Any, Any]:
+    """Return world services, preferring command services when available."""
+    if services is not None and services.world is not None:
+        return (
+            services.world.world,
+            services.world.area,
+            services.world.movement_system,
+            services.world.collision_system,
+            services.world.interaction_system,
+        )
+    return world, area, movement_system, collision_system, interaction_system
 
 
 def _resolve_standard_direction(entity: Any, direction: str | None) -> str:
@@ -282,6 +305,7 @@ def register_movement_commands(
 
     @registry.register("set_entity_grid_position")
     def set_entity_grid_position(
+        services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
@@ -293,10 +317,18 @@ def register_movement_commands(
         **_: Any,
     ) -> CommandHandle:
         """Instantly update a world-space entity's logical grid position."""
+        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
+            services=services,
+            world=world,
+            area=None,
+            movement_system=movement_system,
+            collision_system=None,
+            interaction_system=None,
+        )
         return _set_entity_grid_position(
             require_exact_entity=require_exact_entity,
-            world=world,
-            movement_system=movement_system,
+            world=resolved_world,
+            movement_system=resolved_movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
@@ -306,6 +338,7 @@ def register_movement_commands(
 
     @registry.register("set_entity_world_position")
     def set_entity_world_position(
+        services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
@@ -317,10 +350,18 @@ def register_movement_commands(
         **_: Any,
     ) -> CommandHandle:
         """Instantly update a world-space entity's pixel position."""
+        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
+            services=services,
+            world=world,
+            area=None,
+            movement_system=movement_system,
+            collision_system=None,
+            interaction_system=None,
+        )
         return _set_entity_pixel_position(
             require_exact_entity=require_exact_entity,
-            world=world,
-            movement_system=movement_system,
+            world=resolved_world,
+            movement_system=resolved_movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
@@ -332,6 +373,7 @@ def register_movement_commands(
 
     @registry.register("set_entity_screen_position")
     def set_entity_screen_position(
+        services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
@@ -343,10 +385,18 @@ def register_movement_commands(
         **_: Any,
     ) -> CommandHandle:
         """Instantly update a screen-space entity's pixel position."""
+        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
+            services=services,
+            world=world,
+            area=None,
+            movement_system=movement_system,
+            collision_system=None,
+            interaction_system=None,
+        )
         return _set_entity_pixel_position(
             require_exact_entity=require_exact_entity,
-            world=world,
-            movement_system=movement_system,
+            world=resolved_world,
+            movement_system=resolved_movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
@@ -358,6 +408,7 @@ def register_movement_commands(
 
     @registry.register("move_entity_world_position")
     def move_entity_world_position(
+        services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
@@ -373,11 +424,19 @@ def register_movement_commands(
         **_: Any,
     ) -> CommandHandle:
         """Interpolate a world-space entity's pixel position."""
+        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
+            services=services,
+            world=world,
+            area=None,
+            movement_system=movement_system,
+            collision_system=None,
+            interaction_system=None,
+        )
         return _move_entity_pixel_position(
             require_exact_entity=require_exact_entity,
             movement_handle_factory=MovementCommandHandle,
-            world=world,
-            movement_system=movement_system,
+            world=resolved_world,
+            movement_system=resolved_movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
@@ -393,6 +452,7 @@ def register_movement_commands(
 
     @registry.register("move_entity_screen_position")
     def move_entity_screen_position(
+        services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
@@ -408,11 +468,19 @@ def register_movement_commands(
         **_: Any,
     ) -> CommandHandle:
         """Interpolate a screen-space entity's pixel position."""
+        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
+            services=services,
+            world=world,
+            area=None,
+            movement_system=movement_system,
+            collision_system=None,
+            interaction_system=None,
+        )
         return _move_entity_pixel_position(
             require_exact_entity=require_exact_entity,
             movement_handle_factory=MovementCommandHandle,
-            world=world,
-            movement_system=movement_system,
+            world=resolved_world,
+            movement_system=resolved_movement_system,
             entity_id=entity_id,
             x=x,
             y=y,
@@ -429,6 +497,7 @@ def register_movement_commands(
     @registry.register("move_in_direction", validation_mode="mixed")
     def move_in_direction(
         context: CommandContext,
+        services: CommandServices | None,
         area: Any,
         movement_system: Any,
         collision_system: Any,
@@ -445,16 +514,24 @@ def register_movement_commands(
         **runtime_params: Any,
     ) -> CommandHandle:
         """Resolve one standard grid step using blocked cells and solid/pushable entities."""
-        if movement_system is None:
+        resolved_world, resolved_area, resolved_movement_system, resolved_collision_system, _ = _resolve_world_services(
+            services=services,
+            world=context.world,
+            area=area,
+            movement_system=movement_system,
+            collision_system=collision_system,
+            interaction_system=None,
+        )
+        if resolved_movement_system is None:
             raise ValueError("move_in_direction requires an active movement system.")
-        if collision_system is None:
+        if resolved_collision_system is None:
             raise ValueError("move_in_direction requires an active collision system.")
 
         resolved_id = resolve_entity_id(entity_id, source_entity_id=source_entity_id)
         if not resolved_id:
             logger.warning("move_in_direction: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
-        actor = context.world.get_entity(resolved_id)
+        actor = resolved_world.get_entity(resolved_id)
         if actor is None:
             raise KeyError(f"Cannot move missing entity '{resolved_id}'.")
         if not actor.present:
@@ -470,12 +547,12 @@ def register_movement_commands(
         target_x = actor.grid_x + delta_x
         target_y = actor.grid_y + delta_y
 
-        if collision_system.can_move_to(
+        if resolved_collision_system.can_move_to(
             target_x,
             target_y,
             ignore_entity_id=actor.entity_id,
         ):
-            moved_entity_ids = movement_system.request_grid_step(
+            moved_entity_ids = resolved_movement_system.request_grid_step(
                 actor.entity_id,
                 resolved_direction,  # type: ignore[arg-type]
                 duration=duration,
@@ -486,19 +563,19 @@ def register_movement_commands(
             )
             if not moved_entity_ids or not wait:
                 return ImmediateHandle()
-            return MovementCommandHandle(movement_system, moved_entity_ids)
+            return MovementCommandHandle(resolved_movement_system, moved_entity_ids)
 
         resolved_push_strength = int(actor.push_strength if push_strength is None else push_strength)
         if resolved_push_strength < 0:
             raise ValueError("move_in_direction push_strength must be zero or positive.")
 
-        if resolved_push_strength > 0 and not area.is_blocked(target_x, target_y):
+        if resolved_push_strength > 0 and not resolved_area.is_blocked(target_x, target_y):
             pushed, pushed_entity_ids = _attempt_standard_push(
                 actor=actor,
                 direction=resolved_direction,
-                area=area,
-                collision_system=collision_system,
-                movement_system=movement_system,
+                area=resolved_area,
+                collision_system=resolved_collision_system,
+                movement_system=resolved_movement_system,
                 push_strength=resolved_push_strength,
                 duration=duration,
                 frames_needed=frames_needed,
@@ -507,7 +584,7 @@ def register_movement_commands(
                 persistent=persistent,
             )
             if pushed:
-                moved_entity_ids = movement_system.request_grid_step(
+                moved_entity_ids = resolved_movement_system.request_grid_step(
                     actor.entity_id,
                     resolved_direction,  # type: ignore[arg-type]
                     duration=duration,
@@ -519,7 +596,7 @@ def register_movement_commands(
                 combined_entity_ids = list(dict.fromkeys([*pushed_entity_ids, *moved_entity_ids]))
                 if not combined_entity_ids or not wait:
                     return ImmediateHandle()
-                return MovementCommandHandle(movement_system, combined_entity_ids)
+                return MovementCommandHandle(resolved_movement_system, combined_entity_ids)
 
         blocked_runtime_params = dict(runtime_params)
         blocked_runtime_params.update(
@@ -531,7 +608,7 @@ def register_movement_commands(
                 "target_y": int(target_y),
             }
         )
-        blockers = collision_system.get_blocking_entities(
+        blockers = resolved_collision_system.get_blocking_entities(
             target_x,
             target_y,
             ignore_entity_id=actor.entity_id,
@@ -548,6 +625,7 @@ def register_movement_commands(
     @registry.register("push_facing", validation_mode="mixed")
     def push_facing(
         context: CommandContext,
+        services: CommandServices | None,
         area: Any,
         movement_system: Any,
         collision_system: Any,
@@ -564,16 +642,24 @@ def register_movement_commands(
         **runtime_params: Any,
     ) -> CommandHandle:
         """Try to push exactly one blocker in the actor's facing direction without moving the actor."""
-        if movement_system is None:
+        resolved_world, resolved_area, resolved_movement_system, resolved_collision_system, _ = _resolve_world_services(
+            services=services,
+            world=context.world,
+            area=area,
+            movement_system=movement_system,
+            collision_system=collision_system,
+            interaction_system=None,
+        )
+        if resolved_movement_system is None:
             raise ValueError("push_facing requires an active movement system.")
-        if collision_system is None:
+        if resolved_collision_system is None:
             raise ValueError("push_facing requires an active collision system.")
 
         resolved_id = resolve_entity_id(entity_id, source_entity_id=source_entity_id)
         if not resolved_id:
             logger.warning("push_facing: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
-        actor = context.world.get_entity(resolved_id)
+        actor = resolved_world.get_entity(resolved_id)
         if actor is None:
             raise KeyError(f"Cannot push with missing entity '{resolved_id}'.")
         if not actor.present:
@@ -590,9 +676,9 @@ def register_movement_commands(
         pushed, moved_entity_ids = _attempt_standard_push(
             actor=actor,
             direction=resolved_direction,
-            area=area,
-            collision_system=collision_system,
-            movement_system=movement_system,
+            area=resolved_area,
+            collision_system=resolved_collision_system,
+            movement_system=resolved_movement_system,
             push_strength=resolved_push_strength,
             duration=duration,
             frames_needed=frames_needed,
@@ -603,7 +689,7 @@ def register_movement_commands(
         if pushed:
             if not moved_entity_ids or not wait:
                 return ImmediateHandle()
-            return MovementCommandHandle(movement_system, moved_entity_ids)
+            return MovementCommandHandle(resolved_movement_system, moved_entity_ids)
 
         delta_x, delta_y = DIRECTION_VECTORS[resolved_direction]  # type: ignore[index]
         blocked_runtime_params = dict(runtime_params)
@@ -616,7 +702,7 @@ def register_movement_commands(
                 "target_y": int(actor.grid_y + delta_y),
             }
         )
-        blockers = collision_system.get_blocking_entities(
+        blockers = resolved_collision_system.get_blocking_entities(
             actor.grid_x + delta_x,
             actor.grid_y + delta_y,
             ignore_entity_id=actor.entity_id,
@@ -633,6 +719,7 @@ def register_movement_commands(
     @registry.register("interact_facing", validation_mode="mixed")
     def interact_facing(
         context: CommandContext,
+        services: CommandServices | None,
         interaction_system: Any,
         *,
         entity_id: str,
@@ -641,14 +728,22 @@ def register_movement_commands(
         **runtime_params: Any,
     ) -> CommandHandle:
         """Resolve the standard facing target and dispatch its normal interact command."""
-        if interaction_system is None:
+        resolved_world, _, _, _, resolved_interaction_system = _resolve_world_services(
+            services=services,
+            world=context.world,
+            area=None,
+            movement_system=None,
+            collision_system=None,
+            interaction_system=interaction_system,
+        )
+        if resolved_interaction_system is None:
             raise ValueError("interact_facing requires an active interaction system.")
 
         resolved_id = resolve_entity_id(entity_id, source_entity_id=source_entity_id)
         if not resolved_id:
             logger.warning("interact_facing: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
-        actor = context.world.get_entity(resolved_id)
+        actor = resolved_world.get_entity(resolved_id)
         if actor is None:
             raise KeyError(f"Cannot interact with missing entity '{resolved_id}'.")
         if not actor.present:
@@ -658,7 +753,7 @@ def register_movement_commands(
 
         resolved_direction = _resolve_standard_direction(actor, direction)
         actor.set_facing_value(resolved_direction)
-        target = interaction_system.get_facing_target(actor.entity_id)
+        target = resolved_interaction_system.get_facing_target(actor.entity_id)
         if target is None:
             return ImmediateHandle()
         return dispatch_named_entity_command(
@@ -672,6 +767,7 @@ def register_movement_commands(
 
     @registry.register("wait_for_move")
     def wait_for_move(
+        services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
@@ -679,7 +775,15 @@ def register_movement_commands(
         **_: Any,
     ) -> CommandHandle:
         """Block the command lane until the requested entity stops moving."""
-        resolved_id = require_exact_entity(world, entity_id).entity_id
-        if not movement_system.is_entity_moving(resolved_id):
+        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
+            services=services,
+            world=world,
+            area=None,
+            movement_system=movement_system,
+            collision_system=None,
+            interaction_system=None,
+        )
+        resolved_id = require_exact_entity(resolved_world, entity_id).entity_id
+        if not resolved_movement_system.is_entity_moving(resolved_id):
             return ImmediateHandle()
-        return MovementCommandHandle(movement_system, [resolved_id])
+        return MovementCommandHandle(resolved_movement_system, [resolved_id])

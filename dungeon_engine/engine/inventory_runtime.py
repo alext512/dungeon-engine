@@ -6,6 +6,7 @@ import copy
 from dataclasses import dataclass
 from typing import Any
 
+from dungeon_engine.commands.context_types import InventoryRuntimeLike
 from dungeon_engine.commands.runner import CommandContext, CommandHandle
 from dungeon_engine.items import load_item_definition
 
@@ -37,7 +38,7 @@ class InventorySession:
 class InventorySessionWaitHandle(CommandHandle):
     """Wait until one specific inventory session closes."""
 
-    def __init__(self, runtime: "InventoryRuntime", session: InventorySession) -> None:
+    def __init__(self, runtime: InventoryRuntimeLike, session: InventorySession) -> None:
         super().__init__()
         self.runtime = runtime
         self.session = session

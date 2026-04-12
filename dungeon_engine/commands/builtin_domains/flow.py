@@ -7,6 +7,7 @@ from collections.abc import Callable
 from logging import Logger
 from typing import Any
 
+from dungeon_engine.commands.context_services import CommandServices
 from dungeon_engine.commands.library import (
     instantiate_project_command_commands,
     load_project_command_definition,
@@ -299,6 +300,15 @@ def register_flow_commands(
 ) -> None:
     """Register builtin commands that orchestrate other commands and flows."""
 
+    def _resolve_flow_world(
+        *,
+        services: CommandServices | None,
+        context: CommandContext,
+    ) -> Any:
+        if services is not None and services.world is not None:
+            return services.world.world
+        return context.world
+
     @registry.register(
         "spawn_flow",
         deferred_params={"commands"},
@@ -472,6 +482,7 @@ def register_flow_commands(
     )
     def run_entity_command(
         context: CommandContext,
+        services: CommandServices | None,
         *,
         entity_id: str,
         command_id: str,
@@ -488,7 +499,8 @@ def register_flow_commands(
         if not resolved_id:
             logger.warning("run_entity_command: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
-        entity = context.world.get_entity(resolved_id)
+        resolved_world = _resolve_flow_world(services=services, context=context)
+        entity = resolved_world.get_entity(resolved_id)
         if entity is None:
             raise KeyError(f"Cannot run entity command on missing entity '{resolved_id}'.")
         if not entity.present:

@@ -12,6 +12,14 @@ from dungeon_engine import config
 from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.library import build_project_command_database
 from dungeon_engine.commands.registry import CommandRegistry
+from dungeon_engine.commands.context_services import (
+    CommandAudioServices,
+    CommandPersistenceServices,
+    CommandRuntimeServices,
+    CommandServices,
+    CommandUiServices,
+    CommandWorldServices,
+)
 from dungeon_engine.commands.runner import AreaTransitionRequest, CommandContext, CommandRunner
 from dungeon_engine.engine.asset_manager import AssetManager
 from dungeon_engine.engine.audio import AudioPlayer
@@ -296,6 +304,41 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
             self.persistence_runtime,
         )
         self.animation_system = AnimationSystem(self.world)
+        command_services = CommandServices(
+            world=CommandWorldServices(
+                area=self.area,
+                world=self.world,
+                collision_system=self.collision_system,
+                movement_system=self.movement_system,
+                interaction_system=self.interaction_system,
+                animation_system=self.animation_system,
+            ),
+            ui=CommandUiServices(
+                text_renderer=self.renderer.text_renderer,
+                screen_manager=self.screen_manager,
+                camera=self.camera,
+                dialogue_runtime=None,
+                inventory_runtime=None,
+            ),
+            audio=CommandAudioServices(
+                audio_player=self.audio_player,
+            ),
+            persistence=CommandPersistenceServices(
+                persistence_runtime=self.persistence_runtime,
+            ),
+            runtime=CommandRuntimeServices(
+                request_area_change=self.request_area_change,
+                request_new_game=self.request_new_game,
+                request_load_game=self.request_load_game,
+                save_game=self.save_game,
+                request_quit=self.request_quit,
+                set_simulation_paused=self._set_simulation_paused,
+                get_simulation_paused=self._get_simulation_paused,
+                request_step_simulation_tick=self._request_step_simulation_tick,
+                adjust_output_scale=self._adjust_output_scale,
+                debug_inspection_enabled=self.debug_inspection_enabled,
+            ),
+        )
         command_context = CommandContext(
             area=self.area,
             world=self.world,
@@ -324,6 +367,7 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
             get_simulation_paused=self._get_simulation_paused,
             request_step_simulation_tick=self._request_step_simulation_tick,
             adjust_output_scale=self._adjust_output_scale,
+            services=command_services,
         )
         self.command_runner = CommandRunner(self.command_registry, command_context)
         self.dialogue_runtime = DialogueRuntime(
@@ -341,6 +385,9 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
         )
         command_context.dialogue_runtime = self.dialogue_runtime
         command_context.inventory_runtime = self.inventory_runtime
+        if command_services.ui is not None:
+            command_services.ui.dialogue_runtime = self.dialogue_runtime
+            command_services.ui.inventory_runtime = self.inventory_runtime
         self.input_handler = InputHandler(
             self.command_runner,
             self.world,

@@ -6,8 +6,24 @@ from collections import deque
 import copy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from random import Random
+
+    from dungeon_engine.engine.asset_manager import AssetManager
+    from dungeon_engine.project_context import ProjectContext
+
+from dungeon_engine.commands.context_types import (
+    AudioPlayerLike,
+    CameraLike,
+    DialogueRuntimeLike,
+    InventoryRuntimeLike,
+    PersistenceRuntimeLike,
+    ScreenElementManagerLike,
+    TextRendererLike,
+)
+from dungeon_engine.commands.context_services import CommandServices
 from dungeon_engine.commands.runner_query_values import load_area_owned_snapshot
 from dungeon_engine.commands.runner_resolution import (
     dynamic_deferred_keys_for_spec as _dynamic_deferred_keys_for_spec,
@@ -37,17 +53,18 @@ class CommandContext:
     movement_system: MovementSystem
     interaction_system: InteractionSystem
     animation_system: AnimationSystem
-    project: Any | None = None
-    asset_manager: Any | None = None
-    text_renderer: Any | None = None
-    camera: Any | None = None
-    audio_player: Any | None = None
-    screen_manager: Any | None = None
-    dialogue_runtime: Any | None = None
-    inventory_runtime: Any | None = None
-    command_runner: Any | None = None
-    random_generator: Any | None = None
-    persistence_runtime: Any | None = None
+    project: ProjectContext | None = None
+    asset_manager: AssetManager | None = None
+    text_renderer: TextRendererLike | None = None
+    camera: CameraLike | None = None
+    audio_player: AudioPlayerLike | None = None
+    screen_manager: ScreenElementManagerLike | None = None
+    dialogue_runtime: DialogueRuntimeLike | None = None
+    inventory_runtime: InventoryRuntimeLike | None = None
+    command_runner: CommandRunner | None = None
+    random_generator: Random | None = None
+    persistence_runtime: PersistenceRuntimeLike | None = None
+    services: CommandServices | None = None
     request_area_change: Callable[["AreaTransitionRequest"], None] | None = None
     request_new_game: Callable[["AreaTransitionRequest"], None] | None = None
     request_load_game: Callable[[str | None], None] | None = None
