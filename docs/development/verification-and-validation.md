@@ -76,5 +76,6 @@ When you change command surfaces, authoring conventions, repo-local example proj
 ## Related Pages
 
 - [Startup Checks](../authoring/startup-checks.md) for what authors can expect before play begins
+- [Sample Content Coverage](sample-content-coverage.md) for what `projects/new_project` proves today
 - [For Coding Agents](for-coding-agents.md) for repo-specific agent workflow
 - [Docs Maintenance](docs-maintenance.md) for the docs truth model

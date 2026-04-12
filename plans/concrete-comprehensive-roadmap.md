@@ -485,13 +485,15 @@ continues to protect it during future refactors.
 
 - one or more canonical sample projects with intentional coverage goals
 - documented coverage expectations for what each sample project exercises
+  (`docs/development/sample-content-coverage.md` now covers the current
+  `projects/new_project` baseline)
 - sample content that is useful both for testing and for onboarding
 
 ### Concrete Work
 
 #### 1. Define the sample-content role
 
-- Decide which repo-local project is the main contract fixture.
+- `projects/new_project` is the current main contract fixture.
 - Optionally split responsibilities across more than one sample project if that
   keeps each one understandable.
 
@@ -510,7 +512,8 @@ continues to protect it during future refactors.
 
 #### 3. Align docs and validation with sample content
 
-- Point onboarding and validation docs at the sample projects deliberately.
+- Keep `docs/development/sample-content-coverage.md` linked from the development
+  docs and aligned with the sample content.
 - Use the sample content to demonstrate the intended contract, not just to show
   something playable.
 

@@ -87,6 +87,7 @@ nav:
   - Development:
       - Verification and Validation: development/verification-and-validation.md
       - Engine Contract Truth Map: development/engine-contract-truth-map.md
+      - Sample Content Coverage: development/sample-content-coverage.md
       - Runtime Architecture: development/runtime-architecture.md
       - Editor Architecture: development/editor-architecture.md
       - Editor Data Boundary: development/editor-data-boundary.md

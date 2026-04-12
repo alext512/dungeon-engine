@@ -64,7 +64,7 @@ These are the surfaces most likely to fall out of sync:
 | Project manifest parity | Runtime and editor intentionally interpret the same manifest without importing each other. | Keep parity tests focused on every manifest key with behavior beyond simple path storage. |
 | Command service injection | Production runtime wiring and test-friendly partial contexts can blur together. | Keep production assembly strict, and keep command-visible runtime payload types in `context_types.py`. |
 | Startup validation coverage | Unit tests can pass while actual repo-local projects still contain broken references. | Keep `tools/validate_projects.py` aligned with startup validation, covered by `tests/test_project_validation_tool.py`, and run it for contract-sensitive changes. |
-| Sample content coverage | Example content may not exercise every important authored surface. | Treat canonical sample projects as living contract fixtures. |
+| Sample content coverage | Example content may not exercise every important authored surface. | Keep `docs/development/sample-content-coverage.md` aligned with what canonical sample projects prove. |
 | Authoring docs language | Time-relative terms can hide whether a feature is active, advanced, or slated for removal. | Reword active docs to use current architectural categories, or remove the feature if it is truly retired. |
 
 ## Change Checklist
