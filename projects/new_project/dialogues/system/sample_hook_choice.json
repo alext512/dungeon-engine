@@ -1,0 +1,29 @@
+/*
+  NOTES
+
+  Small dialogue used by the canonical sample project to prove caller-supplied
+  segment hooks. The inline option command is intentionally overridden by the
+  terminal entity that opens this dialogue.
+*/
+{
+  "segments": [
+    {
+      "type": "choice",
+      "text": "Test the terminal hook?",
+      "options": [
+        {
+          "text": "Mark hook",
+          "option_id": "mark_hook",
+          "commands": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$ref_ids.caller",
+              "name": "last_hook_choice",
+              "value": "inline"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

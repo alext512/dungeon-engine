@@ -119,6 +119,12 @@
       }
     },
     {
+      "id": "sample_hook_terminal",
+      "grid_x": 3,
+      "grid_y": 4,
+      "template": "entity_templates/dialogue_hook_terminal"
+    },
+    {
       "id": "transition_to_cave",
       "grid_x": 2,
       "grid_y": 1,

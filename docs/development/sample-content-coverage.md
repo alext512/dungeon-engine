@@ -33,6 +33,9 @@ for what the sample proves today and what it still does not prove.
   in `dialogues/system/title_menu.json`
 - project-level global entity state through
   `project.json` `global_entities.sample_global_tracker`
+- caller-supplied dialogue segment hooks through
+  `entity_templates/dialogue_hook_terminal.json` and
+  `dialogues/system/sample_hook_choice.json`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
 - entity templates with parameters, visuals, render order, collision, pushing,
@@ -48,6 +51,9 @@ Use these files as the first examples when checking sample behavior:
   targets, title-screen state, global entities, and runtime UI defaults
 - `projects/new_project/dialogues/system/title_menu.json` for dialogue/menu data
   plus runtime-control and transition camera-follow commands
+- `projects/new_project/dialogues/system/sample_hook_choice.json` and
+  `projects/new_project/entity_templates/dialogue_hook_terminal.json` for the
+  sample segment-hook override workflow
 - `projects/new_project/commands/player/move_one_tile.json` for reusable project
   command loading and command composition
 - `projects/new_project/entity_templates/player.json` for player input,
@@ -87,10 +93,9 @@ For engine-contract changes, also run the focused or full runtime test suite.
 
 ## Known Gaps
 
-`projects/new_project` does not yet deliberately prove every high-value
-authored workflow. The next useful sample-content expansions are:
-
-- a dialogue or menu path that exercises segment hooks
+No current high-value authored workflow gap is tracked on this page. Add future
+gaps here when a missing sample would catch real content-facing regressions or
+teach an important authoring pattern.
 
 ## Expansion Rule
 

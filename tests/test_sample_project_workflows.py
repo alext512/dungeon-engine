@@ -8,6 +8,7 @@ from dungeon_engine.commands.builtin import register_builtin_commands
 from dungeon_engine.commands.context_services import build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, execute_registered_command
+from dungeon_engine.engine.dialogue_runtime import DialogueRuntime
 from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.inventory import inventory_item_count
 from dungeon_engine.items import load_item_definition
@@ -51,6 +52,36 @@ def _install_project_global_entities(project: object, world: World, tile_size: i
         world.add_entity(global_entity)
 
 
+class _StubTextRenderer:
+    def measure_text(self, text: str, *, font_id: str = "") -> tuple[int, int]:
+        _ = font_id
+        lines = str(text).split("\n")
+        longest = max((len(line) for line in lines), default=0)
+        return (longest * 6, max(1, len(lines)) * 8)
+
+    def wrap_lines(self, text: str, max_width: int, *, font_id: str = "") -> list[str]:
+        _ = max_width
+        _ = font_id
+        return [part for part in str(text).split(" ") if part]
+
+    def paginate_text(
+        self,
+        text: str,
+        max_width: int,
+        max_lines: int,
+        *,
+        font_id: str = "",
+    ) -> list[str]:
+        lines = self.wrap_lines(text, max_width, font_id=font_id)
+        if not lines:
+            return [""]
+        chunk_size = max(1, int(max_lines))
+        pages: list[str] = []
+        for index in range(0, len(lines), chunk_size):
+            pages.append("\n".join(lines[index:index + chunk_size]))
+        return pages or [""]
+
+
 class SampleProjectWorkflowTests(unittest.TestCase):
     def test_new_project_pickup_and_item_use_workflow_executes(self) -> None:
         project_root = _repo_root() / "projects" / "new_project"
@@ -73,11 +104,14 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         self.assertEqual(area.camera_defaults["deadzone"]["space"], "viewport_pixel")
         player = world.get_entity("player_1")
         pickup = world.get_entity("sample_glimmer_berry_pickup")
+        hook_terminal = world.get_entity("sample_hook_terminal")
         tracker = world.get_entity("sample_global_tracker")
         self.assertIsNotNone(player)
         self.assertIsNotNone(pickup)
+        self.assertIsNotNone(hook_terminal)
         self.assertIsNotNone(tracker)
         assert player is not None
+        assert hook_terminal is not None
         assert tracker is not None
 
         registry = CommandRegistry()
@@ -93,6 +127,17 @@ class SampleProjectWorkflowTests(unittest.TestCase):
                 persistence_runtime=persistence_runtime,
             ),
         )
+        dialogue_runtime = DialogueRuntime(
+            project=project,
+            screen_manager=ScreenElementManager(),
+            text_renderer=_StubTextRenderer(),
+            registry=registry,
+            command_context=context,
+        )
+        assert context.services.ui is not None
+        context.services.ui.screen_manager = dialogue_runtime.screen_manager
+        context.services.ui.text_renderer = dialogue_runtime.text_renderer
+        context.services.ui.dialogue_runtime = dialogue_runtime
 
         enter_handle = execute_registered_command(
             registry,
@@ -105,6 +150,24 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         )
         _complete_handle(self, enter_handle)
         self.assertEqual(tracker.variables["start_entries"], 1)
+
+        hook_handle = execute_registered_command(
+            registry,
+            context,
+            "run_entity_command",
+            {
+                "entity_id": "sample_hook_terminal",
+                "command_id": "interact",
+                "entity_refs": {
+                    "instigator": "player_1",
+                },
+            },
+        )
+        self.assertTrue(dialogue_runtime.is_active())
+        dialogue_runtime.handle_action("interact")
+        _complete_handle(self, hook_handle)
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertEqual(hook_terminal.variables["last_hook_choice"], "hook")
 
         pickup_handle = execute_registered_command(
             registry,
