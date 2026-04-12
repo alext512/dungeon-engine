@@ -10,6 +10,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -122,6 +123,10 @@ class _TemplateVisualsEditor(QWidget):
         summary = QFormLayout()
         self._space_label = QLabel("world")
         summary.addRow("space", self._space_label)
+        self._scope_combo = QComboBox()
+        self._scope_combo.addItems(["area", "global"])
+        self._scope_combo.currentIndexChanged.connect(self._on_text_changed)
+        summary.addRow("scope", self._scope_combo)
         layout.addLayout(summary)
 
         font = QFont("Consolas", 10)
@@ -225,6 +230,7 @@ class _TemplateVisualsEditor(QWidget):
 
     def set_editing_enabled(self, enabled: bool) -> None:
         self._editing_enabled = enabled
+        self._scope_combo.setEnabled(enabled)
         self._visuals_text.setReadOnly(not enabled)
         self._entity_state_check.setEnabled(enabled and self._persistence_editable)
         self._persistence_variables_text.setReadOnly(not (enabled and self._persistence_editable))
@@ -252,6 +258,7 @@ class _TemplateVisualsEditor(QWidget):
         self._loading = True
         try:
             self._space_label.setText(str(data.get("space", "world")))
+            self._scope_combo.setCurrentText(str(data.get("scope", "area")))
             visuals = data.get("visuals", [])
             self._visuals_text.setPlainText(json.dumps(visuals, indent=2, ensure_ascii=False))
             self._entity_state_check.setChecked(persistence_entity_state)
@@ -286,6 +293,11 @@ class _TemplateVisualsEditor(QWidget):
         if not isinstance(visuals_value, list):
             raise ValueError("Visuals must be a JSON array.")
         updated = dumps_for_clone(base_data)
+        scope_value = self._scope_combo.currentText()
+        if scope_value != "area" or "scope" in base_data:
+            updated["scope"] = scope_value
+        else:
+            updated.pop("scope", None)
         updated["visuals"] = visuals_value
         if self._persistence_editable:
             persistence_value = _build_persistence_policy(

@@ -74,7 +74,8 @@ Use these files as the first examples when checking sample behavior:
 The project is checked by:
 
 - `tools/validate_projects.py`, which validates repo-local manifests through the
-  startup validation path
+  startup validation path and can also run optional headless startup smoke
+  through `--headless-smoke`
 - `tests/test_startup_smoke.py`, which runs `projects/new_project` headlessly
   for two frames when that fixture is present
 - runtime tests that use repo-local fixtures opportunistically when available
@@ -87,6 +88,7 @@ uses:
 
 ```text
 .venv/Scripts/python tools/validate_projects.py
+.venv/Scripts/python tools/validate_projects.py --headless-smoke
 .venv/Scripts/python run_game.py --project projects/new_project --headless --max-frames 2
 ```
 

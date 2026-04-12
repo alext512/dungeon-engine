@@ -36,6 +36,11 @@ Based on the current roadmap and future-features notes, the next valuable steps 
 - runtime launch or handoff from the editor
 - richer content editing for dialogue and commands
 
+Recent correctness-focused progress already moved `scope` into the structured
+entity-instance and template editing surfaces, so the remaining structured-field
+gap is now more about fields like `input_map`, `entity_commands`, `inventory`,
+and other workflow-heavy authored blocks.
+
 ## Longer-Term Future Features
 
 Ideas that are clearly interesting but should still be treated as future work include:

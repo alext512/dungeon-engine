@@ -267,6 +267,87 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         )
         self.assertEqual(updated._extra["custom_field"], "keep-me")
 
+    def test_build_entity_from_fields_updates_scope(self):
+        entity = EntityDocument(
+            id="tracker",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._scope_combo.setCurrentText("global")
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["scope"], "global")
+
+    def test_build_entity_from_fields_preserves_raw_only_engine_owned_fields(self):
+        entity = EntityDocument(
+            id="terminal_1",
+            grid_x=4,
+            grid_y=5,
+            template="entity_templates/reference_panel",
+            _extra={
+                "scope": "global",
+                "color": [255, 220, 160],
+                "inventory": {
+                    "max_stacks": 2,
+                    "stacks": [{"item_id": "items/copper_key", "quantity": 1}],
+                },
+                "input_map": {"interact": "use_terminal"},
+                "entity_commands": {
+                    "interact": {
+                        "enabled": True,
+                        "commands": [
+                            {
+                                "type": "run_project_command",
+                                "command_id": "commands/system/open_gate",
+                            }
+                        ],
+                    }
+                },
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._kind_edit.setText("console")
+        fields._variables_text.setPlainText('{"visited": true}')
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["scope"], "global")
+        self.assertEqual(updated._extra["color"], [255, 220, 160])
+        self.assertEqual(
+            updated._extra["inventory"],
+            {
+                "max_stacks": 2,
+                "stacks": [{"item_id": "items/copper_key", "quantity": 1}],
+            },
+        )
+        self.assertEqual(
+            updated._extra["input_map"],
+            {"interact": "use_terminal"},
+        )
+        self.assertEqual(
+            updated._extra["entity_commands"],
+            {
+                "interact": {
+                    "enabled": True,
+                    "commands": [
+                        {
+                            "type": "run_project_command",
+                            "command_id": "commands/system/open_gate",
+                        }
+                    ],
+                }
+            },
+        )
+        self.assertEqual(updated._extra["kind"], "console")
+        self.assertEqual(updated._extra["variables"], {"visited": True})
+
     def test_build_entity_from_fields_rejects_non_array_visuals(self):
         entity = EntityDocument(
             id="crate_1",

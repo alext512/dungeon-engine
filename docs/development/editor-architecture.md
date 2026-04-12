@@ -28,7 +28,8 @@ Current slices:
 - world-space entity placement plus basic screen-space placement, selection,
   and nudging support
 - structured editors for project manifest, shared variables, items, templates,
-  global entities, and entity instances
+  global entities, and entity instances, including structured scope editing for
+  template and instance surfaces
 - reference-aware file/folder reorganization for file-backed content
 - project I/O discovery helpers for runtime-aligned area, template, command,
   item, and global-entity ids
@@ -122,6 +123,17 @@ That likely means each tool-owned document keeps:
 
 - fields the tool understands well
 - passthrough buckets for unknown fields or subtrees
+
+Focused editors should follow the same rule even when they only own part of a
+JSON object. For example, editing template visuals, entity-instance fields, or
+shared variable basics must not strip raw-only engine-used subtrees such as
+`entity_commands`, `inventory`, `input_map`, `dialogue_ui`, `inventory_ui`, or
+item `use_commands`. The same rule applies to area-focused surfaces such as
+editing `enter_commands`: those saves must not disturb `camera`,
+`input_targets`, or unrelated area root data. It also applies to the shared
+render-properties surface: layer render edits must preserve unrelated layer
+metadata, and entity render edits must preserve authored entity fields outside
+the render subset.
 
 Without this, the tool will become dangerous as soon as runtime content evolves.
 

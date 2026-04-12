@@ -47,6 +47,7 @@ _ENTITY_INT_DEFAULTS = {
 }
 _MANAGED_EXTRA_KEYS = {
     "kind",
+    "scope",
     "tags",
     "facing",
     *list(_ENTITY_BOOL_DEFAULTS.keys()),
@@ -381,6 +382,11 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._space_label = QLabel("world")
         self._form.addRow(self._space_label_title, self._space_label)
 
+        self._scope_label = QLabel("scope")
+        self._scope_combo = QComboBox()
+        self._scope_combo.addItems(["area", "global"])
+        self._form.addRow(self._scope_label, self._scope_combo)
+
         self._x_label = QLabel("grid_x")
         self._x_spin = QSpinBox()
         self._x_spin.setRange(0, 0)
@@ -613,6 +619,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._id_edit.textChanged.connect(self._on_field_changed)
         self._kind_edit.textChanged.connect(self._on_field_changed)
         self._tags_edit.textChanged.connect(self._on_field_changed)
+        self._scope_combo.currentIndexChanged.connect(self._on_field_changed)
         self._x_spin.valueChanged.connect(self._on_field_changed)
         self._y_spin.valueChanged.connect(self._on_field_changed)
         self._pixel_x_check.toggled.connect(self._on_pixel_check_toggled)
@@ -679,6 +686,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             QSignalBlocker(self._id_edit),
             QSignalBlocker(self._kind_edit),
             QSignalBlocker(self._tags_edit),
+            QSignalBlocker(self._scope_combo),
             QSignalBlocker(self._x_spin),
             QSignalBlocker(self._y_spin),
             QSignalBlocker(self._pixel_x_check),
@@ -708,6 +716,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._tags_edit.clear()
         self._template_label.setText("-")
         self._space_label.setText("world")
+        self._scope_combo.setCurrentText("area")
         self._x_spin.setValue(0)
         self._y_spin.setValue(0)
         self._pixel_x_check.setChecked(False)
@@ -769,6 +778,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._template_label.setText(entity.template or "-")
         self._template_label.setCursorPosition(0)
         self._space_label.setText(self._effective_space)
+        self._scope_combo.setCurrentText(str(entity._extra.get("scope", "area")))
         self._x_spin.setValue(entity.x)
         self._y_spin.setValue(entity.y)
         self._pixel_x_check.setChecked(has_pixel_x)
@@ -967,6 +977,13 @@ class _EntityInstanceFieldsEditor(QWidget):
         kind = self._kind_edit.text().strip()
         if kind:
             extra["kind"] = kind
+
+        self._apply_extra_value(
+            extra,
+            key="scope",
+            value=self._scope_combo.currentText(),
+            default="area",
+        )
 
         tags = _parse_tag_list(self._tags_edit.text())
         if tags:

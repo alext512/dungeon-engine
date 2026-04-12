@@ -145,6 +145,58 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             window._tab_widget.set_dirty("areas/demo", False)
 
+    def test_area_start_panel_save_preserves_other_area_json_surfaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            area_path = project_file.parent / "areas" / "demo.json"
+            area_data = load_json_data(area_path)
+            area_data["enter_commands"] = [
+                {
+                    "type": "route_inputs_to_entity",
+                    "entity_id": "switch_a",
+                }
+            ]
+            area_data["custom_root"] = {"keep": True}
+            area_path.write_text(json.dumps(area_data, indent=2), encoding="utf-8")
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            panel = window._area_start_panel
+            panel._helper_combo.setCurrentIndex(0)
+            panel._route_entity_edit.setText("relay")
+            panel._on_add_helper_command()
+            panel._on_apply()
+            window._on_save_active()
+
+            saved = load_json_data(area_path)
+
+            self.assertEqual(
+                saved["enter_commands"],
+                [
+                    {
+                        "type": "route_inputs_to_entity",
+                        "entity_id": "switch_a",
+                    },
+                    {
+                        "type": "route_inputs_to_entity",
+                        "entity_id": "relay",
+                    },
+                ],
+            )
+            self.assertEqual(
+                saved["camera"],
+                {
+                    "follow": {
+                        "mode": "entity",
+                        "entity_id": "switch_a",
+                    }
+                },
+            )
+            self.assertEqual(saved["input_targets"], {"interact": "switch_a"})
+            self.assertEqual(saved["custom_root"], {"keep": True})
+
     def test_edit_tileset_updates_dimensions(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project(Path(tmp))
@@ -204,6 +256,38 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 canvas._entity_items[0].zValue(),
             )
             window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_layer_render_properties_save_preserves_other_layer_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_layering_project(Path(tmp))
+            area_path = project_file.parent / "areas" / "demo.json"
+            area_data = load_json_data(area_path)
+            area_data["tile_layers"][0]["opacity"] = 0.5
+            area_data["tile_layers"][0]["custom_tag"] = {"keep": "yes"}
+            area_path.write_text(json.dumps(area_data, indent=2), encoding="utf-8")
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._render_panel._render_order_spin.setValue(15)
+            window._render_panel._y_sort_check.setChecked(True)
+            window._render_panel._sort_y_offset_spin.setValue(-4.0)
+            window._render_panel._stack_order_spin.setValue(3)
+            QApplication.processEvents()
+            window._on_save_active()
+
+            saved = load_json_data(area_path)
+            layer = saved["tile_layers"][0]
+
+            self.assertEqual(layer["name"], "ground")
+            self.assertEqual(layer["grid"], [[1]])
+            self.assertEqual(layer["render_order"], 15)
+            self.assertTrue(layer["y_sort"])
+            self.assertEqual(layer["sort_y_offset"], -4.0)
+            self.assertEqual(layer["stack_order"], 3)
+            self.assertEqual(layer["opacity"], 0.5)
+            self.assertEqual(layer["custom_tag"], {"keep": "yes"})
 
     def test_layer_panel_lists_only_real_tile_layers(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -384,6 +468,60 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             self.assertEqual(canvas.selected_entity_id, "npc_2")
             window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_render_properties_save_preserves_other_entity_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            area_path = project_file.parent / "areas" / "demo.json"
+            area_data = load_json_data(area_path)
+            for entity in area_data["entities"]:
+                if entity["id"] == "npc_2":
+                    entity["kind"] = "npc"
+                    entity["variables"] = {"mood": "calm"}
+                    entity["entity_commands"] = {
+                        "on_interact": [{"type": "show_message", "text": "Hello"}]
+                    }
+                    entity["custom_entity_flag"] = True
+                    break
+            area_path.write_text(json.dumps(area_data, indent=2), encoding="utf-8")
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._json_editing_enabled = False
+            window._set_json_editing_action_state(False)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._select_action.setChecked(True)
+            canvas.select_entities_at_cell(0, 0)
+            QApplication.processEvents()
+
+            window._render_panel._render_order_spin.setValue(14)
+            window._render_panel._y_sort_check.setChecked(False)
+            window._render_panel._sort_y_offset_spin.setValue(3.5)
+            window._render_panel._stack_order_spin.setValue(7)
+            QApplication.processEvents()
+            window._on_save_active()
+
+            saved = load_json_data(area_path)
+            entity = next(entry for entry in saved["entities"] if entry["id"] == "npc_2")
+
+            self.assertEqual(entity["grid_x"], 0)
+            self.assertEqual(entity["grid_y"], 0)
+            self.assertEqual(entity["render_order"], 14)
+            self.assertFalse(entity["y_sort"])
+            self.assertEqual(entity["sort_y_offset"], 3.5)
+            self.assertEqual(entity["stack_order"], 7)
+            self.assertEqual(entity["kind"], "npc")
+            self.assertEqual(entity["variables"], {"mood": "calm"})
+            self.assertEqual(
+                entity["entity_commands"],
+                {"on_interact": [{"type": "show_message", "text": "Hello"}]},
+            )
+            self.assertTrue(entity["custom_entity_flag"])
 
     def test_entity_instance_panel_uses_its_own_left_dock_with_internal_tabs(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -119,6 +119,57 @@ class ProjectLayoutParityTests(unittest.TestCase):
         self.assertEqual(runtime.internal_width, editor.display_width)
         self.assertEqual(runtime.internal_height, editor.display_height)
 
+    def test_runtime_and_editor_manifest_loaders_match_runtime_control_fields(self) -> None:
+        project_root = self._make_project(
+            project_payload={
+                "startup_area": "  areas/intro/title_screen  ",
+                "save_dir": "session_saves",
+                "input_targets": {
+                    "interact": "player_1",
+                    "pause": "  pause_controller  ",
+                    "menu": "",
+                    "  ": "ignored",
+                },
+                "debug_inspection_enabled": True,
+                "global_entities": [
+                    {
+                        "id": "dialogue_controller",
+                        "template": "entity_templates/controllers/dialogue_controller",
+                    },
+                    {
+                        "id": "screen_fx",
+                        "variables": {"active": True},
+                    },
+                ],
+                "command_runtime": {
+                    "max_settle_passes": "64",
+                    "max_immediate_commands_per_settle": 4096.2,
+                    "log_settle_usage_peaks": 1,
+                    "settle_warning_ratio": 1.75,
+                },
+            },
+        )
+
+        runtime = load_project(project_root)
+        editor = load_manifest(project_root)
+
+        self.assertEqual(runtime.startup_area, editor.startup_area)
+        self.assertEqual(runtime.save_dir, editor.save_dir)
+        self.assertEqual(runtime.input_targets, editor.input_targets)
+        self.assertEqual(runtime.debug_inspection_enabled, editor.debug_inspection_enabled)
+        self.assertEqual(runtime.global_entities, editor.global_entities)
+        self.assertEqual(
+            {
+                "max_settle_passes": runtime.command_runtime.max_settle_passes,
+                "max_immediate_commands_per_settle": (
+                    runtime.command_runtime.max_immediate_commands_per_settle
+                ),
+                "log_settle_usage_peaks": runtime.command_runtime.log_settle_usage_peaks,
+                "settle_warning_ratio": runtime.command_runtime.settle_warning_ratio,
+            },
+            editor.command_runtime,
+        )
+
     def test_runtime_and_editor_discover_same_area_template_command_and_item_ids(self) -> None:
         project_root = self._make_project(
             project_payload={

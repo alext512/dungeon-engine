@@ -326,6 +326,7 @@ Useful commands during development:
 ```text
 .venv/Scripts/python -m unittest discover -s tests -v
 .venv/Scripts/python tools/validate_projects.py
+.venv/Scripts/python tools/validate_projects.py --headless-smoke
 .venv/Scripts/python run_game.py --project path/to/project --headless --max-frames 2
 cd tools/area_editor
 ..\..\.venv/Scripts/python -m unittest discover -s tests -v
@@ -337,7 +338,8 @@ asset references before launch.
 
 If you keep repo-local example projects under `projects/`, validate each
 present `project.json` after command-surface or content-authoring changes with
-`tools/validate_projects.py`.
+`tools/validate_projects.py`. Add `--headless-smoke` when you also want the
+real startup path exercised automatically for a couple of frames.
 
 When changing `projects/new_project`, also keep
 [`docs/development/sample-content-coverage.md`](./docs/development/sample-content-coverage.md)

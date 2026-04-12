@@ -67,6 +67,70 @@ class TestManifestLoading(unittest.TestCase):
             (_FIXTURE.project_root / "shared_variables.json").resolve(),
         )
 
+    def test_runtime_control_fields_are_normalized(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp) / "project"
+            project_root.mkdir()
+            (project_root / "project.json").write_text(
+                (
+                    "{\n"
+                    '  "startup_area": "  areas/demo  ",\n'
+                    '  "save_dir": "session_saves",\n'
+                    '  "input_targets": {\n'
+                    '    "interact": "player_1",\n'
+                    '    "pause": "  pause_controller  ",\n'
+                    '    "menu": ""\n'
+                    "  },\n"
+                    '  "debug_inspection_enabled": true,\n'
+                    '  "global_entities": [\n'
+                    "    {\n"
+                    '      "id": "dialogue_controller",\n'
+                    '      "template": "entity_templates/controllers/dialogue_controller"\n'
+                    "    }\n"
+                    "  ],\n"
+                    '  "command_runtime": {\n'
+                    '    "max_settle_passes": "64",\n'
+                    '    "max_immediate_commands_per_settle": 4096.2,\n'
+                    '    "log_settle_usage_peaks": 1,\n'
+                    '    "settle_warning_ratio": 1.75\n'
+                    "  }\n"
+                    "}\n"
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = load_manifest(project_root / "project.json")
+
+            self.assertEqual(manifest.startup_area, "areas/demo")
+            self.assertEqual(manifest.save_dir, (project_root / "session_saves").resolve())
+            self.assertEqual(
+                manifest.input_targets,
+                {
+                    "interact": "player_1",
+                    "pause": "pause_controller",
+                    "menu": "",
+                },
+            )
+            self.assertTrue(manifest.debug_inspection_enabled)
+            self.assertEqual(
+                manifest.global_entities,
+                [
+                    {
+                        "id": "dialogue_controller",
+                        "template": "entity_templates/controllers/dialogue_controller",
+                    }
+                ],
+            )
+            self.assertEqual(
+                manifest.command_runtime,
+                {
+                    "max_settle_passes": 64,
+                    "max_immediate_commands_per_settle": 4096,
+                    "log_settle_usage_peaks": True,
+                    "settle_warning_ratio": 1.0,
+                },
+            )
+
 
 class TestAreaDiscovery(unittest.TestCase):
     def setUp(self) -> None:

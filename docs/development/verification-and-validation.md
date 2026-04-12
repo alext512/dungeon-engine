@@ -36,11 +36,15 @@ If you changed command ids, command references, authoring conventions, or repo-l
 
 ```text
 .venv/Scripts/python tools/validate_projects.py
+.venv/Scripts/python tools/validate_projects.py --headless-smoke
 ```
 
 The validation command itself is covered by `tests/test_project_validation_tool.py`
-so changes to its input handling or exit-code behavior stay visible in the
-runtime suite.
+so changes to its input handling, default project discovery, headless-smoke
+flow, or exit-code behavior stay visible in the runtime suite. The optional
+`--headless-smoke` mode runs the same `run_game.py --project ... --headless
+--max-frames 2` startup path the runtime uses, but loops over each selected
+project automatically.
 
 ## Docs Site Commands
 

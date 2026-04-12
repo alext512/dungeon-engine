@@ -181,6 +181,7 @@ Recommended direct project validation:
 
 ```text
 .venv/Scripts/python tools/validate_projects.py
+.venv/Scripts/python tools/validate_projects.py --headless-smoke
 ```
 
 Why this matters:
@@ -191,6 +192,41 @@ Why this matters:
 - Some end-to-end runtime tests use optional repo-local example projects and
   skip when those fixtures are not present. Treat those as bonus integration
   coverage, not as the only safety net.
+
+## Architectural Debt Guardrails
+
+When making changes that affect the active runtime, editor, validation, or
+authored JSON contract, use these rules to avoid slowly rebuilding drift or
+debt:
+
+- Do not add compatibility layers, legacy code paths, or shim surfaces unless a
+  maintainer explicitly asks for them. Prefer updating the real callers and
+  removing dead paths.
+- If you change a public authored surface, update the whole contract bundle in
+  the same pass:
+  - runtime behavior
+  - startup validation
+  - editor-side interpretation if applicable
+  - canonical docs
+  - focused tests and parity tests
+  - repo-local sample content or sample-coverage docs when relevant
+- Every new authored field should be classified explicitly:
+  - stable author-authored contract
+  - runtime-owned/transient state
+  - internal implementation detail that should stay out of authoring docs
+- If runtime and editor both interpret the same file shape, keep them separate
+  in code but prove parity with tests. Do not rely on “they probably still
+  match.”
+- For focused editor surfaces, preserve fields the editor does not own. If a
+  widget edits only part of a JSON object, add or update a regression test that
+  proves the untouched engine-used subtrees survive a save.
+- Avoid permissive silent fallbacks for alternate JSON shapes unless that
+  behavior is intentional, documented, and tested. Convenience parsing that
+  nobody owns turns into long-term debt.
+- Do not let plans or past discussions become de facto truth. If a plan and the
+  implementation differ, either update the code or fix the docs/plan language.
+- Prefer one authoritative path over parallel “old vs new” behavior. When a
+  cleanup is complete, remove the obsolete route instead of carrying both.
 
 ## Gotchas
 

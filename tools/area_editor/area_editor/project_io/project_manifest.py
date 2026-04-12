@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from area_editor.json_io import (
+    dumps_for_clone,
     is_json_data_file,
     iter_json_data_files,
     json_data_path_candidates,
@@ -62,6 +63,7 @@ class GlobalEntityEntry:
 class ProjectManifest:
     project_file: Path
     project_root: Path
+    save_dir: Path
     area_paths: list[Path] = field(default_factory=list)
     entity_template_paths: list[Path] = field(default_factory=list)
     asset_paths: list[Path] = field(default_factory=list)
@@ -69,9 +71,13 @@ class ProjectManifest:
     dialogue_paths: list[Path] = field(default_factory=list)
     item_paths: list[Path] = field(default_factory=list)
     shared_variables_path: Path | None = None
+    global_entities: list[dict[str, Any]] = field(default_factory=list)
     display_width: int = 320
     display_height: int = 240
     startup_area: str | None = None
+    input_targets: dict[str, str] = field(default_factory=dict)
+    debug_inspection_enabled: bool = False
+    command_runtime: dict[str, Any] | None = None
     _raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -151,6 +157,84 @@ def _resolve_project_dimension(
         return int(default)
 
 
+def _optional_manifest_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _resolve_input_targets(raw_input_targets: Any) -> dict[str, str]:
+    resolved: dict[str, str] = {}
+    if not isinstance(raw_input_targets, dict):
+        return resolved
+    for raw_action, raw_entity_id in raw_input_targets.items():
+        action = str(raw_action).strip()
+        if not action:
+            continue
+        if raw_entity_id in (None, ""):
+            resolved[action] = ""
+            continue
+        resolved[action] = str(raw_entity_id).strip()
+    return resolved
+
+
+def _resolve_global_entities(raw_global_entities: Any) -> list[dict[str, Any]]:
+    if raw_global_entities is None:
+        return []
+    if not isinstance(raw_global_entities, list):
+        raise ValueError("project.json field 'global_entities' must be a JSON array.")
+    normalized: list[dict[str, Any]] = []
+    for index, entity_data in enumerate(raw_global_entities):
+        if not isinstance(entity_data, dict):
+            raise ValueError(
+                "project.json field 'global_entities' must contain JSON objects "
+                f"(invalid entry at index {index})."
+            )
+        normalized.append(dumps_for_clone(entity_data))
+    return normalized
+
+
+def _resolve_command_runtime(raw_value: Any) -> dict[str, Any] | None:
+    if raw_value in (None, ""):
+        return None
+    if not isinstance(raw_value, dict):
+        raise ValueError("project.json field 'command_runtime' must be a JSON object.")
+
+    resolved: dict[str, Any] = {}
+    if "max_settle_passes" in raw_value:
+        try:
+            resolved["max_settle_passes"] = max(1, int(raw_value["max_settle_passes"]))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "project.json field 'command_runtime.max_settle_passes' must be a positive integer."
+            ) from exc
+    if "max_immediate_commands_per_settle" in raw_value:
+        try:
+            resolved["max_immediate_commands_per_settle"] = max(
+                1,
+                int(raw_value["max_immediate_commands_per_settle"]),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "project.json field 'command_runtime.max_immediate_commands_per_settle' "
+                "must be a positive integer."
+            ) from exc
+    if "log_settle_usage_peaks" in raw_value:
+        resolved["log_settle_usage_peaks"] = bool(raw_value["log_settle_usage_peaks"])
+    if "settle_warning_ratio" in raw_value:
+        try:
+            resolved["settle_warning_ratio"] = max(
+                0.0,
+                min(1.0, float(raw_value["settle_warning_ratio"])),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "project.json field 'command_runtime.settle_warning_ratio' must be a number between 0 and 1."
+            ) from exc
+    return resolved
+
+
 def _content_id(file_path: Path, root_dirs: list[Path]) -> str:
     """Derive a content id from a file path relative to its root directory."""
     resolved = file_path.resolve()
@@ -198,6 +282,7 @@ def load_manifest(project_path: Path) -> ProjectManifest:
     return ProjectManifest(
         project_file=project_file.resolve(),
         project_root=project_root,
+        save_dir=(project_root / str(raw.get("save_dir", "saves"))).resolve(),
         area_paths=_resolve_path_list(project_root, raw, "area_paths", "areas"),
         entity_template_paths=_resolve_path_list(
             project_root, raw, "entity_template_paths", "entity_templates"
@@ -209,9 +294,13 @@ def load_manifest(project_path: Path) -> ProjectManifest:
         ),
         item_paths=_resolve_path_list(project_root, raw, "item_paths", "items"),
         shared_variables_path=shared_variables_path,
+        global_entities=_resolve_global_entities(raw.get("global_entities")),
         display_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
         display_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
-        startup_area=raw.get("startup_area"),
+        startup_area=_optional_manifest_str(raw.get("startup_area")),
+        input_targets=_resolve_input_targets(raw.get("input_targets")),
+        debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
+        command_runtime=_resolve_command_runtime(raw.get("command_runtime")),
         _raw=raw,
     )
 
@@ -302,14 +391,8 @@ def discover_items(manifest: ProjectManifest) -> list[ItemEntry]:
 
 def discover_global_entities(manifest: ProjectManifest) -> list[GlobalEntityEntry]:
     """Return authored global entities in the manifest's stored order."""
-    raw_entries = manifest._raw.get("global_entities", [])
-    if not isinstance(raw_entries, list):
-        return []
-
     entries: list[GlobalEntityEntry] = []
-    for index, raw_entry in enumerate(raw_entries):
-        if not isinstance(raw_entry, dict):
-            continue
+    for index, raw_entry in enumerate(manifest.global_entities):
         raw_id = raw_entry.get("id")
         entity_id = (
             str(raw_id).strip()

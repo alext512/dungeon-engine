@@ -95,3 +95,31 @@ Use [Verification and Validation](verification-and-validation.md) when you need 
 - Preserve user changes you did not make.
 - Avoid treating old plans as implemented behavior.
 - When behavior changes, think in terms of code plus docs plus project validation, not code alone.
+
+## Debt Prevention Rules
+
+Use these rules to avoid reintroducing the same kinds of architectural debt:
+
+- Do not add compatibility layers, legacy routes, or shim APIs unless a
+  maintainer explicitly asks for them. Prefer changing the real callers and
+  deleting the obsolete path.
+- Treat contract changes as bundle changes. When authored behavior changes,
+  update:
+  - runtime code
+  - startup validation
+  - editor interpretation where applicable
+  - canonical docs
+  - parity or regression tests
+  - sample-content coverage docs if the canonical sample proves that surface
+- When adding or changing an authored field, explicitly decide whether it is:
+  - public authored contract
+  - runtime-owned/transient
+  - internal-only implementation detail
+- If both runtime and editor interpret the same JSON shape, keep parity covered
+  by tests. Separate code is fine; unproven parity is not.
+- Focused editors must preserve the JSON they do not own. If a structured
+  widget edits only one part of an object, add a regression test proving
+  engine-used raw subtrees survive the save.
+- Be skeptical of permissive fallback parsing. If the engine accepts multiple
+  shapes, that should be a deliberate documented contract, not an accident.
+- Prefer removing dead code over leaving “just in case” alternate paths behind.
