@@ -342,11 +342,10 @@ class Game(GameAreaRuntimeMixin, GameSaveRuntimeMixin):
             text_renderer=self.renderer.text_renderer,
             command_context=command_context,
         )
-        command_context.dialogue_runtime = self.dialogue_runtime
-        command_context.inventory_runtime = self.inventory_runtime
-        if command_services.ui is not None:
-            command_services.ui.dialogue_runtime = self.dialogue_runtime
-            command_services.ui.inventory_runtime = self.inventory_runtime
+        if command_services.ui is None:
+            raise RuntimeError("Play runtime command services are missing the UI service bundle.")
+        command_services.ui.dialogue_runtime = self.dialogue_runtime
+        command_services.ui.inventory_runtime = self.inventory_runtime
         self.input_handler = InputHandler(
             self.command_runner,
             self.world,

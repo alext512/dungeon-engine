@@ -87,6 +87,20 @@ class InventoryRuntime:
             "engine_inventory_action_option_1",
         ]
 
+    def _world(self) -> Any:
+        """Return the active runtime world for inventory lookups."""
+        world_services = self.command_context.services.world
+        if world_services is None or world_services.world is None:
+            raise ValueError("Inventory runtime requires an active world service.")
+        return world_services.world
+
+    def _audio_player(self) -> Any | None:
+        """Return the active audio player when one is available."""
+        audio_services = self.command_context.services.audio
+        if audio_services is None:
+            return None
+        return audio_services.audio_player
+
     def is_active(self) -> bool:
         """Return whether any inventory session is currently open."""
         return self.current_session is not None
@@ -117,7 +131,7 @@ class InventoryRuntime:
         resolved_entity_id = str(entity_id).strip()
         if not resolved_entity_id:
             raise ValueError("open_inventory_session requires a non-empty entity_id.")
-        if self.command_context.world.get_entity(resolved_entity_id) is None:
+        if self._world().get_entity(resolved_entity_id) is None:
             raise KeyError(f"Cannot open inventory for missing entity '{resolved_entity_id}'.")
 
         preset_name, preset = self._resolve_ui_preset(
@@ -477,7 +491,7 @@ class InventoryRuntime:
 
     def _view_items(self, session: InventorySession) -> list[dict[str, Any]]:
         """Return rendered item-view records for the active inventory stacks."""
-        entity = self.command_context.world.get_entity(session.entity_id)
+        entity = self._world().get_entity(session.entity_id)
         if entity is None or entity.inventory is None:
             return []
 
@@ -603,7 +617,7 @@ class InventoryRuntime:
 
     def _deny_feedback(self, session: InventorySession) -> None:
         """Play one optional small deny sound when the preset configures it."""
-        audio_player = self.command_context.audio_player
+        audio_player = self._audio_player()
         if audio_player is None:
             return
         deny_sfx_path = session.ui_preset.get("deny_sfx_path")

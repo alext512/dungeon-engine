@@ -102,10 +102,6 @@ class AnimationSystem:
             return bool(visual is not None and visual.animation_playback.active)
         return any(visual.animation_playback.active for visual in entity.visuals)
 
-    def update(self, dt: float) -> None:
-        """Backward-compatible wrapper that advances one fixed animation tick."""
-        self.update_tick(dt)
-
     def update_tick(self, dt: float) -> None:
         """Update visible frames for each entity visual for one simulation tick."""
         for entity in self.world.iter_entities():

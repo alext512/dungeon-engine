@@ -498,6 +498,7 @@ def register_movement_commands(
     def move_in_direction(
         context: CommandContext,
         services: CommandServices | None,
+        world: Any,
         area: Any,
         movement_system: Any,
         collision_system: Any,
@@ -516,7 +517,7 @@ def register_movement_commands(
         """Resolve one standard grid step using blocked cells and solid/pushable entities."""
         resolved_world, resolved_area, resolved_movement_system, resolved_collision_system, _ = _resolve_world_services(
             services=services,
-            world=context.world,
+            world=world,
             area=area,
             movement_system=movement_system,
             collision_system=collision_system,
@@ -626,6 +627,7 @@ def register_movement_commands(
     def push_facing(
         context: CommandContext,
         services: CommandServices | None,
+        world: Any,
         area: Any,
         movement_system: Any,
         collision_system: Any,
@@ -644,7 +646,7 @@ def register_movement_commands(
         """Try to push exactly one blocker in the actor's facing direction without moving the actor."""
         resolved_world, resolved_area, resolved_movement_system, resolved_collision_system, _ = _resolve_world_services(
             services=services,
-            world=context.world,
+            world=world,
             area=area,
             movement_system=movement_system,
             collision_system=collision_system,
@@ -720,6 +722,7 @@ def register_movement_commands(
     def interact_facing(
         context: CommandContext,
         services: CommandServices | None,
+        world: Any,
         interaction_system: Any,
         *,
         entity_id: str,
@@ -730,7 +733,7 @@ def register_movement_commands(
         """Resolve the standard facing target and dispatch its normal interact command."""
         resolved_world, _, _, _, resolved_interaction_system = _resolve_world_services(
             services=services,
-            world=context.world,
+            world=world,
             area=None,
             movement_system=None,
             collision_system=None,

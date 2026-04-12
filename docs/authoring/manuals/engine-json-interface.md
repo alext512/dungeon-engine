@@ -316,7 +316,7 @@ Each entry point object currently uses:
 - `pixel_y`
 
 Notes:
-- `entry_points` remain supported for compatibility, but newer authored
+- `entry_points` remain supported, but newer authored
   projects should prefer destination marker entities plus
   `destination_entity_id` on `change_area` / `new_game`.
 - `facing` on an area entry point remains supported.

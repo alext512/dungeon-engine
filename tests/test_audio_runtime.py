@@ -5,7 +5,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.context_services import build_command_services
+from dungeon_engine.commands.context_services import (
+    CommandAudioServices,
+    build_command_services,
+)
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, execute_registered_command
 from dungeon_engine.engine.audio import AudioPlayer
@@ -159,12 +162,13 @@ class AudioRuntimeTests(unittest.TestCase):
                 animation_system=None,
             ),
         )
+        context.services.audio = CommandAudioServices()
         return registry, context
 
     def test_audio_commands_forward_parameters_to_audio_player(self) -> None:
         registry, context = self._make_command_context()
         audio_player = _RecordingAudioPlayer()
-        context.audio_player = audio_player
+        context.services.audio.audio_player = audio_player
 
         execute_registered_command(
             registry,

@@ -9,7 +9,11 @@ from pathlib import Path
 
 import run_game
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.context_services import build_command_services
+from dungeon_engine.commands.context_services import (
+    CommandRuntimeServices,
+    CommandUiServices,
+    build_command_services,
+)
 from dungeon_engine.commands.library import (
     ProjectCommandValidationError,
     validate_project_commands,
@@ -437,6 +441,8 @@ class StrictContentIdTests(unittest.TestCase):
                 persistence_runtime=persistence_runtime,
             ),
         )
+        context.services.ui = CommandUiServices()
+        context.services.runtime = CommandRuntimeServices()
         return registry, context
 
     def _complete_handle(self, handle: object, *, max_steps: int = 32) -> None:
@@ -467,9 +473,9 @@ class StrictContentIdTests(unittest.TestCase):
         registry, context = self._make_command_context(area=area, world=world)
         collision = CollisionSystem(area, world)
         movement = MovementSystem(area, world, collision)
-        context.collision_system = collision
-        context.interaction_system = InteractionSystem(world)
-        context.movement_system = movement
+        context.services.world.collision_system = collision
+        context.services.world.interaction_system = InteractionSystem(world)
+        context.services.world.movement_system = movement
 
         def _dispatch_occupancy_hooks(
             instigator: Entity,
@@ -589,8 +595,8 @@ class StrictContentIdTests(unittest.TestCase):
         world.add_entity(actor)
         registry, context = self._make_command_context(area=area, world=world)
         movement_system = _RecordingMovementSystem()
-        context.movement_system = movement_system
-        context.collision_system = CollisionSystem(area, world)
+        context.services.world.movement_system = movement_system
+        context.services.world.collision_system = CollisionSystem(area, world)
 
         handle = execute_registered_command(
             registry,
@@ -658,8 +664,8 @@ class StrictContentIdTests(unittest.TestCase):
         world.add_entity(blocker)
         registry, context = self._make_command_context(area=area, world=world)
         movement_system = _RecordingMovementSystem()
-        context.movement_system = movement_system
-        context.collision_system = CollisionSystem(area, world)
+        context.services.world.movement_system = movement_system
+        context.services.world.collision_system = CollisionSystem(area, world)
 
         handle = execute_registered_command(
             registry,
@@ -701,8 +707,8 @@ class StrictContentIdTests(unittest.TestCase):
         world.add_entity(blocker)
         registry, context = self._make_command_context(area=area, world=world)
         movement_system = _RecordingMovementSystem()
-        context.movement_system = movement_system
-        context.collision_system = CollisionSystem(area, world)
+        context.services.world.movement_system = movement_system
+        context.services.world.collision_system = CollisionSystem(area, world)
 
         handle = execute_registered_command(
             registry,
@@ -750,8 +756,8 @@ class StrictContentIdTests(unittest.TestCase):
         world.add_entity(blocker)
         registry, context = self._make_command_context(area=area, world=world)
         movement_system = _RecordingMovementSystem()
-        context.movement_system = movement_system
-        context.collision_system = CollisionSystem(area, world)
+        context.services.world.movement_system = movement_system
+        context.services.world.collision_system = CollisionSystem(area, world)
 
         handle = execute_registered_command(
             registry,
@@ -806,7 +812,7 @@ class StrictContentIdTests(unittest.TestCase):
         target.interactable = True
         world.add_entity(target)
         registry, context = self._make_command_context(area=area, world=world)
-        context.interaction_system = InteractionSystem(world)
+        context.services.world.interaction_system = InteractionSystem(world)
 
         handle = execute_registered_command(
             registry,
@@ -1116,12 +1122,12 @@ class StrictContentIdTests(unittest.TestCase):
             paused_states.append(bool(paused))
             pause_state["paused"] = bool(paused)
 
-        context.set_simulation_paused = _record_pause
-        context.get_simulation_paused = lambda: pause_state["paused"]
-        context.request_step_simulation_tick = lambda: step_requests.append("step")
-        context.adjust_output_scale = lambda delta: zoom_deltas.append(int(delta))
+        context.services.runtime.set_simulation_paused = _record_pause
+        context.services.runtime.get_simulation_paused = lambda: pause_state["paused"]
+        context.services.runtime.request_step_simulation_tick = lambda: step_requests.append("step")
+        context.services.runtime.adjust_output_scale = lambda delta: zoom_deltas.append(int(delta))
 
-        context.debug_inspection_enabled = False
+        context.services.runtime.debug_inspection_enabled = False
         execute_registered_command(registry, context, "toggle_simulation_paused", {}).update(0.0)
         execute_registered_command(registry, context, "step_simulation_tick", {}).update(0.0)
         execute_registered_command(
@@ -1134,7 +1140,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(step_requests, [])
         self.assertEqual(zoom_deltas, [])
 
-        context.debug_inspection_enabled = True
+        context.services.runtime.debug_inspection_enabled = True
         execute_registered_command(registry, context, "toggle_simulation_paused", {}).update(0.0)
         execute_registered_command(registry, context, "step_simulation_tick", {}).update(0.0)
         execute_registered_command(
@@ -1455,7 +1461,7 @@ class StrictContentIdTests(unittest.TestCase):
             "set_current_area_var_length",
             {
                 "name": "visited_room_count",
-                "value": context.world.variables["visited_rooms"],
+                "value": context.services.world.world.variables["visited_rooms"],
             },
         ).update(0.0)
         execute_command_spec(
@@ -1466,7 +1472,7 @@ class StrictContentIdTests(unittest.TestCase):
                 "name": "latest_room",
                 "value": {
                     "$collection_item": {
-                        "value": context.world.variables["visited_rooms"],
+                        "value": context.services.world.world.variables["visited_rooms"],
                         "index": 1,
                         "default": "",
                     }
@@ -1501,13 +1507,13 @@ class StrictContentIdTests(unittest.TestCase):
             },
         ).update(0.0)
 
-        self.assertEqual(context.world.variables["mode"], "play")
-        self.assertEqual(context.world.variables["turn_count"], 3)
-        self.assertEqual(context.world.variables["visited_room_count"], 2)
-        self.assertEqual(context.world.variables["latest_room"], "areas/village_house")
-        self.assertEqual(context.world.variables["visited_rooms"], ["areas/village_square"])
-        self.assertEqual(context.world.variables["popped_room"], "areas/village_house")
-        self.assertTrue(context.world.variables["world_branch_hit"])
+        self.assertEqual(context.services.world.world.variables["mode"], "play")
+        self.assertEqual(context.services.world.world.variables["turn_count"], 3)
+        self.assertEqual(context.services.world.world.variables["visited_room_count"], 2)
+        self.assertEqual(context.services.world.world.variables["latest_room"], "areas/village_house")
+        self.assertEqual(context.services.world.world.variables["visited_rooms"], ["areas/village_square"])
+        self.assertEqual(context.services.world.world.variables["popped_room"], "areas/village_house")
+        self.assertTrue(context.services.world.world.variables["world_branch_hit"])
 
     def test_toggle_var_primitives_flip_boolean_values(self) -> None:
         world = World()
@@ -1544,7 +1550,7 @@ class StrictContentIdTests(unittest.TestCase):
         switch = world.get_entity("switch")
         assert switch is not None
         self.assertFalse(switch.variables["enabled"])
-        self.assertTrue(context.world.variables["paused"])
+        self.assertTrue(context.services.world.world.variables["paused"])
 
         switch.variables["enabled"] = "yes"
         with self.assertRaises(CommandExecutionError):
@@ -3321,7 +3327,7 @@ class StrictContentIdTests(unittest.TestCase):
         world = World()
         world.add_entity(controller)
         registry, context = self._make_command_context(project=project, world=world)
-        context.screen_manager = ScreenElementManager()
+        context.services.ui.screen_manager = ScreenElementManager()
 
         def _run_named(command_id: str, **params: object) -> None:
             handle = execute_registered_command(
@@ -3339,9 +3345,9 @@ class StrictContentIdTests(unittest.TestCase):
 
         _run_named("commands/dialogue/render_choice")
 
-        option_0 = context.screen_manager.get_element("dialogue_option_0")
-        option_1 = context.screen_manager.get_element("dialogue_option_1")
-        option_2 = context.screen_manager.get_element("dialogue_option_2")
+        option_0 = context.services.ui.screen_manager.get_element("dialogue_option_0")
+        option_1 = context.services.ui.screen_manager.get_element("dialogue_option_1")
+        option_2 = context.services.ui.screen_manager.get_element("dialogue_option_2")
         assert option_0 is not None
         assert option_1 is not None
         assert option_2 is not None
@@ -3356,16 +3362,16 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(controller.variables["dialogue_choice_index"], 3)
         self.assertEqual(controller.variables["dialogue_choice_scroll_offset"], 1)
 
-        option_0 = context.screen_manager.get_element("dialogue_option_0")
-        option_1 = context.screen_manager.get_element("dialogue_option_1")
-        option_2 = context.screen_manager.get_element("dialogue_option_2")
+        option_0 = context.services.ui.screen_manager.get_element("dialogue_option_0")
+        option_1 = context.services.ui.screen_manager.get_element("dialogue_option_1")
+        option_2 = context.services.ui.screen_manager.get_element("dialogue_option_2")
         assert option_0 is not None
         assert option_1 is not None
         assert option_2 is not None
         self.assertEqual(option_0.text, "Two")
         self.assertEqual(option_1.text, "Three")
         self.assertEqual(option_2.text, ">Four")
-        self.assertIsNone(context.screen_manager.get_element("dialogue_cursor"))
+        self.assertIsNone(context.services.ui.screen_manager.get_element("dialogue_cursor"))
 
     def test_sample_timer_dialogue_segment_advances_without_input(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")

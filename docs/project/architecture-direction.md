@@ -209,7 +209,7 @@ The current implementation exposes that access through a `CommandContext` plus a
 
 The bundle is assembled in `engine/game.py` and mirrors the real play-mode wiring, so commands can remain narrow without importing concrete runtime classes. Protocols in `commands/context_types.py` describe the stable shape of those services for typing and future refactors.
 
-`CommandContext` is now a thin facade over that bundle rather than a second copy of the same runtime references. Registry injection still lets commands ask for explicit parameters like `world`, `area`, `camera`, `dialogue_runtime`, or `request_area_change`, but those values are resolved from `CommandServices` instead of being duplicated as separate stored fields.
+`CommandContext` no longer mirrors those runtime references as separate stored fields. Registry injection still lets commands ask for explicit parameters like `world`, `area`, `camera`, `dialogue_runtime`, or `request_area_change`, but those values are resolved directly from `CommandServices`.
 
 ### Command types
 

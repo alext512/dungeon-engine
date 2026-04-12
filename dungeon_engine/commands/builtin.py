@@ -939,7 +939,10 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         refs_mode: str | None = None,
     ) -> CommandHandle:
         """Execute one named entity command through the normal runtime pipeline."""
-        entity = context.world.get_entity(str(entity_id).strip())
+        world_services = context.services.world
+        if world_services is None or world_services.world is None:
+            raise ValueError("Entity command dispatch requires an active world service.")
+        entity = world_services.world.get_entity(str(entity_id).strip())
         if entity is None or not entity.present:
             return ImmediateHandle()
         entity_command = entity.get_entity_command(command_id)
@@ -995,9 +998,13 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
         runtime_params = _build_occupancy_runtime_params(previous_cell, next_cell)
         handles: list[CommandHandle] = []
+        world_services = context.services.world
+        if world_services is None or world_services.world is None:
+            raise ValueError("Occupancy transition hooks require an active world service.")
+        world = world_services.world
 
         if previous_cell is not None:
-            for receiver in context.world.get_entities_at(
+            for receiver in world.get_entities_at(
                 previous_cell[0],
                 previous_cell[1],
                 exclude_entity_id=instigator.entity_id,
@@ -1015,7 +1022,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     handles.append(handle)
 
         if next_cell is not None:
-            for receiver in context.world.get_entities_at(
+            for receiver in world.get_entities_at(
                 next_cell[0],
                 next_cell[1],
                 exclude_entity_id=instigator.entity_id,
@@ -1060,7 +1067,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         """Open one engine-owned dialogue session using the canonical modal runtime."""
         from dungeon_engine.engine.dialogue_runtime import DialogueSessionWaitHandle
 
-        dialogue_runtime = context.dialogue_runtime
+        ui_services = context.services.ui
+        dialogue_runtime = None if ui_services is None else ui_services.dialogue_runtime
         if dialogue_runtime is None:
             raise ValueError("open_dialogue_session requires an active dialogue runtime.")
 
@@ -1096,7 +1104,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         **_: Any,
     ) -> CommandHandle:
         """Close the currently active engine-owned dialogue session when one exists."""
-        dialogue_runtime = context.dialogue_runtime
+        ui_services = context.services.ui
+        dialogue_runtime = None if ui_services is None else ui_services.dialogue_runtime
         if dialogue_runtime is None:
             raise ValueError("close_dialogue_session requires an active dialogue runtime.")
         dialogue_runtime.close_current_session()

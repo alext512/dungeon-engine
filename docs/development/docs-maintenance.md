@@ -86,4 +86,4 @@ If editor workflows change, review:
 ## Best Practice
 
 When in doubt, update the canonical repo doc first, then make the docs site explain that updated truth more clearly.
-When a public manual already lives under `docs/`, prefer updating that page directly instead of treating a root compatibility pointer as the real source.
+When a public manual already lives under `docs/`, prefer updating that page directly instead of treating a root pointer as the real source.

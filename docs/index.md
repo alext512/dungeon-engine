@@ -10,7 +10,7 @@ This site is centered on people building games through JSON and the editor.
 
 It also includes smaller sections for project direction and engine/developer workflow, but the main path through the site is `Game Authoring`.
 
-The docs site is also the permanent home for the public long-form manuals. Root-level compatibility pointers still exist in the repo, but the site is now the main place to browse and maintain them.
+The docs site is also the permanent home for the public long-form manuals. Root-level pointers may still exist in the repo, but the site is the main place to browse and maintain them.
 
 ## What You Can Build Today
 

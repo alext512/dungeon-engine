@@ -303,11 +303,10 @@ def register_flow_commands(
     def _resolve_flow_world(
         *,
         services: CommandServices | None,
-        context: CommandContext,
     ) -> Any:
-        if services is not None and services.world is not None:
-            return services.world.world
-        return context.world
+        if services is None or services.world is None or services.world.world is None:
+            raise ValueError("Flow commands require an active world service.")
+        return services.world.world
 
     @registry.register(
         "spawn_flow",
@@ -499,7 +498,7 @@ def register_flow_commands(
         if not resolved_id:
             logger.warning("run_entity_command: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
-        resolved_world = _resolve_flow_world(services=services, context=context)
+        resolved_world = _resolve_flow_world(services=services)
         entity = resolved_world.get_entity(resolved_id)
         if entity is None:
             raise KeyError(f"Cannot run entity command on missing entity '{resolved_id}'.")

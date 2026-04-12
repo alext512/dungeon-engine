@@ -1,8 +1,7 @@
-"""Live persistence runtime plus compatibility re-exports.
+"""Live persistence runtime.
 
 Save-data models and JSON codec helpers live in ``persistence_data.py``.
 Snapshot/diff application helpers live in ``persistence_snapshots.py``.
-This module keeps the runtime mutation layer as the stable public entry point.
 """
 
 from __future__ import annotations

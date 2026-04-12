@@ -1,7 +1,7 @@
 """Project manifest loading and content discovery.
 
 Replicates the runtime's path-resolution conventions from
-``dungeon_engine/project.py`` without importing it.  The shared contract
+``dungeon_engine/project_context.py`` without importing it.  The shared contract
 is the ``project.json`` manifest and the filesystem layout it describes.
 """
 

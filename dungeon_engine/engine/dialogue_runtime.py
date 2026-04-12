@@ -277,7 +277,7 @@ class DialogueRuntime:
         definition: dict[str, Any],
         explicit_preset_name: str | None,
     ) -> tuple[str, dict[str, Any]]:
-        """Resolve one named dialogue UI preset with a compatibility fallback."""
+        """Resolve one named dialogue UI preset or use the engine default."""
         dialogue_ui = self.project.shared_variables.get("dialogue_ui", {})
         if isinstance(dialogue_ui, dict) and isinstance(dialogue_ui.get("presets"), dict):
             preset_name = (
@@ -292,63 +292,6 @@ class DialogueRuntime:
             if not isinstance(preset, dict):
                 raise KeyError(f"Unknown dialogue UI preset '{preset_name}'.")
             return preset_name, copy.deepcopy(preset)
-
-        legacy_dialogue = self.project.shared_variables.get("dialogue", {})
-        if isinstance(legacy_dialogue, dict) and legacy_dialogue:
-            choice_rows = legacy_dialogue.get("choice_rows_y", [154, 164, 174])
-            visible_rows = max(1, len(choice_rows)) if isinstance(choice_rows, list) else 3
-            base_y = int(choice_rows[0]) if isinstance(choice_rows, list) and choice_rows else 154
-            row_height = 10
-            if isinstance(choice_rows, list) and len(choice_rows) >= 2:
-                row_height = max(1, int(choice_rows[1]) - int(choice_rows[0]))
-            preset = {
-                "panel": {
-                    "path": str(legacy_dialogue.get("panel_path", "assets/project/ui/dialogue_panel.png")),
-                    "x": 0,
-                    "y": 148,
-                },
-                "portrait_slot": {
-                    "x": int(dict(legacy_dialogue.get("portrait_position", {})).get("x", 3)),
-                    "y": int(dict(legacy_dialogue.get("portrait_position", {})).get("y", 151)),
-                    "width": 38,
-                    "height": 38,
-                },
-                "text": {
-                    "plain": {
-                        "x": int(dict(legacy_dialogue.get("plain_box", {})).get("x", 8)),
-                        "y": int(dict(legacy_dialogue.get("plain_box", {})).get("y", 154)),
-                        "width": int(dict(legacy_dialogue.get("plain_box", {})).get("width", 240)),
-                        "max_lines": int(legacy_dialogue.get("max_lines", 3)),
-                    },
-                    "with_portrait": {
-                        "x": int(dict(legacy_dialogue.get("portrait_box", {})).get("x", 56)),
-                        "y": int(dict(legacy_dialogue.get("portrait_box", {})).get("y", 154)),
-                        "width": int(dict(legacy_dialogue.get("portrait_box", {})).get("width", 192)),
-                        "max_lines": int(legacy_dialogue.get("max_lines", 3)),
-                    },
-                },
-                "choices": {
-                    "mode": "inline",
-                    "visible_rows": visible_rows,
-                    "base_y": base_y,
-                    "row_height": row_height,
-                    "overflow": "marquee",
-                    "plain": {
-                        "x": int(dict(legacy_dialogue.get("plain_choice_box", {})).get("x", 8)),
-                        "width": int(dict(legacy_dialogue.get("plain_choice_box", {})).get("width", 240)),
-                    },
-                    "with_portrait": {
-                        "x": int(dict(legacy_dialogue.get("choice_box", {})).get("x", 56)),
-                        "width": int(dict(legacy_dialogue.get("choice_box", {})).get("width", 188)),
-                    },
-                },
-                "font_id": "pixelbet",
-                "text_color": [245, 232, 190],
-                "choice_text_color": [238, 242, 248],
-                "ui_layer": 100,
-                "text_layer": 101,
-            }
-            return "legacy_default", preset
 
         preset = {
             "panel": {

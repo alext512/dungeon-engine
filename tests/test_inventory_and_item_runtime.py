@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.context_services import build_command_services
+from dungeon_engine.commands.context_services import (
+    CommandAudioServices,
+    CommandUiServices,
+    build_command_services,
+)
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     CommandContext,
@@ -186,6 +190,8 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
                 animation_system=None,
             ),
         )
+        context.services.ui = CommandUiServices()
+        context.services.audio = CommandAudioServices()
         return registry, context
 
     def _complete_handle(self, handle: object, *, max_steps: int = 32) -> None:
@@ -208,9 +214,10 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
             text_renderer=_StubTextRenderer(),
             command_context=context,
         )
-        context.screen_manager = inventory_runtime.screen_manager
-        context.text_renderer = inventory_runtime.text_renderer
-        context.inventory_runtime = inventory_runtime
+        assert context.services.ui is not None
+        context.services.ui.screen_manager = inventory_runtime.screen_manager
+        context.services.ui.text_renderer = inventory_runtime.text_renderer
+        context.services.ui.inventory_runtime = inventory_runtime
         if context.command_runner is None:
             CommandRunner(registry, context)
         return inventory_runtime
@@ -886,7 +893,7 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
         )
         world.add_entity(player)
         registry, context = self._make_command_context(project=project, world=world)
-        context.audio_player = _RecordingAudioPlayer()
+        context.services.audio.audio_player = _RecordingAudioPlayer()
         inventory_runtime = self._install_inventory_runtime(
             registry=registry,
             context=context,
@@ -899,4 +906,4 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
         self.assertIsNone(
             inventory_runtime.screen_manager.get_element("engine_inventory_action_panel")
         )
-        self.assertEqual(context.audio_player.paths, ["assets/project/sfx/bump.wav"])  # type: ignore[attr-defined]
+        self.assertEqual(context.services.audio.audio_player.paths, ["assets/project/sfx/bump.wav"])  # type: ignore[attr-defined]

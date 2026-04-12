@@ -1,9 +1,9 @@
-"""Grouped command-facing runtime services."""
+"""Grouped command-facing runtime services and injectable service lookups."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, cast
+from typing import Any, Callable
 
 from dungeon_engine.commands.context_types import (
     AudioPlayerLike,
@@ -26,53 +26,53 @@ from dungeon_engine.world.world import World
 class CommandWorldServices:
     """Core world and system services used by command execution."""
 
-    area: Area
-    world: World
-    collision_system: CollisionSystem
-    movement_system: MovementSystem
-    interaction_system: InteractionSystem
-    animation_system: AnimationSystem
+    area: Area | None = None
+    world: World | None = None
+    collision_system: CollisionSystem | None = None
+    movement_system: MovementSystem | None = None
+    interaction_system: InteractionSystem | None = None
+    animation_system: AnimationSystem | None = None
 
 
 @dataclass(slots=True)
 class CommandUiServices:
     """Screen, camera, and modal UI services used by commands."""
 
-    text_renderer: TextRendererLike | None
-    screen_manager: ScreenElementManagerLike | None
-    camera: CameraLike | None
-    dialogue_runtime: DialogueRuntimeLike | None
-    inventory_runtime: InventoryRuntimeLike | None
+    text_renderer: TextRendererLike | None = None
+    screen_manager: ScreenElementManagerLike | None = None
+    camera: CameraLike | None = None
+    dialogue_runtime: DialogueRuntimeLike | None = None
+    inventory_runtime: InventoryRuntimeLike | None = None
 
 
 @dataclass(slots=True)
 class CommandAudioServices:
     """Audio playback helpers used by presentation commands."""
 
-    audio_player: AudioPlayerLike | None
+    audio_player: AudioPlayerLike | None = None
 
 
 @dataclass(slots=True)
 class CommandPersistenceServices:
     """Persistence helpers used by state-mutation commands."""
 
-    persistence_runtime: PersistenceRuntimeLike | None
+    persistence_runtime: PersistenceRuntimeLike | None = None
 
 
 @dataclass(slots=True)
 class CommandRuntimeServices:
     """Runtime hooks that let commands request higher-level actions."""
 
-    request_area_change: Callable[[Any], None] | None
-    request_new_game: Callable[[Any], None] | None
-    request_load_game: Callable[[str | None], None] | None
-    save_game: Callable[[str | None], bool] | None
-    request_quit: Callable[[], None] | None
-    set_simulation_paused: Callable[[bool], None] | None
-    get_simulation_paused: Callable[[], bool] | None
-    request_step_simulation_tick: Callable[[], None] | None
-    adjust_output_scale: Callable[[int], None] | None
-    debug_inspection_enabled: bool
+    request_area_change: Callable[[Any], None] | None = None
+    request_new_game: Callable[[Any], None] | None = None
+    request_load_game: Callable[[str | None], None] | None = None
+    save_game: Callable[[str | None], bool] | None = None
+    request_quit: Callable[[], None] | None = None
+    set_simulation_paused: Callable[[bool], None] | None = None
+    get_simulation_paused: Callable[[], bool] | None = None
+    request_step_simulation_tick: Callable[[], None] | None = None
+    adjust_output_scale: Callable[[int], None] | None = None
+    debug_inspection_enabled: bool = False
 
 
 @dataclass(slots=True)
@@ -84,6 +84,97 @@ class CommandServices:
     audio: CommandAudioServices | None = None
     persistence: CommandPersistenceServices | None = None
     runtime: CommandRuntimeServices | None = None
+
+
+COMMAND_SERVICE_INJECTION_NAMES = frozenset(
+    {
+        "area",
+        "world",
+        "collision_system",
+        "movement_system",
+        "interaction_system",
+        "animation_system",
+        "text_renderer",
+        "camera",
+        "audio_player",
+        "screen_manager",
+        "dialogue_runtime",
+        "inventory_runtime",
+        "persistence_runtime",
+        "request_area_change",
+        "request_new_game",
+        "request_load_game",
+        "save_game",
+        "request_quit",
+        "debug_inspection_enabled",
+        "set_simulation_paused",
+        "get_simulation_paused",
+        "request_step_simulation_tick",
+        "adjust_output_scale",
+    }
+)
+
+
+def resolve_service_injection(services: CommandServices, name: str) -> Any:
+    """Return one injectable dependency from the grouped command services."""
+
+    if name in {
+        "area",
+        "world",
+        "collision_system",
+        "movement_system",
+        "interaction_system",
+        "animation_system",
+    }:
+        world_services = services.world
+        if world_services is None:
+            return None
+        return getattr(world_services, name)
+
+    if name in {
+        "text_renderer",
+        "camera",
+        "screen_manager",
+        "dialogue_runtime",
+        "inventory_runtime",
+    }:
+        ui_services = services.ui
+        if ui_services is None:
+            return None
+        return getattr(ui_services, name)
+
+    if name == "audio_player":
+        audio_services = services.audio
+        return None if audio_services is None else audio_services.audio_player
+
+    if name == "persistence_runtime":
+        persistence_services = services.persistence
+        return (
+            None
+            if persistence_services is None
+            else persistence_services.persistence_runtime
+        )
+
+    if name in {
+        "request_area_change",
+        "request_new_game",
+        "request_load_game",
+        "save_game",
+        "request_quit",
+        "debug_inspection_enabled",
+        "set_simulation_paused",
+        "get_simulation_paused",
+        "request_step_simulation_tick",
+        "adjust_output_scale",
+    }:
+        runtime_services = services.runtime
+        if runtime_services is None:
+            if name == "debug_inspection_enabled":
+                return False
+            return None
+        return getattr(runtime_services, name)
+
+    raise KeyError(f"Unknown service injection name '{name}'.")
 
 
 def build_command_services(
@@ -113,6 +204,7 @@ def build_command_services(
     debug_inspection_enabled: bool = False,
 ) -> CommandServices:
     """Build one command-service bundle from the provided runtime slices."""
+
     services = CommandServices()
     if any(
         value is not None
@@ -126,12 +218,12 @@ def build_command_services(
         )
     ):
         services.world = CommandWorldServices(
-            area=cast(Area, area),
-            world=cast(World, world),
-            collision_system=cast(CollisionSystem, collision_system),
-            movement_system=cast(MovementSystem, movement_system),
-            interaction_system=cast(InteractionSystem, interaction_system),
-            animation_system=cast(AnimationSystem, animation_system),
+            area=area,
+            world=world,
+            collision_system=collision_system,
+            movement_system=movement_system,
+            interaction_system=interaction_system,
+            animation_system=animation_system,
         )
     if any(
         value is not None
@@ -183,3 +275,16 @@ def build_command_services(
             debug_inspection_enabled=bool(debug_inspection_enabled),
         )
     return services
+
+
+__all__ = [
+    "COMMAND_SERVICE_INJECTION_NAMES",
+    "CommandAudioServices",
+    "CommandPersistenceServices",
+    "CommandRuntimeServices",
+    "CommandServices",
+    "CommandUiServices",
+    "CommandWorldServices",
+    "build_command_services",
+    "resolve_service_injection",
+]

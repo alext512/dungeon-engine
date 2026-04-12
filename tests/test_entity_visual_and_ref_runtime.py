@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.context_services import build_command_services
+from dungeon_engine.commands.context_services import CommandUiServices, build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     CommandContext,
@@ -177,13 +177,14 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 animation_system=None,
             ),
         )
+        context.services.ui = CommandUiServices()
         return registry, context
 
     def test_strict_entity_primitives_reject_raw_symbolic_entity_refs(self) -> None:
         world = World(default_input_targets={"interact": "player"})
         world.add_entity(_make_runtime_entity("player", kind="player", with_visual=True))
         registry, context = self._make_command_context(world=world)
-        context.camera = _RecordingCamera()
+        context.services.ui.camera = _RecordingCamera()
 
         for command_name, params in (
             (
@@ -259,7 +260,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         world.add_entity(caller)
         registry, context = self._make_command_context(project=project, world=world)
         animation_system = _RecordingAnimationSystem()
-        context.animation_system = animation_system
+        context.services.world.animation_system = animation_system
 
         play_handle = execute_registered_command(
             registry,
@@ -376,7 +377,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         world.add_entity(caller)
         registry, context = self._make_command_context(world=world)
         movement_system = _RecordingMovementSystem()
-        context.movement_system = movement_system
+        context.services.world.movement_system = movement_system
 
         handle = execute_registered_command(
             registry,

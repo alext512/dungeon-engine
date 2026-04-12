@@ -3,20 +3,36 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import inspect
 from typing import Literal
 from typing import Any
 
-from dungeon_engine.commands.runner import (
-    COMMAND_CONTEXT_INJECTABLE_NAMES,
-    CommandContext,
-    CommandHandle,
+from dungeon_engine.commands.context_services import (
+    COMMAND_SERVICE_INJECTION_NAMES,
+    resolve_service_injection,
 )
+from dungeon_engine.commands.runner import CommandContext, CommandHandle
 
 CommandCallable = Callable[[CommandContext], CommandHandle | None]
 CommandValidationMode = Literal["strict", "mixed", "passthrough"]
-_INJECTABLE_CONTEXT_NAMES = frozenset(COMMAND_CONTEXT_INJECTABLE_NAMES)
+_CONTEXT_FIELD_NAMES = frozenset(
+    field_info.name for field_info in fields(CommandContext)
+)
+_INJECTABLE_ARGUMENT_NAMES = _CONTEXT_FIELD_NAMES | COMMAND_SERVICE_INJECTION_NAMES
+
+
+def _resolve_injected_argument(
+    context: CommandContext,
+    parameter_name: str,
+) -> Any:
+    """Return one injected command argument from context fields or services."""
+
+    if parameter_name in _CONTEXT_FIELD_NAMES:
+        return getattr(context, parameter_name)
+    if parameter_name in COMMAND_SERVICE_INJECTION_NAMES:
+        return resolve_service_injection(context.services, parameter_name)
+    raise KeyError(f"Unknown injected argument '{parameter_name}'.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +83,7 @@ class CommandRegistry:
             authored_param_names = frozenset(
                 parameter_name
                 for parameter_name, parameter in signature.parameters.items()
-                if parameter_name not in _INJECTABLE_CONTEXT_NAMES
+                if parameter_name not in _INJECTABLE_ARGUMENT_NAMES
                 and parameter_name != "context"
                 and parameter.kind
                 not in {
@@ -142,9 +158,9 @@ class CommandRegistry:
             for parameter in signature.parameters.values()
         )
         injected_kwargs = {
-            parameter_name: getattr(context, parameter_name)
+            parameter_name: _resolve_injected_argument(context, parameter_name)
             for parameter_name in signature.parameters
-            if parameter_name in _INJECTABLE_CONTEXT_NAMES
+            if parameter_name in _INJECTABLE_ARGUMENT_NAMES
         }
         if "context" in signature.parameters:
             injected_kwargs["context"] = context

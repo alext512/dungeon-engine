@@ -1,8 +1,7 @@
-"""Area loading and validation helpers plus compatibility re-exports.
+"""Area loading and validation helpers.
 
-Area parsing stays here, while entity/template loading now lives in
-``loader_entities.py``. ``world.loader`` remains the stable public entry point
-for the wider runtime and tests while the file is being decomposed.
+Area parsing stays here, while entity/template loading lives in
+``loader_entities.py``.
 """
 
 from __future__ import annotations

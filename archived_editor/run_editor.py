@@ -47,7 +47,7 @@ def main() -> int:
     from dungeon_engine.display_setup import configure_process_dpi_awareness
     from dungeon_engine.launcher_state import load_launcher_state, update_launcher_state
     from dungeon_engine.logging_utils import install_exception_logging
-    from dungeon_engine.project import load_project
+    from dungeon_engine.project_context import load_project
     from dungeon_engine.startup_validation import validate_project_startup
 
     if not args.headless:

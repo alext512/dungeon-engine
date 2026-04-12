@@ -68,7 +68,7 @@ class EditorApp:
     FACING_CYCLE = ("up", "right", "down", "left")
 
     def __init__(self, area_path: Path, project: "ProjectContext") -> None:
-        from dungeon_engine.project import ProjectContext  # noqa: F811
+        from dungeon_engine.project_context import ProjectContext  # noqa: F811
 
         pygame.init()
         area_id = project.area_path_to_reference(area_path)

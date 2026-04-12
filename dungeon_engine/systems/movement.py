@@ -29,24 +29,6 @@ class MovementSystem:
             Callable[[Entity, tuple[int, int] | None, tuple[int, int] | None], None] | None
         ) = None
 
-    def request_step(
-        self,
-        entity_id: str,
-        direction: Direction,
-        *,
-        duration: float | None = None,
-        frames_needed: int | None = None,
-        speed_px_per_second: float | None = None,
-    ) -> list[str]:
-        """Backward-compatible wrapper for a one-tile grid move."""
-        return self.request_grid_step(
-            entity_id,
-            direction,
-            duration=duration,
-            frames_needed=frames_needed,
-            speed_px_per_second=speed_px_per_second,
-        )
-
     def request_grid_step(
         self,
         entity_id: str,
@@ -374,11 +356,6 @@ class MovementSystem:
             target_grid_y=target_grid_y,
             persistent=persistent,
         )
-
-    def update(self, dt: float) -> None:
-        """Backward-compatible wrapper that advances one fixed movement tick."""
-        _ = dt
-        self.update_tick()
 
     def update_tick(self) -> None:
         """Advance all active movement interpolations by one simulation tick."""

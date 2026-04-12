@@ -67,7 +67,7 @@ Key files:
 - `builtin_domains/` for grouped builtin implementations
 - `library.py` for project command loading and validation
 
-`CommandServices` is now the source of truth for command-facing runtime dependencies. `CommandContext` keeps project/runner state plus that service bundle, and exposes thin convenience accessors so callers do not have to care whether a dependency lives under `services.world`, `services.ui`, `services.audio`, `services.persistence`, or `services.runtime`.
+`CommandServices` is the source of truth for command-facing runtime dependencies. `CommandContext` keeps project/runner state plus that service bundle. Registry injection resolves explicit command parameters from `services.world`, `services.ui`, `services.audio`, `services.persistence`, and `services.runtime` without mirroring those references onto `CommandContext` itself.
 
 The registry also treats those service-backed accessors as injectable command parameters. That means a command can still ask for `world`, `area`, `camera`, `persistence_runtime`, or `request_area_change` explicitly, but the data is resolved from the shared bundle instead of being stored twice on the context.
 

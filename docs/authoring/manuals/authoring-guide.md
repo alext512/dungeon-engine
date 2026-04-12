@@ -301,7 +301,7 @@ Example structure:
 - `tile_size`
   Tile size in pixels.
 - `entry_points`
-  Optional named destinations kept for compatibility with older transfer flows.
+  Optional named destinations for area-transfer flows.
 - `camera`
   Optional authored camera defaults for this area.
 - `input_targets`

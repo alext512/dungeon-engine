@@ -47,6 +47,7 @@ def register_persistence_state_commands(
         context: CommandContext,
         services: CommandServices | None,
         world: Any,
+        area: Any | None,
         persistence_runtime: PersistenceRuntimeLike | None,
         *,
         area_id: str,
@@ -70,7 +71,7 @@ def register_persistence_state_commands(
         )
         persisted_value = copy.deepcopy(value)
         runtime.set_area_variable(resolved_area_id, name, persisted_value)
-        if context.area is not None and context.area.area_id == resolved_area_id:
+        if area is not None and area.area_id == resolved_area_id:
             resolved_world.variables[name] = copy.deepcopy(persisted_value)
         return ImmediateHandle()
 
@@ -79,6 +80,7 @@ def register_persistence_state_commands(
         context: CommandContext,
         services: CommandServices | None,
         world: Any,
+        area: Any | None,
         persistence_runtime: PersistenceRuntimeLike | None,
         *,
         area_id: str,
@@ -105,7 +107,7 @@ def register_persistence_state_commands(
         if not resolved_entity_id:
             raise ValueError("set_area_entity_var requires a non-empty entity_id.")
         live_entity = None
-        if context.area is not None and context.area.area_id == resolved_area_id:
+        if area is not None and area.area_id == resolved_area_id:
             live_entity = resolved_world.area_entities.get(resolved_entity_id)
         if live_entity is None:
             resolve_authored_area_entity_snapshot(
@@ -130,6 +132,7 @@ def register_persistence_state_commands(
         context: CommandContext,
         services: CommandServices | None,
         world: Any,
+        area: Any | None,
         persistence_runtime: PersistenceRuntimeLike | None,
         *,
         area_id: str,
@@ -157,7 +160,7 @@ def register_persistence_state_commands(
             raise ValueError("set_area_entity_field requires a non-empty entity_id.")
 
         live_entity = None
-        if context.area is not None and context.area.area_id == resolved_area_id:
+        if area is not None and area.area_id == resolved_area_id:
             live_entity = resolved_world.area_entities.get(resolved_entity_id)
 
         validation_entity = live_entity

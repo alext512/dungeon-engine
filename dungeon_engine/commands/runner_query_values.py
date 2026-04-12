@@ -76,6 +76,35 @@ _ENTITY_QUERY_ALLOWED_SPACES = ("world", "screen")
 _ENTITY_QUERY_ALLOWED_SCOPES = ("area", "global")
 
 
+def _active_world(context: Any) -> World:
+    """Return the active runtime world for value-source resolution."""
+    services = getattr(context, "services", None)
+    world_services = None if services is None else getattr(services, "world", None)
+    world = None if world_services is None else world_services.world
+    if world is None:
+        raise ValueError("Value-source resolution requires an active world service.")
+    return world
+
+
+def _active_area(context: Any) -> Area:
+    """Return the active runtime area for value-source resolution."""
+    services = getattr(context, "services", None)
+    world_services = None if services is None else getattr(services, "world", None)
+    area = None if world_services is None else world_services.area
+    if area is None:
+        raise ValueError("Value-source resolution requires an active area service.")
+    return area
+
+
+def _active_persistence_runtime(context: Any) -> PersistenceRuntimeLike | None:
+    """Return the active persistence runtime when one is wired."""
+    services = getattr(context, "services", None)
+    persistence_services = None if services is None else getattr(services, "persistence", None)
+    if persistence_services is None:
+        return None
+    return persistence_services.persistence_runtime
+
+
 def _serialize_entity_fields(entity: Any, *, fields: list[str] | tuple[str, ...]) -> dict[str, Any]:
     """Return a small plain-data object containing only the requested entity fields."""
     data: dict[str, Any] = {}
@@ -438,7 +467,7 @@ def resolve_entity_ref_value(context: Any, resolved_source: Any) -> dict[str, An
         resolved_source.get("select"),
         source_name="$entity_ref",
     )
-    entity = context.world.get_entity(entity_id)
+    entity = _active_world(context).get_entity(entity_id)
     if entity is None:
         return default
     return _serialize_selected_entity(entity, select=select)
@@ -464,7 +493,7 @@ def resolve_area_entity_ref_value(context: Any, resolved_source: Any) -> dict[st
     _, snapshot_world = load_area_owned_snapshot(
         project=context.project,
         area_id=area_id,
-        persistence_runtime=context.persistence_runtime,
+        persistence_runtime=_active_persistence_runtime(context),
         asset_manager=context.asset_manager,
         include_persistent=True,
     )
@@ -484,7 +513,7 @@ def resolve_entity_var_value(context: Any, resolved_source: Any) -> Any:
     name = str(resolved_source.get("name", "")).strip()
     if not name:
         raise ValueError("$entity_var value source requires a non-empty name.")
-    entity = context.world.get_entity(entity_id)
+    entity = _active_world(context).get_entity(entity_id)
     if entity is None:
         return copy.deepcopy(resolved_source.get("default"))
     if "default" in resolved_source:
@@ -500,8 +529,8 @@ def resolve_current_area_var_value(context: Any, resolved_source: Any) -> Any:
     if not name:
         raise ValueError("$current_area_var value source requires a non-empty name.")
     if "default" in resolved_source:
-        return copy.deepcopy(context.world.variables.get(name, resolved_source.get("default")))
-    return copy.deepcopy(context.world.variables.get(name))
+        return copy.deepcopy(_active_world(context).variables.get(name, resolved_source.get("default")))
+    return copy.deepcopy(_active_world(context).variables.get(name))
 
 
 def resolve_inventory_item_count_value(context: Any, resolved_source: Any) -> int:
@@ -514,7 +543,7 @@ def resolve_inventory_item_count_value(context: Any, resolved_source: Any) -> in
     item_id = str(resolved_source.get("item_id", "")).strip()
     if not item_id:
         raise ValueError("$inventory_item_count value source requires a non-empty item_id.")
-    entity = context.world.get_entity(entity_id)
+    entity = _active_world(context).get_entity(entity_id)
     if entity is None:
         return 0
     return int(inventory_item_count(entity.inventory, item_id))
@@ -533,7 +562,7 @@ def resolve_inventory_has_item_value(context: Any, resolved_source: Any) -> bool
     quantity = int(resolved_source.get("quantity", 1))
     if quantity <= 0:
         raise ValueError("$inventory_has_item value source quantity must be positive.")
-    entity = context.world.get_entity(entity_id)
+    entity = _active_world(context).get_entity(entity_id)
     if entity is None:
         return False
     return bool(inventory_has_item(entity.inventory, item_id, quantity=quantity))
@@ -564,7 +593,7 @@ def resolve_entities_at_value(context: Any, resolved_source: Any) -> list[dict[s
         resolved_source.get("select"),
         source_name="$entities_at",
     )
-    entities = context.world.get_entities_at(
+    entities = _active_world(context).get_entities_at(
         int(raw_x),
         int(raw_y),
         exclude_entity_id=None if exclude_entity_id in (None, "") else str(exclude_entity_id),
@@ -607,14 +636,15 @@ def resolve_entities_query_value(context: Any, resolved_source: Any) -> list[dic
         resolved_source.get("select"),
         source_name="$entities_query",
     )
+    world = _active_world(context)
     entities = sorted(
         [
             entity
-            for entity in context.world.iter_entities(include_absent=include_absent)
+            for entity in world.iter_entities(include_absent=include_absent)
             if include_hidden or entity.visible
             if _entity_matches_where(entity, where)
         ],
-        key=context.world.entity_sort_key,
+        key=world.entity_sort_key,
     )
     return [_serialize_selected_entity(entity, select=select) for entity in entities]
 
@@ -633,8 +663,7 @@ def resolve_entity_query_value(context: Any, resolved_source: Any) -> Any:
 
 def resolve_cell_flags_at_value(context: Any, resolved_source: Any) -> dict[str, Any] | Any:
     """Return plain per-cell flag data for one explicit tile coordinate."""
-    if context.area is None:
-        raise ValueError("Cannot resolve cell flags without an active area.")
+    area = _active_area(context)
     if not isinstance(resolved_source, dict):
         raise TypeError("$cell_flags_at value source requires a JSON object.")
     raw_x = resolved_source.get("x")
@@ -643,8 +672,8 @@ def resolve_cell_flags_at_value(context: Any, resolved_source: Any) -> dict[str,
         raise ValueError("$cell_flags_at value source requires both x and y.")
     grid_x = int(raw_x)
     grid_y = int(raw_y)
-    if context.area.in_bounds(grid_x, grid_y):
-        return copy.deepcopy(context.area.cell_flags_at(grid_x, grid_y))
+    if area.in_bounds(grid_x, grid_y):
+        return copy.deepcopy(area.cell_flags_at(grid_x, grid_y))
     if "default" in resolved_source:
         return copy.deepcopy(resolved_source.get("default"))
     raise KeyError(f"Cell flag lookup ({grid_x}, {grid_y}) is out of bounds.")

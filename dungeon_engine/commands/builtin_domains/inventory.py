@@ -114,12 +114,9 @@ def register_inventory_commands(
 
     def _resolve_inventory_runtime(
         *,
-        services: CommandServices | None,
-        context: CommandContext,
+        inventory_runtime: Any | None,
     ) -> Any | None:
-        if services is not None and services.ui is not None:
-            return services.ui.inventory_runtime or context.inventory_runtime
-        return context.inventory_runtime
+        return inventory_runtime
 
     @registry.register("add_inventory_item")
     def add_inventory_item(
@@ -430,8 +427,7 @@ def register_inventory_commands(
 
     @registry.register("open_inventory_session")
     def open_inventory_session(
-        context: CommandContext,
-        services: CommandServices | None,
+        inventory_runtime: Any | None,
         *,
         entity_id: str,
         ui_preset: str | None = None,
@@ -441,7 +437,9 @@ def register_inventory_commands(
         """Open one engine-owned inventory session for an entity-owned inventory."""
         from dungeon_engine.engine.inventory_runtime import InventorySessionWaitHandle
 
-        inventory_runtime = _resolve_inventory_runtime(services=services, context=context)
+        inventory_runtime = _resolve_inventory_runtime(
+            inventory_runtime=inventory_runtime,
+        )
         if inventory_runtime is None:
             raise ValueError("open_inventory_session requires an active inventory runtime.")
 
@@ -455,12 +453,13 @@ def register_inventory_commands(
 
     @registry.register("close_inventory_session")
     def close_inventory_session(
-        context: CommandContext,
-        services: CommandServices | None,
+        inventory_runtime: Any | None,
         **_: Any,
     ) -> CommandHandle:
         """Close the currently active engine-owned inventory session when one exists."""
-        inventory_runtime = _resolve_inventory_runtime(services=services, context=context)
+        inventory_runtime = _resolve_inventory_runtime(
+            inventory_runtime=inventory_runtime,
+        )
         if inventory_runtime is None:
             raise ValueError("close_inventory_session requires an active inventory runtime.")
         inventory_runtime.close_current_session()

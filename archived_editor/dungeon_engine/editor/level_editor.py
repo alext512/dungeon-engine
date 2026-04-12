@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dungeon_engine.project import ProjectContext
+from dungeon_engine.project_context import ProjectContext
 from dungeon_engine.world.area import Area, TileLayer, Tileset
 from dungeon_engine.world.entity import Entity
 from dungeon_engine.world.loader import (

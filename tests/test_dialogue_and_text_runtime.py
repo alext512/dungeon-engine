@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.context_services import build_command_services
+from dungeon_engine.commands.context_services import CommandUiServices, build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     CommandContext,
@@ -234,6 +234,7 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                 animation_system=None,
             ),
         )
+        context.services.ui = CommandUiServices()
         return registry, context
 
     def _install_dialogue_runtime(
@@ -250,9 +251,10 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             registry=registry,
             command_context=context,
         )
-        context.screen_manager = dialogue_runtime.screen_manager
-        context.text_renderer = dialogue_runtime.text_renderer
-        context.dialogue_runtime = dialogue_runtime
+        assert context.services.ui is not None
+        context.services.ui.screen_manager = dialogue_runtime.screen_manager
+        context.services.ui.text_renderer = dialogue_runtime.text_renderer
+        context.services.ui.dialogue_runtime = dialogue_runtime
         return dialogue_runtime
 
     def test_removed_dialogue_runtime_commands_raise_clear_errors(self) -> None:
@@ -328,7 +330,7 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         self.assertTrue(dialogue_runtime.is_active())
         self.assertEqual(caller.variables["phase"], "opened")
 
-        text_element = context.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
+        text_element = context.services.ui.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
         assert text_element is not None
         self.assertIn("Engine", text_element.text)
 
@@ -390,9 +392,9 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         self.assertEqual(session.choice_index, 0)
         self.assertEqual(session.choice_scroll_offset, 0)
 
-        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
-        option_1 = context.screen_manager.get_element("engine_dialogue_option_1")
-        option_2 = context.screen_manager.get_element("engine_dialogue_option_2")
+        option_0 = context.services.ui.screen_manager.get_element("engine_dialogue_option_0")
+        option_1 = context.services.ui.screen_manager.get_element("engine_dialogue_option_1")
+        option_2 = context.services.ui.screen_manager.get_element("engine_dialogue_option_2")
         assert option_0 is not None
         assert option_1 is not None
         assert option_2 is not None
@@ -409,9 +411,9 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         self.assertEqual(session.choice_index, 3)
         self.assertEqual(session.choice_scroll_offset, 1)
 
-        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
-        option_1 = context.screen_manager.get_element("engine_dialogue_option_1")
-        option_2 = context.screen_manager.get_element("engine_dialogue_option_2")
+        option_0 = context.services.ui.screen_manager.get_element("engine_dialogue_option_0")
+        option_1 = context.services.ui.screen_manager.get_element("engine_dialogue_option_1")
+        option_2 = context.services.ui.screen_manager.get_element("engine_dialogue_option_2")
         assert option_0 is not None
         assert option_1 is not None
         assert option_2 is not None
@@ -460,10 +462,10 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         )
 
         self.assertTrue(dialogue_runtime.is_active())
-        choices_panel = context.screen_manager.get_element(
+        choices_panel = context.services.ui.screen_manager.get_element(
             DialogueRuntime.CHOICES_PANEL_ELEMENT_ID
         )
-        option_0 = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_0 = context.services.ui.screen_manager.get_element("engine_dialogue_option_0")
         assert choices_panel is not None
         assert option_0 is not None
         self.assertEqual(choices_panel.kind, "image")
@@ -512,14 +514,14 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             },
         )
 
-        option_before = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_before = context.services.ui.screen_manager.get_element("engine_dialogue_option_0")
         assert option_before is not None
         before_text = option_before.text
         self.assertTrue(before_text.startswith(">"))
 
         dialogue_runtime.update(0.7)
 
-        option_after = context.screen_manager.get_element("engine_dialogue_option_0")
+        option_after = context.services.ui.screen_manager.get_element("engine_dialogue_option_0")
         assert option_after is not None
         self.assertTrue(option_after.text.startswith(">"))
         self.assertNotEqual(option_after.text, before_text)
@@ -643,7 +645,7 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         session = dialogue_runtime.current_session
         assert session is not None
         self.assertEqual(session.segment_index, 1)
-        text_element = context.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
+        text_element = context.services.ui.screen_manager.get_element(DialogueRuntime.TEXT_ELEMENT_ID)
         assert text_element is not None
         self.assertIn("Later", text_element.text)
 
@@ -739,7 +741,7 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         world = World()
         world.add_entity(_make_runtime_entity("dialogue_controller", space="screen"))
         registry, context = self._make_command_context(world=world)
-        context.text_renderer = _StubTextRenderer()
+        context.services.ui.text_renderer = _StubTextRenderer()
 
         wrapped_handle = execute_command_spec(
             registry,

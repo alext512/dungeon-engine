@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from dungeon_engine.commands.builtin import register_builtin_commands
-from dungeon_engine.commands.context_services import build_command_services
+from dungeon_engine.commands.context_services import CommandUiServices, build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     CommandContext,
@@ -214,6 +214,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 animation_system=None,
             ),
         )
+        context.services.ui = CommandUiServices()
         return registry, context
 
     def test_input_handler_only_dispatches_actions_with_explicit_input_map_entries(self) -> None:
@@ -533,7 +534,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world.add_entity(caller)
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         handle = execute_registered_command(
             registry,
@@ -579,7 +580,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world.route_inputs_to_entity("dialogue_controller", actions=["menu"])
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         handle = execute_registered_command(
             registry,
@@ -605,7 +606,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world.add_entity(_make_runtime_entity("player", kind="player"))
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         execute_registered_command(
             registry,
@@ -669,7 +670,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world = World()
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         with self.assertRaises(CommandExecutionError) as raised:
             execute_registered_command(
@@ -685,7 +686,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
     def test_legacy_camera_commands_are_removed(self) -> None:
         world = World()
         registry, context = self._make_command_context(world=world)
-        context.camera = _RecordingCamera()
+        context.services.ui.camera = _RecordingCamera()
 
         for command_name in (
             "set_camera_follow_entity",
@@ -705,7 +706,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world = World()
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         with self.assertRaises(CommandExecutionError) as raised:
             execute_registered_command(
@@ -744,7 +745,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world = World()
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         for command_name, params, expected_message in (
             (
@@ -774,7 +775,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         world.add_entity(_make_runtime_entity("player", kind="player"))
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
-        context.camera = camera
+        context.services.ui.camera = camera
 
         bounds_handle = execute_registered_command(
             registry,

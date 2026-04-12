@@ -75,6 +75,34 @@ _VALUE_SOURCE_NAMES = {
 }
 
 
+def _active_text_renderer(context: Any) -> Any:
+    """Return the active text renderer for runtime value resolution."""
+    services = getattr(context, "services", None)
+    ui_services = None if services is None else getattr(services, "ui", None)
+    return None if ui_services is None else ui_services.text_renderer
+
+
+def _active_camera(context: Any) -> Any:
+    """Return the active camera for runtime value resolution."""
+    services = getattr(context, "services", None)
+    ui_services = None if services is None else getattr(services, "ui", None)
+    return None if ui_services is None else ui_services.camera
+
+
+def _active_area(context: Any) -> Any:
+    """Return the active area for runtime value resolution."""
+    services = getattr(context, "services", None)
+    world_services = None if services is None else getattr(services, "world", None)
+    return None if world_services is None else world_services.area
+
+
+def _active_world(context: Any) -> Any:
+    """Return the active world for runtime value resolution."""
+    services = getattr(context, "services", None)
+    world_services = None if services is None else getattr(services, "world", None)
+    return None if world_services is None else world_services.world
+
+
 def resolve_runtime_value_source(
     source_name: str,
     source_value: Any,
@@ -93,11 +121,12 @@ def resolve_runtime_value_source(
         )
 
     if source_name == "$wrapped_lines":
-        if context.text_renderer is None:
+        text_renderer = _active_text_renderer(context)
+        if text_renderer is None:
             raise ValueError("Cannot wrap text without an active text renderer.")
         if not isinstance(resolved_source, dict):
             raise TypeError("$wrapped_lines value source requires a JSON object.")
-        return context.text_renderer.wrap_lines(
+        return text_renderer.wrap_lines(
             "" if resolved_source.get("text") is None else str(resolved_source.get("text")),
             int(resolved_source.get("max_width", 0)),
             font_id=str(resolved_source.get("font_id", config.DEFAULT_UI_FONT_ID)),
@@ -238,9 +267,10 @@ def resolve_runtime_token(
         return copy.deepcopy(context.project.resolve_shared_variable(tail))
 
     if head == "camera":
-        if context.camera is None:
+        camera = _active_camera(context)
+        if camera is None:
             raise KeyError("No active camera context for $camera lookup.")
-        camera_state = context.camera.to_state_dict()
+        camera_state = camera.to_state_dict()
         camera_state.setdefault("x", None)
         camera_state.setdefault("y", None)
         camera_state.setdefault(
@@ -260,29 +290,36 @@ def resolve_runtime_token(
         return copy.deepcopy(lookup_nested_value(camera_state, tail))
 
     if head == "area":
-        if context.area is None:
+        area = _active_area(context)
+        if area is None:
             raise KeyError("No active area context for $area lookup.")
         area_state = {
-            "area_id": context.area.area_id,
-            "tile_size": context.area.tile_size,
-            "width": context.area.width,
-            "height": context.area.height,
-            "pixel_width": context.area.pixel_width,
-            "pixel_height": context.area.pixel_height,
-            "camera": copy.deepcopy(context.area.camera_defaults),
+            "area_id": area.area_id,
+            "tile_size": area.tile_size,
+            "width": area.width,
+            "height": area.height,
+            "pixel_width": area.pixel_width,
+            "pixel_height": area.pixel_height,
+            "camera": copy.deepcopy(area.camera_defaults),
         }
         if not tail:
             return copy.deepcopy(area_state)
         return copy.deepcopy(lookup_nested_value(area_state, tail))
 
     if head == "current_area":
-        return copy.deepcopy(lookup_nested_value(context.world.variables, tail))
+        world = _active_world(context)
+        if world is None:
+            raise KeyError("No active world context for $current_area lookup.")
+        return copy.deepcopy(lookup_nested_value(world.variables, tail))
 
     if head == "self":
         entity_id = runtime_params.get("source_entity_id")
         if not entity_id:
             raise KeyError(f"Token '${token}' requires a source entity context.")
-        entity = context.world.get_entity(str(entity_id))
+        world = _active_world(context)
+        if world is None:
+            raise KeyError(f"Token '${token}' requires an active world context.")
+        entity = world.get_entity(str(entity_id))
         if entity is None:
             raise KeyError(f"Token '${token}' references missing source entity '{entity_id}'.")
         return copy.deepcopy(lookup_nested_value(entity.variables, tail))
@@ -309,7 +346,10 @@ def resolve_runtime_token(
         entity_id = entity_refs.get(ref_name)
         if not entity_id:
             raise KeyError(f"Token '${token}' references missing entity ref '{ref_name}'.")
-        entity = context.world.get_entity(str(entity_id))
+        world = _active_world(context)
+        if world is None:
+            raise KeyError(f"Token '${token}' requires an active world context.")
+        entity = world.get_entity(str(entity_id))
         if entity is None:
             raise KeyError(f"Token '${token}' references missing entity '{entity_id}'.")
         return copy.deepcopy(lookup_nested_value(entity.variables, parts[2:]))

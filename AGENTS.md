@@ -62,8 +62,7 @@ dungeon_engine/
     items.py                     # Item definition loading and validation
     launcher_state.py            # Launcher state management
     logging_utils.py             # Rotating error log setup
-    project_context.py           # Runtime project-context implementation and preferred import surface
-    project.py                   # Compatibility wrapper for older project-context imports
+    project_context.py           # Runtime project-context implementation and import surface
     startup_validation.py        # Project startup checks
     engine/
         game.py                  # Play-mode runtime loop and runtime-wiring entry point
@@ -82,10 +81,10 @@ dungeon_engine/
         area.py                  # Area data model (tilesets, tile layers, walkability, entity grid)
         entity.py                # Entity data model
         world.py                 # World state container
-        loader.py                # Area loading/validation surface and compatibility re-exports
+        loader.py                # Area loading/validation surface
         loader_entities.py       # Entity/template parsing and validation helpers used by loader.py
         serializer.py            # Area/World -> JSON
-        persistence.py           # Live persistence runtime plus compatibility re-exports
+        persistence.py           # Live persistence runtime
         persistence_data.py      # Save-data models and JSON codec helpers
         persistence_snapshots.py # Persistent apply/capture/snapshot helpers
         persistence_travelers.py # Traveler lifecycle helpers used by persistence.py
@@ -147,7 +146,7 @@ dungeon_engine/
 
 **Changing play-mode save/load flow**: `engine/game_save_runtime.py` now owns save-slot dialogs plus save/load session restore. `engine/game.py` remains the main loop/runtime wiring entry point, while `engine/game_area_runtime.py` handles the deferred transition side that save/load feeds into.
 
-**Changing project asset/content lookup**: Runtime search-path behavior lives in `project_context.py`, with `project.py` kept as a compatibility import surface. Related consumers live in `world/loader.py` and `engine/asset_manager.py`. Editor-side project discovery stays separate in `tools/area_editor/area_editor/project_io/project_manifest.py`.
+**Changing project asset/content lookup**: Runtime search-path behavior lives in `project_context.py`. Related consumers live in `world/loader.py` and `engine/asset_manager.py`. Editor-side project discovery stays separate in `tools/area_editor/area_editor/project_io/project_manifest.py`.
 
 **Changing command value lookup or runtime token behavior**: Start in `commands/runner.py`, but expect the supporting logic to be split between `commands/runner_resolution.py`, `commands/runner_value_utils.py`, and `commands/runner_query_values.py`.
 
