@@ -15,6 +15,9 @@
     "max_stacks": 8,
     "stacks": []
   },
+  "persistence": {
+    "entity_state": true
+  },
   "visuals": [
     {
       "id": "body",

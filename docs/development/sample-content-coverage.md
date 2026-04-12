@@ -27,6 +27,8 @@ for what the sample proves today and what it still does not prove.
 - item-definition loading, pickup, and item use through
   `items/consumables/glimmer_berry.json` and
   `entity_templates/inventory_pickup.json`
+- persistent restoration of the sample pickup/item-use result through
+  `tests/test_sample_project_workflows.py`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
 - entity templates with parameters, visuals, render order, collision, pushing,
@@ -45,7 +47,8 @@ Use these files as the first examples when checking sample behavior:
 - `projects/new_project/commands/player/move_one_tile.json` for reusable project
   command loading and command composition
 - `projects/new_project/entity_templates/player.json` for player input,
-  inventory session opening, collision, movement, and rendering
+  inventory session opening, persistence defaults, collision, movement, and
+  rendering
 - `projects/new_project/items/consumables/glimmer_berry.json` and
   `projects/new_project/entity_templates/inventory_pickup.json` for the sample
   item pickup/use workflow
@@ -65,6 +68,8 @@ The project is checked by:
 - `tests/test_startup_smoke.py`, which runs `projects/new_project` headlessly
   for two frames when that fixture is present
 - runtime tests that use repo-local fixtures opportunistically when available
+- `tests/test_sample_project_workflows.py`, which executes the sample item
+  pickup/use path and applies a save-data roundtrip to a freshly loaded area
 
 When this sample changes, prefer validating through the same paths the runtime
 uses:
@@ -81,7 +86,6 @@ For engine-contract changes, also run the focused or full runtime test suite.
 `projects/new_project` does not yet deliberately prove every high-value
 authored workflow. The next useful sample-content expansions are:
 
-- a save/load restoration scenario with visible state restoration
 - a dialogue or menu path that exercises segment hooks
 - a camera-default or camera-state example tied to an area transition
 - a small global-entity example that persists across area changes

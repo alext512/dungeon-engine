@@ -11,6 +11,12 @@ from dungeon_engine.engine.screen import ScreenElementManager
 from dungeon_engine.inventory import inventory_item_count
 from dungeon_engine.items import load_item_definition
 from dungeon_engine.project_context import load_project
+from dungeon_engine.world.persistence import PersistenceRuntime
+from dungeon_engine.world.persistence_data import (
+    get_persistent_area_state,
+    save_data_from_dict,
+    save_data_to_dict,
+)
 from dungeon_engine.world.loader import load_area
 
 
@@ -51,12 +57,15 @@ class SampleProjectWorkflowTests(unittest.TestCase):
 
         registry = CommandRegistry()
         register_builtin_commands(registry)
+        persistence_runtime = PersistenceRuntime(project=project)
+        persistence_runtime.bind_area(area.area_id, authored_world=world)
         context = CommandContext(
             project=project,
             services=build_command_services(
                 area=area,
                 world=world,
                 screen_manager=ScreenElementManager(),
+                persistence_runtime=persistence_runtime,
             ),
         )
 
@@ -97,6 +106,29 @@ class SampleProjectWorkflowTests(unittest.TestCase):
             0,
         )
         self.assertEqual(player.variables["last_used_item"], "items/consumables/glimmer_berry")
+
+        restored_save_data = save_data_from_dict(save_data_to_dict(persistence_runtime.save_data))
+        restored_area_state = get_persistent_area_state(restored_save_data, "areas/start")
+        self.assertIsNotNone(restored_area_state)
+        restored_area, restored_world = load_area(
+            area_path,
+            project=project,
+            persistent_area_state=restored_area_state,
+        )
+        self.assertEqual(restored_area.area_id, "areas/start")
+
+        restored_player = restored_world.get_entity("player_1")
+        self.assertIsNotNone(restored_player)
+        assert restored_player is not None
+        self.assertEqual(
+            inventory_item_count(restored_player.inventory, "items/consumables/glimmer_berry"),
+            0,
+        )
+        self.assertEqual(
+            restored_player.variables["last_used_item"],
+            "items/consumables/glimmer_berry",
+        )
+        self.assertIsNone(restored_world.get_entity("sample_glimmer_berry_pickup"))
 
 
 if __name__ == "__main__":
