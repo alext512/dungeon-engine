@@ -79,7 +79,8 @@ The project is checked by:
   for two frames when that fixture is present
 - runtime tests that use repo-local fixtures opportunistically when available
 - `tests/test_sample_project_workflows.py`, which executes the sample item
-  pickup/use path and applies a save-data roundtrip to a freshly loaded area
+  pickup/use path, segment-hook override, global-entity mutation, camera-default
+  assertions, and save-data roundtrip to a freshly loaded area
 
 When this sample changes, prefer validating through the same paths the runtime
 uses:

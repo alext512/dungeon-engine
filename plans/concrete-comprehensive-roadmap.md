@@ -499,16 +499,11 @@ continues to protect it during future refactors.
 
 #### 2. Cover the highest-value authored systems
 
-- Make sure canonical sample content exercises:
-  - dialogue
-  - area transitions
-  - camera defaults/state
-  - inventory
-  - persistence
-  - entity references
-  - global entities
-  - input routing
-  - command chaining/composition
+- The current `projects/new_project` baseline now exercises dialogue, area
+  transitions, camera defaults/state, inventory, persistence, entity
+  references, global entities, input routing, and command chaining/composition.
+- `tests/test_sample_project_workflows.py` executes the newer item,
+  persistence, camera, global-entity, and segment-hook sample paths.
 
 #### 3. Align docs and validation with sample content
 
@@ -516,6 +511,12 @@ continues to protect it during future refactors.
   docs and aligned with the sample content.
 - Use the sample content to demonstrate the intended contract, not just to show
   something playable.
+
+### Current Status
+
+Completed for the current roadmap baseline. Future sample-content work should
+be driven by a newly identified contract gap, not by trying to cover every
+command mechanically.
 
 ### Files Most Likely Involved
 
