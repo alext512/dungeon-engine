@@ -86,6 +86,13 @@
       "space": "viewport_pixel"
     }
   },
+  "enter_commands": [
+    {
+      "type": "run_entity_command",
+      "entity_id": "sample_global_tracker",
+      "command_id": "mark_start_entry"
+    }
+  ],
   "entities": [
     {
       "id": "player_1",

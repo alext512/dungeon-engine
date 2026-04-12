@@ -31,6 +31,8 @@ for what the sample proves today and what it still does not prove.
   `tests/test_sample_project_workflows.py`
 - authored camera defaults in `areas/start.json` plus transition camera follow
   in `dialogues/system/title_menu.json`
+- project-level global entity state through
+  `project.json` `global_entities.sample_global_tracker`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
 - entity templates with parameters, visuals, render order, collision, pushing,
@@ -43,7 +45,7 @@ for what the sample proves today and what it still does not prove.
 Use these files as the first examples when checking sample behavior:
 
 - `projects/new_project/project.json` for manifest paths, startup area, input
-  targets, title-screen state, and runtime UI defaults
+  targets, title-screen state, global entities, and runtime UI defaults
 - `projects/new_project/dialogues/system/title_menu.json` for dialogue/menu data
   plus runtime-control and transition camera-follow commands
 - `projects/new_project/commands/player/move_one_tile.json` for reusable project
@@ -89,7 +91,6 @@ For engine-contract changes, also run the focused or full runtime test suite.
 authored workflow. The next useful sample-content expansions are:
 
 - a dialogue or menu path that exercises segment hooks
-- a small global-entity example that persists across area changes
 
 ## Expansion Rule
 

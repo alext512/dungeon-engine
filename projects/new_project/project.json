@@ -15,7 +15,32 @@
     "items/"
   ],
   "shared_variables_path": "shared_variables.json",
-  "global_entities": [],
+  "global_entities": [
+    {
+      "id": "sample_global_tracker",
+      "kind": "sample_global_tracker",
+      "space": "screen",
+      "pixel_x": 0,
+      "pixel_y": 0,
+      "visible": false,
+      "variables": {
+        "start_entries": 0
+      },
+      "persistence": {
+        "entity_state": true
+      },
+      "entity_commands": {
+        "mark_start_entry": [
+          {
+            "type": "add_entity_var",
+            "entity_id": "$self_id",
+            "name": "start_entries",
+            "amount": 1
+          }
+        ]
+      }
+    }
+  ],
   "startup_area": "areas/title_screen",
   "input_targets": {},
   "debug_inspection_enabled": true

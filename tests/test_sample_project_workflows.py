@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from dungeon_engine.inventory import inventory_item_count
 from dungeon_engine.items import load_item_definition
 from dungeon_engine.json_io import load_json_data
 from dungeon_engine.project_context import load_project
+from dungeon_engine.world.loader_entities import instantiate_entity
 from dungeon_engine.world.loader import load_area
 from dungeon_engine.world.persistence import PersistenceRuntime
 from dungeon_engine.world.persistence_data import (
@@ -19,6 +21,8 @@ from dungeon_engine.world.persistence_data import (
     save_data_from_dict,
     save_data_to_dict,
 )
+from dungeon_engine.world.persistence_snapshots import apply_persistent_global_state
+from dungeon_engine.world.world import World
 
 
 def _repo_root() -> Path:
@@ -31,6 +35,20 @@ def _complete_handle(test_case: unittest.TestCase, handle: object, *, max_steps:
             return
         handle.update(0.0)
     test_case.fail("Command handle did not complete within the expected number of steps.")
+
+
+def _install_project_global_entities(project: object, world: World, tile_size: int) -> None:
+    for index, entity_data in enumerate(project.global_entities):
+        global_entity = instantiate_entity(
+            {
+                **copy.deepcopy(entity_data),
+                "scope": "global",
+            },
+            tile_size,
+            project=project,
+            source_name=f"project global_entities[{index}]",
+        )
+        world.add_entity(global_entity)
 
 
 class SampleProjectWorkflowTests(unittest.TestCase):
@@ -50,13 +68,17 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(area_path)
         assert area_path is not None
         area, world = load_area(area_path, project=project)
+        _install_project_global_entities(project, world, area.tile_size)
         self.assertEqual(area.camera_defaults["follow"]["entity_id"], "player_1")
         self.assertEqual(area.camera_defaults["deadzone"]["space"], "viewport_pixel")
         player = world.get_entity("player_1")
         pickup = world.get_entity("sample_glimmer_berry_pickup")
+        tracker = world.get_entity("sample_global_tracker")
         self.assertIsNotNone(player)
         self.assertIsNotNone(pickup)
+        self.assertIsNotNone(tracker)
         assert player is not None
+        assert tracker is not None
 
         registry = CommandRegistry()
         register_builtin_commands(registry)
@@ -71,6 +93,18 @@ class SampleProjectWorkflowTests(unittest.TestCase):
                 persistence_runtime=persistence_runtime,
             ),
         )
+
+        enter_handle = execute_registered_command(
+            registry,
+            context,
+            "run_entity_command",
+            {
+                "entity_id": "sample_global_tracker",
+                "command_id": "mark_start_entry",
+            },
+        )
+        _complete_handle(self, enter_handle)
+        self.assertEqual(tracker.variables["start_entries"], 1)
 
         pickup_handle = execute_registered_command(
             registry,
@@ -118,11 +152,21 @@ class SampleProjectWorkflowTests(unittest.TestCase):
             project=project,
             persistent_area_state=restored_area_state,
         )
+        _install_project_global_entities(project, restored_world, restored_area.tile_size)
+        apply_persistent_global_state(
+            restored_area,
+            restored_world,
+            restored_save_data,
+            project=project,
+        )
         self.assertEqual(restored_area.area_id, "areas/start")
 
         restored_player = restored_world.get_entity("player_1")
+        restored_tracker = restored_world.get_entity("sample_global_tracker")
         self.assertIsNotNone(restored_player)
+        self.assertIsNotNone(restored_tracker)
         assert restored_player is not None
+        assert restored_tracker is not None
         self.assertEqual(
             inventory_item_count(restored_player.inventory, "items/consumables/glimmer_berry"),
             0,
@@ -132,6 +176,7 @@ class SampleProjectWorkflowTests(unittest.TestCase):
             "items/consumables/glimmer_berry",
         )
         self.assertIsNone(restored_world.get_entity("sample_glimmer_berry_pickup"))
+        self.assertEqual(restored_tracker.variables["start_entries"], 1)
 
         title_menu = load_json_data(project_root / "dialogues" / "system" / "title_menu.json")
         new_game_command = title_menu["segments"][0]["options"][0]["commands"][0]
