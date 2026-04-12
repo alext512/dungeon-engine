@@ -131,6 +131,10 @@ usually:
 - `dialogues/*.json`
 - `items/*.json`
 
+The current canonical repo-local sample is `projects/new_project`. Its
+intentional coverage is tracked in
+[`docs/development/sample-content-coverage.md`](./docs/development/sample-content-coverage.md).
+
 ## How To Think About Authoring
 
 At a high level, a project usually consists of:
@@ -334,6 +338,11 @@ asset references before launch.
 If you keep repo-local example projects under `projects/`, validate each
 present `project.json` after command-surface or content-authoring changes with
 `tools/validate_projects.py`.
+
+When changing `projects/new_project`, also keep
+[`docs/development/sample-content-coverage.md`](./docs/development/sample-content-coverage.md)
+and `tests/test_sample_project_workflows.py` aligned with what the sample is
+meant to prove.
 
 ## Current Limits
 

@@ -39,6 +39,7 @@ Or double-click `Run_Game.cmd`.
 | `docs/authoring/manuals/engine-json-interface.md` | Canonical reference for the exact current engine <-> JSON surface: manifests, file shapes, tokens, value sources, builtin commands, and engine-known fields |
 | `docs/project/architecture-direction.md` | Design principles and medium-term architectural direction |
 | `docs/development/engine-contract-truth-map.md` | Active contract ownership map across runtime, validation, editor, docs, tests, and sample content |
+| `docs/development/sample-content-coverage.md` | What the canonical repo-local sample project currently proves and how to keep it aligned |
 | `CONTRIBUTING.md` | Working rules and project direction |
 | `CHANGELOG.md` | Reverse-chronological history of functionality changes |
 

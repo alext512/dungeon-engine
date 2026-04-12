@@ -88,6 +88,9 @@ Use [Verification and Validation](verification-and-validation.md) when you need 
 ## Good Agent Habits In This Repo
 
 - Prefer reading a real example file from `projects/new_project/` before abstracting.
+- Use [Sample Content Coverage](sample-content-coverage.md) before changing
+  `projects/new_project/`, then update that page if the sample starts proving a
+  new contract.
 - Respect the runtime/editor boundary.
 - Preserve user changes you did not make.
 - Avoid treating old plans as implemented behavior.

@@ -69,7 +69,10 @@ The editor is external on purpose. It reads and writes the same JSON that the ru
 
 ## If You Have 30 Minutes
 
-Open a repo-local project, then trace one area and one entity template:
+Open a repo-local project, then trace one area and one entity template. In this
+repo, `projects/new_project` is the canonical sample fixture; its intended
+coverage is tracked in
+[Sample Content Coverage](sample-content-coverage.md).
 
 1. `projects/<project>/project.json`
 2. One area in `areas/`
