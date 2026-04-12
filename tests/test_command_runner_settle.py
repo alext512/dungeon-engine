@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.context_services import build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, CommandRunner, ImmediateHandle
 from dungeon_engine.world.area import Area
@@ -30,13 +31,15 @@ class CommandRunnerSettleTests(unittest.TestCase):
         register_builtin_commands(registry)
         world = World()
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=world,
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
             project=None,
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+            ),
         )
         runner = CommandRunner(
             registry,
@@ -196,13 +199,15 @@ class CommandRunnerSettleTests(unittest.TestCase):
 
         world = World()
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=world,
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
             project=None,
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+            ),
         )
         runner = CommandRunner(
             registry,
@@ -229,13 +234,15 @@ class CommandRunnerSettleTests(unittest.TestCase):
 
         world = World()
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=world,
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
             project=None,
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+            ),
         )
         runner = CommandRunner(registry, context)
 

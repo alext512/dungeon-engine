@@ -27,7 +27,7 @@ graph TD
 ## The 3 Key Surfaces
 
 1. **Project content**: `project.json`, areas, entity templates, commands, items, dialogue data. See `docs/authoring/manuals/authoring-guide.md`.
-2. **Command runner**: resolves JSON commands and drives runtime behavior. It exposes a `CommandContext` plus an optional `CommandServices` bundle so commands can work against a narrow, typed runtime surface. See `dungeon_engine/commands/runner.py`.
+2. **Command runner**: resolves JSON commands and drives runtime behavior. `CommandContext` carries runner/project state, while `CommandServices` is the source of truth for injected runtime dependencies like `world`, `camera`, dialogue/inventory runtimes, persistence, and scene-change hooks. See `dungeon_engine/commands/runner.py`.
 3. **Runtime systems**: movement, collision, interaction, animation, rendering, persistence. See `dungeon_engine/systems/` and `dungeon_engine/engine/`.
 
 ## Authoring Flow (Mental Model)

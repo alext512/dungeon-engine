@@ -9,6 +9,7 @@ from pathlib import Path
 
 import run_game
 from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.context_services import build_command_services
 from dungeon_engine.commands.library import (
     ProjectCommandValidationError,
     validate_project_commands,
@@ -425,14 +426,16 @@ class StrictContentIdTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
         context = CommandContext(
-            area=area or _minimal_runtime_area(),
-            world=world or World(),
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
             project=project,
-            persistence_runtime=persistence_runtime,
+            services=build_command_services(
+                area=area or _minimal_runtime_area(),
+                world=world or World(),
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+                persistence_runtime=persistence_runtime,
+            ),
         )
         return registry, context
 
@@ -2625,13 +2628,15 @@ class StrictContentIdTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=World(),
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
-            request_new_game=recorded_requests.append,
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=World(),
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+                request_new_game=recorded_requests.append,
+            ),
         )
 
         handle = execute_registered_command(
@@ -2658,13 +2663,15 @@ class StrictContentIdTests(unittest.TestCase):
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=world,
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
-            request_area_change=recorded_requests.append,
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+                request_area_change=recorded_requests.append,
+            ),
         )
 
         handle = execute_command_spec(
@@ -3616,15 +3623,17 @@ class StrictContentIdTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
         context = CommandContext(
-            area=game.area,
-            world=game.world,
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
             project=project,
-            persistence_runtime=game.persistence_runtime,
-            save_game=game.save_game,
+            services=build_command_services(
+                area=game.area,
+                world=game.world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+                persistence_runtime=game.persistence_runtime,
+                save_game=game.save_game,
+            ),
         )
 
         handle = SequenceCommandHandle(

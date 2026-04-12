@@ -67,7 +67,9 @@ Key files:
 - `builtin_domains/` for grouped builtin implementations
 - `library.py` for project command loading and validation
 
-Command implementations can request `services: CommandServices | None` alongside the usual context fields, which lets them work against a narrow, typed runtime surface while still supporting fallbacks to the older context properties.
+`CommandServices` is now the source of truth for command-facing runtime dependencies. `CommandContext` keeps project/runner state plus that service bundle, and exposes thin convenience accessors so callers do not have to care whether a dependency lives under `services.world`, `services.ui`, `services.audio`, `services.persistence`, or `services.runtime`.
+
+The registry also treats those service-backed accessors as injectable command parameters. That means a command can still ask for `world`, `area`, `camera`, `persistence_runtime`, or `request_area_change` explicitly, but the data is resolved from the shared bundle instead of being stored twice on the context.
 
 ## Architectural Principles
 

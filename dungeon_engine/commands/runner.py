@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections import deque
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from random import Random
@@ -24,6 +24,13 @@ from dungeon_engine.commands.context_types import (
     TextRendererLike,
 )
 from dungeon_engine.commands.context_services import CommandServices
+from dungeon_engine.commands.context_services import (
+    CommandAudioServices,
+    CommandPersistenceServices,
+    CommandRuntimeServices,
+    CommandUiServices,
+    CommandWorldServices,
+)
 from dungeon_engine.commands.runner_query_values import load_area_owned_snapshot
 from dungeon_engine.commands.runner_resolution import (
     dynamic_deferred_keys_for_spec as _dynamic_deferred_keys_for_spec,
@@ -47,39 +54,327 @@ logger = get_logger(__name__)
 class CommandContext:
     """Objects that command implementations need access to at runtime."""
 
-    area: Area
-    world: World
-    collision_system: CollisionSystem
-    movement_system: MovementSystem
-    interaction_system: InteractionSystem
-    animation_system: AnimationSystem
     project: ProjectContext | None = None
     asset_manager: AssetManager | None = None
-    text_renderer: TextRendererLike | None = None
-    camera: CameraLike | None = None
-    audio_player: AudioPlayerLike | None = None
-    screen_manager: ScreenElementManagerLike | None = None
-    dialogue_runtime: DialogueRuntimeLike | None = None
-    inventory_runtime: InventoryRuntimeLike | None = None
+    services: CommandServices = field(default_factory=CommandServices)
     command_runner: CommandRunner | None = None
     random_generator: Random | None = None
-    persistence_runtime: PersistenceRuntimeLike | None = None
-    services: CommandServices | None = None
-    request_area_change: Callable[["AreaTransitionRequest"], None] | None = None
-    request_new_game: Callable[["AreaTransitionRequest"], None] | None = None
-    request_load_game: Callable[[str | None], None] | None = None
-    save_game: Callable[[str | None], bool] | None = None
-    request_quit: Callable[[], None] | None = None
-    debug_inspection_enabled: bool = False
-    set_simulation_paused: Callable[[bool], None] | None = None
-    get_simulation_paused: Callable[[], bool] | None = None
-    request_step_simulation_tick: Callable[[], None] | None = None
-    adjust_output_scale: Callable[[int], None] | None = None
     project_command_stack: list[str] = field(default_factory=list)
     command_trace: list[str] = field(default_factory=list)
     json_file_cache: dict[Path, Any] = field(default_factory=dict)
     command_execution_count: int = 0
     command_execution_budget_remaining: int | None = None
+
+    def _ensure_world_services(self) -> CommandWorldServices:
+        """Create placeholder world services so tests can wire them incrementally."""
+        if self.services.world is None:
+            self.services.world = CommandWorldServices(
+                area=None,  # type: ignore[arg-type]
+                world=None,  # type: ignore[arg-type]
+                collision_system=None,  # type: ignore[arg-type]
+                movement_system=None,  # type: ignore[arg-type]
+                interaction_system=None,  # type: ignore[arg-type]
+                animation_system=None,  # type: ignore[arg-type]
+            )
+        return self.services.world
+
+    def _ensure_ui_services(self) -> CommandUiServices:
+        """Create an empty UI bundle when tests/runtime wire pieces in later."""
+        if self.services.ui is None:
+            self.services.ui = CommandUiServices(
+                text_renderer=None,
+                screen_manager=None,
+                camera=None,
+                dialogue_runtime=None,
+                inventory_runtime=None,
+            )
+        return self.services.ui
+
+    def _ensure_audio_services(self) -> CommandAudioServices:
+        """Create an empty audio bundle on first assignment."""
+        if self.services.audio is None:
+            self.services.audio = CommandAudioServices(audio_player=None)
+        return self.services.audio
+
+    def _ensure_persistence_services(self) -> CommandPersistenceServices:
+        """Create an empty persistence bundle on first assignment."""
+        if self.services.persistence is None:
+            self.services.persistence = CommandPersistenceServices(
+                persistence_runtime=None,
+            )
+        return self.services.persistence
+
+    def _ensure_runtime_services(self) -> CommandRuntimeServices:
+        """Create an empty runtime-hooks bundle on first assignment."""
+        if self.services.runtime is None:
+            self.services.runtime = CommandRuntimeServices(
+                request_area_change=None,
+                request_new_game=None,
+                request_load_game=None,
+                save_game=None,
+                request_quit=None,
+                set_simulation_paused=None,
+                get_simulation_paused=None,
+                request_step_simulation_tick=None,
+                adjust_output_scale=None,
+                debug_inspection_enabled=False,
+            )
+        return self.services.runtime
+
+    @property
+    def area(self) -> Area | None:
+        world_services = self.services.world
+        return None if world_services is None else world_services.area
+
+    @area.setter
+    def area(self, value: Area | None) -> None:
+        self._ensure_world_services().area = value  # type: ignore[assignment]
+
+    @property
+    def world(self) -> World | None:
+        world_services = self.services.world
+        return None if world_services is None else world_services.world
+
+    @world.setter
+    def world(self, value: World | None) -> None:
+        self._ensure_world_services().world = value  # type: ignore[assignment]
+
+    @property
+    def collision_system(self) -> CollisionSystem | None:
+        world_services = self.services.world
+        return None if world_services is None else world_services.collision_system
+
+    @collision_system.setter
+    def collision_system(self, value: CollisionSystem | None) -> None:
+        self._ensure_world_services().collision_system = value  # type: ignore[assignment]
+
+    @property
+    def movement_system(self) -> MovementSystem | None:
+        world_services = self.services.world
+        return None if world_services is None else world_services.movement_system
+
+    @movement_system.setter
+    def movement_system(self, value: MovementSystem | None) -> None:
+        self._ensure_world_services().movement_system = value  # type: ignore[assignment]
+
+    @property
+    def interaction_system(self) -> InteractionSystem | None:
+        world_services = self.services.world
+        return None if world_services is None else world_services.interaction_system
+
+    @interaction_system.setter
+    def interaction_system(self, value: InteractionSystem | None) -> None:
+        self._ensure_world_services().interaction_system = value  # type: ignore[assignment]
+
+    @property
+    def animation_system(self) -> AnimationSystem | None:
+        world_services = self.services.world
+        return None if world_services is None else world_services.animation_system
+
+    @animation_system.setter
+    def animation_system(self, value: AnimationSystem | None) -> None:
+        self._ensure_world_services().animation_system = value  # type: ignore[assignment]
+
+    @property
+    def text_renderer(self) -> TextRendererLike | None:
+        ui_services = self.services.ui
+        return None if ui_services is None else ui_services.text_renderer
+
+    @text_renderer.setter
+    def text_renderer(self, value: TextRendererLike | None) -> None:
+        self._ensure_ui_services().text_renderer = value
+
+    @property
+    def camera(self) -> CameraLike | None:
+        ui_services = self.services.ui
+        return None if ui_services is None else ui_services.camera
+
+    @camera.setter
+    def camera(self, value: CameraLike | None) -> None:
+        self._ensure_ui_services().camera = value
+
+    @property
+    def audio_player(self) -> AudioPlayerLike | None:
+        audio_services = self.services.audio
+        return None if audio_services is None else audio_services.audio_player
+
+    @audio_player.setter
+    def audio_player(self, value: AudioPlayerLike | None) -> None:
+        self._ensure_audio_services().audio_player = value
+
+    @property
+    def screen_manager(self) -> ScreenElementManagerLike | None:
+        ui_services = self.services.ui
+        return None if ui_services is None else ui_services.screen_manager
+
+    @screen_manager.setter
+    def screen_manager(self, value: ScreenElementManagerLike | None) -> None:
+        self._ensure_ui_services().screen_manager = value
+
+    @property
+    def dialogue_runtime(self) -> DialogueRuntimeLike | None:
+        ui_services = self.services.ui
+        return None if ui_services is None else ui_services.dialogue_runtime
+
+    @dialogue_runtime.setter
+    def dialogue_runtime(self, value: DialogueRuntimeLike | None) -> None:
+        self._ensure_ui_services().dialogue_runtime = value
+
+    @property
+    def inventory_runtime(self) -> InventoryRuntimeLike | None:
+        ui_services = self.services.ui
+        return None if ui_services is None else ui_services.inventory_runtime
+
+    @inventory_runtime.setter
+    def inventory_runtime(self, value: InventoryRuntimeLike | None) -> None:
+        self._ensure_ui_services().inventory_runtime = value
+
+    @property
+    def persistence_runtime(self) -> PersistenceRuntimeLike | None:
+        persistence_services = self.services.persistence
+        return (
+            None
+            if persistence_services is None
+            else persistence_services.persistence_runtime
+        )
+
+    @persistence_runtime.setter
+    def persistence_runtime(self, value: PersistenceRuntimeLike | None) -> None:
+        self._ensure_persistence_services().persistence_runtime = value
+
+    @property
+    def request_area_change(self) -> Any:
+        runtime_services = self.services.runtime
+        return None if runtime_services is None else runtime_services.request_area_change
+
+    @request_area_change.setter
+    def request_area_change(self, value: Any) -> None:
+        self._ensure_runtime_services().request_area_change = value
+
+    @property
+    def request_new_game(self) -> Any:
+        runtime_services = self.services.runtime
+        return None if runtime_services is None else runtime_services.request_new_game
+
+    @request_new_game.setter
+    def request_new_game(self, value: Any) -> None:
+        self._ensure_runtime_services().request_new_game = value
+
+    @property
+    def request_load_game(self) -> Any:
+        runtime_services = self.services.runtime
+        return None if runtime_services is None else runtime_services.request_load_game
+
+    @request_load_game.setter
+    def request_load_game(self, value: Any) -> None:
+        self._ensure_runtime_services().request_load_game = value
+
+    @property
+    def save_game(self) -> Any:
+        runtime_services = self.services.runtime
+        return None if runtime_services is None else runtime_services.save_game
+
+    @save_game.setter
+    def save_game(self, value: Any) -> None:
+        self._ensure_runtime_services().save_game = value
+
+    @property
+    def request_quit(self) -> Any:
+        runtime_services = self.services.runtime
+        return None if runtime_services is None else runtime_services.request_quit
+
+    @request_quit.setter
+    def request_quit(self, value: Any) -> None:
+        self._ensure_runtime_services().request_quit = value
+
+    @property
+    def debug_inspection_enabled(self) -> bool:
+        runtime_services = self.services.runtime
+        return (
+            False
+            if runtime_services is None
+            else bool(runtime_services.debug_inspection_enabled)
+        )
+
+    @debug_inspection_enabled.setter
+    def debug_inspection_enabled(self, value: bool) -> None:
+        self._ensure_runtime_services().debug_inspection_enabled = bool(value)
+
+    @property
+    def set_simulation_paused(self) -> Any:
+        runtime_services = self.services.runtime
+        return (
+            None if runtime_services is None else runtime_services.set_simulation_paused
+        )
+
+    @set_simulation_paused.setter
+    def set_simulation_paused(self, value: Any) -> None:
+        self._ensure_runtime_services().set_simulation_paused = value
+
+    @property
+    def get_simulation_paused(self) -> Any:
+        runtime_services = self.services.runtime
+        return (
+            None if runtime_services is None else runtime_services.get_simulation_paused
+        )
+
+    @get_simulation_paused.setter
+    def get_simulation_paused(self, value: Any) -> None:
+        self._ensure_runtime_services().get_simulation_paused = value
+
+    @property
+    def request_step_simulation_tick(self) -> Any:
+        runtime_services = self.services.runtime
+        return (
+            None
+            if runtime_services is None
+            else runtime_services.request_step_simulation_tick
+        )
+
+    @request_step_simulation_tick.setter
+    def request_step_simulation_tick(self, value: Any) -> None:
+        self._ensure_runtime_services().request_step_simulation_tick = value
+
+    @property
+    def adjust_output_scale(self) -> Any:
+        runtime_services = self.services.runtime
+        return None if runtime_services is None else runtime_services.adjust_output_scale
+
+    @adjust_output_scale.setter
+    def adjust_output_scale(self, value: Any) -> None:
+        self._ensure_runtime_services().adjust_output_scale = value
+
+
+_SERVICE_BACKED_CONTEXT_FIELD_NAMES = frozenset(
+    {
+        "area",
+        "world",
+        "collision_system",
+        "movement_system",
+        "interaction_system",
+        "animation_system",
+        "text_renderer",
+        "camera",
+        "audio_player",
+        "screen_manager",
+        "dialogue_runtime",
+        "inventory_runtime",
+        "persistence_runtime",
+        "request_area_change",
+        "request_new_game",
+        "request_load_game",
+        "save_game",
+        "request_quit",
+        "debug_inspection_enabled",
+        "set_simulation_paused",
+        "get_simulation_paused",
+        "request_step_simulation_tick",
+        "adjust_output_scale",
+    }
+)
+COMMAND_CONTEXT_INJECTABLE_NAMES = frozenset(
+    field_info.name for field_info in fields(CommandContext)
+) | _SERVICE_BACKED_CONTEXT_FIELD_NAMES
 
 
 @dataclass(slots=True)

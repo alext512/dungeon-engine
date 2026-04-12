@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 import inspect
 from typing import Literal
 from typing import Any
 
-from dungeon_engine.commands.runner import CommandContext, CommandHandle
+from dungeon_engine.commands.runner import (
+    COMMAND_CONTEXT_INJECTABLE_NAMES,
+    CommandContext,
+    CommandHandle,
+)
 
 CommandCallable = Callable[[CommandContext], CommandHandle | None]
 CommandValidationMode = Literal["strict", "mixed", "passthrough"]
-_CONTEXT_FIELD_NAMES = frozenset(field_info.name for field_info in fields(CommandContext))
+_INJECTABLE_CONTEXT_NAMES = frozenset(COMMAND_CONTEXT_INJECTABLE_NAMES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +67,7 @@ class CommandRegistry:
             authored_param_names = frozenset(
                 parameter_name
                 for parameter_name, parameter in signature.parameters.items()
-                if parameter_name not in _CONTEXT_FIELD_NAMES
+                if parameter_name not in _INJECTABLE_CONTEXT_NAMES
                 and parameter_name != "context"
                 and parameter.kind
                 not in {
@@ -140,7 +144,7 @@ class CommandRegistry:
         injected_kwargs = {
             parameter_name: getattr(context, parameter_name)
             for parameter_name in signature.parameters
-            if parameter_name in _CONTEXT_FIELD_NAMES
+            if parameter_name in _INJECTABLE_CONTEXT_NAMES
         }
         if "context" in signature.parameters:
             injected_kwargs["context"] = context

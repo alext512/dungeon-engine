@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dungeon_engine.commands.audit import audit_project_command_surfaces
 from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.context_services import build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import CommandContext, execute_command_spec
 from dungeon_engine.project_context import load_project
@@ -131,13 +132,15 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=world or World(),
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
             project=project,
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world or World(),
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+            ),
         )
         return registry, context
 

@@ -199,7 +199,7 @@ files from disk during active play.
 
 Commands need access to live runtime state, but primitive command APIs should stay narrow and explicit. The engine may keep a broad internal runtime root, while primitive commands receive only the dependencies they actually need.
 
-The current implementation exposes that access through a `CommandContext` plus an optional `CommandServices` bundle. Commands that need runtime systems can request `services` and read grouped surfaces like:
+The current implementation exposes that access through a `CommandContext` plus a `CommandServices` bundle. Commands that need runtime systems can request `services` and read grouped surfaces like:
 
 - `services.world` (world + area)
 - `services.ui` (camera, screen manager, dialogue/inventory runtimes)
@@ -207,7 +207,9 @@ The current implementation exposes that access through a `CommandContext` plus a
 - `services.persistence`
 - `services.runtime` (scene-change requests, debug toggles)
 
-The bundle is assembled in `engine/game.py` and mirrors the real play-mode wiring, so commands can remain narrow without importing concrete runtime classes. Protocols in `commands/context_types.py` describe the stable shape of those services for typing and future refactors. When a service is not available, commands should fall back to the direct context fields instead of hard-crashing.
+The bundle is assembled in `engine/game.py` and mirrors the real play-mode wiring, so commands can remain narrow without importing concrete runtime classes. Protocols in `commands/context_types.py` describe the stable shape of those services for typing and future refactors.
+
+`CommandContext` is now a thin facade over that bundle rather than a second copy of the same runtime references. Registry injection still lets commands ask for explicit parameters like `world`, `area`, `camera`, `dialogue_runtime`, or `request_area_change`, but those values are resolved from `CommandServices` instead of being duplicated as separate stored fields.
 
 ### Command types
 

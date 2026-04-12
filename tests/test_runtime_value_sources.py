@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from dungeon_engine.commands.builtin import register_builtin_commands
+from dungeon_engine.commands.context_services import build_command_services
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
     CommandContext,
@@ -68,12 +69,14 @@ class RuntimeValueSourceTests(unittest.TestCase):
         registry = CommandRegistry()
         register_builtin_commands(registry)
         context = CommandContext(
-            area=area or _minimal_runtime_area(),
-            world=world or World(),
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
+            services=build_command_services(
+                area=area or _minimal_runtime_area(),
+                world=world or World(),
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+            ),
         )
         return registry, context
 
@@ -882,12 +885,14 @@ class RuntimeValueSourceTests(unittest.TestCase):
 
     def test_runtime_token_lookup_rejects_removed_source_alias(self) -> None:
         context = CommandContext(
-            area=_minimal_runtime_area(),
-            world=World(),
-            collision_system=None,  # type: ignore[arg-type]
-            movement_system=None,  # type: ignore[arg-type]
-            interaction_system=None,  # type: ignore[arg-type]
-            animation_system=None,  # type: ignore[arg-type]
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=World(),
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+            ),
         )
 
         with self.assertRaises(KeyError):
