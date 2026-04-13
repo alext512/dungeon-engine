@@ -1919,7 +1919,7 @@ Notes:
 
 ### Area / Save / Game Flow
 
-- `change_area(area_id?, entry_id?, destination_entity_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
+- `change_area(area_id?, entry_id?, destination_entity_id?, transfer_entity_id?, transfer_entity_ids?, camera_follow?, allowed_instigator_kinds?, source_entity_id?, entity_refs?, refs_mode?)`
 - `new_game(area_id?, entry_id?, destination_entity_id?, camera_follow?, source_entity_id?, entity_refs?, refs_mode?)`
 - `load_game(save_path?)`
 - `save_game(save_path?)`
@@ -1927,11 +1927,19 @@ Notes:
 
 Notes:
 - `camera_follow` uses the same structured follow object as `set_camera_follow`
-- in `change_area` / `new_game`, `camera_follow.entity_id` must be an explicit id
+- in `change_area` / `new_game`, `camera_follow.entity_id` may use runtime
+  ref tokens such as `$ref_ids.instigator` when the command runs from a
+  higher-level entity command
 - `destination_entity_id` lets transferred entities land on a world-space entity
   in the destination area instead of only using an authored `entry_id`
 - if both `destination_entity_id` and `entry_id` are provided,
   `destination_entity_id` wins
+- `allowed_instigator_kinds` is an optional `change_area` guard for occupancy
+  hooks. When present, the command only queues the active scene transition if
+  `entity_refs.instigator` exists in the current world and its `kind` is in
+  the list. For direct occupancy-triggered uses, standard grid movement and
+  push commands also treat that trigger cell as closed to entrants whose kind
+  is not listed.
 - `change_area`, `new_game`, and `load_game` are scene boundaries; once one of
   these requests runs, old-scene command work is cancelled and later commands in
   the same old-scene sequence do not continue

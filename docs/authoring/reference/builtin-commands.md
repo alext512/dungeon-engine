@@ -88,7 +88,10 @@ When a called flow needs referenced entities, author `entity_refs` on the caller
 
 ## Area, Save, And Game Flow
 
-- `change_area` transitions to another area and can transfer travelers.
+- `change_area` transitions to another area and can transfer travelers. For
+  occupancy hooks, `allowed_instigator_kinds` can limit which entering entity
+  kinds may trigger the active scene change. For direct trigger commands,
+  standard grid movement treats those cells as closed to rejected kinds.
 - `new_game` resets into a fresh session and optional destination.
 - `load_game` restores from a save path.
 - `save_game` writes the current session to a save path.

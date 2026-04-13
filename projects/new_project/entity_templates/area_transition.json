@@ -5,7 +5,10 @@
   "interactable": false,
   "parameters": {
     "target_area": "areas/start",
-    "destination_entity_id": "starting_position"
+    "destination_entity_id": "starting_position",
+    "allowed_instigator_kinds": [
+      "player"
+    ]
   },
   "parameter_specs": {
     "target_area": {
@@ -18,6 +21,12 @@
       "area_parameter": "target_area",
       "scope": "area",
       "space": "world"
+    },
+    "allowed_instigator_kinds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "entity_commands": {
@@ -26,9 +35,14 @@
         "type": "change_area",
         "area_id": "$target_area",
         "destination_entity_id": "$destination_entity_id",
+        "allowed_instigator_kinds": "$allowed_instigator_kinds",
         "transfer_entity_ids": [
           "$ref_ids.instigator"
-        ]
+        ],
+        "camera_follow": {
+          "mode": "entity",
+          "entity_id": "$ref_ids.instigator"
+        }
       }
     ]
   }

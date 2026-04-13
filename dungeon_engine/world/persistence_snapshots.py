@@ -115,7 +115,7 @@ def apply_area_travelers(
             project=project,
         )
         entity.origin_area_id = traveler_state.origin_area
-        world.add_entity(entity)
+        world.replace_entity(entity)
 
 
 def capture_current_area_state(

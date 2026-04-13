@@ -52,6 +52,7 @@ class Renderer:
         self.internal_surface = pygame.Surface(
             (self.internal_width, self.internal_height)
         )
+        self._static_tile_layer_cache: dict[tuple, pygame.Surface] = {}
 
     def set_display_surface(self, display_surface: pygame.Surface) -> None:
         """Swap the window surface after the game recreates the display."""
@@ -175,11 +176,10 @@ class Renderer:
         )
 
     def _draw_tile_layer(self, area: Area, camera: Camera, layer) -> None:
-        """Draw every non-empty tile from one layer batch."""
-        for grid_y, row in enumerate(layer.grid):
-            for grid_x, gid in enumerate(row):
-                if gid > 0:
-                    self._draw_tile_gid(area, camera, grid_x, grid_y, gid)
+        """Draw one cached non-y-sorted tile layer batch."""
+        cached_surface = self._get_static_tile_layer_surface(area, layer)
+        screen_x, screen_y = self._world_to_screen(0.0, 0.0, camera)
+        self.internal_surface.blit(cached_surface, (screen_x, screen_y))
 
     def _draw_tile_cell(self, area: Area, camera: Camera, layer, grid_x: int, grid_y: int) -> None:
         """Draw exactly one tile cell from a y-sorted layer."""
@@ -205,6 +205,69 @@ class Renderer:
             local_frame,
         )
         self.internal_surface.blit(frame_surface, (screen_x, screen_y))
+
+    def _get_static_tile_layer_surface(self, area: Area, layer) -> pygame.Surface:
+        """Return one cached area-space surface for a static tile layer."""
+        cache_key = self._static_tile_layer_cache_key(area, layer)
+        cached_surface = self._static_tile_layer_cache.get(cache_key)
+        if cached_surface is not None:
+            return cached_surface
+
+        cached_surface = pygame.Surface(
+            (max(1, area.pixel_width), max(1, area.pixel_height)),
+            pygame.SRCALPHA,
+        )
+        for grid_y, row in enumerate(layer.grid):
+            for grid_x, gid in enumerate(row):
+                if gid <= 0:
+                    continue
+                resolved = area.resolve_gid(int(gid))
+                if resolved is None:
+                    continue
+                tileset_path, tile_w, tile_h, local_frame = resolved
+                frame_surface = self.asset_manager.get_frame(
+                    tileset_path,
+                    tile_w,
+                    tile_h,
+                    local_frame,
+                )
+                cached_surface.blit(
+                    frame_surface,
+                    (grid_x * area.tile_size, grid_y * area.tile_size),
+                )
+
+        self._static_tile_layer_cache[cache_key] = cached_surface
+        return cached_surface
+
+    def _static_tile_layer_cache_key(self, area: Area, layer) -> tuple:
+        """Return one stable cache key for a static tile layer surface."""
+        tileset_signature = tuple(
+            (
+                int(tileset.firstgid),
+                str(tileset.path),
+                int(tileset.tile_width),
+                int(tileset.tile_height),
+                int(tileset.tile_count),
+            )
+            for tileset in area.tilesets
+        )
+        grid_signature = tuple(
+            tuple(int(gid) for gid in row)
+            for row in layer.grid
+        )
+        return (
+            area.area_id,
+            int(area.tile_size),
+            int(area.pixel_width),
+            int(area.pixel_height),
+            str(layer.name),
+            int(layer.render_order),
+            bool(layer.y_sort),
+            float(layer.sort_y_offset),
+            int(layer.stack_order),
+            tileset_signature,
+            grid_signature,
+        )
 
     def _draw_world_entity(self, area: Area, camera: Camera, entity) -> None:
         """Draw one world-space entity."""

@@ -97,10 +97,57 @@ def _run_on_blocked_if_present(
     )
 
 
+def _iter_nested_command_specs(commands: Any) -> list[dict[str, Any]]:
+    """Return direct and simply nested command specs from an authored command list."""
+    if not isinstance(commands, list):
+        return []
+    specs: list[dict[str, Any]] = []
+    for command in commands:
+        if not isinstance(command, dict):
+            continue
+        specs.append(command)
+        for nested_key in ("commands", "on_start", "on_end"):
+            specs.extend(_iter_nested_command_specs(command.get(nested_key)))
+    return specs
+
+
+def _can_entity_enter_cell(world: Any, grid_x: int, grid_y: int, entrant: Any) -> bool:
+    """Return False when a kind-gated active transition rejects this entrant."""
+    entrant_kind = str(entrant.kind).strip()
+    for receiver in world.get_entities_at(
+        grid_x,
+        grid_y,
+        exclude_entity_id=entrant.entity_id,
+        include_hidden=True,
+    ):
+        if not receiver.has_enabled_entity_command("on_occupant_enter"):
+            continue
+        entity_command = receiver.get_entity_command("on_occupant_enter")
+        if entity_command is None:
+            continue
+        for command in _iter_nested_command_specs(entity_command.commands):
+            if str(command.get("type", "")).strip() != "change_area":
+                continue
+            if "allowed_instigator_kinds" not in command:
+                continue
+            allowed = command["allowed_instigator_kinds"]
+            if not isinstance(allowed, list):
+                continue
+            allowed_kinds = {
+                str(kind).strip()
+                for kind in allowed
+                if str(kind).strip()
+            }
+            if entrant_kind not in allowed_kinds:
+                return False
+    return True
+
+
 def _attempt_standard_push(
     *,
     actor: Any,
     direction: str,
+    world: Any,
     area: Any,
     collision_system: Any,
     movement_system: Any,
@@ -137,6 +184,8 @@ def _attempt_standard_push(
         target_y,
         ignore_entity_id=blocker.entity_id,
     ):
+        return False, []
+    if not _can_entity_enter_cell(world, target_x, target_y, blocker):
         return False, []
 
     moved_entity_ids = movement_system.request_grid_step(
@@ -552,7 +601,7 @@ def register_movement_commands(
             target_x,
             target_y,
             ignore_entity_id=actor.entity_id,
-        ):
+        ) and _can_entity_enter_cell(resolved_world, target_x, target_y, actor):
             moved_entity_ids = resolved_movement_system.request_grid_step(
                 actor.entity_id,
                 resolved_direction,  # type: ignore[arg-type]
@@ -570,10 +619,15 @@ def register_movement_commands(
         if resolved_push_strength < 0:
             raise ValueError("move_in_direction push_strength must be zero or positive.")
 
-        if resolved_push_strength > 0 and not resolved_area.is_blocked(target_x, target_y):
+        if (
+            resolved_push_strength > 0
+            and not resolved_area.is_blocked(target_x, target_y)
+            and _can_entity_enter_cell(resolved_world, target_x, target_y, actor)
+        ):
             pushed, pushed_entity_ids = _attempt_standard_push(
                 actor=actor,
                 direction=resolved_direction,
+                world=resolved_world,
                 area=resolved_area,
                 collision_system=resolved_collision_system,
                 movement_system=resolved_movement_system,
@@ -678,6 +732,7 @@ def register_movement_commands(
         pushed, moved_entity_ids = _attempt_standard_push(
             actor=actor,
             direction=resolved_direction,
+            world=resolved_world,
             area=resolved_area,
             collision_system=resolved_collision_system,
             movement_system=resolved_movement_system,

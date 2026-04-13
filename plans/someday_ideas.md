@@ -33,3 +33,10 @@ implementation shape has been discussed.
   implementation exists. The future version should be visual (not just a plain
   list), support right-click context actions per entity, and stay consistent with
   the new right-click menu behavior.
+
+- Rendering optimization follow-up: static non-y-sorted tile layers now have a
+  first pass of runtime caching, but future rendering work may still be worth
+  revisiting. Candidate follow-ups include viewport culling for tiles and
+  entities, better handling for large dynamic scenes, and profiling-guided
+  cleanup of per-frame render/sort work before content scale makes it
+  noticeable again.

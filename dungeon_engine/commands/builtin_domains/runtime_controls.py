@@ -91,6 +91,7 @@ def register_runtime_control_commands(
     @registry.register("change_area")
     def change_area(
         request_area_change: AreaTransitionCallback | None,
+        world: Any | None,
         *,
         area_id: str = "",
         entry_id: str | None = None,
@@ -98,12 +99,21 @@ def register_runtime_control_commands(
         transfer_entity_id: str | None = None,
         transfer_entity_ids: list[str] | None = None,
         camera_follow: dict[str, Any] | None = None,
+        allowed_instigator_kinds: list[str] | None = None,
         source_entity_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
         **_: Any,
     ) -> CommandHandle:
         """Queue a transition into another authored area at the next scene boundary."""
         if request_area_change is None:
             raise ValueError("Cannot change area without an active area-transition handler.")
+
+        if allowed_instigator_kinds is not None and not _instigator_kind_is_allowed(
+            world,
+            allowed_instigator_kinds,
+            entity_refs=entity_refs,
+        ):
+            return ImmediateHandle()
 
         resolved_reference = str(area_id).strip()
         if not resolved_reference:
@@ -330,3 +340,36 @@ def register_runtime_control_commands(
 
 
 __all__ = ["register_runtime_control_commands"]
+
+
+def _instigator_kind_is_allowed(
+    world: Any | None,
+    allowed_instigator_kinds: list[str],
+    *,
+    entity_refs: dict[str, str] | None,
+) -> bool:
+    """Return whether the hook instigator may request an active area change."""
+    if not isinstance(allowed_instigator_kinds, list):
+        raise TypeError("change_area allowed_instigator_kinds must be a JSON array.")
+    allowed_kinds: set[str] = set()
+    for index, raw_kind in enumerate(allowed_instigator_kinds):
+        if not isinstance(raw_kind, str):
+            raise TypeError(
+                f"change_area allowed_instigator_kinds[{index}] must be a string."
+            )
+        kind = raw_kind.strip()
+        if kind:
+            allowed_kinds.add(kind)
+    if not allowed_kinds:
+        return False
+
+    instigator_id = ""
+    if isinstance(entity_refs, dict):
+        instigator_id = str(entity_refs.get("instigator", "")).strip()
+    if not instigator_id or world is None:
+        return False
+
+    instigator = world.get_entity(instigator_id)
+    if instigator is None:
+        return False
+    return str(instigator.kind).strip() in allowed_kinds

@@ -483,7 +483,7 @@ class GameAreaRuntimeMixin:
                 entry_point=entry_point,
                 destination_entity=destination_entity,
             )
-            world.add_entity(entity)
+            world.replace_entity(entity)
 
     def _place_transferred_entity(self, area, entity, *, entry_point, destination_entity) -> None:
         """Move one transferred entity onto the destination entry marker when provided."""

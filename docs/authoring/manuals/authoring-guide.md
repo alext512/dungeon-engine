@@ -1798,6 +1798,7 @@ Common fields:
 - `transfer_entity_id`
 - `transfer_entity_ids`
 - `camera_follow`
+- `allowed_instigator_kinds`
 
 Preferred current example using a destination marker entity:
 
@@ -1822,7 +1823,12 @@ Rules:
   entry point
 - use `transfer_entity_ids` when the live entity itself should travel to the new area
 - `camera_follow.mode` can be `entity`, `input_target`, or `none`
-- `camera_follow.entity_id` supports symbolic `self` / `actor` / `caller` in these high-level transition commands
+- `camera_follow.entity_id` may use `self` in a source-entity context, or
+  runtime ref tokens such as `$self_id` and `$ref_ids.instigator`
+- use `allowed_instigator_kinds` on occupancy-driven `change_area` commands
+  when a trigger should only transition selected entity kinds, such as a
+  player-only doorway. Standard grid movement and push commands treat that
+  doorway as closed to other kinds.
 - transferred entities are tracked as session travelers:
   - a transferred entity keeps one live identity across areas
   - its authored origin placeholder is suppressed while it is away
@@ -1861,7 +1867,10 @@ Transition trigger example:
   "interactable": false,
   "parameters": {
     "target_area": "areas/start",
-    "destination_entity_id": "spawn_marker"
+    "destination_entity_id": "spawn_marker",
+    "allowed_instigator_kinds": [
+      "player"
+    ]
   },
   "parameter_specs": {
     "target_area": {
@@ -1874,6 +1883,12 @@ Transition trigger example:
       "area_parameter": "target_area",
       "scope": "area",
       "space": "world"
+    },
+    "allowed_instigator_kinds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "entity_commands": {
@@ -1882,9 +1897,14 @@ Transition trigger example:
         "type": "change_area",
         "area_id": "$target_area",
         "destination_entity_id": "$destination_entity_id",
+        "allowed_instigator_kinds": "$allowed_instigator_kinds",
         "transfer_entity_ids": [
           "$ref_ids.instigator"
-        ]
+        ],
+        "camera_follow": {
+          "mode": "entity",
+          "entity_id": "$ref_ids.instigator"
+        }
       }
     ]
   }

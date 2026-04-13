@@ -34,7 +34,7 @@ from dungeon_engine.commands.runner import (
     execute_command_spec,
     execute_registered_command,
 )
-from dungeon_engine.world.area import Area, TileLayer
+from dungeon_engine.world.area import Area, TileLayer, Tileset
 from dungeon_engine.world.entity import (
     Entity,
     EntityCommandDefinition,
@@ -73,6 +73,7 @@ from dungeon_engine.world.persistence_snapshots import (
     capture_current_area_state,
 )
 from dungeon_engine.engine.asset_manager import AssetManager
+from dungeon_engine.engine.camera import Camera
 from dungeon_engine.engine.input_handler import InputHandler
 from dungeon_engine.engine.renderer import Renderer
 from dungeon_engine.engine.screen import ScreenElementManager
@@ -736,6 +737,101 @@ class StrictContentIdTests(unittest.TestCase):
             ],
         )
 
+    def test_move_in_direction_does_not_push_blocker_into_rejected_transition(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        actor.push_strength = 1
+        blocker = _make_runtime_entity("boulder", kind="boulder")
+        blocker.grid_x = 1
+        blocker.solid = True
+        blocker.pushable = True
+        transition = _make_runtime_entity(
+            "door",
+            kind="area_transition",
+            entity_commands={
+                "on_occupant_enter": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "change_area",
+                            "area_id": "areas/cave",
+                            "allowed_instigator_kinds": ["player"],
+                        }
+                    ]
+                )
+            },
+        )
+        transition.grid_x = 2
+        transition.visible = False
+        world.add_entity(actor)
+        world.add_entity(blocker)
+        world.add_entity(transition)
+        registry, context = self._make_command_context(area=area, world=world)
+        collision_system = CollisionSystem(area, world)
+        context.services.world.collision_system = collision_system
+        context.services.world.movement_system = MovementSystem(area, world, collision_system)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {"entity_id": "player", "direction": "right", "wait": False},
+        )
+        handle.update(0.0)
+
+        self.assertEqual(actor.grid_x, 0)
+        self.assertEqual(blocker.grid_x, 1)
+
+    def test_move_in_direction_allows_matching_entity_into_gated_transition(self) -> None:
+        area = Area(
+            area_id="areas/test_room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[TileLayer(name="ground", grid=[[1, 1]], render_order=0)],
+            cell_flags=[[{"blocked": False}, {"blocked": False}]],
+        )
+        world = World()
+        actor = _make_runtime_entity("player", kind="player")
+        transition = _make_runtime_entity(
+            "door",
+            kind="area_transition",
+            entity_commands={
+                "on_occupant_enter": EntityCommandDefinition(
+                    commands=[
+                        {
+                            "type": "change_area",
+                            "area_id": "areas/cave",
+                            "allowed_instigator_kinds": ["player"],
+                        }
+                    ]
+                )
+            },
+        )
+        transition.grid_x = 1
+        transition.visible = False
+        world.add_entity(actor)
+        world.add_entity(transition)
+        registry, context = self._make_command_context(area=area, world=world)
+        collision_system = CollisionSystem(area, world)
+        context.services.world.collision_system = collision_system
+        context.services.world.movement_system = MovementSystem(area, world, collision_system)
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "move_in_direction",
+            {"entity_id": "player", "direction": "right", "wait": False},
+        )
+        handle.update(0.0)
+
+        self.assertEqual(actor.grid_x, 1)
+
     def test_push_facing_moves_only_the_blocker(self) -> None:
         area = Area(
             area_id="areas/test_room",
@@ -1087,6 +1183,43 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(items[1].payload[0].name, "front_wall")
         self.assertEqual(items[2].payload[0].entity_id, "player")
         self.assertEqual(items[3].payload[0].name, "roof")
+
+    def test_renderer_caches_static_tile_layer_surfaces(self) -> None:
+        import pygame
+
+        class _CountingAssetManager:
+            def __init__(self) -> None:
+                self.calls = 0
+                self.frame = pygame.Surface((16, 16), pygame.SRCALPHA)
+
+            def get_frame(self, relative_path, frame_width, frame_height, frame_index):
+                self.calls += 1
+                return self.frame
+
+        area = Area(
+            area_id="areas/test_room",
+            tile_size=16,
+            tilesets=[
+                Tileset(
+                    firstgid=1,
+                    path="assets/test_tiles.png",
+                    tile_width=16,
+                    tile_height=16,
+                    tile_count=1,
+                )
+            ],
+            tile_layers=[TileLayer(name="ground", grid=[[1]], render_order=0, y_sort=False)],
+            cell_flags=[[{"blocked": False}]],
+        )
+        area.build_gid_lookup()
+        asset_manager = _CountingAssetManager()
+        renderer = Renderer(pygame.Surface((16, 16)), asset_manager)
+        camera = Camera(16, 16, area)
+
+        renderer._draw_tile_layer(area, camera, area.tile_layers[0])
+        renderer._draw_tile_layer(area, camera, area.tile_layers[0])
+
+        self.assertEqual(asset_manager.calls, 1)
 
     def test_removed_text_session_commands_raise_clear_runtime_errors(self) -> None:
         registry, context = self._make_command_context()
@@ -2736,6 +2869,53 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(request.camera_follow.offset_x, 12.0)
         self.assertEqual(request.camera_follow.offset_y, -8.0)
 
+    def test_change_area_command_can_filter_hook_instigator_kind(self) -> None:
+        recorded_requests: list[AreaTransitionRequest] = []
+        registry = CommandRegistry()
+        register_builtin_commands(registry)
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("boulder", kind="boulder"))
+        context = CommandContext(
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+                request_area_change=recorded_requests.append,
+            ),
+        )
+
+        command_spec = {
+            "type": "change_area",
+            "area_id": "areas/cave",
+            "destination_entity_id": "spawn",
+            "allowed_instigator_kinds": ["player"],
+            "transfer_entity_ids": ["$ref_ids.instigator"],
+        }
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            command_spec,
+            base_params={"entity_refs": {"instigator": "boulder"}},
+        )
+        handle.update(0.0)
+        self.assertEqual(recorded_requests, [])
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            command_spec,
+            base_params={"entity_refs": {"instigator": "player"}},
+        )
+        handle.update(0.0)
+
+        self.assertEqual(len(recorded_requests), 1)
+        self.assertEqual(recorded_requests[0].transfer_entity_ids, ["player"])
+
     def test_asset_manager_requires_project_asset_resolution(self) -> None:
         _, project = self._make_project()
         asset_manager = AssetManager(project)
@@ -4097,6 +4277,20 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(restored_crate.variables["moved"])  # type: ignore[index]
         self.assertEqual(restored_crate.origin_area_id, "areas/room_a")
 
+        restored_save_data.travelers["crate"].current_area = area_a.area_id
+        returned_world_a = World()
+        returned_placeholder = _make_runtime_entity("crate", kind="crate")
+        returned_placeholder.grid_x = 1
+        returned_placeholder.grid_y = 1
+        returned_world_a.add_entity(returned_placeholder)
+        apply_area_travelers(area_a, returned_world_a, restored_save_data, project=project)
+        returned_crate = returned_world_a.get_entity("crate")
+        assert returned_crate is not None
+        self.assertEqual(returned_crate.grid_x, 5)
+        self.assertEqual(returned_crate.grid_y, 6)
+        self.assertTrue(returned_crate.variables["moved"])  # type: ignore[index]
+        self.assertEqual(returned_crate.origin_area_id, "areas/room_a")
+
     def test_game_area_change_without_returning_traveler_suppresses_origin_placeholder(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
@@ -4185,6 +4379,97 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(game.area.area_id, "areas/room_a")
         self.assertIsNone(game.world.get_entity("crate"))
+
+    def test_game_area_change_returning_traveler_replaces_origin_placeholder(self) -> None:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+        import pygame
+        from dungeon_engine.engine.game import Game
+
+        _, project = self._make_project(
+            startup_area="areas/room_a",
+            areas={
+                "room_a.json": {
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [
+                        {
+                            "name": "ground",
+                            "render_order": 0,
+                            "grid": [[0, 0, 0]],
+                        }
+                    ],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
+                    "entities": [
+                        {
+                            "id": "crate",
+                            "kind": "crate",
+                            "grid_x": 1,
+                            "grid_y": 0,
+                        },
+                    ],
+                },
+                "room_b.json": {
+                    "tile_size": 16,
+                    "variables": {},
+                    "tilesets": [],
+                    "tile_layers": [
+                        {
+                            "name": "ground",
+                            "render_order": 0,
+                            "grid": [[0, 0, 0]],
+                        }
+                    ],
+                    "cell_flags": [[{"blocked": False}, {"blocked": False}, {"blocked": False}]],
+                    "entry_points": {
+                        "landing": {
+                            "grid_x": 2,
+                            "grid_y": 0,
+                        }
+                    },
+                    "entities": [],
+                },
+            },
+        )
+
+        area_a_path = project.resolve_area_reference("areas/room_a")
+        assert area_a_path is not None
+        game = Game(area_path=area_a_path, project=project)
+        self.addCleanup(pygame.quit)
+
+        crate = game.world.get_entity("crate")
+        assert crate is not None
+        crate.variables["moved"] = True
+
+        game.request_area_change(
+            AreaTransitionRequest(
+                area_id="areas/room_b",
+                entry_id="landing",
+                transfer_entity_ids=["crate"],
+            )
+        )
+        game._apply_pending_area_change_if_idle()
+
+        moved_crate = game.world.get_entity("crate")
+        assert moved_crate is not None
+        moved_crate.grid_x = 2
+        moved_crate.grid_y = 0
+        moved_crate.sync_pixel_position(game.area.tile_size)
+
+        game.request_area_change(
+            AreaTransitionRequest(
+                area_id="areas/room_a",
+                transfer_entity_ids=["crate"],
+            )
+        )
+        game._apply_pending_area_change_if_idle()
+
+        self.assertEqual(game.area.area_id, "areas/room_a")
+        returned_crate = game.world.get_entity("crate")
+        assert returned_crate is not None
+        self.assertEqual(returned_crate.grid_x, 2)
+        self.assertTrue(returned_crate.variables["moved"])  # type: ignore[index]
+        self.assertEqual(returned_crate.origin_area_id, "areas/room_a")
 
 
 if __name__ == "__main__":

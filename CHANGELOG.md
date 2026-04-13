@@ -4,6 +4,19 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Area Transition Traveler Fixes
+
+- Added an optional `allowed_instigator_kinds` guard to `change_area` so
+  occupancy-triggered active scene transitions can be limited to selected
+  entity kinds, and standard grid movement treats those trigger cells as closed
+  to rejected entity kinds
+- Updated the sample area-transition template to be player-gated, transfer the
+  entering entity, and keep the camera following that transferred entity
+- Fixed returning travelers so they replace their authored origin placeholder
+  instead of colliding with a duplicate entity id
+
+---
+
 ## External Editor Dependency And Preview Catch-Up
 
 - Added the editor's `json5` dependency to its own requirements file and

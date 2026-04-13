@@ -64,7 +64,8 @@ Use these files as the first examples when checking sample behavior:
   item pickup/use workflow
 - `projects/new_project/entity_templates/area_transition.json` and
   `projects/new_project/entity_templates/area_transition_target.json` for
-  area-change handoff behavior
+  player-gated area-change handoff behavior, traveler transfer, and transition
+  camera follow
 - `projects/new_project/areas/start.json` and
   `projects/new_project/areas/levels/first_area.json` for tile layers,
   template-backed entities, camera defaults, transitions, and puzzle objects
