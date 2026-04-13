@@ -7,8 +7,8 @@ from pathlib import Path
 
 from dungeon_engine.commands.context_types import AreaTransitionRequest
 from dungeon_engine.commands.runner import execute_registered_command
-from dungeon_engine.json_io import json_data_path_candidates
-from dungeon_engine.world.loader import load_area, load_area_from_data
+from dungeon_engine.json_io import json_data_path_candidates, load_json_data
+from dungeon_engine.world.loader import load_area_from_data
 from dungeon_engine.world.loader_entities import instantiate_entity
 from dungeon_engine.world.persistence import PersistenceRuntime
 from dungeon_engine.world.persistence_data import (
@@ -20,7 +20,6 @@ from dungeon_engine.world.persistence_snapshots import (
     apply_persistent_global_state,
     select_entity_ids_by_tags,
 )
-from dungeon_engine.world.serializer import serialize_area
 
 
 class GameAreaRuntimeMixin:
@@ -62,12 +61,7 @@ class GameAreaRuntimeMixin:
     ) -> None:
         """Load one authored area plus any persistent overrides and rebuild runtime systems."""
         resolved_area_path = self._resolve_area_path(area_path)
-        document_area, document_world = load_area(
-            resolved_area_path,
-            asset_manager=self.asset_manager,
-            project=self.project,
-        )
-        document_data = serialize_area(document_area, document_world, project=self.project)
+        document_data = load_json_data(resolved_area_path)
         play_document_data = copy.deepcopy(document_data)
         play_authored_area, play_authored_world = load_area_from_data(
             copy.deepcopy(document_data),

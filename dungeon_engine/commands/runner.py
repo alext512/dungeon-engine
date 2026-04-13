@@ -373,6 +373,8 @@ class CommandRunner:
         """Run one handle as an independent root flow."""
         if handle.complete:
             return
+        if not hasattr(handle, "project_command_stack"):
+            setattr(handle, "project_command_stack", list(self.context.project_command_stack))
         if self._updating_root_handles:
             self._pending_spawned_root_handles.append(handle)
             return
@@ -471,7 +473,16 @@ class CommandRunner:
                     for handle in self.root_handles:
                         if self._scene_boundary_requested:
                             break
-                        handle.update(dt)
+                        previous_stack = self.context.project_command_stack
+                        handle_stack = getattr(handle, "project_command_stack", None)
+                        if handle_stack is None:
+                            handle_stack = []
+                            setattr(handle, "project_command_stack", handle_stack)
+                        self.context.project_command_stack = handle_stack
+                        try:
+                            handle.update(dt)
+                        finally:
+                            self.context.project_command_stack = previous_stack
                         if self._scene_boundary_requested:
                             break
                         if not handle.complete:
@@ -593,12 +604,20 @@ class CommandRunner:
         """Turn queued requests into root flows or immediate effects."""
         while self.pending:
             queued_command = self.pending.popleft()
-            handle = execute_registered_command(
-                self.registry,
-                self.context,
-                queued_command.name,
-                queued_command.params,
-            )
+            root_stack: list[str] = []
+            previous_stack = self.context.project_command_stack
+            self.context.project_command_stack = root_stack
+            try:
+                handle = execute_registered_command(
+                    self.registry,
+                    self.context,
+                    queued_command.name,
+                    queued_command.params,
+                )
+            finally:
+                self.context.project_command_stack = previous_stack
+            if not hasattr(handle, "project_command_stack"):
+                setattr(handle, "project_command_stack", root_stack)
             self.spawn_root_handle(handle)
             if self._scene_boundary_requested:
                 self.pending.clear()

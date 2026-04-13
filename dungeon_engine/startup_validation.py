@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any
 
 from dungeon_engine.commands.audit import audit_project_command_surfaces
@@ -104,7 +105,11 @@ def validate_project_startup(
     | None
 ):
     """Validate project content and report any startup-blocking errors."""
+    logger.info("Startup validation: begin")
+    overall_start = time.perf_counter()
+
     # Validate entity templates.
+    step_start = time.perf_counter()
     try:
         validate_project_entity_templates(project)
     except EntityTemplateValidationError as error:
@@ -114,8 +119,14 @@ def validate_project_startup(
         if show_dialog:
             _show_error_dialog(ui_title, message)
         return error
+    finally:
+        logger.info(
+            "Startup validation: entity templates in %.2fs",
+            time.perf_counter() - step_start,
+        )
 
     # Validate item definitions.
+    step_start = time.perf_counter()
     try:
         validate_project_items(project)
     except ItemDefinitionValidationError as error:
@@ -125,8 +136,14 @@ def validate_project_startup(
         if show_dialog:
             _show_error_dialog(ui_title, message)
         return error
+    finally:
+        logger.info(
+            "Startup validation: items in %.2fs",
+            time.perf_counter() - step_start,
+        )
 
     # Validate areas.
+    step_start = time.perf_counter()
     try:
         validate_project_areas(project)
     except AreaValidationError as error:
@@ -136,8 +153,14 @@ def validate_project_startup(
         if show_dialog:
             _show_error_dialog(ui_title, message)
         return error
+    finally:
+        logger.info(
+            "Startup validation: areas in %.2fs",
+            time.perf_counter() - step_start,
+        )
 
     # Validate project commands.
+    step_start = time.perf_counter()
     try:
         validate_project_commands(project)
     except ProjectCommandValidationError as error:
@@ -147,7 +170,13 @@ def validate_project_startup(
         if show_dialog:
             _show_error_dialog(ui_title, message)
         return error
+    finally:
+        logger.info(
+            "Startup validation: commands in %.2fs",
+            time.perf_counter() - step_start,
+        )
 
+    step_start = time.perf_counter()
     try:
         validate_project_command_authoring(project)
     except CommandAuthoringValidationError as error:
@@ -157,9 +186,23 @@ def validate_project_startup(
         if show_dialog:
             _show_error_dialog(ui_title, message)
         return error
+    finally:
+        logger.info(
+            "Startup validation: command authoring in %.2fs",
+            time.perf_counter() - step_start,
+        )
 
+    step_start = time.perf_counter()
     try:
         validate_project_static_references(project)
+        logger.info(
+            "Startup validation: static references in %.2fs",
+            time.perf_counter() - step_start,
+        )
+        logger.info(
+            "Startup validation: complete in %.2fs",
+            time.perf_counter() - overall_start,
+        )
         return None
     except StaticReferenceValidationError as error:
         log_static_reference_validation_error(error)
@@ -167,6 +210,14 @@ def validate_project_startup(
         print(message)
         if show_dialog:
             _show_error_dialog(ui_title, message)
+        logger.info(
+            "Startup validation: static references failed after %.2fs",
+            time.perf_counter() - step_start,
+        )
+        logger.info(
+            "Startup validation: complete in %.2fs",
+            time.perf_counter() - overall_start,
+        )
         return error
 
 

@@ -124,6 +124,10 @@ def loads_json_data(text: str, *, source_name: str = "<string>") -> Any:
 
     parts = split_json_file_text(text, source_name=source_name)
     try:
+        return json.loads(parts.body_text)
+    except json.JSONDecodeError:
+        pass
+    try:
         return json5.loads(parts.body_text)
     except ValueError as exc:
         lineno, colno = _decode_json5_location(exc)

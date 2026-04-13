@@ -29,6 +29,11 @@ from dungeon_engine.world.entity import (
 logger = get_logger(__name__)
 
 _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
+_AUTHORED_ENTITY_INDEX_CACHE: dict[
+    tuple[Path, tuple[tuple[Path, int | None, int | None], ...]],
+    dict[str, list[dict[str, Any]]],
+] = {}
+_AUTHORED_ENTITY_INDEX_PROJECT_CACHE: dict[int, tuple[ProjectContext, dict[str, list[dict[str, Any]]]]] = {}
 _PARAMETER_TOKEN_RE = re.compile(
     r"^\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))$"
 )
@@ -1110,8 +1115,26 @@ def _validate_entity_parameter_reference(
     project: ProjectContext,
     all_parameters: dict[str, Any],
 ) -> None:
-    record = _find_authored_entity_record(project, entity_id)
+    area_parameter = spec.get("area_parameter")
+    target_area_id = None
+    if isinstance(area_parameter, str):
+        raw_area_id = all_parameters.get(area_parameter)
+        if _parameter_value_is_blank(raw_area_id):
+            raw_area_id = None
+        elif not isinstance(raw_area_id, str):
+            raise ValueError(
+                f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
+                "but that parameter is not a string area id."
+            )
+        else:
+            target_area_id = str(raw_area_id).strip()
+
+    record = _find_authored_entity_record(project, entity_id, area_id=target_area_id)
     if record is None:
+        if target_area_id is not None and _find_authored_entity_record(project, entity_id) is not None:
+            raise ValueError(
+                f"{source_name} parameter '{parameter_name}' must reference an entity in area '{target_area_id}'."
+            )
         raise ValueError(f"{source_name} parameter '{parameter_name}' references unknown entity '{entity_id}'.")
     expected_scope = spec.get("scope")
     if isinstance(expected_scope, str) and record.get("scope") != expected_scope:
@@ -1123,25 +1146,16 @@ def _validate_entity_parameter_reference(
         raise ValueError(
             f"{source_name} parameter '{parameter_name}' must reference a {expected_space}-space entity."
         )
-    area_parameter = spec.get("area_parameter")
-    if not isinstance(area_parameter, str):
+    if target_area_id is None:
         return
-    raw_area_id = all_parameters.get(area_parameter)
-    if _parameter_value_is_blank(raw_area_id):
-        return
-    if not isinstance(raw_area_id, str):
-        raise ValueError(
-            f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
-            "but that parameter is not a string area id."
-        )
     if record.get("scope") != "area":
         raise ValueError(
             f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
             f"but entity '{entity_id}' is not an area entity."
         )
-    if record.get("area_id") != raw_area_id:
+    if record.get("area_id") != target_area_id:
         raise ValueError(
-            f"{source_name} parameter '{parameter_name}' must reference an entity in area '{raw_area_id}'."
+            f"{source_name} parameter '{parameter_name}' must reference an entity in area '{target_area_id}'."
         )
 
 
@@ -1177,20 +1191,51 @@ def _validate_entity_command_parameter_reference(
         )
 
 
-def _find_authored_entity_record(project: ProjectContext, entity_id: str) -> dict[str, Any] | None:
+def _find_authored_entity_record(
+    project: ProjectContext,
+    entity_id: str,
+    *,
+    area_id: str | None = None,
+) -> dict[str, Any] | None:
     target = str(entity_id).strip()
     if not target:
         return None
+    records = _authored_entity_index(project).get(target, [])
+    if area_id is not None:
+        for record in records:
+            if record.get("scope") == "area" and record.get("area_id") == area_id:
+                return record
+        return None
+    if records:
+        return records[0]
+    return None
 
+
+def _authored_entity_index(project: ProjectContext) -> dict[str, list[dict[str, Any]]]:
+    project_cache = _AUTHORED_ENTITY_INDEX_PROJECT_CACHE.get(id(project))
+    if project_cache is not None and project_cache[0] is project:
+        return project_cache[1]
+
+    cache_key = _authored_entity_index_cache_key(project)
+    cached = _AUTHORED_ENTITY_INDEX_CACHE.get(cache_key)
+    if cached is not None:
+        _AUTHORED_ENTITY_INDEX_PROJECT_CACHE[id(project)] = (project, cached)
+        return cached
+
+    index: dict[str, list[dict[str, Any]]] = {}
     for raw_entity in project.global_entities:
         if not isinstance(raw_entity, dict):
             continue
-        if str(raw_entity.get("id", "")).strip() == target:
-            return {
+        entity_id = str(raw_entity.get("id", "")).strip()
+        if not entity_id:
+            continue
+        index.setdefault(entity_id, []).append(
+            {
                 "raw": raw_entity,
                 "scope": "global",
                 "space": _resolve_authored_entity_space(raw_entity, project),
             }
+        )
 
     for area_path in project.list_area_files():
         try:
@@ -1202,17 +1247,39 @@ def _find_authored_entity_record(project: ProjectContext, entity_id: str) -> dic
         raw_entities = raw_area.get("entities", [])
         if not isinstance(raw_entities, list):
             continue
+        area_id = project.area_id(area_path)
         for raw_entity in raw_entities:
             if not isinstance(raw_entity, dict):
                 continue
-            if str(raw_entity.get("id", "")).strip() == target:
-                return {
+            entity_id = str(raw_entity.get("id", "")).strip()
+            if not entity_id:
+                continue
+            index.setdefault(entity_id, []).append(
+                {
                     "raw": raw_entity,
                     "scope": "area",
                     "space": _resolve_authored_entity_space(raw_entity, project),
-                    "area_id": project.area_id(area_path),
+                    "area_id": area_id,
                 }
-    return None
+            )
+
+    _AUTHORED_ENTITY_INDEX_CACHE[cache_key] = index
+    _AUTHORED_ENTITY_INDEX_PROJECT_CACHE[id(project)] = (project, index)
+    return index
+
+
+def _authored_entity_index_cache_key(
+    project: ProjectContext,
+) -> tuple[Path, tuple[tuple[Path, int | None, int | None], ...]]:
+    area_fingerprint: list[tuple[Path, int | None, int | None]] = []
+    for area_path in project.list_area_files():
+        resolved = area_path.resolve()
+        try:
+            stat = resolved.stat()
+            area_fingerprint.append((resolved, int(stat.st_mtime_ns), int(stat.st_size)))
+        except OSError:
+            area_fingerprint.append((resolved, None, None))
+    return (project.project_root.resolve(), tuple(area_fingerprint))
 
 
 def _resolve_authored_entity_space(raw_entity: dict[str, Any], project: ProjectContext) -> str:

@@ -152,11 +152,18 @@ def register_runtime_control_commands(
                 offset_y=float(follow_spec.get("offset_y", 0.0)),
             )
 
+        resolved_entry_id = None
+        if entry_id is not None:
+            resolved_entry_id = str(entry_id).strip() or None
+        resolved_destination_entity_id = None
+        if destination_entity_id is not None:
+            resolved_destination_entity_id = str(destination_entity_id).strip() or None
+
         request_area_change(
             AreaTransitionRequest(
                 area_id=resolved_reference,
-                entry_id=str(entry_id).strip() or None,
-                destination_entity_id=str(destination_entity_id).strip() or None,
+                entry_id=resolved_entry_id,
+                destination_entity_id=resolved_destination_entity_id,
                 transfer_entity_ids=resolved_transfer_ids,
                 camera_follow=camera_follow_request,
             )
@@ -206,11 +213,18 @@ def register_runtime_control_commands(
                 offset_y=float(follow_spec.get("offset_y", 0.0)),
             )
 
+        resolved_entry_id = None
+        if entry_id is not None:
+            resolved_entry_id = str(entry_id).strip() or None
+        resolved_destination_entity_id = None
+        if destination_entity_id is not None:
+            resolved_destination_entity_id = str(destination_entity_id).strip() or None
+
         request_new_game(
             AreaTransitionRequest(
                 area_id=resolved_reference,
-                entry_id=str(entry_id).strip() or None,
-                destination_entity_id=str(destination_entity_id).strip() or None,
+                entry_id=resolved_entry_id,
+                destination_entity_id=resolved_destination_entity_id,
                 camera_follow=camera_follow_request,
             )
         )

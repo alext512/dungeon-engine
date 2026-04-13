@@ -27,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         help="Use SDL's dummy video driver for automated smoke tests.",
     )
     parser.add_argument(
+        "--skip-startup-validation",
+        action="store_true",
+        help="Skip project startup validation (faster, but may hide errors).",
+    )
+    parser.add_argument(
         "--max-frames",
         type=int,
         default=None,
@@ -63,13 +68,14 @@ def main() -> int:
         return 0
 
     project = load_project(project_path)
-    validation_error = validate_project_startup(
-        project,
-        ui_title="Cannot start project",
-        show_dialog=not args.headless,
-    )
-    if validation_error is not None:
-        return 1
+    if not args.skip_startup_validation:
+        validation_error = validate_project_startup(
+            project,
+            ui_title="Cannot start project",
+            show_dialog=not args.headless,
+        )
+        if validation_error is not None:
+            return 1
     update_launcher_state(last_project=str(project_path))
 
     area_id = _choose_area_id(args.area, project, launcher_state.last_game_area, allow_picker=not args.headless)
