@@ -10,6 +10,28 @@
     "on_completed_command_id": "",
     "on_uncompleted_command_id": ""
   },
+  "parameter_specs": {
+    "required_count": {
+      "type": "int",
+      "min": 1
+    },
+    "reversible": {
+      "type": "bool"
+    },
+    "target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "on_completed_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    },
+    "on_uncompleted_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    }
+  },
   "variables": {
     "current_count": 0,
     "completed": false

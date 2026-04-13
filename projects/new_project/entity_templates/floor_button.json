@@ -20,6 +20,24 @@
     "target_press_command_id": "contribute_on",
     "target_release_command_id": "contribute_off"
   },
+  "parameter_specs": {
+    "latching": {
+      "type": "bool"
+    },
+    "target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "target_press_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    },
+    "target_release_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    }
+  },
   "variables": {
     "pressed": false
   },

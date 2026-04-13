@@ -5,7 +5,20 @@
   "interactable": false,
   "parameters": {
     "target_area": "areas/start",
-    "destination_entity_id": "spawn_marker"
+    "destination_entity_id": "starting_position"
+  },
+  "parameter_specs": {
+    "target_area": {
+      "type": "area_id",
+      "required": true
+    },
+    "destination_entity_id": {
+      "type": "entity_id",
+      "required": true,
+      "area_parameter": "target_area",
+      "scope": "area",
+      "space": "world"
+    }
   },
   "entity_commands": {
     "on_occupant_enter": [

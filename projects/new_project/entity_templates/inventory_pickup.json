@@ -17,6 +17,20 @@
     "quantity": 1,
     "pickup_message": "Picked up an item."
   },
+  "parameter_specs": {
+    "item_id": {
+      "type": "item_id",
+      "required": true
+    },
+    "quantity": {
+      "type": "int",
+      "required": true,
+      "min": 1
+    },
+    "pickup_message": {
+      "type": "text"
+    }
+  },
   "variables": {
     "picked_up": false,
     "pickup_inventory_result": null

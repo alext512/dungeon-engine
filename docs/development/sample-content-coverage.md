@@ -38,8 +38,8 @@ for what the sample proves today and what it still does not prove.
   `dialogues/system/sample_hook_choice.json`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
-- entity templates with parameters, visuals, render order, collision, pushing,
-  interaction, and occupancy hooks
+- entity templates with typed parameter specs, visuals, render order,
+  collision, pushing, interaction, and occupancy hooks
 - GID tile layers, multiple tilesets, and authored cell/entity placement
 - project assets and bitmap font assets loaded through manifest asset roots
 

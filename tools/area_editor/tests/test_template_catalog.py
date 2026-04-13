@@ -202,3 +202,59 @@ class TestTemplateCatalog(unittest.TestCase):
                 "destination_entity_id": "spawn_marker",
             },
         )
+
+    def test_get_template_entity_command_names_returns_authored_commands(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/gate"] = {
+            "entity_commands": {
+                "contribute_off": {"commands": []},
+                "contribute_on": {"commands": []},
+                "": {"commands": []},
+            }
+        }
+
+        names = catalog.get_template_entity_command_names("entity_templates/gate")
+
+        self.assertEqual(names, ["contribute_off", "contribute_on"])
+
+    def test_get_template_parameter_specs_returns_authored_specs(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/transition"] = {
+            "parameter_specs": {
+                "target_area": {
+                    "type": "area_id",
+                    "required": True,
+                },
+                "destination_entity_id": {
+                    "type": "entity_id",
+                    "area_parameter": "target_area",
+                    "scope": "area",
+                    "space": "world",
+                },
+            }
+        }
+
+        specs = catalog.get_template_parameter_specs("entity_templates/transition")
+
+        self.assertEqual(
+            specs,
+            {
+                "target_area": {
+                    "type": "area_id",
+                    "required": True,
+                },
+                "destination_entity_id": {
+                    "type": "entity_id",
+                    "area_parameter": "target_area",
+                    "scope": "area",
+                    "space": "world",
+                },
+            },
+        )
+        specs["target_area"]["type"] = "string"
+        self.assertEqual(
+            catalog.get_template_parameter_specs("entity_templates/transition")[
+                "target_area"
+            ]["type"],
+            "area_id",
+        )

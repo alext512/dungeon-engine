@@ -31,6 +31,26 @@
     "filled_target_entity_id": "",
     "filled_command_id": ""
   },
+  "parameter_specs": {
+    "group_target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "group_fill_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "group_target_entity_id"
+    },
+    "filled_target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "filled_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "filled_target_entity_id"
+    }
+  },
   "variables": {
     "filled": false
   },

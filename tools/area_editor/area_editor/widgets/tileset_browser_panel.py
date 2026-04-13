@@ -580,6 +580,10 @@ class TilesetBrowserPanel(QDockWidget):
         self._sheet_widget.set_brush_active(active)
         self._update_status()
 
+    def set_brush_mode(self, *, erase_mode: bool) -> None:
+        """Programmatically choose the remembered tile brush mode."""
+        self._apply_brush_state(erase_mode=erase_mode, emit=False)
+
     def select_gid(self, gid: int) -> None:
         """Programmatically select a brush GID, e.g. from eyedropper or tab restore."""
         if not self._tilesets:

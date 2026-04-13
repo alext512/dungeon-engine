@@ -24,6 +24,8 @@ class AreaEntityListPanel(QWidget):
     """List entity instances for the active area and emit selection requests."""
 
     entity_selected = Signal(str)
+    entity_edit_requested = Signal(str)
+    entity_context_menu_requested = Signal(str, object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -45,6 +47,9 @@ class AreaEntityListPanel(QWidget):
 
         self._list = QListWidget()
         self._list.currentItemChanged.connect(self._on_current_item_changed)
+        self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_context_menu_requested)
         layout.addWidget(self._list, 1)
 
         self._area_id: str | None = None
@@ -147,6 +152,24 @@ class AreaEntityListPanel(QWidget):
             return
         self._selected_entity_id = entity_id
         self.entity_selected.emit(entity_id)
+
+    def _on_item_double_clicked(self, item: QListWidgetItem) -> None:
+        if item.data(_PLACEHOLDER_ROLE):
+            return
+        entity_id = str(item.data(_ENTITY_ID_ROLE) or "")
+        if entity_id:
+            self.entity_edit_requested.emit(entity_id)
+
+    def _on_context_menu_requested(self, position) -> None:
+        item = self._list.itemAt(position)
+        if item is None or item.data(_PLACEHOLDER_ROLE):
+            return
+        self._list.setCurrentItem(item)
+        entity_id = str(item.data(_ENTITY_ID_ROLE) or "")
+        if not entity_id:
+            return
+        global_pos = self._list.viewport().mapToGlobal(position)
+        self.entity_context_menu_requested.emit(entity_id, global_pos)
 
     def _format_entity_label(self, entity: EntityDocument) -> str:
         template = entity.template.rsplit("/", 1)[-1] if entity.template else "entity"

@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent, QPixmap
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem
 
 from area_editor.catalogs.template_catalog import VisualInfo
 from area_editor.catalogs.template_catalog import TemplateCatalog
@@ -282,7 +282,14 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
 
         with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
             self.assertTrue(canvas._handle_edit_pointer_event(left_event, Qt.MouseButton.LeftButton))
-            self.assertTrue(canvas._handle_edit_pointer_event(right_event, Qt.MouseButton.RightButton))
+        canvas.set_entity_brush_erase_mode(True)
+        erase_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(8, 8),
+            button=Qt.MouseButton.LeftButton,
+        )
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            self.assertTrue(canvas._handle_edit_pointer_event(erase_event, Qt.MouseButton.LeftButton))
         self.assertEqual(placed, [("entity_templates/npc", 0, 0)])
         self.assertEqual(deleted, [(0, 0)])
 
@@ -320,6 +327,217 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
             selections,
             [("npc_2", 1, 2), ("npc_1", 2, 2), ("", 0, 0)],
         )
+
+    def test_entity_marker_shows_overlap_count_for_stacked_entities(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(id="npc_1", grid_x=0, grid_y=0, render_order=10, y_sort=True),
+            EntityDocument(id="npc_2", grid_x=0, grid_y=0, render_order=20, y_sort=True),
+            EntityDocument(id="npc_3", grid_x=1, grid_y=0, render_order=10, y_sort=True),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+
+        badge_texts = [
+            child.text()
+            for item in canvas._entity_items
+            for child in item.childItems()
+            if isinstance(child, QGraphicsSimpleTextItem)
+        ]
+
+        self.assertEqual(badge_texts.count("2"), 2)
+        self.assertNotIn("1", badge_texts)
+
+    def test_select_mode_drags_world_entity_by_tile_and_emits_commit(self):
+        area = _make_area()
+        area.tile_layers[0].grid = [[0, 0, 0], [0, 0, 0]]
+        area.cell_flags = [[{}, {}, {}], [{}, {}, {}]]
+        area.entities = [
+            EntityDocument(id="npc_1", grid_x=0, grid_y=0, render_order=10, y_sort=True),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_select_mode(True)
+
+        commits: list[tuple[str, str, int, int]] = []
+        canvas.entity_drag_committed.connect(
+            lambda entity_id, space, x, y: commits.append((entity_id, space, x, y))
+        )
+
+        press_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(8, 8),
+            button=Qt.MouseButton.LeftButton,
+        )
+        move_event = _make_mouse_event(
+            QMouseEvent.Type.MouseMove,
+            QPointF(24, 8),
+            button=Qt.MouseButton.NoButton,
+            buttons=Qt.MouseButton.LeftButton,
+        )
+        release_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonRelease,
+            QPointF(24, 8),
+            button=Qt.MouseButton.LeftButton,
+            buttons=Qt.MouseButton.NoButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            self.assertTrue(canvas._handle_edit_pointer_event(press_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=QPointF(24, 8)):
+            self.assertTrue(canvas._handle_edit_pointer_event(move_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=QPointF(24, 8)):
+            canvas.mouseReleaseEvent(release_event)
+
+        self.assertEqual((area.entities[0].grid_x, area.entities[0].grid_y), (1, 0))
+        self.assertEqual(commits, [("npc_1", "world", 1, 0)])
+        self.assertEqual(canvas.selected_entity_id, "npc_1")
+
+    def test_select_mode_release_updates_world_drag_final_cell(self):
+        area = _make_area()
+        area.tile_layers[0].grid = [[0, 0, 0], [0, 0, 0]]
+        area.cell_flags = [[{}, {}, {}], [{}, {}, {}]]
+        area.entities = [
+            EntityDocument(id="npc_1", grid_x=0, grid_y=0, render_order=10, y_sort=True),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_select_mode(True)
+
+        commits: list[tuple[str, str, int, int]] = []
+        canvas.entity_drag_committed.connect(
+            lambda entity_id, space, x, y: commits.append((entity_id, space, x, y))
+        )
+
+        press_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(8, 8),
+            button=Qt.MouseButton.LeftButton,
+        )
+        release_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonRelease,
+            QPointF(40, 8),
+            button=Qt.MouseButton.LeftButton,
+            buttons=Qt.MouseButton.NoButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            self.assertTrue(canvas._handle_edit_pointer_event(press_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=QPointF(40, 8)):
+            canvas.mouseReleaseEvent(release_event)
+
+        self.assertEqual((area.entities[0].grid_x, area.entities[0].grid_y), (2, 0))
+        self.assertEqual(commits, [("npc_1", "world", 2, 0)])
+
+    def test_select_mode_drags_screen_entity_by_pixel_and_emits_commit(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(
+                id="hud",
+                pixel_x=4,
+                pixel_y=5,
+                space="screen",
+                render_order=0,
+                y_sort=False,
+            ),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(80, 60))
+        canvas.set_select_mode(True)
+        pane_x, pane_y = canvas._screen_pane_origin
+
+        commits: list[tuple[str, str, int, int]] = []
+        canvas.entity_drag_committed.connect(
+            lambda entity_id, space, x, y: commits.append((entity_id, space, x, y))
+        )
+
+        press_scene = QPointF(pane_x + 5, pane_y + 6)
+        move_scene = QPointF(pane_x + 15, pane_y + 16)
+        press_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            press_scene,
+            button=Qt.MouseButton.LeftButton,
+        )
+        move_event = _make_mouse_event(
+            QMouseEvent.Type.MouseMove,
+            move_scene,
+            button=Qt.MouseButton.NoButton,
+            buttons=Qt.MouseButton.LeftButton,
+        )
+        release_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonRelease,
+            move_scene,
+            button=Qt.MouseButton.LeftButton,
+            buttons=Qt.MouseButton.NoButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=press_scene):
+            self.assertTrue(canvas._handle_edit_pointer_event(press_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=move_scene):
+            self.assertTrue(canvas._handle_edit_pointer_event(move_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=move_scene):
+            canvas.mouseReleaseEvent(release_event)
+
+        self.assertEqual((area.entities[0].pixel_x, area.entities[0].pixel_y), (14, 15))
+        self.assertEqual(commits, [("hud", "screen", 14, 15)])
+        self.assertEqual(canvas.selected_entity_id, "hud")
+
+    def test_select_mode_drags_screen_entity_to_negative_pixels(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(
+                id="hud",
+                pixel_x=4,
+                pixel_y=5,
+                space="screen",
+                render_order=0,
+                y_sort=False,
+            ),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(80, 60))
+        canvas.set_select_mode(True)
+        pane_x, pane_y = canvas._screen_pane_origin
+
+        commits: list[tuple[str, str, int, int]] = []
+        canvas.entity_drag_committed.connect(
+            lambda entity_id, space, x, y: commits.append((entity_id, space, x, y))
+        )
+
+        press_scene = QPointF(pane_x + 5, pane_y + 6)
+        move_scene = QPointF(pane_x - 5, pane_y - 6)
+        press_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            press_scene,
+            button=Qt.MouseButton.LeftButton,
+        )
+        move_event = _make_mouse_event(
+            QMouseEvent.Type.MouseMove,
+            move_scene,
+            button=Qt.MouseButton.NoButton,
+            buttons=Qt.MouseButton.LeftButton,
+        )
+        release_event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonRelease,
+            move_scene,
+            button=Qt.MouseButton.LeftButton,
+            buttons=Qt.MouseButton.NoButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=press_scene):
+            self.assertTrue(canvas._handle_edit_pointer_event(press_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=move_scene):
+            self.assertTrue(canvas._handle_edit_pointer_event(move_event, Qt.MouseButton.LeftButton))
+        with patch.object(canvas, "mapToScene", return_value=move_scene):
+            canvas.mouseReleaseEvent(release_event)
+
+        self.assertEqual((area.entities[0].pixel_x, area.entities[0].pixel_y), (-6, -7))
+        self.assertEqual(commits, [("hud", "screen", -6, -7)])
 
     def test_tile_select_mode_drag_creates_rectangle_selection(self):
         area = _make_area()
@@ -492,6 +710,201 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
         self.assertEqual(canvas.selected_entity_id, "overlay")
         self.assertEqual(canvas._selection_cycle_ids, ())
         self.assertEqual(canvas._screen_selection_cycle_ids, ("overlay",))
+
+    def test_select_mode_double_click_requests_entity_edit(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(id="npc", grid_x=0, grid_y=0, render_order=10, y_sort=True),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_select_mode(True)
+
+        requested: list[str] = []
+        canvas.entity_edit_requested.connect(requested.append)
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonDblClick,
+            QPointF(8, 8),
+            button=Qt.MouseButton.LeftButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            canvas.mouseDoubleClickEvent(event)
+
+        self.assertEqual(requested, ["npc"])
+        self.assertEqual(canvas.selected_entity_id, "npc")
+
+    def test_select_mode_hover_does_not_request_entity_stack_picker(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(id="npc_1", grid_x=0, grid_y=0, render_order=10, y_sort=True, stack_order=0),
+            EntityDocument(id="npc_2", grid_x=0, grid_y=0, render_order=10, y_sort=True, stack_order=2),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_select_mode(True)
+
+        requested: list[tuple[tuple[str, ...], tuple[int, int], str]] = []
+        canvas.entity_stack_picker_requested.connect(
+            lambda ids, pos, purpose: requested.append((tuple(ids), (pos.x(), pos.y()), purpose))
+        )
+
+        canvas._update_entity_stack_hover(
+            QPointF(8, 8),
+            QPoint(24, 30),
+            buttons=Qt.MouseButton.NoButton,
+        )
+        canvas._emit_entity_stack_hover_request()
+
+        self.assertEqual(requested, [])
+
+    def test_select_mode_right_click_requests_entity_context_menu(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(
+                id="npc_1",
+                grid_x=0,
+                grid_y=0,
+                render_order=10,
+                y_sort=True,
+                stack_order=0,
+            ),
+            EntityDocument(
+                id="npc_2",
+                grid_x=0,
+                grid_y=0,
+                render_order=10,
+                y_sort=True,
+                stack_order=2,
+            ),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_select_mode(True)
+
+        requested: list[tuple[tuple[str, ...], tuple[int, int]]] = []
+        canvas.entity_context_menu_requested.connect(
+            lambda ids, pos: requested.append((tuple(ids), (pos.x(), pos.y())))
+        )
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(8, 8),
+            button=Qt.MouseButton.RightButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.RightButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(requested, [(("npc_2", "npc_1"), (8, 8))])
+
+    def test_entity_brush_erase_requests_delete_picker_for_stacked_entities(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(id="npc_1", grid_x=0, grid_y=0, render_order=10, y_sort=True, stack_order=0),
+            EntityDocument(id="npc_2", grid_x=0, grid_y=0, render_order=10, y_sort=True, stack_order=2),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_tile_paint_mode(True)
+        canvas.set_entity_brush("entity_templates/npc", None, supported=True)
+        canvas.set_active_brush_type(BrushType.ENTITY)
+        canvas.set_entity_brush_erase_mode(True)
+
+        requested: list[tuple[tuple[str, ...], tuple[int, int], str]] = []
+        canvas.entity_stack_picker_requested.connect(
+            lambda ids, pos, purpose: requested.append((tuple(ids), (pos.x(), pos.y()), purpose))
+        )
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(8, 8),
+            button=Qt.MouseButton.LeftButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            requested,
+            [(("npc_2", "npc_1"), (8, 8), "delete")],
+        )
+
+    def test_entity_brush_right_click_requests_context_menu(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(id="npc", grid_x=0, grid_y=0, render_order=10, y_sort=True),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_tile_paint_mode(True)
+        canvas.set_entity_brush("entity_templates/npc", None, supported=True)
+        canvas.set_active_brush_type(BrushType.ENTITY)
+
+        requested: list[tuple[tuple[str, ...], tuple[int, int]]] = []
+        canvas.entity_context_menu_requested.connect(
+            lambda ids, pos: requested.append((tuple(ids), (pos.x(), pos.y())))
+        )
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(8, 8),
+            button=Qt.MouseButton.RightButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(8, 8)):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.RightButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(requested, [(("npc",), (8, 8))])
+
+    def test_screen_entity_brush_erase_emits_delete_by_id(self):
+        area = _make_area()
+        area.entities = [
+            EntityDocument(
+                id="hud",
+                pixel_x=4,
+                pixel_y=5,
+                space="screen",
+                render_order=0,
+                y_sort=False,
+            ),
+        ]
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None, display_size=(80, 60))
+        canvas.set_tile_paint_mode(True)
+        canvas.set_entity_brush(
+            "entity_templates/hud",
+            None,
+            supported=True,
+            target_space="screen",
+        )
+        canvas.set_active_brush_type(BrushType.ENTITY)
+        canvas.set_entity_brush_erase_mode(True)
+        pane_x, pane_y = canvas._screen_pane_origin
+
+        deleted: list[str] = []
+        canvas.entity_delete_by_id_requested.connect(deleted.append)
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(pane_x + 5, pane_y + 6),
+            button=Qt.MouseButton.LeftButton,
+        )
+
+        with patch.object(
+            canvas,
+            "mapToScene",
+            return_value=QPointF(pane_x + 5, pane_y + 6),
+        ):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(deleted, ["hud"])
 
     def test_mouse_move_emits_screen_pixel_hovered_inside_screen_pane(self):
         area = _make_area()

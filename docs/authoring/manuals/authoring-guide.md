@@ -440,6 +440,50 @@ Templates can also author top-level `parameters` defaults. Instance
 `parameters` override only the keys you set, which keeps reusable templates
 compact while still exposing the important knobs.
 
+Templates can add `parameter_specs` when a parameter should be validated and
+browsed by type in the editor:
+
+```json
+{
+  "parameters": {
+    "target_area": "areas/start",
+    "destination_entity_id": "spawn_marker",
+    "target_entity_id": "",
+    "target_command_id": "open_now",
+    "toggleable": true
+  },
+  "parameter_specs": {
+    "target_area": {
+      "type": "area_id"
+    },
+    "destination_entity_id": {
+      "type": "entity_id",
+      "area_parameter": "target_area",
+      "scope": "area",
+      "space": "world"
+    },
+    "target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "target_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    },
+    "toggleable": {
+      "type": "bool"
+    }
+  }
+}
+```
+
+Use `scope` and `space` on `entity_id` to avoid picking the wrong kind of
+entity. Use `entity_parameter` on `entity_command_id` to say which selected
+entity owns that command. Use `area_parameter` on `entity_id` only when another
+parameter, such as `target_area`, decides which area the entity id must come
+from.
+
 You usually omit render-layering fields on placed entities unless that specific
 instance needs a non-default override. Default authored entity render values are:
 
@@ -1818,6 +1862,19 @@ Transition trigger example:
   "parameters": {
     "target_area": "areas/start",
     "destination_entity_id": "spawn_marker"
+  },
+  "parameter_specs": {
+    "target_area": {
+      "type": "area_id",
+      "required": true
+    },
+    "destination_entity_id": {
+      "type": "entity_id",
+      "required": true,
+      "area_parameter": "target_area",
+      "scope": "area",
+      "space": "world"
+    }
   },
   "entity_commands": {
     "on_occupant_enter": [

@@ -32,6 +32,11 @@ _BUILTIN_VARIABLES = frozenset({
     "current_area",
     "area",
     "camera",
+    "from_x",
+    "from_y",
+    "to_x",
+    "to_y",
+    "blocking_entity_id",
 })
 
 
@@ -145,6 +150,31 @@ class TemplateCatalog:
             return {}
         return copy.deepcopy(defaults)
 
+    def get_template_parameter_specs(self, template_id: str) -> dict[str, Any]:
+        """Return template-level parameter specs, if authored."""
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return {}
+        specs = raw.get("parameter_specs")
+        if not isinstance(specs, dict):
+            return {}
+        return copy.deepcopy(specs)
+
+    def get_template_entity_command_names(self, template_id: str) -> list[str]:
+        """Return authored entity-command names for one template."""
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return []
+        entity_commands = raw.get("entity_commands")
+        if not isinstance(entity_commands, dict):
+            return []
+        names = [
+            str(name).strip()
+            for name in entity_commands.keys()
+            if str(name).strip()
+        ]
+        return sorted(set(names))
+
     def clear(self) -> None:
         self._templates.clear()
         self._template_parameter_names.clear()
@@ -215,7 +245,9 @@ class TemplateCatalog:
     @staticmethod
     def _collect_variable_names(value: Any, found: set[str]) -> None:
         if isinstance(value, dict):
-            for subvalue in value.values():
+            for key, subvalue in value.items():
+                if key == "parameter_specs":
+                    continue
                 TemplateCatalog._collect_variable_names(subvalue, found)
             return
         if isinstance(value, list):

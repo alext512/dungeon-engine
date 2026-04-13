@@ -695,6 +695,315 @@ class ProjectContentContractTests(unittest.TestCase):
             any("must not use 'sprite'" in issue for issue in raised.exception.issues)
         )
 
+    def test_template_parameter_specs_validate_and_do_not_leak_to_instances(self) -> None:
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "target",
+                "kind": "marker",
+                "grid_x": 0,
+                "grid_y": 0,
+                "entity_commands": {
+                    "activate": []
+                },
+            },
+            {
+                "id": "relay",
+                "grid_x": 0,
+                "grid_y": 0,
+                "template": "entity_templates/relay",
+                "parameters": {
+                    "target_entity_id": "target",
+                    "target_command_id": "activate",
+                    "count": 2,
+                },
+            },
+        ]
+        _, project = self._make_project(
+            entity_templates={
+                "relay.json": {
+                    "kind": "relay",
+                    "parameters": {
+                        "target_entity_id": "",
+                        "target_command_id": "",
+                        "count": 1,
+                    },
+                    "parameter_specs": {
+                        "target_entity_id": {
+                            "type": "entity_id",
+                            "required": True,
+                            "scope": "area",
+                            "space": "world",
+                        },
+                        "target_command_id": {
+                            "type": "entity_command_id",
+                            "required": True,
+                            "entity_parameter": "target_entity_id",
+                        },
+                        "count": {
+                            "type": "int",
+                            "min": 1,
+                        },
+                    },
+                    "variables": {
+                        "count": "$count",
+                    },
+                    "entity_commands": {
+                        "interact": [
+                            {
+                                "type": "run_entity_command",
+                                "entity_id": "$target_entity_id",
+                                "command_id": "$target_command_id",
+                            }
+                        ]
+                    },
+                }
+            },
+            areas={"room.json": raw_area},
+        )
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+        relay = world.get_entity("relay")
+        self.assertIsNotNone(relay)
+        assert relay is not None
+        self.assertEqual(relay.variables["count"], 2)
+        serialized = serialize_area(area, world, project=project)
+        relay_data = next(entity for entity in serialized["entities"] if entity["id"] == "relay")
+        self.assertNotIn("parameter_specs", relay_data)
+
+    def test_area_loader_rejects_unknown_parameter_when_specs_declared(self) -> None:
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "counter_1",
+                "grid_x": 0,
+                "grid_y": 0,
+                "template": "entity_templates/counter",
+                "parameters": {
+                    "count": 2,
+                    "extra": True,
+                },
+            }
+        ]
+        _, project = self._make_project(
+            entity_templates={
+                "counter.json": {
+                    "kind": "counter",
+                    "parameters": {
+                        "count": 1,
+                    },
+                    "parameter_specs": {
+                        "count": {
+                            "type": "int",
+                            "min": 0,
+                        }
+                    },
+                    "variables": {
+                        "count": "$count",
+                    },
+                }
+            },
+            areas={"room.json": raw_area},
+        )
+
+        with self.assertRaisesRegex(ValueError, "unknown template parameter"):
+            load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+    def test_area_loader_rejects_parameter_spec_type_mismatch(self) -> None:
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "counter_1",
+                "grid_x": 0,
+                "grid_y": 0,
+                "template": "entity_templates/counter",
+                "parameters": {
+                    "count": "many",
+                },
+            }
+        ]
+        _, project = self._make_project(
+            entity_templates={
+                "counter.json": {
+                    "kind": "counter",
+                    "parameters": {
+                        "count": 1,
+                    },
+                    "parameter_specs": {
+                        "count": {
+                            "type": "int",
+                            "min": 0,
+                        }
+                    },
+                    "variables": {
+                        "count": "$count",
+                    },
+                }
+            },
+            areas={"room.json": raw_area},
+        )
+
+        with self.assertRaisesRegex(ValueError, "must be an integer"):
+            load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+    def test_area_loader_rejects_entity_parameter_with_wrong_space(self) -> None:
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "screen_target",
+                "kind": "ui",
+                "space": "screen",
+                "pixel_x": 0,
+                "pixel_y": 0,
+            },
+            {
+                "id": "relay",
+                "grid_x": 0,
+                "grid_y": 0,
+                "template": "entity_templates/relay",
+                "parameters": {
+                    "target_entity_id": "screen_target",
+                },
+            },
+        ]
+        _, project = self._make_project(
+            entity_templates={
+                "relay.json": {
+                    "kind": "relay",
+                    "parameters": {
+                        "target_entity_id": "",
+                    },
+                    "parameter_specs": {
+                        "target_entity_id": {
+                            "type": "entity_id",
+                            "scope": "area",
+                            "space": "world",
+                        }
+                    },
+                    "variables": {
+                        "target": "$target_entity_id",
+                    },
+                }
+            },
+            areas={"room.json": raw_area},
+        )
+
+        with self.assertRaisesRegex(ValueError, "world-space entity"):
+            load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+    def test_area_loader_rejects_entity_parameter_in_wrong_area(self) -> None:
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "local_marker",
+                "kind": "marker",
+                "grid_x": 0,
+                "grid_y": 0,
+            },
+            {
+                "id": "transition",
+                "grid_x": 0,
+                "grid_y": 0,
+                "template": "entity_templates/transition",
+                "parameters": {
+                    "target_area": "areas/destination",
+                    "destination_entity_id": "local_marker",
+                },
+            },
+        ]
+        destination_area = _minimal_area()
+        destination_area["entities"] = [
+            {
+                "id": "destination_marker",
+                "kind": "marker",
+                "grid_x": 0,
+                "grid_y": 0,
+            }
+        ]
+        _, project = self._make_project(
+            entity_templates={
+                "transition.json": {
+                    "kind": "area_transition",
+                    "parameters": {
+                        "target_area": "areas/destination",
+                        "destination_entity_id": "destination_marker",
+                    },
+                    "parameter_specs": {
+                        "target_area": {
+                            "type": "area_id",
+                        },
+                        "destination_entity_id": {
+                            "type": "entity_id",
+                            "area_parameter": "target_area",
+                            "scope": "area",
+                            "space": "world",
+                        },
+                    },
+                    "entity_commands": {
+                        "on_occupant_enter": [
+                            {
+                                "type": "change_area",
+                                "area_id": "$target_area",
+                                "destination_entity_id": "$destination_entity_id",
+                            }
+                        ]
+                    },
+                }
+            },
+            areas={
+                "room.json": raw_area,
+                "destination.json": destination_area,
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "entity in area 'areas/destination'"):
+            load_area_from_data(raw_area, source_name="<memory>", project=project)
+
+    def test_entity_template_validation_rejects_invalid_parameter_specs(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "bad_spec.json": {
+                    "kind": "counter",
+                    "parameters": {
+                        "count": 1,
+                    },
+                    "parameter_specs": {
+                        "count": {
+                            "type": "integer",
+                        }
+                    },
+                    "variables": {
+                        "count": "$count",
+                    },
+                }
+            }
+        )
+
+        with self.assertRaises(EntityTemplateValidationError) as raised:
+            validate_project_entity_templates(project)
+
+        self.assertTrue(
+            any("parameter_specs.count.type" in issue for issue in raised.exception.issues)
+        )
+
+    def test_entity_template_parameters_remain_untyped_without_specs(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "legacy_counter.json": {
+                    "kind": "counter",
+                    "parameters": {
+                        "count": 1,
+                    },
+                    "variables": {
+                        "count": "$count",
+                    },
+                }
+            }
+        )
+
+        validate_project_entity_templates(project)
+
     def test_project_command_validation_rejects_authored_id(self) -> None:
         _, project = self._make_project(
             commands={

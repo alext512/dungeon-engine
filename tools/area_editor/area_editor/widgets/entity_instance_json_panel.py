@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
-from typing import Callable
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from PySide6.QtCore import QSignalBlocker, Signal
 from PySide6.QtGui import QFont
@@ -77,6 +79,32 @@ _AREA_REFERENCE_PARAMETER_NAMES = {
 }
 
 
+@dataclass(frozen=True)
+class EntityReferencePickerRequest:
+    parameter_name: str
+    current_value: str
+    parameter_spec: dict[str, Any] | None
+    current_area_id: str | None
+    entity_id: str | None
+    entity_template_id: str | None
+    parameter_values: dict[str, object] | None = None
+
+
+@dataclass
+class _ParameterFieldState:
+    name: str
+    spec: dict[str, Any] | None
+    default_value: object
+    explicit_original: bool
+    control_kind: str
+    explicit_override_enabled: bool
+    edit: QLineEdit | None = None
+    checkbox: QCheckBox | None = None
+    picker_button: QPushButton | None = None
+    use_default_button: QPushButton | None = None
+    status_label: QLabel | None = None
+
+
 def _section_label(text: str) -> QLabel:
     label = QLabel(text)
     font = label.font()
@@ -88,6 +116,14 @@ def _section_label(text: str) -> QLabel:
 def _set_row_visible(label: QWidget, field: QWidget, visible: bool) -> None:
     label.setVisible(visible)
     field.setVisible(visible)
+
+
+def _parameter_placeholder_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _parse_parameter_text(text: str):
@@ -135,6 +171,124 @@ def _parameter_reference_kind(name: str) -> str | None:
     ):
         return "entity"
     return None
+
+
+def _parameter_spec_reference_kind(spec: object) -> str | None:
+    if not isinstance(spec, dict):
+        return None
+    spec_type = str(spec.get("type", "")).strip()
+    if spec_type == "area_id":
+        return "area"
+    if spec_type == "entity_id":
+        return "entity"
+    if spec_type == "entity_command_id":
+        return "entity_command"
+    if spec_type == "item_id":
+        return "item"
+    if spec_type == "dialogue_path":
+        return "dialogue"
+    if spec_type == "project_command_id":
+        return "command"
+    if spec_type == "asset_path":
+        return "asset"
+    return None
+
+
+def _call_reference_picker_callback(
+    callback: Callable[..., str | None] | None,
+    current_value: str,
+    *,
+    request: EntityReferencePickerRequest | None = None,
+) -> str | None:
+    if callback is None:
+        return None
+    if request is None:
+        return callback(current_value)
+    try:
+        signature = inspect.signature(callback)
+    except (TypeError, ValueError):
+        return callback(current_value)
+
+    positional_count = 0
+    has_varargs = False
+    for parameter in signature.parameters.values():
+        if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+            has_varargs = True
+            break
+        if parameter.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            positional_count += 1
+    if has_varargs or positional_count >= 2:
+        return callback(current_value, request)
+    return callback(current_value)
+
+
+def _parse_parameter_text_for_spec(name: str, text: str, spec: object):
+    if not isinstance(spec, dict) or not isinstance(spec.get("type"), str):
+        return _parse_parameter_text(text)
+
+    stripped = text.strip()
+    if not stripped:
+        return None, False
+
+    spec_type = str(spec["type"]).strip()
+    if spec_type in {
+        "string",
+        "text",
+        "entity_id",
+        "entity_command_id",
+        "area_id",
+        "item_id",
+        "dialogue_path",
+        "project_command_id",
+        "entity_template_id",
+        "asset_path",
+    }:
+        return stripped, True
+
+    if spec_type == "bool":
+        lowered = stripped.lower()
+        if lowered not in {"true", "false"}:
+            raise ValueError(f"Parameter '{name}' must be true or false.")
+        return lowered == "true", True
+
+    if spec_type == "int":
+        try:
+            return int(stripped), True
+        except ValueError as exc:
+            raise ValueError(f"Parameter '{name}' must be an integer.") from exc
+
+    if spec_type == "number":
+        try:
+            number = float(stripped)
+        except ValueError as exc:
+            raise ValueError(f"Parameter '{name}' must be a number.") from exc
+        return int(number) if number.is_integer() else number, True
+
+    if spec_type == "enum":
+        return _parse_parameter_text(text)
+
+    if spec_type in {"array", "json", "color_rgb"}:
+        try:
+            parsed = loads_json_data(stripped, source_name=f"Parameter '{name}'")
+        except JsonDataDecodeError as exc:
+            raise ValueError(f"Parameter '{name}' must be valid JSON.\n{exc}") from exc
+        if spec_type == "array" and not isinstance(parsed, list):
+            raise ValueError(f"Parameter '{name}' must be a JSON array.")
+        if spec_type == "color_rgb":
+            if (
+                not isinstance(parsed, list)
+                or len(parsed) != 3
+                or not all(isinstance(channel, int) for channel in parsed)
+            ):
+                raise ValueError(
+                    f"Parameter '{name}' must be an RGB array of three integers."
+                )
+        return parsed, True
+
+    return _parse_parameter_text(text)
 
 
 class _EntityInstanceJsonEditor(QWidget):
@@ -243,6 +397,468 @@ class _EntityInstanceJsonEditor(QWidget):
         if self._loading or not self._editing_enabled:
             return
         self._set_dirty(True)
+
+    def _set_dirty(self, dirty: bool) -> None:
+        if self._dirty == dirty:
+            return
+        self._dirty = dirty
+        self.dirty_changed.emit(dirty)
+
+    def _set_buttons_enabled(self, enabled: bool) -> None:
+        self._apply_button.setEnabled(enabled)
+        self._revert_button.setEnabled(enabled)
+
+
+class _EntityInstanceParametersEditor(QWidget):
+    """Focused editor for template parameters."""
+
+    apply_requested = Signal()
+    revert_requested = Signal()
+    dirty_changed = Signal(bool)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+
+        self._target_label = QLabel("Selected Entity: None")
+        outer.addWidget(self._target_label)
+
+        self._warning_label = QLabel("")
+        self._warning_label.setWordWrap(True)
+        self._warning_label.setStyleSheet("color: #a25b00;")
+        self._warning_label.hide()
+        outer.addWidget(self._warning_label)
+
+        self._empty_label = QLabel("No template parameters for this entity.")
+        self._empty_label.setStyleSheet("color: #666; font-style: italic;")
+        self._empty_label.setWordWrap(True)
+        self._empty_label.hide()
+        outer.addWidget(self._empty_label)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        outer.addWidget(self._scroll, 1)
+
+        container = QWidget()
+        self._form = QFormLayout(container)
+        self._form.setContentsMargins(0, 0, 0, 0)
+        self._form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        self._scroll.setWidget(container)
+
+        buttons = QHBoxLayout()
+        self._apply_button = QPushButton("Apply")
+        self._apply_button.clicked.connect(self.apply_requested.emit)
+        buttons.addWidget(self._apply_button)
+        self._revert_button = QPushButton("Revert")
+        self._revert_button.clicked.connect(self.revert_requested.emit)
+        buttons.addWidget(self._revert_button)
+        buttons.addStretch(1)
+        outer.addLayout(buttons)
+
+        self._template_catalog: TemplateCatalog | None = None
+        self._entity: EntityDocument | None = None
+        self._current_area_id: str | None = None
+        self._loading = False
+        self._dirty = False
+        self._parameters_editable = True
+        self._parameter_specs: dict[str, Any] = {}
+        self._template_defaults: dict[str, Any] = {}
+        self._parameter_fields: dict[str, _ParameterFieldState] = {}
+        self._parameter_browse_buttons: dict[str, QPushButton] = {}
+        self._parameter_edits: dict[str, QLineEdit] = {}
+        self._reference_picker_callbacks: dict[
+            str,
+            Callable[..., str | None] | None,
+        ] = {
+            "area": None,
+            "entity": None,
+            "entity_command": None,
+            "item": None,
+            "dialogue": None,
+            "command": None,
+            "asset": None,
+        }
+        self._set_buttons_enabled(False)
+
+    @property
+    def is_dirty(self) -> bool:
+        return self._dirty
+
+    @property
+    def has_parameters(self) -> bool:
+        return bool(self._parameter_fields)
+
+    def set_template_catalog(self, catalog: TemplateCatalog | None) -> None:
+        self._template_catalog = catalog
+
+    def set_area_context(self, area_id: str | None) -> None:
+        self._current_area_id = str(area_id).strip() or None if area_id else None
+
+    def set_reference_picker_callbacks(
+        self,
+        *,
+        area_picker: Callable[..., str | None] | None = None,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
+    ) -> None:
+        self._reference_picker_callbacks = {
+            "area": area_picker,
+            "entity": entity_picker,
+            "entity_command": entity_command_picker,
+            "item": item_picker,
+            "dialogue": dialogue_picker,
+            "command": command_picker,
+            "asset": asset_picker,
+        }
+        self._sync_entity_command_picker_buttons()
+
+    def clear_entity(self) -> None:
+        self._entity = None
+        self._target_label.setText("Selected Entity: None")
+        self._warning_label.hide()
+        self._template_defaults = {}
+        self._parameters_editable = True
+        self._clear_parameter_rows()
+        self._set_empty_visible(False)
+        self._set_dirty(False)
+        self._set_buttons_enabled(False)
+
+    def load_entity(self, entity: EntityDocument) -> None:
+        self._entity = entity
+        self._target_label.setText(f"Selected Entity: {entity.id}")
+        self._rebuild_parameter_rows(entity)
+        self._set_dirty(False)
+        self._set_buttons_enabled(True)
+
+    def build_parameters_value(self):
+        if self._entity is None:
+            return None
+        if not self._parameters_editable:
+            return self._entity.parameters
+        parameters: dict[str, object] = {}
+        for name, field in self._parameter_fields.items():
+            if field.control_kind == "bool":
+                if not field.explicit_override_enabled or field.checkbox is None:
+                    continue
+                parameters[name] = bool(field.checkbox.isChecked())
+                continue
+            if field.edit is None:
+                continue
+            value, keep = _parse_parameter_text_for_spec(
+                name,
+                field.edit.text(),
+                field.spec,
+            )
+            if not keep:
+                continue
+            parameters[name] = value
+        return parameters or None
+
+    def _rebuild_parameter_rows(self, entity: EntityDocument) -> None:
+        self._clear_parameter_rows()
+        parameters = entity.parameters
+        self._template_defaults = {}
+        self._parameter_specs = {}
+        if parameters is not None and not isinstance(parameters, dict):
+            self._parameters_editable = False
+            self._warning_label.setText(
+                "Parameters are not a JSON object for this entity. "
+                "Use the JSON tab to edit them."
+            )
+            self._warning_label.show()
+            self._set_empty_visible(True)
+            return
+
+        self._parameters_editable = True
+        self._warning_label.hide()
+        parameter_names: set[str] = set()
+        if entity.template and self._template_catalog is not None:
+            parameter_names.update(
+                self._template_catalog.get_template_parameter_names(entity.template)
+            )
+            self._template_defaults = self._template_catalog.get_template_parameter_defaults(
+                entity.template
+            )
+            self._parameter_specs = self._template_catalog.get_template_parameter_specs(
+                entity.template
+            )
+        if isinstance(parameters, dict):
+            parameter_names.update(parameters.keys())
+        parameter_names.update(self._template_defaults.keys())
+        parameter_names.update(self._parameter_specs.keys())
+
+        if not parameter_names:
+            self._set_empty_visible(True)
+            return
+
+        self._set_empty_visible(False)
+        for name in sorted(parameter_names):
+            self._add_parameter_row(
+                name,
+                None if not isinstance(parameters, dict) else parameters.get(name),
+                self._template_defaults.get(name),
+                self._parameter_specs.get(name)
+                if isinstance(self._parameter_specs.get(name), dict)
+                else None,
+            )
+        self._sync_entity_command_picker_buttons()
+
+    def _add_parameter_row(
+        self,
+        name: str,
+        current_value: object,
+        default_value: object,
+        spec: dict[str, Any] | None,
+    ) -> None:
+        label = QLabel(name)
+        spec_type = str(spec.get("type", "")).strip() if isinstance(spec, dict) else ""
+        if spec_type == "bool":
+            checkbox = QCheckBox()
+            status_label = QLabel("")
+            status_label.setStyleSheet("color: #666;")
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(checkbox)
+            row_layout.addWidget(status_label)
+            row_layout.addStretch(1)
+            use_default_button = QPushButton("Use Default")
+            row_layout.addWidget(use_default_button)
+
+            explicit_override_enabled = current_value is not None
+            bool_value = (
+                bool(current_value)
+                if current_value is not None
+                else bool(default_value) if isinstance(default_value, bool) else False
+            )
+            blockers = [QSignalBlocker(checkbox)]
+            checkbox.setChecked(bool_value)
+            del blockers
+            checkbox.toggled.connect(
+                lambda _checked=False, parameter_name=name: self._on_bool_parameter_toggled(
+                    parameter_name
+                )
+            )
+            use_default_button.clicked.connect(
+                lambda _checked=False, parameter_name=name: self._on_bool_parameter_reset(
+                    parameter_name
+                )
+            )
+
+            field = _ParameterFieldState(
+                name=name,
+                spec=spec,
+                default_value=default_value,
+                explicit_original=current_value is not None,
+                control_kind="bool",
+                explicit_override_enabled=explicit_override_enabled,
+                checkbox=checkbox,
+                use_default_button=use_default_button,
+                status_label=status_label,
+            )
+            self._parameter_fields[name] = field
+            self._form.addRow(label, row_widget)
+            self._sync_bool_field_state(name)
+            return
+
+        edit = QLineEdit()
+        if current_value is None:
+            edit.setText("")
+            edit.setPlaceholderText(_parameter_placeholder_text(default_value))
+        elif isinstance(current_value, str):
+            edit.setText(current_value)
+        else:
+            edit.setText(json.dumps(current_value, ensure_ascii=False))
+        edit.textChanged.connect(self._on_parameter_text_changed)
+
+        picker_kind = self._picker_kind_for_parameter(name)
+        picker_callback = (
+            None if picker_kind is None else self._reference_picker_callbacks.get(picker_kind)
+        )
+        row_widget: QWidget = edit
+        browse_button: QPushButton | None = None
+        if picker_callback is not None:
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(edit, 1)
+            button_text = "Pick..." if picker_kind in {"entity", "entity_command"} else "Browse..."
+            browse_button = QPushButton(button_text)
+            browse_button.clicked.connect(
+                lambda _checked=False, parameter_name=name: self._on_pick_parameter_value(
+                    parameter_name
+                )
+            )
+            row_layout.addWidget(browse_button)
+            self._parameter_browse_buttons[name] = browse_button
+        field = _ParameterFieldState(
+            name=name,
+            spec=spec,
+            default_value=default_value,
+            explicit_original=current_value is not None,
+            control_kind="text",
+            explicit_override_enabled=current_value is not None,
+            edit=edit,
+            picker_button=browse_button,
+        )
+        self._parameter_fields[name] = field
+        self._parameter_edits[name] = edit
+        self._form.addRow(label, row_widget)
+
+    def _picker_kind_for_parameter(self, name: str) -> str | None:
+        spec = self._parameter_specs.get(name)
+        if isinstance(spec, dict) and isinstance(spec.get("type"), str):
+            return _parameter_spec_reference_kind(spec)
+        return _parameter_reference_kind(name)
+
+    def _clear_parameter_rows(self) -> None:
+        self._parameter_fields.clear()
+        self._parameter_browse_buttons.clear()
+        self._parameter_edits.clear()
+        while self._form.rowCount() > 0:
+            self._form.removeRow(0)
+
+    def _set_empty_visible(self, visible: bool) -> None:
+        self._empty_label.setVisible(visible)
+        self._scroll.setVisible(not visible)
+
+    def _on_parameter_text_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        self._sync_entity_command_picker_buttons()
+        self._set_dirty(True)
+
+    def _on_bool_parameter_toggled(self, name: str) -> None:
+        if self._loading:
+            return
+        field = self._parameter_fields.get(name)
+        if field is None:
+            return
+        field.explicit_override_enabled = True
+        self._sync_bool_field_state(name)
+        self._set_dirty(True)
+
+    def _on_bool_parameter_reset(self, name: str) -> None:
+        field = self._parameter_fields.get(name)
+        if field is None or field.checkbox is None:
+            return
+        self._loading = True
+        try:
+            field.explicit_override_enabled = False
+            reset_value = (
+                bool(field.default_value)
+                if isinstance(field.default_value, bool)
+                else False
+            )
+            field.checkbox.setChecked(reset_value)
+        finally:
+            self._loading = False
+        self._sync_bool_field_state(name)
+        self._set_dirty(True)
+
+    def _sync_bool_field_state(self, name: str) -> None:
+        field = self._parameter_fields.get(name)
+        if field is None:
+            return
+        if field.status_label is not None:
+            if field.explicit_override_enabled:
+                field.status_label.setText("authored")
+            elif isinstance(field.default_value, bool):
+                field.status_label.setText(
+                    f"default: {str(bool(field.default_value)).lower()}"
+                )
+            else:
+                field.status_label.setText("unset")
+        if field.use_default_button is not None:
+            field.use_default_button.setEnabled(field.explicit_override_enabled)
+
+    def _current_parameter_values_for_picker(self) -> dict[str, object]:
+        values: dict[str, object] = {}
+        for name, field in self._parameter_fields.items():
+            if field.control_kind == "bool":
+                if field.checkbox is None:
+                    continue
+                if field.explicit_override_enabled:
+                    values[name] = bool(field.checkbox.isChecked())
+                elif field.default_value is not None:
+                    values[name] = field.default_value
+                continue
+            if field.edit is None:
+                continue
+            text = field.edit.text().strip()
+            if text:
+                values[name] = text
+            elif field.default_value is not None:
+                values[name] = field.default_value
+        return values
+
+    def _sync_entity_command_picker_buttons(self) -> None:
+        current_values = self._current_parameter_values_for_picker()
+        for name, field in self._parameter_fields.items():
+            if field.picker_button is None:
+                continue
+            spec_type = (
+                str(field.spec.get("type", "")).strip()
+                if isinstance(field.spec, dict)
+                else ""
+            )
+            if spec_type != "entity_command_id":
+                area_parameter = (
+                    str(field.spec.get("area_parameter", "")).strip()
+                    if isinstance(field.spec, dict)
+                    else ""
+                )
+                if spec_type == "entity_id" and area_parameter:
+                    area_value = str(current_values.get(area_parameter, "")).strip()
+                    enabled = bool(area_value)
+                    field.picker_button.setEnabled(enabled)
+                    field.picker_button.setToolTip(
+                        "" if enabled else "Pick the target area first."
+                    )
+                else:
+                    field.picker_button.setEnabled(True)
+                    field.picker_button.setToolTip("")
+                continue
+            entity_parameter = str(field.spec.get("entity_parameter", "")).strip()
+            entity_value = str(current_values.get(entity_parameter, "")).strip()
+            enabled = bool(entity_value)
+            field.picker_button.setEnabled(enabled)
+            field.picker_button.setToolTip(
+                "" if enabled else "Pick the target entity first."
+            )
+
+    def _on_pick_parameter_value(self, name: str) -> None:
+        field = self._parameter_fields.get(name)
+        if field is None or field.edit is None:
+            return
+        picker_kind = self._picker_kind_for_parameter(name)
+        if picker_kind is None:
+            return
+        callback = self._reference_picker_callbacks.get(picker_kind)
+        if callback is None:
+            return
+        request = EntityReferencePickerRequest(
+            parameter_name=name,
+            current_value=field.edit.text().strip(),
+            parameter_spec=field.spec,
+            current_area_id=self._current_area_id,
+            entity_id=self._entity.id if self._entity is not None else None,
+            entity_template_id=self._entity.template if self._entity is not None else None,
+            parameter_values=self._current_parameter_values_for_picker(),
+        )
+        selected = _call_reference_picker_callback(
+            callback,
+            field.edit.text().strip(),
+            request=request,
+        )
+        if selected:
+            field.edit.setText(selected)
 
     def _set_dirty(self, dirty: bool) -> None:
         if self._dirty == dirty:
@@ -497,7 +1113,8 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity_commands_text.setFont(entity_commands_font)
         self._form.addRow(self._entity_commands_text)
 
-        self._form.addRow(_section_label("Parameters"))
+        self._parameters_section_label = _section_label("Parameters")
+        self._form.addRow(self._parameters_section_label)
         self._parameter_warning = QLabel("")
         self._parameter_warning.setWordWrap(True)
         self._parameter_warning.setStyleSheet("color: #a25b00;")
@@ -650,21 +1267,24 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._template_catalog: TemplateCatalog | None = None
         self._entity: EntityDocument | None = None
         self._effective_space = "world"
+        self._current_area_id: str | None = None
         self._loading = False
         self._dirty = False
         self._area_width = 0
         self._area_height = 0
         self._parameter_edits: dict[str, QLineEdit] = {}
         self._parameter_browse_buttons: dict[str, QPushButton] = {}
+        self._parameter_specs: dict[str, Any] = {}
         self._reference_picker_callbacks: dict[
             str,
-            Callable[[str], str | None] | None,
+            Callable[..., str | None] | None,
         ] = {
             "area": None,
             "entity": None,
             "item": None,
             "dialogue": None,
             "command": None,
+            "asset": None,
         }
         self._parameters_editable = True
         self._color_editable = True
@@ -710,6 +1330,9 @@ class _EntityInstanceFieldsEditor(QWidget):
 
         self._set_buttons_enabled(False)
         self._clear_parameter_rows()
+        self._parameters_section_label.hide()
+        self._parameter_warning.hide()
+        self._parameters_widget.hide()
         self._set_extra_visible(False)
         self._set_color_controls_enabled(True)
         self._set_entity_commands_controls_enabled(True)
@@ -726,11 +1349,12 @@ class _EntityInstanceFieldsEditor(QWidget):
     def set_reference_picker_callbacks(
         self,
         *,
-        area_picker: Callable[[str], str | None] | None = None,
-        entity_picker: Callable[[str], str | None] | None = None,
-        item_picker: Callable[[str], str | None] | None = None,
-        dialogue_picker: Callable[[str], str | None] | None = None,
-        command_picker: Callable[[str], str | None] | None = None,
+        area_picker: Callable[..., str | None] | None = None,
+        entity_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._reference_picker_callbacks = {
             "area": area_picker,
@@ -738,7 +1362,11 @@ class _EntityInstanceFieldsEditor(QWidget):
             "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
+            "asset": asset_picker,
         }
+
+    def set_area_context(self, area_id: str | None) -> None:
+        self._current_area_id = str(area_id).strip() or None if area_id else None
 
     def set_area_bounds(self, width: int, height: int) -> None:
         self._area_width = max(0, width)
@@ -1119,8 +1747,9 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._loading = False
         self._target_label.setText("Selected Entity: None")
         self._clear_parameter_rows()
+        self._parameters_section_label.hide()
         self._parameter_warning.hide()
-        self._parameters_widget.show()
+        self._parameters_widget.hide()
         self._parameters_editable = True
         self._color_warning.hide()
         self._color_editable = True
@@ -1191,6 +1820,9 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._apply_space_visibility(has_pixel_x=has_pixel_x, has_pixel_y=has_pixel_y)
         self._sync_pixel_spin_enabled()
         self._rebuild_parameter_rows(entity)
+        self._parameters_section_label.hide()
+        self._parameter_warning.hide()
+        self._parameters_widget.hide()
         self._show_unmanaged_extra(_filtered_unmanaged_extra(entity._extra))
         self._apply_color_warning(color_warning)
         self._set_color_controls_enabled(self._color_editable)
@@ -1209,7 +1841,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         if self._entity is None:
             raise RuntimeError("No entity is currently loaded.")
 
-        parameters = self._build_parameters_value()
+        parameters = self._entity.parameters
         extra = dict(self._entity._extra)
         for key in _MANAGED_EXTRA_KEYS:
             extra.pop(key, None)
@@ -1356,9 +1988,11 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._clear_parameter_rows()
         parameters = entity.parameters
         template_defaults: dict[str, object] = {}
+        template_specs: dict[str, Any] = {}
         if parameters is not None and not isinstance(parameters, dict):
             self._parameters_editable = False
             self._parameters_widget.hide()
+            self._parameter_specs = {}
             self._parameter_warning.setText(
                 "Parameters are not a JSON object for this entity. "
                 "Use the JSON tab to edit them."
@@ -1377,9 +2011,14 @@ class _EntityInstanceFieldsEditor(QWidget):
             template_defaults = self._template_catalog.get_template_parameter_defaults(
                 entity.template
             )
+            template_specs = self._template_catalog.get_template_parameter_specs(
+                entity.template
+            )
         if isinstance(parameters, dict):
             parameter_names.update(parameters.keys())
         parameter_names.update(template_defaults.keys())
+        parameter_names.update(template_specs.keys())
+        self._parameter_specs = template_specs
 
         for name in sorted(parameter_names):
             label = QLabel(name)
@@ -1400,7 +2039,7 @@ class _EntityInstanceFieldsEditor(QWidget):
                 edit.setText(json.dumps(value, ensure_ascii=False))
             edit.textChanged.connect(self._on_field_changed)
             row_widget: QWidget = edit
-            picker_kind = _parameter_reference_kind(name)
+            picker_kind = self._picker_kind_for_parameter(name)
             picker_callback = (
                 None if picker_kind is None else self._reference_picker_callbacks.get(picker_kind)
             )
@@ -1409,7 +2048,8 @@ class _EntityInstanceFieldsEditor(QWidget):
                 row_layout = QHBoxLayout(row_widget)
                 row_layout.setContentsMargins(0, 0, 0, 0)
                 row_layout.addWidget(edit, 1)
-                browse_button = QPushButton("Browse...")
+                button_text = "Pick..." if picker_kind == "entity" else "Browse..."
+                browse_button = QPushButton(button_text)
                 browse_button.clicked.connect(
                     lambda _checked=False, parameter_name=name: self._on_pick_parameter_value(
                         parameter_name
@@ -1420,9 +2060,16 @@ class _EntityInstanceFieldsEditor(QWidget):
             self._parameters_layout.addRow(label, row_widget)
             self._parameter_edits[name] = edit
 
+    def _picker_kind_for_parameter(self, name: str) -> str | None:
+        spec = self._parameter_specs.get(name)
+        if isinstance(spec, dict) and isinstance(spec.get("type"), str):
+            return _parameter_spec_reference_kind(spec)
+        return _parameter_reference_kind(name)
+
     def _clear_parameter_rows(self) -> None:
         self._parameter_edits.clear()
         self._parameter_browse_buttons.clear()
+        self._parameter_specs = {}
         while self._parameters_layout.rowCount() > 0:
             self._parameters_layout.removeRow(0)
 
@@ -1433,7 +2080,11 @@ class _EntityInstanceFieldsEditor(QWidget):
             return self._entity.parameters
         parameters: dict[str, object] = {}
         for name, edit in self._parameter_edits.items():
-            value, keep = _parse_parameter_text(edit.text())
+            value, keep = _parse_parameter_text_for_spec(
+                name,
+                edit.text(),
+                self._parameter_specs.get(name),
+            )
             if not keep:
                 continue
             parameters[name] = value
@@ -1471,13 +2122,31 @@ class _EntityInstanceFieldsEditor(QWidget):
         edit = self._parameter_edits.get(name)
         if edit is None:
             return
-        picker_kind = _parameter_reference_kind(name)
+        picker_kind = self._picker_kind_for_parameter(name)
         if picker_kind is None:
             return
         callback = self._reference_picker_callbacks.get(picker_kind)
         if callback is None:
             return
-        selected = callback(edit.text().strip())
+        request = None
+        if picker_kind == "entity":
+            request = EntityReferencePickerRequest(
+                parameter_name=name,
+                current_value=edit.text().strip(),
+                parameter_spec=(
+                    self._parameter_specs.get(name)
+                    if isinstance(self._parameter_specs.get(name), dict)
+                    else None
+                ),
+                current_area_id=self._current_area_id,
+                entity_id=self._entity.id if self._entity is not None else None,
+                entity_template_id=self._entity.template if self._entity is not None else None,
+            )
+        selected = _call_reference_picker_callback(
+            callback,
+            edit.text().strip(),
+            request=request,
+        )
         if selected:
             edit.setText(selected)
 
@@ -1520,8 +2189,8 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._revert_button.setEnabled(enabled)
 
 
-class EntityInstanceJsonPanel(QDockWidget):
-    """Dockable entity-instance editor with internal tabs."""
+class EntityInstanceEditorWidget(QWidget):
+    """Entity-instance editor with JSON and structured field tabs."""
 
     apply_requested = Signal()
     revert_requested = Signal()
@@ -1532,23 +2201,25 @@ class EntityInstanceJsonPanel(QDockWidget):
     fields_dirty_changed = Signal(bool)
 
     def __init__(self, parent=None) -> None:
-        super().__init__("Entity Instance", parent)
-        self.setObjectName("EntityInstanceJsonPanel")
-        self.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-        )
+        super().__init__(parent)
+        self.setObjectName("EntityInstanceEditorWidget")
 
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         configure_tab_widget_overflow(self._tabs)
 
+        self._parameters_editor = _EntityInstanceParametersEditor()
         self._json_editor = _EntityInstanceJsonEditor()
         self._fields_editor = _EntityInstanceFieldsEditor()
 
-        self._tabs.addTab(self._json_editor, "Entity Instance JSON")
+        self._tabs.addTab(self._parameters_editor, "Parameters")
         self._tabs.addTab(self._fields_editor, "Entity Instance Editor")
-        self.setWidget(self._tabs)
+        self._tabs.addTab(self._json_editor, "Entity Instance JSON")
+        self._tabs.setCurrentIndex(1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._tabs)
         self.setMinimumWidth(300)
         self._editor = self._json_editor.editor
 
@@ -1558,6 +2229,9 @@ class EntityInstanceJsonPanel(QDockWidget):
         self._json_editor.editing_enabled_changed.connect(
             self.editing_enabled_changed.emit
         )
+        self._parameters_editor.apply_requested.connect(self.fields_apply_requested.emit)
+        self._parameters_editor.revert_requested.connect(self.fields_revert_requested.emit)
+        self._parameters_editor.dirty_changed.connect(self._on_fields_dirty_changed)
         self._fields_editor.apply_requested.connect(self.fields_apply_requested.emit)
         self._fields_editor.revert_requested.connect(self.fields_revert_requested.emit)
         self._fields_editor.dirty_changed.connect(self._on_fields_dirty_changed)
@@ -1577,7 +2251,11 @@ class EntityInstanceJsonPanel(QDockWidget):
 
     @property
     def fields_dirty(self) -> bool:
-        return self._fields_editor.is_dirty
+        return self._parameters_editor.is_dirty or self._fields_editor.is_dirty
+
+    @property
+    def has_parameters(self) -> bool:
+        return self._parameters_editor.has_parameters
 
     @property
     def json_text(self) -> str:
@@ -1594,39 +2272,74 @@ class EntityInstanceJsonPanel(QDockWidget):
     def tab_titles(self) -> list[str]:
         return [self._tabs.tabText(index) for index in range(self._tabs.count())]
 
+    def current_tab_title(self) -> str:
+        return self._tabs.tabText(self._tabs.currentIndex())
+
+    def set_current_tab(self, index: int) -> bool:
+        if index < 0 or index >= self._tabs.count():
+            return False
+        self._tabs.setCurrentIndex(index)
+        return True
+
+    def set_current_tab_title(self, title: str) -> bool:
+        for index in range(self._tabs.count()):
+            if self._tabs.tabText(index) == title:
+                self._tabs.setCurrentIndex(index)
+                return True
+        return False
+
     def set_editing_enabled(self, enabled: bool) -> None:
         self._json_editor.set_editing_enabled(enabled)
         self._sync_editor_lock_state()
 
     def set_template_catalog(self, catalog: TemplateCatalog | None) -> None:
+        self._parameters_editor.set_template_catalog(catalog)
         self._fields_editor.set_template_catalog(catalog)
 
     def set_reference_picker_callbacks(
         self,
         *,
-        area_picker: Callable[[str], str | None] | None = None,
-        entity_picker: Callable[[str], str | None] | None = None,
-        item_picker: Callable[[str], str | None] | None = None,
-        dialogue_picker: Callable[[str], str | None] | None = None,
-        command_picker: Callable[[str], str | None] | None = None,
+        area_picker: Callable[..., str | None] | None = None,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
     ) -> None:
+        self._parameters_editor.set_reference_picker_callbacks(
+            area_picker=area_picker,
+            entity_picker=entity_picker,
+            entity_command_picker=entity_command_picker,
+            item_picker=item_picker,
+            dialogue_picker=dialogue_picker,
+            command_picker=command_picker,
+            asset_picker=asset_picker,
+        )
         self._fields_editor.set_reference_picker_callbacks(
             area_picker=area_picker,
             entity_picker=entity_picker,
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
+            asset_picker=asset_picker,
         )
+
+    def set_area_context(self, area_id: str | None) -> None:
+        self._parameters_editor.set_area_context(area_id)
+        self._fields_editor.set_area_context(area_id)
 
     def set_area_bounds(self, width: int, height: int) -> None:
         self._fields_editor.set_area_bounds(width, height)
 
     def clear_entity(self) -> None:
+        self._parameters_editor.clear_entity()
         self._json_editor.clear_entity()
         self._fields_editor.clear_entity()
         self._sync_editor_lock_state()
 
     def load_entity(self, entity: EntityDocument) -> None:
+        self._parameters_editor.load_entity(entity)
         self._json_editor.load_entity(entity)
         self._fields_editor.load_entity(entity)
         self._sync_editor_lock_state()
@@ -1636,7 +2349,9 @@ class EntityInstanceJsonPanel(QDockWidget):
         self._sync_editor_lock_state()
 
     def build_entity_from_fields(self) -> EntityDocument:
-        return self._fields_editor.build_entity_document()
+        document = self._fields_editor.build_entity_document()
+        document.parameters = self._parameters_editor.build_parameters_value()
+        return document
 
     def _on_json_dirty_changed(self, dirty: bool) -> None:
         self._sync_editor_lock_state()
@@ -1647,5 +2362,135 @@ class EntityInstanceJsonPanel(QDockWidget):
         self.fields_dirty_changed.emit(dirty)
 
     def _sync_editor_lock_state(self) -> None:
-        self._json_editor.setEnabled(not self._fields_editor.is_dirty)
+        structured_dirty = self.fields_dirty
+        self._json_editor.setEnabled(not structured_dirty)
+        self._parameters_editor.setEnabled(not self._json_editor.is_dirty)
         self._fields_editor.setEnabled(not self._json_editor.is_dirty)
+
+
+class EntityInstanceJsonPanel(QDockWidget):
+    """Dockable entity-instance editor with internal tabs."""
+
+    apply_requested = Signal()
+    revert_requested = Signal()
+    dirty_changed = Signal(bool)
+    editing_enabled_changed = Signal(bool)
+    fields_apply_requested = Signal()
+    fields_revert_requested = Signal()
+    fields_dirty_changed = Signal(bool)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__("Entity Instance", parent)
+        self.setObjectName("EntityInstanceJsonPanel")
+        self.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+
+        self._editor_widget = EntityInstanceEditorWidget()
+        self.setWidget(self._editor_widget)
+
+        self._tabs = self._editor_widget._tabs
+        self._parameters_editor = self._editor_widget._parameters_editor
+        self._json_editor = self._editor_widget._json_editor
+        self._fields_editor = self._editor_widget._fields_editor
+        self._editor = self._editor_widget.editor
+
+        self._editor_widget.apply_requested.connect(self.apply_requested.emit)
+        self._editor_widget.revert_requested.connect(self.revert_requested.emit)
+        self._editor_widget.dirty_changed.connect(self.dirty_changed.emit)
+        self._editor_widget.editing_enabled_changed.connect(
+            self.editing_enabled_changed.emit
+        )
+        self._editor_widget.fields_apply_requested.connect(
+            self.fields_apply_requested.emit
+        )
+        self._editor_widget.fields_revert_requested.connect(
+            self.fields_revert_requested.emit
+        )
+        self._editor_widget.fields_dirty_changed.connect(
+            self.fields_dirty_changed.emit
+        )
+
+    @property
+    def editor_widget(self) -> EntityInstanceEditorWidget:
+        return self._editor_widget
+
+    @property
+    def entity_id(self) -> str | None:
+        return self._editor_widget.entity_id
+
+    @property
+    def editing_enabled(self) -> bool:
+        return self._editor_widget.editing_enabled
+
+    @property
+    def is_dirty(self) -> bool:
+        return self._editor_widget.is_dirty
+
+    @property
+    def fields_dirty(self) -> bool:
+        return self._editor_widget.fields_dirty
+
+    @property
+    def json_text(self) -> str:
+        return self._editor_widget.json_text
+
+    @property
+    def editor(self) -> QPlainTextEdit:
+        return self._editor_widget.editor
+
+    @property
+    def tab_count(self) -> int:
+        return self._editor_widget.tab_count
+
+    def tab_titles(self) -> list[str]:
+        return self._editor_widget.tab_titles()
+
+    def current_tab_title(self) -> str:
+        return self._editor_widget.current_tab_title()
+
+    def set_editing_enabled(self, enabled: bool) -> None:
+        self._editor_widget.set_editing_enabled(enabled)
+
+    def set_template_catalog(self, catalog: TemplateCatalog | None) -> None:
+        self._editor_widget.set_template_catalog(catalog)
+
+    def set_reference_picker_callbacks(
+        self,
+        *,
+        area_picker: Callable[..., str | None] | None = None,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
+    ) -> None:
+        self._editor_widget.set_reference_picker_callbacks(
+            area_picker=area_picker,
+            entity_picker=entity_picker,
+            entity_command_picker=entity_command_picker,
+            item_picker=item_picker,
+            dialogue_picker=dialogue_picker,
+            command_picker=command_picker,
+            asset_picker=asset_picker,
+        )
+
+    def set_area_context(self, area_id: str | None) -> None:
+        self._editor_widget.set_area_context(area_id)
+
+    def set_area_bounds(self, width: int, height: int) -> None:
+        self._editor_widget.set_area_bounds(width, height)
+
+    def clear_entity(self) -> None:
+        self._editor_widget.clear_entity()
+
+    def load_entity(self, entity: EntityDocument) -> None:
+        self._editor_widget.load_entity(entity)
+
+    def set_json_text(self, text: str) -> None:
+        self._editor_widget.set_json_text(text)
+
+    def build_entity_from_fields(self) -> EntityDocument:
+        return self._editor_widget.build_entity_from_fields()

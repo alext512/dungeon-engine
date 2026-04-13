@@ -14,12 +14,14 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QTransform
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDockWidget,
     QFileDialog,
     QInputDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QVBoxLayout,
     QWidget,
@@ -111,7 +113,21 @@ from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
 from area_editor.widgets.canvas_tool_strip import CanvasToolStrip
 from area_editor.widgets.cell_flag_brush_panel import CellFlagBrushPanel
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
-from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
+from area_editor.widgets.entity_instance_dialog import EntityInstanceDialog
+from area_editor.widgets.entity_instance_json_panel import (
+    EntityReferencePickerRequest,
+    EntityInstanceEditorWidget,
+    EntityInstanceJsonPanel,
+)
+from area_editor.widgets.entity_reference_picker_dialog import (
+    EntityReferencePickerDialog,
+    EntityReferencePickerEntry,
+    GLOBAL_AREA_KEY,
+)
+from area_editor.widgets.entity_stack_picker_popup import (
+    EntityStackPickerEntry,
+    EntityStackPickerPopup,
+)
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
 from area_editor.widgets.file_tree_panel import FileTreePanel
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
@@ -172,6 +188,10 @@ class MainWindow(
         self._render_target_kind: str | None = None
         self._render_target_ref: int | str | None = None
         self._active_instance_entity_id: str | None = None
+        self._entity_instance_dialog: EntityInstanceDialog | None = None
+        self._entity_stack_picker: EntityStackPickerPopup | None = None
+        self._canvas_target: str = "entities"
+        self._canvas_tool: str = "select"
         self._json_dirty_bound: set[str] = set()
         self._display_width: int = 320
         self._display_height: int = 240
@@ -310,11 +330,14 @@ class MainWindow(
         self._entity_instance_panel.set_reference_picker_callbacks(
             area_picker=self._browse_project_area_id,
             entity_picker=self._browse_project_entity_id,
+            entity_command_picker=self._browse_project_entity_command_id,
             item_picker=self._browse_project_item_id,
             dialogue_picker=self._browse_project_dialogue_id,
             command_picker=self._browse_project_command_id,
+            asset_picker=lambda _current: self._browse_project_asset(),
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._entity_instance_panel)
+        self._entity_instance_panel.hide()
 
         self._tileset_panel = TilesetBrowserPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._tileset_panel)
@@ -363,6 +386,7 @@ class MainWindow(
         # Menus
         self._build_menus()
         self._build_tool_bar()
+        self._sync_canvas_target_tool_from_canvas(None)
 
         # Signals — side panel open requests (double-click / context menu)
         self._area_panel.area_open_requested.connect(self._on_area_open_requested)
@@ -546,6 +570,12 @@ class MainWindow(
         self._area_entity_list_panel.entity_selected.connect(
             self._on_area_entity_list_selected
         )
+        self._area_entity_list_panel.entity_edit_requested.connect(
+            self._on_entity_edit_requested
+        )
+        self._area_entity_list_panel.entity_context_menu_requested.connect(
+            self._on_area_entity_list_context_menu_requested
+        )
         self._cell_flag_brush_panel.brush_changed.connect(self._on_cell_flag_brush_changed)
         self._render_panel.properties_changed.connect(self._on_render_properties_changed)
         self._entity_instance_panel.apply_requested.connect(self._on_apply_entity_instance_json)
@@ -575,6 +605,10 @@ class MainWindow(
 
     def open_project(self, project_path: Path) -> None:
         """Load a project manifest and populate the side panels."""
+        self._hide_entity_stack_picker()
+        if not self._prepare_entity_instance_dialog_close():
+            return
+        self._force_close_entity_instance_dialog()
         if not self._maybe_save_dirty_tabs():
             return
 
@@ -596,6 +630,8 @@ class MainWindow(
         self._templates = TemplateCatalog()
         self._templates.load_from_manifest(self._manifest)
         self._entity_instance_panel.set_template_catalog(self._templates)
+        if self._entity_instance_dialog is not None:
+            self._entity_instance_dialog.editor_widget.set_template_catalog(self._templates)
         self._display_width = self._manifest.display_width
         self._display_height = self._manifest.display_height
 
@@ -747,6 +783,30 @@ class MainWindow(
         self._cell_flags_action.toggled.connect(self._on_cell_flags_toggled)
         edit_menu.addAction(self._cell_flags_action)
 
+        self._target_tiles_action = QAction("Tiles", self)
+        self._target_tiles_action.setCheckable(True)
+        self._target_tiles_action.toggled.connect(self._on_target_tiles_toggled)
+
+        self._target_entities_action = QAction("Entities", self)
+        self._target_entities_action.setCheckable(True)
+        self._target_entities_action.toggled.connect(self._on_target_entities_toggled)
+
+        self._target_flags_action = QAction("Flags", self)
+        self._target_flags_action.setCheckable(True)
+        self._target_flags_action.toggled.connect(self._on_target_flags_toggled)
+
+        self._tool_select_mode_action = QAction("Select", self)
+        self._tool_select_mode_action.setCheckable(True)
+        self._tool_select_mode_action.toggled.connect(self._on_tool_select_mode_toggled)
+
+        self._tool_pencil_action = QAction("Pencil", self)
+        self._tool_pencil_action.setCheckable(True)
+        self._tool_pencil_action.toggled.connect(self._on_tool_pencil_toggled)
+
+        self._tool_eraser_action = QAction("Eraser", self)
+        self._tool_eraser_action.setCheckable(True)
+        self._tool_eraser_action.toggled.connect(self._on_tool_eraser_toggled)
+
         edit_menu.addSeparator()
 
         self._copy_tiles_action = QAction("Copy Tiles", self)
@@ -839,6 +899,11 @@ class MainWindow(
         reset_zoom_action.setShortcut(QKeySequence("Ctrl+0"))
         reset_zoom_action.triggered.connect(self._on_reset_zoom)
         view_menu.addAction(reset_zoom_action)
+
+        view_menu.addSeparator()
+        self._entity_instance_dock_action = self._entity_instance_panel.toggleViewAction()
+        self._entity_instance_dock_action.setText("Show Entity Instance Dock")
+        view_menu.addAction(self._entity_instance_dock_action)
 
         area_menu = self.menuBar().addMenu("&Area")
 
@@ -937,12 +1002,24 @@ class MainWindow(
 
     def _build_tool_bar(self) -> None:
         """Expose the main canvas tools near the document area."""
-        self._canvas_tool_strip.set_actions(
+        self._canvas_tool_strip.set_sections(
             [
-                self._paint_tiles_action,
-                self._select_action,
-                self._tile_select_action,
-                self._cell_flags_action,
+                (
+                    "Target",
+                    [
+                        self._target_tiles_action,
+                        self._target_entities_action,
+                        self._target_flags_action,
+                    ],
+                ),
+                (
+                    "Tool",
+                    [
+                        self._tool_select_mode_action,
+                        self._tool_pencil_action,
+                        self._tool_eraser_action,
+                    ],
+                ),
             ]
         )
 
@@ -1286,6 +1363,7 @@ class MainWindow(
 
     def _on_active_tab_changed(self, content_id: str, content_type: object) -> None:
         """Update layer panel, tileset browser, and status bar when the active tab changes."""
+        self._hide_entity_stack_picker()
         if content_type == ContentType.AREA and content_id in self._area_docs:
             doc = self._area_docs[content_id]
             self._layer_panel.set_layers(doc.tile_layers)
@@ -1320,10 +1398,7 @@ class MainWindow(
                 self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
                 self._select_action.setEnabled(True)
                 self._tile_select_action.setEnabled(can_paint)
-                self._set_cell_flags_action_state(canvas.cell_flags_edit_mode)
-                self._set_paint_tiles_action_state(canvas.tile_paint_mode)
-                self._set_select_action_state(canvas.select_mode)
-                self._set_tile_select_action_state(canvas.tile_select_mode)
+                self._sync_canvas_target_tool_from_canvas(canvas)
                 self._entities_visibility_action.blockSignals(True)
                 self._entities_visibility_action.setChecked(self._entities_visible)
                 self._entities_visibility_action.blockSignals(False)
@@ -1360,6 +1435,7 @@ class MainWindow(
             self._set_paint_tiles_action_state(False)
             self._set_select_action_state(False)
             self._set_tile_select_action_state(False)
+            self._sync_canvas_target_tool_from_canvas(None)
             self._render_target_kind = None
             self._render_target_ref = None
             self._render_panel.clear_target()
@@ -1395,6 +1471,7 @@ class MainWindow(
             self._set_paint_tiles_action_state(False)
             self._set_select_action_state(False)
             self._set_tile_select_action_state(False)
+            self._sync_canvas_target_tool_from_canvas(None)
             self._render_target_kind = None
             self._render_target_ref = None
             self._render_panel.clear_target()
@@ -1468,6 +1545,8 @@ class MainWindow(
         self._templates = TemplateCatalog()
         self._templates.load_from_manifest(self._manifest)
         self._entity_instance_panel.set_template_catalog(self._templates)
+        if self._entity_instance_dialog is not None:
+            self._entity_instance_dialog.editor_widget.set_template_catalog(self._templates)
         self._display_width = self._manifest.display_width
         self._display_height = self._manifest.display_height
         self._template_panel.set_templates(
@@ -1487,6 +1566,8 @@ class MainWindow(
         self._templates = TemplateCatalog()
         self._templates.load_from_manifest(self._manifest)
         self._entity_instance_panel.set_template_catalog(self._templates)
+        if self._entity_instance_dialog is not None:
+            self._entity_instance_dialog.editor_widget.set_template_catalog(self._templates)
         if self._catalog is not None:
             self._template_panel.set_templates(
                 self._manifest,
@@ -2274,11 +2355,20 @@ class MainWindow(
         self.statusBar().showMessage(f"Deleted global entity {entity_id}.", 3500)
 
     def _on_tab_close_requested(self, content_id: str, _content_type: object) -> None:
+        self._hide_entity_stack_picker_for_area(content_id)
+        if not self._prepare_entity_instance_dialog_for_area_close(content_id):
+            return
         if not self._maybe_save_dirty_tabs([content_id]):
             return
         self._tab_widget.close_content(content_id)
 
     def _on_tab_closed(self, content_id: str) -> None:
+        self._hide_entity_stack_picker_for_area(content_id)
+        if (
+            self._entity_instance_dialog is not None
+            and self._entity_instance_dialog.target_area_id == content_id
+        ):
+            self._force_close_entity_instance_dialog()
         self._area_docs.pop(content_id, None)
         self._json_dirty_bound.discard(content_id)
 
@@ -2302,83 +2392,287 @@ class MainWindow(
         if canvas is not None:
             canvas.reset_zoom()
 
-    def _on_paint_tiles_toggled(self, enabled: bool) -> None:
+    def _sync_canvas_target_tool_from_canvas(self, canvas: TileCanvas | None) -> None:
+        if canvas is None:
+            self._canvas_target = "entities"
+            self._canvas_tool = "select"
+            self._sync_canvas_tool_strip_states()
+            self._sync_canvas_tool_strip_enabled_state()
+            self._sync_legacy_mode_action_states()
+            return
+        if canvas.cell_flags_edit_mode:
+            self._canvas_target = "flags"
+            self._canvas_tool = "eraser" if canvas.cell_flag_erase_mode else "pencil"
+        elif canvas.tile_select_mode:
+            self._canvas_target = "tiles"
+            self._canvas_tool = "select"
+        elif canvas.select_mode:
+            self._canvas_target = "entities"
+            self._canvas_tool = "select"
+        elif canvas.tile_paint_mode:
+            if canvas.active_brush_type == BrushType.ENTITY:
+                self._canvas_target = "entities"
+                self._canvas_tool = "eraser" if canvas.entity_brush_erase_mode else "pencil"
+            elif canvas.active_brush_type == BrushType.ERASER:
+                self._canvas_target = "tiles"
+                self._canvas_tool = "eraser"
+            else:
+                self._canvas_target = "tiles"
+                self._canvas_tool = "pencil"
+        else:
+            self._canvas_target = "entities"
+            self._canvas_tool = "select"
+        self._sync_canvas_tool_strip_states()
+        self._sync_canvas_tool_strip_enabled_state()
+        self._sync_legacy_mode_action_states()
+
+    def _sync_canvas_tool_strip_states(self) -> None:
+        target_map = {
+            "tiles": self._target_tiles_action,
+            "entities": self._target_entities_action,
+            "flags": self._target_flags_action,
+        }
+        tool_map = {
+            "select": self._tool_select_mode_action,
+            "pencil": self._tool_pencil_action,
+            "eraser": self._tool_eraser_action,
+        }
+        for name, action in target_map.items():
+            action.blockSignals(True)
+            action.setChecked(self._canvas_target == name)
+            action.blockSignals(False)
+        for name, action in tool_map.items():
+            action.blockSignals(True)
+            action.setChecked(self._canvas_tool == name)
+            action.blockSignals(False)
+
+    def _sync_canvas_tool_strip_enabled_state(self) -> None:
+        canvas = self._active_canvas()
+        has_area = canvas is not None
+        tiles_enabled = has_area and self._paint_tiles_action.isEnabled()
+        tile_select_enabled = has_area and self._tile_select_action.isEnabled()
+        entities_enabled = has_area and self._select_action.isEnabled()
+        flags_enabled = has_area and self._cell_flags_action.isEnabled()
+
+        self._target_tiles_action.setEnabled(bool(tiles_enabled or tile_select_enabled))
+        self._target_entities_action.setEnabled(bool(entities_enabled or self._paint_tiles_action.isEnabled()))
+        self._target_flags_action.setEnabled(flags_enabled)
+
+        self._tool_select_mode_action.setEnabled(
+            bool(has_area and self._canvas_target != "flags" and (
+                self._canvas_target != "tiles" or tile_select_enabled
+            ))
+        )
+        self._tool_pencil_action.setEnabled(
+            bool(
+                has_area
+                and (
+                    (self._canvas_target == "tiles" and tiles_enabled)
+                    or (self._canvas_target == "entities" and self._paint_tiles_action.isEnabled())
+                    or (self._canvas_target == "flags" and flags_enabled)
+                )
+            )
+        )
+        self._tool_eraser_action.setEnabled(self._tool_pencil_action.isEnabled())
+
+    def _sync_legacy_mode_action_states(self) -> None:
+        paint_active = self._canvas_target in {"tiles", "entities"} and self._canvas_tool in {
+            "pencil",
+            "eraser",
+        }
+        self._set_paint_tiles_action_state(paint_active)
+        self._set_select_action_state(
+            self._canvas_target == "entities" and self._canvas_tool == "select"
+        )
+        self._set_tile_select_action_state(
+            self._canvas_target == "tiles" and self._canvas_tool == "select"
+        )
+        self._set_cell_flags_action_state(self._canvas_target == "flags")
+
+    def _canvas_target_tool_status_message(self) -> str:
+        if self._canvas_target == "tiles":
+            if self._canvas_tool == "select":
+                return (
+                    "Tile select: drag to select tiles on the active layer; Delete clears, "
+                    "Ctrl+C/X/V copy, cut, and paste."
+                )
+            if self._canvas_tool == "eraser":
+                return "Tile eraser: left-click clears tiles on the active layer."
+            return "Tile pencil: left-click paints the active tile brush; right-click also clears tiles."
+        if self._canvas_target == "entities":
+            if self._canvas_tool == "select":
+                return (
+                    "Entity select: click to select, "
+                    "double-click edits, Delete removes, arrows nudge."
+                )
+            if self._canvas_tool == "eraser":
+                return (
+                    "Entity eraser: left-click removes entities, overlapping targets open a chooser, "
+                    "right-click opens entity actions."
+                )
+            return (
+                "Entity pencil: left-click places the selected template, "
+                "right-click opens entity actions."
+            )
+        if self._canvas_tool == "eraser":
+            return "Flag eraser: left-click clears the selected cell-flag brush."
+        return "Flag pencil: left-click paints the selected cell-flag brush; right-click also clears it."
+
+    def _apply_canvas_target_tool_state(self, *, announce: bool) -> None:
         canvas = self._active_canvas()
         if canvas is None:
-            self._set_paint_tiles_action_state(False)
+            self._sync_canvas_tool_strip_states()
+            self._sync_canvas_tool_strip_enabled_state()
+            self._sync_legacy_mode_action_states()
             return
-        # Mutually exclusive with select + cell-flag mode
-        if enabled and self._select_action.isChecked():
-            self._set_select_action_state(False)
-            canvas.set_select_mode(False)
-        if enabled and self._tile_select_action.isChecked():
-            self._set_tile_select_action_state(False)
-            canvas.set_tile_select_mode(False)
-        if enabled and self._cell_flags_action.isChecked():
-            self._set_cell_flags_action_state(False)
-            canvas.set_cell_flags_edit_mode(False)
-        canvas.set_tile_paint_mode(enabled)
-        if enabled:
-            self._tileset_panel.show()
-            self._tileset_panel.raise_()
-            self._update_paint_status()
-            self.statusBar().showMessage(
-                "Paint mode: left-click uses the active brush, right-click erases tiles or deletes entities, Alt+click eyedrops tiles.",
-                4000,
-            )
+
+        if self._canvas_target == "flags" and self._canvas_tool == "select":
+            self._canvas_tool = "pencil"
+        if self._canvas_target == "tiles" and self._canvas_tool == "select" and not self._tile_select_action.isEnabled():
+            self._canvas_tool = "pencil"
+
+        paint_active = self._canvas_target in {"tiles", "entities"} and self._canvas_tool in {
+            "pencil",
+            "eraser",
+        }
+        canvas.set_select_mode(self._canvas_target == "entities" and self._canvas_tool == "select")
+        canvas.set_tile_select_mode(self._canvas_target == "tiles" and self._canvas_tool == "select")
+        canvas.set_cell_flags_edit_mode(self._canvas_target == "flags")
+        canvas.set_cell_flag_erase_mode(
+            self._canvas_target == "flags" and self._canvas_tool == "eraser"
+        )
+        canvas.set_tile_paint_mode(paint_active)
+
+        self._apply_entity_brush_to_canvas(canvas)
+        canvas.set_selected_gid_block(self._tileset_panel.selected_brush_block)
+
+        if self._canvas_target == "tiles":
+            erase_mode = self._canvas_tool == "eraser"
+            self._tileset_panel.set_brush_mode(erase_mode=erase_mode)
+            canvas.set_brush_erase_mode(erase_mode)
+            canvas.set_entity_brush_erase_mode(False)
+            canvas.set_active_brush_type(BrushType.ERASER if erase_mode else BrushType.TILE)
+            self._active_brush_type = BrushType.ERASER if erase_mode else BrushType.TILE
+            self._tileset_panel.set_brush_active(True)
+            self._template_panel.set_brush_active(None)
+        elif self._canvas_target == "entities":
+            canvas.set_brush_erase_mode(False)
+            canvas.set_entity_brush_erase_mode(self._canvas_tool == "eraser")
+            if paint_active:
+                canvas.set_active_brush_type(BrushType.ENTITY)
+            self._active_brush_type = BrushType.ENTITY
+            self._tileset_panel.set_brush_active(False)
+            self._template_panel.set_brush_active(self._entity_brush_template_id)
         else:
-            self._update_paint_status()
+            canvas.set_brush_erase_mode(False)
+            canvas.set_entity_brush_erase_mode(False)
+            self._tileset_panel.set_brush_active(False)
+            self._template_panel.set_brush_active(None)
+
+        if self._canvas_target == "flags":
+            self._area_workspace.set_current_page("cell_flags")
+
+        self._sync_canvas_tool_strip_states()
+        self._sync_canvas_tool_strip_enabled_state()
+        self._sync_legacy_mode_action_states()
+        self._update_paint_status()
         self._refresh_tile_selection_actions()
+        if announce:
+            self.statusBar().showMessage(self._canvas_target_tool_status_message(), 4000)
+
+    def _ensure_paint_mode(
+        self,
+        *,
+        target: str | None = None,
+        tool: str | None = None,
+    ) -> None:
+        canvas = self._active_canvas()
+        if canvas is None or not self._paint_tiles_action.isEnabled():
+            return
+        if target is not None:
+            self._canvas_target = target
+        elif self._canvas_target == "flags":
+            self._canvas_target = "tiles"
+        if tool is not None:
+            self._canvas_tool = tool
+        elif self._canvas_tool == "select":
+            self._canvas_tool = "pencil"
+        self._apply_canvas_target_tool_state(announce=False)
+
+    def _on_target_tiles_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_canvas_tool_strip_states()
+            return
+        self._canvas_target = "tiles"
+        if self._canvas_tool == "select" and not self._tile_select_action.isEnabled():
+            self._canvas_tool = "pencil"
+        self._apply_canvas_target_tool_state(announce=True)
+
+    def _on_target_entities_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_canvas_tool_strip_states()
+            return
+        self._canvas_target = "entities"
+        self._apply_canvas_target_tool_state(announce=True)
+
+    def _on_target_flags_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_canvas_tool_strip_states()
+            return
+        self._canvas_target = "flags"
+        if self._canvas_tool == "select":
+            self._canvas_tool = "pencil"
+        self._apply_canvas_target_tool_state(announce=True)
+
+    def _on_tool_select_mode_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_canvas_tool_strip_states()
+            return
+        if self._canvas_target == "flags":
+            self._sync_canvas_tool_strip_states()
+            return
+        self._canvas_tool = "select"
+        self._apply_canvas_target_tool_state(announce=True)
+
+    def _on_tool_pencil_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_canvas_tool_strip_states()
+            return
+        self._canvas_tool = "pencil"
+        self._apply_canvas_target_tool_state(announce=True)
+
+    def _on_tool_eraser_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_canvas_tool_strip_states()
+            return
+        self._canvas_tool = "eraser"
+        self._apply_canvas_target_tool_state(announce=True)
+
+    def _on_paint_tiles_toggled(self, enabled: bool) -> None:
+        if not enabled:
+            self._sync_legacy_mode_action_states()
+            return
+        if self._canvas_target == "flags":
+            self._canvas_target = "tiles"
+        if self._canvas_tool == "select":
+            self._canvas_tool = "pencil"
+        self._apply_canvas_target_tool_state(announce=True)
 
     def _on_select_toggled(self, enabled: bool) -> None:
-        canvas = self._active_canvas()
-        if canvas is None:
-            self._set_select_action_state(False)
+        if not enabled:
+            self._sync_legacy_mode_action_states()
             return
-        if enabled and self._paint_tiles_action.isChecked():
-            self._set_paint_tiles_action_state(False)
-            canvas.set_tile_paint_mode(False)
-        if enabled and self._tile_select_action.isChecked():
-            self._set_tile_select_action_state(False)
-            canvas.set_tile_select_mode(False)
-        if enabled and self._cell_flags_action.isChecked():
-            self._set_cell_flags_action_state(False)
-            canvas.set_cell_flags_edit_mode(False)
-        canvas.set_select_mode(enabled)
-        if enabled:
-            self._update_paint_status()
-            self.statusBar().showMessage(
-                "Select mode: click entities to select, click again to cycle, Delete removes, arrows nudge, Escape clears.",
-                4000,
-            )
-        else:
-            self._update_paint_status()
-        self._refresh_tile_selection_actions()
+        self._canvas_target = "entities"
+        self._canvas_tool = "select"
+        self._apply_canvas_target_tool_state(announce=True)
 
     def _on_tile_select_toggled(self, enabled: bool) -> None:
-        canvas = self._active_canvas()
-        if canvas is None:
-            self._set_tile_select_action_state(False)
+        if not enabled:
+            self._sync_legacy_mode_action_states()
             return
-        if enabled and self._paint_tiles_action.isChecked():
-            self._set_paint_tiles_action_state(False)
-            canvas.set_tile_paint_mode(False)
-        if enabled and self._select_action.isChecked():
-            self._set_select_action_state(False)
-            canvas.set_select_mode(False)
-        if enabled and self._cell_flags_action.isChecked():
-            self._set_cell_flags_action_state(False)
-            canvas.set_cell_flags_edit_mode(False)
-        canvas.set_tile_select_mode(enabled)
-        if enabled:
-            self._update_paint_status()
-            self.statusBar().showMessage(
-                "Tile Select mode: drag to select tiles on the active layer, Delete clears, Ctrl+C/X/V copy cut and paste.",
-                4000,
-            )
-        else:
-            self._update_paint_status()
-        self._refresh_tile_selection_actions()
+        self._canvas_target = "tiles"
+        self._canvas_tool = "select"
+        self._apply_canvas_target_tool_state(announce=True)
 
     def _on_toggle_json_editing(self, enabled: bool) -> None:
         self._json_editing_enabled = enabled
@@ -2388,51 +2682,29 @@ class MainWindow(
         self.statusBar().showMessage(message, 2000)
 
     def _on_cell_flags_toggled(self, enabled: bool) -> None:
-        canvas = self._active_canvas()
-        if canvas is None:
-            self._set_cell_flags_action_state(False)
+        if not enabled:
+            self._sync_legacy_mode_action_states()
             return
-        # Mutually exclusive with paint/select modes
-        if enabled and self._select_action.isChecked():
-            self._set_select_action_state(False)
-            canvas.set_select_mode(False)
-        if enabled and self._tile_select_action.isChecked():
-            self._set_tile_select_action_state(False)
-            canvas.set_tile_select_mode(False)
-        if enabled and self._paint_tiles_action.isChecked():
-            self._set_paint_tiles_action_state(False)
-            canvas.set_tile_paint_mode(False)
-            self._update_paint_status()
-        canvas.set_cell_flags_edit_mode(enabled)
-        if enabled:
-            self._area_workspace.set_current_page("cell_flags")
-            self.statusBar().showMessage(
-                "Cell Flags mode: left-click paints the selected flag brush, right-click clears that flag.",
-                4000,
-            )
-        self._update_paint_status()
-        self._refresh_tile_selection_actions()
+        self._canvas_target = "flags"
+        if self._canvas_tool == "select":
+            self._canvas_tool = "pencil"
+        self._apply_canvas_target_tool_state(announce=True)
 
     def _on_tile_selected(self, gid: int) -> None:
         canvas = self._active_canvas()
         if canvas is not None:
             canvas.set_selected_gid_block(self._tileset_panel.selected_brush_block)
             canvas.set_tileset_index_hint(self._tileset_panel.current_tileset_index)
-            canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
-            canvas.set_active_brush_type(
-                BrushType.ERASER if self._tileset_panel.brush_is_erase else BrushType.TILE
-            )
-        self._active_brush_type = (
-            BrushType.ERASER if self._tileset_panel.brush_is_erase else BrushType.TILE
+        self._canvas_target = "tiles"
+        self._canvas_tool = "eraser" if self._tileset_panel.brush_is_erase else "pencil"
+        self._ensure_paint_mode(
+            target="tiles",
+            tool=self._canvas_tool,
         )
-        self._tileset_panel.set_brush_active(True)
-        self._template_panel.set_brush_active(None)
-        self._ensure_paint_mode()
         self._update_paint_status()
 
     def _on_template_brush_selected(self, template_id: str) -> None:
         self._entity_brush_template_id = template_id
-        self._active_brush_type = BrushType.ENTITY
         self._entity_brush_supported = True
         self._template_panel.set_brush_active(template_id)
         self._tileset_panel.set_brush_active(False)
@@ -2440,9 +2712,7 @@ class MainWindow(
         canvas = self._active_canvas()
         if canvas is not None:
             self._apply_entity_brush_to_canvas(canvas)
-            canvas.set_active_brush_type(BrushType.ENTITY)
-
-        self._ensure_paint_mode()
+        self._ensure_paint_mode(target="entities", tool="pencil")
         self._update_paint_status()
 
     def _on_active_layer_changed(self, index: int) -> None:
@@ -2478,6 +2748,8 @@ class MainWindow(
         self._tab_widget.set_dirty(content_id, True)
         self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
         self._tile_select_action.setEnabled(bool(doc.tile_layers))
+        self._sync_canvas_tool_strip_enabled_state()
+        self._apply_canvas_target_tool_state(announce=False)
         self._refresh_layer_action_state()
         self._refresh_tile_selection_actions()
         self._update_paint_status()
@@ -2530,6 +2802,8 @@ class MainWindow(
         self._tab_widget.set_dirty(content_id, True)
         self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
         self._tile_select_action.setEnabled(bool(doc.tile_layers))
+        self._sync_canvas_tool_strip_enabled_state()
+        self._apply_canvas_target_tool_state(announce=False)
         self._refresh_layer_action_state()
         self._refresh_tile_selection_actions()
         self._update_paint_status()
@@ -2719,6 +2993,7 @@ class MainWindow(
         cycle_position: int,
         cycle_total: int,
     ) -> None:
+        self._hide_entity_stack_picker()
         if not self._prepare_for_entity_instance_target_change(entity_id or None):
             canvas = self._active_canvas()
             if canvas is not None:
@@ -2849,6 +3124,13 @@ class MainWindow(
             f"Deleted {deleted_id} from ({col}, {row}).",
             2500,
         )
+
+    def _on_entity_delete_by_id_requested(self, entity_id: str) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, _canvas = context
+        self._delete_area_entity_by_id(content_id, entity_id)
 
     def _on_delete_selected_entity(self) -> None:
         context = self._active_area_context()
@@ -3034,36 +3316,49 @@ class MainWindow(
             2500,
         )
 
+    def _on_entity_drag_committed(
+        self,
+        entity_id: str,
+        effective_space: str,
+        x: int,
+        y: int,
+    ) -> None:
+        context = self._active_area_context()
+        if context is None or not self._select_action.isChecked():
+            return
+        content_id, doc, canvas = context
+        if entity_by_id(doc, entity_id) is None:
+            return
+        canvas.set_selected_entity(entity_id, cycle_position=1, cycle_total=1, emit=False)
+        self._active_instance_entity_id = entity_id
+        self._set_render_target_entity(entity_id)
+        self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
+        self._tab_widget.set_dirty(content_id, True)
+        self._update_paint_status()
+        if effective_space == "screen":
+            self.statusBar().showMessage(
+                f"Moved {entity_id} to pixel ({x}, {y}).",
+                2500,
+            )
+            return
+        self.statusBar().showMessage(
+            f"Moved {entity_id} to grid ({x}, {y}).",
+            2500,
+        )
+
     def _on_apply_entity_instance_json(self) -> None:
         context = self._active_area_context()
         entity_id = self._active_instance_entity_id
         if context is None or entity_id is None:
             return
-        content_id, doc, canvas = context
-        current = entity_by_id(doc, entity_id)
-        if current is None:
-            return
-        try:
-            raw = loads_json_data(
-                self._entity_instance_panel.json_text,
-                source_name="Entity instance JSON",
-            )
-        except Exception as exc:
-            QMessageBox.warning(self, "Invalid JSON", f"Could not parse entity JSON:\n{exc}")
-            return
-        if not isinstance(raw, dict):
-            QMessageBox.warning(self, "Invalid Entity", "Entity instance JSON must be an object.")
-            return
-        updated = EntityDocument.from_dict(raw)
-        if not self._apply_entity_instance_update(
+        content_id, _doc, _canvas = context
+        self._apply_entity_instance_json_for_target(
+            self._entity_instance_panel.editor_widget,
             content_id,
-            doc,
-            canvas,
-            current,
-            updated,
-            status_message=f"Applied JSON changes to entity {updated.id}.",
-        ):
-            return
+            entity_id,
+            activate_updated=True,
+        )
 
     def _on_revert_entity_instance_json(self) -> None:
         self._refresh_entity_instance_panel()
@@ -3074,19 +3369,125 @@ class MainWindow(
         entity_id = self._active_instance_entity_id
         if context is None or entity_id is None:
             return
-        content_id, doc, canvas = context
+        content_id, _doc, _canvas = context
+        self._apply_entity_instance_fields_for_target(
+            self._entity_instance_panel.editor_widget,
+            content_id,
+            entity_id,
+            activate_updated=True,
+        )
+
+    def _on_revert_entity_instance_fields(self) -> None:
+        self._refresh_entity_instance_panel()
+        self.statusBar().showMessage("Reverted selected entity fields.", 2000)
+
+    def _on_apply_entity_instance_dialog_json(self) -> None:
+        dialog = self._entity_instance_dialog
+        if dialog is None or dialog.target_area_id is None or dialog.target_entity_id is None:
+            return
+        updated_id = self._apply_entity_instance_json_for_target(
+            dialog.editor_widget,
+            dialog.target_area_id,
+            dialog.target_entity_id,
+            activate_updated=False,
+        )
+        if updated_id is not None:
+            self._load_entity_instance_dialog_target(dialog.target_area_id, updated_id)
+
+    def _on_apply_entity_instance_dialog_fields(self) -> None:
+        dialog = self._entity_instance_dialog
+        if dialog is None or dialog.target_area_id is None or dialog.target_entity_id is None:
+            return
+        updated_id = self._apply_entity_instance_fields_for_target(
+            dialog.editor_widget,
+            dialog.target_area_id,
+            dialog.target_entity_id,
+            activate_updated=False,
+        )
+        if updated_id is not None:
+            self._load_entity_instance_dialog_target(dialog.target_area_id, updated_id)
+
+    def _on_revert_entity_instance_dialog(self) -> None:
+        dialog = self._entity_instance_dialog
+        if dialog is None or dialog.target_area_id is None or dialog.target_entity_id is None:
+            return
+        if self._load_entity_instance_dialog_target(
+            dialog.target_area_id,
+            dialog.target_entity_id,
+        ):
+            self.statusBar().showMessage("Reverted entity dialog changes.", 2000)
+
+    def _on_entity_instance_dialog_dirty_changed(self, dirty: bool) -> None:
+        if dirty:
+            self.statusBar().showMessage("Entity dialog has unapplied changes.", 2000)
+
+    def _on_entity_instance_dialog_close_requested(self) -> None:
+        if self._prepare_entity_instance_dialog_close():
+            self._force_close_entity_instance_dialog()
+
+    def _apply_entity_instance_json_for_target(
+        self,
+        editor: EntityInstanceEditorWidget,
+        content_id: str,
+        entity_id: str,
+        *,
+        activate_updated: bool,
+    ) -> str | None:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return None
+        _content_id, doc, canvas = context
         current = entity_by_id(doc, entity_id)
         if current is None:
-            return
+            return None
         try:
-            updated = self._entity_instance_panel.build_entity_from_fields()
+            raw = loads_json_data(
+                editor.json_text,
+                source_name="Entity instance JSON",
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Invalid JSON", f"Could not parse entity JSON:\n{exc}")
+            return None
+        if not isinstance(raw, dict):
+            QMessageBox.warning(self, "Invalid Entity", "Entity instance JSON must be an object.")
+            return None
+        updated = EntityDocument.from_dict(raw)
+        if not self._apply_entity_instance_update(
+            content_id,
+            doc,
+            canvas,
+            current,
+            updated,
+            status_message=f"Applied JSON changes to entity {updated.id}.",
+            activate_updated=activate_updated,
+        ):
+            return None
+        return updated.id
+
+    def _apply_entity_instance_fields_for_target(
+        self,
+        editor: EntityInstanceEditorWidget,
+        content_id: str,
+        entity_id: str,
+        *,
+        activate_updated: bool,
+    ) -> str | None:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return None
+        _content_id, doc, canvas = context
+        current = entity_by_id(doc, entity_id)
+        if current is None:
+            return None
+        try:
+            updated = editor.build_entity_from_fields()
         except Exception as exc:
             QMessageBox.warning(
                 self,
                 "Invalid Entity",
                 f"Could not build entity fields:\n{exc}",
             )
-            return
+            return None
         updated.render_order = current.render_order
         updated.y_sort = current.y_sort
         updated.sort_y_offset = current.sort_y_offset
@@ -3098,12 +3499,10 @@ class MainWindow(
             current,
             updated,
             status_message=f"Applied field changes to entity {updated.id}.",
+            activate_updated=activate_updated,
         ):
-            return
-
-    def _on_revert_entity_instance_fields(self) -> None:
-        self._refresh_entity_instance_panel()
-        self.statusBar().showMessage("Reverted selected entity fields.", 2000)
+            return None
+        return updated.id
 
     # ------------------------------------------------------------------
     # Internal
@@ -3135,6 +3534,7 @@ class MainWindow(
             display_size=(self._display_width, self._display_height),
         )
         canvas.set_grid_visible(self._grid_action.isChecked())
+        canvas.set_select_mode(True)
 
         self._tab_widget.open_tab(
             area_id, file_path, ContentType.AREA, widget=canvas
@@ -3255,8 +3655,38 @@ class MainWindow(
                 except (RuntimeError, TypeError):
                     pass
                 try:
+                    self._connected_canvas.entity_delete_by_id_requested.disconnect(
+                        self._on_entity_delete_by_id_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
                     self._connected_canvas.entity_selection_changed.disconnect(
                         self._on_entity_selection_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.entity_edit_requested.disconnect(
+                        self._on_entity_edit_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.entity_context_menu_requested.disconnect(
+                        self._on_canvas_entity_context_menu_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.entity_stack_picker_requested.disconnect(
+                        self._on_canvas_entity_stack_picker_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
+                    self._connected_canvas.entity_drag_committed.disconnect(
+                        self._on_entity_drag_committed
                     )
                 except (RuntimeError, TypeError):
                     pass
@@ -3283,7 +3713,18 @@ class MainWindow(
             self._on_entity_screen_paint_requested
         )
         canvas.entity_delete_requested.connect(self._on_entity_delete_requested)
+        canvas.entity_delete_by_id_requested.connect(
+            self._on_entity_delete_by_id_requested
+        )
         canvas.entity_selection_changed.connect(self._on_entity_selection_changed)
+        canvas.entity_edit_requested.connect(self._on_entity_edit_requested)
+        canvas.entity_context_menu_requested.connect(
+            self._on_canvas_entity_context_menu_requested
+        )
+        canvas.entity_stack_picker_requested.connect(
+            self._on_canvas_entity_stack_picker_requested
+        )
+        canvas.entity_drag_committed.connect(self._on_entity_drag_committed)
         canvas.tile_selection_changed.connect(self._on_tile_selection_changed)
         self._layer_panel.layer_visibility_changed.connect(canvas.set_layer_visible)
         canvas.set_entities_visible(self._entities_visible)
@@ -3520,6 +3961,8 @@ class MainWindow(
             erase_mode=True,
         )
         self._paint_tiles_action.setEnabled(bool(doc.tile_layers and doc.tilesets))
+        self._sync_canvas_tool_strip_enabled_state()
+        self._apply_canvas_target_tool_state(announce=False)
         self.statusBar().showMessage(
             f"Added tileset {Path(tileset.path).stem} to {content_id}.",
             3000,
@@ -3621,11 +4064,311 @@ class MainWindow(
             current_value=current_value,
         )
 
-    def _browse_project_entity_id(self, current_value: str = "") -> str | None:
+    def _format_entity_reference_position_text(
+        self,
+        entity: EntityDocument,
+        *,
+        space: str,
+    ) -> str:
+        if space == "screen":
+            return f"screen ({entity.pixel_x or 0}, {entity.pixel_y or 0})"
+        return f"world ({entity.grid_x}, {entity.grid_y})"
+
+    def _build_entity_reference_picker_entries(self) -> list[EntityReferencePickerEntry]:
+        if self._manifest is None:
+            return []
+
+        entries: list[EntityReferencePickerEntry] = []
+        seen_area_ids: set[str] = set()
+        area_entries = discover_areas(self._manifest)
+        for area_entry in area_entries:
+            seen_area_ids.add(area_entry.area_id)
+            document = self._area_docs.get(area_entry.area_id)
+            if document is None:
+                try:
+                    document = load_area_document(area_entry.file_path)
+                except Exception as exc:
+                    log.warning(
+                        "Failed to load area entities for %s: %s",
+                        area_entry.area_id,
+                        exc,
+                    )
+                    continue
+            for entity in document.entities:
+                entity_id = str(entity.id).strip()
+                if not entity_id:
+                    continue
+                space = self._entity_effective_space(entity)
+                entries.append(
+                    EntityReferencePickerEntry(
+                        entity_id=entity_id,
+                        template_id=entity.template,
+                        area_key=area_entry.area_id,
+                        area_label=area_entry.area_id,
+                        scope="area",
+                        space=space,
+                        position_text=self._format_entity_reference_position_text(
+                            entity,
+                            space=space,
+                        ),
+                    )
+                )
+
+        for area_id, document in self._area_docs.items():
+            if area_id in seen_area_ids:
+                continue
+            for entity in document.entities:
+                entity_id = str(entity.id).strip()
+                if not entity_id:
+                    continue
+                space = self._entity_effective_space(entity)
+                entries.append(
+                    EntityReferencePickerEntry(
+                        entity_id=entity_id,
+                        template_id=entity.template,
+                        area_key=area_id,
+                        area_label=area_id,
+                        scope="area",
+                        space=space,
+                        position_text=self._format_entity_reference_position_text(
+                            entity,
+                            space=space,
+                        ),
+                    )
+                )
+
+        for raw_entry in self._manifest.global_entities:
+            if not isinstance(raw_entry, dict):
+                continue
+            try:
+                entity = EntityDocument.from_dict(raw_entry)
+            except Exception as exc:
+                log.warning("Failed to load global entity for picker: %s", exc)
+                continue
+            entity_id = str(entity.id).strip()
+            if not entity_id:
+                continue
+            space = self._entity_effective_space(entity)
+            entries.append(
+                EntityReferencePickerEntry(
+                    entity_id=entity_id,
+                    template_id=entity.template,
+                    area_key=GLOBAL_AREA_KEY,
+                    area_label="Global Entities",
+                    scope="global",
+                    space=space,
+                    position_text=self._format_entity_reference_position_text(
+                        entity,
+                        space=space,
+                    ),
+                )
+            )
+
+        return sorted(
+            entries,
+            key=lambda entry: (
+                entry.area_key == GLOBAL_AREA_KEY,
+                entry.area_label.lower(),
+                entry.entity_id.lower(),
+            ),
+        )
+
+    def _entity_reference_picker_entries_for_request(
+        self,
+        request: EntityReferencePickerRequest | None,
+    ) -> list[EntityReferencePickerEntry]:
+        entries = self._build_entity_reference_picker_entries()
+        if request is None:
+            return entries
+
+        spec = request.parameter_spec if isinstance(request.parameter_spec, dict) else {}
+        scope = str(spec.get("scope", "")).strip().lower()
+        if scope == "area":
+            entries = [entry for entry in entries if entry.scope == "area"]
+        elif scope == "global":
+            entries = [entry for entry in entries if entry.scope == "global"]
+
+        space = str(spec.get("space", "")).strip().lower()
+        if space in {"world", "screen"}:
+            entries = [entry for entry in entries if entry.space == space]
+
+        locked_area_key = self._entity_reference_picker_locked_area_key(request)
+        if locked_area_key:
+            entries = [entry for entry in entries if entry.area_key == locked_area_key]
+
+        return entries
+
+    def _entity_reference_picker_locked_area_key(
+        self,
+        request: EntityReferencePickerRequest | None,
+    ) -> str | None:
+        if request is None or not isinstance(request.parameter_spec, dict):
+            return None
+        area_parameter = str(request.parameter_spec.get("area_parameter", "")).strip()
+        if not area_parameter or not isinstance(request.parameter_values, dict):
+            return None
+        return str(request.parameter_values.get(area_parameter, "")).strip() or None
+
+    def _entity_reference_picker_preferred_area_key(
+        self,
+        entries: list[EntityReferencePickerEntry],
+        *,
+        current_value: str,
+        request: EntityReferencePickerRequest | None,
+    ) -> str | None:
+        normalized_current = current_value.strip()
+        if normalized_current:
+            for entry in entries:
+                if entry.entity_id == normalized_current:
+                    return entry.area_key
+
+        preferred_area_id = None if request is None else request.current_area_id
+        if preferred_area_id:
+            for entry in entries:
+                if entry.area_key == preferred_area_id:
+                    return preferred_area_id
+
+        if any(entry.area_key == GLOBAL_AREA_KEY for entry in entries):
+            return GLOBAL_AREA_KEY
+        return entries[0].area_key if entries else None
+
+    def _browse_project_entity_id(
+        self,
+        current_value: str = "",
+        request: EntityReferencePickerRequest | None = None,
+    ) -> str | None:
+        locked_area_key = self._entity_reference_picker_locked_area_key(request)
+        if (
+            locked_area_key is None
+            and request is not None
+            and isinstance(request.parameter_spec, dict)
+            and str(request.parameter_spec.get("area_parameter", "")).strip()
+        ):
+            QMessageBox.information(
+                self,
+                "Choose Entity",
+                "Pick the target area first.",
+            )
+            return None
+
+        entries = self._entity_reference_picker_entries_for_request(request)
+        if not entries:
+            QMessageBox.information(
+                self,
+                "Choose Entity",
+                "No known entity ids match this picker.",
+            )
+            return None
+
+        dialog = EntityReferencePickerDialog(self)
+        dialog.set_entries(
+            entries,
+            current_value=current_value,
+            preferred_area_key=self._entity_reference_picker_preferred_area_key(
+                entries,
+                current_value=current_value,
+                request=request,
+            ),
+            locked_area_key=locked_area_key,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.selected_entity_id
+
+    def _resolve_project_entity_by_id(self, entity_id: str) -> EntityDocument | None:
+        normalized = str(entity_id).strip()
+        if not normalized or self._manifest is None:
+            return None
+
+        for raw_entry in self._manifest.global_entities:
+            if not isinstance(raw_entry, dict):
+                continue
+            raw_id = str(raw_entry.get("id", "")).strip()
+            if raw_id != normalized:
+                continue
+            try:
+                return EntityDocument.from_dict(raw_entry)
+            except Exception as exc:
+                log.warning("Failed to load global entity %s: %s", normalized, exc)
+                return None
+
+        seen_area_ids: set[str] = set()
+        for entry in discover_areas(self._manifest):
+            seen_area_ids.add(entry.area_id)
+            document = self._area_docs.get(entry.area_id)
+            if document is None:
+                try:
+                    document = load_area_document(entry.file_path)
+                except Exception as exc:
+                    log.warning("Failed to load area %s for entity lookup: %s", entry.area_id, exc)
+                    continue
+            entity = entity_by_id(document, normalized)
+            if entity is not None:
+                return entity
+
+        for area_id, document in self._area_docs.items():
+            if area_id in seen_area_ids:
+                continue
+            entity = entity_by_id(document, normalized)
+            if entity is not None:
+                return entity
+        return None
+
+    def _entity_command_names_for_entity(self, entity: EntityDocument) -> list[str]:
+        names: set[str] = set()
+        if entity.template and self._templates is not None:
+            names.update(self._templates.get_template_entity_command_names(entity.template))
+        raw_entity_commands = entity._extra.get("entity_commands")
+        if isinstance(raw_entity_commands, dict):
+            for raw_name in raw_entity_commands.keys():
+                name = str(raw_name).strip()
+                if name:
+                    names.add(name)
+        return sorted(names)
+
+    def _browse_project_entity_command_id(
+        self,
+        current_value: str = "",
+        request: EntityReferencePickerRequest | None = None,
+    ) -> str | None:
+        spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
+        entity_parameter = str(spec.get("entity_parameter", "")).strip()
+        parameter_values = request.parameter_values if request is not None else None
+        target_entity_id = (
+            str(parameter_values.get(entity_parameter, "")).strip()
+            if isinstance(parameter_values, dict)
+            else ""
+        )
+        if not target_entity_id:
+            QMessageBox.information(
+                self,
+                "Choose Entity Command",
+                "Pick the target entity first.",
+            )
+            return None
+
+        entity = self._resolve_project_entity_by_id(target_entity_id)
+        if entity is None:
+            QMessageBox.information(
+                self,
+                "Choose Entity Command",
+                f"Could not find entity '{target_entity_id}' in this project.",
+            )
+            return None
+
+        command_names = self._entity_command_names_for_entity(entity)
+        if not command_names:
+            QMessageBox.information(
+                self,
+                "Choose Entity Command",
+                f"Entity '{target_entity_id}' has no available entity commands.",
+            )
+            return None
+
         return self._browse_known_reference(
-            title="Choose Entity",
-            label="Entity",
-            values=sorted(self._project_used_entity_ids()),
+            title=f"Choose Command for {target_entity_id}",
+            label="Command",
+            values=command_names,
             current_value=current_value,
         )
 
@@ -3727,6 +4470,19 @@ class MainWindow(
             return None
         return info.content_id, document, canvas
 
+    def _area_context_for_content(
+        self,
+        content_id: str,
+    ) -> tuple[str, AreaDocument, TileCanvas] | None:
+        info = self._tab_widget.content_info(content_id)
+        if info is None or info.content_type != ContentType.AREA:
+            return None
+        document = self._area_docs.get(content_id)
+        canvas = self._tab_widget.widget_for_content(content_id)
+        if document is None or not isinstance(canvas, TileCanvas):
+            return None
+        return content_id, document, canvas
+
     def _current_tileset_counts(self, document: AreaDocument) -> list[int]:
         if self._catalog is None:
             return [0 for _ in document.tilesets]
@@ -3750,7 +4506,9 @@ class MainWindow(
             self.resize(1280, 900)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        if self._maybe_save_dirty_tabs():
+        self._hide_entity_stack_picker()
+        if self._prepare_entity_instance_dialog_close() and self._maybe_save_dirty_tabs():
+            self._force_close_entity_instance_dialog()
             event.accept()
             return
         event.ignore()
@@ -3881,12 +4639,12 @@ class MainWindow(
 
     def _update_paint_status(self) -> None:
         """Update status bar with current tool info."""
-        if self._select_action.isChecked():
+        if self._canvas_target == "entities" and self._canvas_tool == "select":
             self._status_layer.setText("")
             self._status_gid.setText(self._selection_status_text())
             return
 
-        if self._tile_select_action.isChecked():
+        if self._canvas_target == "tiles" and self._canvas_tool == "select":
             self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
             canvas = self._active_canvas()
             if canvas is not None and canvas.has_tile_selection:
@@ -3900,28 +4658,30 @@ class MainWindow(
             self._status_gid.setText("Tile Select")
             return
 
-        if self._cell_flags_action.isChecked():
+        if self._canvas_target == "flags":
             self._status_layer.setText("")
+            verb = "Erase" if self._canvas_tool == "eraser" else "Paint"
             self._status_gid.setText(
-                f"Cell Flags: {self._cell_flag_brush_panel.current_brush.label}"
+                f"Flags {verb}: {self._cell_flag_brush_panel.current_brush.label}"
             )
             return
 
-        if self._active_brush_type in {BrushType.TILE, BrushType.ERASER}:
+        if self._canvas_target == "tiles":
             self._status_layer.setText(f"Layer: {self._layer_panel.active_layer_name()}")
         else:
             self._status_layer.setText("")
 
-        if self._active_brush_type == BrushType.ENTITY:
+        if self._canvas_target == "entities":
             if self._entity_brush_template_id is None:
                 self._status_gid.setText("(no brush)")
                 return
+            label = "Erase" if self._canvas_tool == "eraser" else "Paint"
             self._status_gid.setText(
-                f"Paint: entity {self._entity_brush_template_id.rsplit('/', 1)[-1]}"
+                f"{label}: entity {self._entity_brush_template_id.rsplit('/', 1)[-1]}"
             )
             return
 
-        if self._active_brush_type == BrushType.ERASER:
+        if self._canvas_tool == "eraser":
             self._status_gid.setText("Erase")
             return
 
@@ -3955,32 +4715,42 @@ class MainWindow(
 
     def _refresh_tile_selection_actions(self) -> None:
         canvas = self._active_canvas()
-        tile_select_active = canvas is not None and self._tile_select_action.isChecked()
+        tile_select_active = (
+            canvas is not None
+            and self._canvas_target == "tiles"
+            and self._canvas_tool == "select"
+        )
         has_selection = canvas is not None and canvas.has_tile_selection
         has_clipboard = self._tile_clipboard is not None
         self._copy_tiles_action.setEnabled(tile_select_active and has_selection)
         self._cut_tiles_action.setEnabled(tile_select_active and has_selection)
         self._paste_tiles_action.setEnabled(tile_select_active and has_clipboard)
 
-    def _ensure_paint_mode(self) -> None:
-        """Turn on the shared Paint tool after an explicit brush selection."""
-        canvas = self._active_canvas()
-        if canvas is None or not self._paint_tiles_action.isEnabled():
-            return
-        if self._paint_tiles_action.isChecked() and canvas.tile_paint_mode:
-            return
-        self._set_paint_tiles_action_state(True)
-        self._on_paint_tiles_toggled(True)
-
     def _apply_active_brush_to_canvas(self, canvas: TileCanvas) -> None:
         self._apply_entity_brush_to_canvas(canvas)
         canvas.set_selected_gid_block(self._tileset_panel.selected_brush_block)
-        canvas.set_brush_erase_mode(self._tileset_panel.brush_is_erase)
-        canvas.set_active_brush_type(self._active_brush_type)
-        self._tileset_panel.set_brush_active(self._active_brush_type != BrushType.ENTITY)
-        self._template_panel.set_brush_active(
-            self._entity_brush_template_id if self._active_brush_type == BrushType.ENTITY else None
-        )
+        if self._canvas_target == "tiles":
+            erase_mode = self._canvas_tool == "eraser"
+            self._tileset_panel.set_brush_mode(erase_mode=erase_mode)
+            canvas.set_brush_erase_mode(erase_mode)
+            canvas.set_entity_brush_erase_mode(False)
+            canvas.set_active_brush_type(BrushType.ERASER if erase_mode else BrushType.TILE)
+            self._active_brush_type = BrushType.ERASER if erase_mode else BrushType.TILE
+            self._tileset_panel.set_brush_active(True)
+            self._template_panel.set_brush_active(None)
+            return
+        if self._canvas_target == "entities":
+            canvas.set_brush_erase_mode(False)
+            canvas.set_entity_brush_erase_mode(self._canvas_tool == "eraser")
+            canvas.set_active_brush_type(BrushType.ENTITY)
+            self._active_brush_type = BrushType.ENTITY
+            self._tileset_panel.set_brush_active(False)
+            self._template_panel.set_brush_active(self._entity_brush_template_id)
+            return
+        canvas.set_brush_erase_mode(False)
+        canvas.set_entity_brush_erase_mode(False)
+        self._tileset_panel.set_brush_active(False)
+        self._template_panel.set_brush_active(None)
 
     def _set_render_target_layer(self, index: int) -> None:
         self._render_target_kind = "layer"
@@ -4035,16 +4805,483 @@ class MainWindow(
     def _refresh_entity_instance_panel(self) -> None:
         context = self._active_area_context()
         if context is None or self._active_instance_entity_id is None:
+            self._entity_instance_panel.set_area_context(None)
             self._entity_instance_panel.clear_entity()
             return
-        _content_id, doc, _canvas = context
+        content_id, doc, _canvas = context
         entity = entity_by_id(doc, self._active_instance_entity_id)
         if entity is None:
             self._active_instance_entity_id = None
+            self._entity_instance_panel.set_area_context(None)
             self._entity_instance_panel.clear_entity()
             return
+        self._entity_instance_panel.set_area_context(content_id)
         self._entity_instance_panel.set_area_bounds(doc.width, doc.height)
         self._entity_instance_panel.load_entity(entity)
+
+    def _on_entity_edit_requested(self, entity_id: str) -> None:
+        self._hide_entity_stack_picker()
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, _canvas = context
+        if not self._activate_area_entity(content_id, entity_id):
+            return
+        self._open_entity_instance_dialog(
+            content_id,
+            entity_id,
+            preferred_tab="Parameters",
+        )
+
+    def _open_entity_instance_dialog(
+        self,
+        content_id: str,
+        entity_id: str,
+        *,
+        preferred_tab: str | None = None,
+    ) -> None:
+        existing = self._entity_instance_dialog
+        if (
+            existing is not None
+            and existing.isVisible()
+            and existing.target_area_id == content_id
+            and existing.target_entity_id == entity_id
+        ):
+            if preferred_tab:
+                if (
+                    preferred_tab == "Parameters"
+                    and not existing.editor_widget.has_parameters
+                ):
+                    existing.editor_widget.set_current_tab_title("Entity Instance Editor")
+                else:
+                    existing.editor_widget.set_current_tab_title(preferred_tab)
+            existing.show()
+            existing.raise_()
+            existing.activateWindow()
+            return
+        if not self._prepare_entity_instance_dialog_retarget(content_id, entity_id):
+            return
+        dialog = self._ensure_entity_instance_dialog()
+        if not self._load_entity_instance_dialog_target(content_id, entity_id):
+            return
+        if preferred_tab:
+            if preferred_tab == "Parameters" and not dialog.editor_widget.has_parameters:
+                dialog.editor_widget.set_current_tab_title("Entity Instance Editor")
+            else:
+                dialog.editor_widget.set_current_tab_title(preferred_tab)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _activate_area_entity(self, content_id: str, entity_id: str) -> bool:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return False
+        _content_id, doc, canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            if self._active_area_context() is not None and self._active_area_context()[0] == content_id:
+                self._refresh_area_entity_list_panel()
+            return False
+        self._active_instance_entity_id = entity_id
+        canvas.set_selected_entity(entity_id, cycle_position=1, cycle_total=1, emit=False)
+        if self._active_area_context() is not None and self._active_area_context()[0] == content_id:
+            self._set_render_target_entity(entity_id)
+            self._refresh_entity_instance_panel()
+            self._area_entity_list_panel.select_entity(entity_id)
+            self._sync_json_edit_actions()
+            self._update_paint_status()
+        return True
+
+    def _on_area_entity_list_context_menu_requested(self, entity_id: str, global_pos) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, _canvas = context
+        self._show_area_entity_context_menu(content_id, (entity_id,), global_pos)
+
+    def _on_canvas_entity_context_menu_requested(self, entity_ids: object, global_pos) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, _canvas = context
+        normalized_ids = tuple(str(entity_id) for entity_id in entity_ids or () if str(entity_id))
+        if not normalized_ids:
+            return
+        self._show_area_entity_context_menu(content_id, normalized_ids, global_pos)
+
+    def _on_canvas_entity_stack_picker_requested(
+        self,
+        entity_ids: object,
+        global_pos,
+        purpose: str,
+    ) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, _canvas = context
+        normalized_ids = tuple(str(entity_id) for entity_id in entity_ids or () if str(entity_id))
+        if len(normalized_ids) <= 1:
+            return
+        self._show_entity_stack_picker(content_id, normalized_ids, purpose, global_pos)
+
+    def _show_area_entity_context_menu(
+        self,
+        content_id: str,
+        entity_ids: tuple[str, ...],
+        global_pos,
+    ) -> None:
+        self._hide_entity_stack_picker()
+        menu = self._build_area_entity_context_menu(content_id, entity_ids)
+        if menu is None or not menu.actions():
+            return
+        menu.exec(global_pos)
+
+    def _ensure_entity_stack_picker(self) -> EntityStackPickerPopup:
+        if self._entity_stack_picker is not None:
+            return self._entity_stack_picker
+        popup = EntityStackPickerPopup(self)
+        popup.entity_chosen.connect(self._on_entity_stack_picker_chosen)
+        self._entity_stack_picker = popup
+        return popup
+
+    def _show_entity_stack_picker(
+        self,
+        content_id: str,
+        entity_ids: tuple[str, ...],
+        purpose: str,
+        global_pos,
+    ) -> None:
+        entries = self._build_entity_stack_picker_entries(content_id, entity_ids)
+        if len(entries) <= 1:
+            self._hide_entity_stack_picker()
+            return
+        popup = self._ensure_entity_stack_picker()
+        popup.show_entries(
+            area_id=content_id,
+            purpose=purpose,
+            entries=entries,
+            global_pos=global_pos,
+        )
+
+    def _build_entity_stack_picker_entries(
+        self,
+        content_id: str,
+        entity_ids: tuple[str, ...],
+    ) -> list[EntityStackPickerEntry]:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return []
+        _content_id, doc, _canvas = context
+        entries: list[EntityStackPickerEntry] = []
+        for entity_id in dict.fromkeys(entity_ids):
+            entity = entity_by_id(doc, entity_id)
+            if entity is None:
+                continue
+            template = entity.template.rsplit("/", 1)[-1] if entity.template else "entity"
+            space = self._entity_effective_space(entity)
+            if space == "screen":
+                location = f"screen ({entity.pixel_x or 0}, {entity.pixel_y or 0})"
+            else:
+                location = f"world ({entity.grid_x}, {entity.grid_y})"
+            entries.append(
+                EntityStackPickerEntry(
+                    entity_id=entity.id,
+                    label=f"{entity.id}  [{template}]  {location}",
+                )
+            )
+        return entries
+
+    def _on_entity_stack_picker_chosen(
+        self,
+        content_id: str,
+        entity_id: str,
+        purpose: str,
+    ) -> None:
+        self._hide_entity_stack_picker()
+        if purpose == "delete":
+            self._delete_area_entity_by_id(content_id, entity_id)
+            return
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return
+        _content_id, _doc, canvas = context
+        canvas.set_selected_entity(entity_id, cycle_position=1, cycle_total=1)
+
+    def _hide_entity_stack_picker(self) -> None:
+        if self._entity_stack_picker is not None:
+            self._entity_stack_picker.hide()
+
+    def _hide_entity_stack_picker_for_area(self, content_id: str) -> None:
+        picker = self._entity_stack_picker
+        if picker is None or picker.target_area_id != content_id:
+            return
+        picker.hide()
+
+    def _build_area_entity_context_menu(
+        self,
+        content_id: str,
+        entity_ids: tuple[str, ...],
+    ) -> QMenu | None:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return None
+        _content_id, doc, _canvas = context
+        unique_ids = tuple(dict.fromkeys(entity_id for entity_id in entity_ids if entity_id))
+        if not unique_ids:
+            return None
+        menu = QMenu(self)
+        if len(unique_ids) == 1:
+            self._populate_area_entity_context_menu(menu, content_id, unique_ids[0])
+            return menu if menu.actions() else None
+        for entity_id in unique_ids:
+            if entity_by_id(doc, entity_id) is None:
+                continue
+            submenu = menu.addMenu(entity_id)
+            self._populate_area_entity_context_menu(submenu, content_id, entity_id)
+        return menu if menu.actions() else None
+
+    def _populate_area_entity_context_menu(
+        self,
+        menu: QMenu,
+        content_id: str,
+        entity_id: str,
+    ) -> None:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return
+        _content_id, doc, _canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            return
+
+        parameters_action = QAction("Parameters...", self)
+        parameters_action.setEnabled(self._entity_has_parameter_surface(entity))
+        parameters_action.triggered.connect(
+            lambda _checked=False, cid=content_id, eid=entity_id: self._edit_area_entity_in_dialog(
+                cid,
+                eid,
+                preferred_tab="Parameters",
+            )
+        )
+        menu.addAction(parameters_action)
+
+        edit_instance_action = QAction("Edit Instance...", self)
+        edit_instance_action.triggered.connect(
+            lambda _checked=False, cid=content_id, eid=entity_id: self._edit_area_entity_in_dialog(
+                cid,
+                eid,
+                preferred_tab="Entity Instance Editor",
+            )
+        )
+        menu.addAction(edit_instance_action)
+
+        edit_json_action = QAction("Edit JSON...", self)
+        edit_json_action.triggered.connect(
+            lambda _checked=False, cid=content_id, eid=entity_id: self._edit_area_entity_in_dialog(
+                cid,
+                eid,
+                preferred_tab="Entity Instance JSON",
+            )
+        )
+        menu.addAction(edit_json_action)
+
+        menu.addSeparator()
+
+        copy_id_action = QAction("Copy ID", self)
+        copy_id_action.triggered.connect(
+            lambda _checked=False, eid=entity_id: self._copy_entity_id_to_clipboard(eid)
+        )
+        menu.addAction(copy_id_action)
+
+        menu.addSeparator()
+
+        delete_action = QAction("Delete", self)
+        delete_action.triggered.connect(
+            lambda _checked=False, cid=content_id, eid=entity_id: self._delete_area_entity_by_id(
+                cid,
+                eid,
+            )
+        )
+        menu.addAction(delete_action)
+
+    def _entity_has_parameter_surface(self, entity: EntityDocument) -> bool:
+        if entity.parameters is not None:
+            if not isinstance(entity.parameters, dict) or bool(entity.parameters):
+                return True
+        if not entity.template or self._templates is None:
+            return False
+        return bool(
+            self._templates.get_template_parameter_names(entity.template)
+            or self._templates.get_template_parameter_defaults(entity.template)
+            or self._templates.get_template_parameter_specs(entity.template)
+        )
+
+    def _edit_area_entity_in_dialog(
+        self,
+        content_id: str,
+        entity_id: str,
+        *,
+        preferred_tab: str,
+    ) -> None:
+        if not self._activate_area_entity(content_id, entity_id):
+            return
+        self._open_entity_instance_dialog(
+            content_id,
+            entity_id,
+            preferred_tab=preferred_tab,
+        )
+
+    def _copy_entity_id_to_clipboard(self, entity_id: str) -> None:
+        QApplication.clipboard().setText(entity_id)
+        self.statusBar().showMessage(f"Copied entity id '{entity_id}'.", 2000)
+
+    def _delete_area_entity_by_id(self, content_id: str, entity_id: str) -> bool:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return False
+        _content_id, doc, canvas = context
+        deleted_id = delete_entity_by_id(doc, entity_id)
+        if deleted_id is None:
+            return False
+
+        self._unregister_project_entity_id(deleted_id)
+        if canvas.selected_entity_id == deleted_id:
+            canvas.clear_selected_entity(emit=False)
+            if self._active_area_context() is not None and self._active_area_context()[0] == content_id:
+                self._set_render_target_layer(self._layer_panel.active_layer)
+        if self._active_instance_entity_id == deleted_id:
+            self._active_instance_entity_id = None
+        if (
+            self._entity_instance_dialog is not None
+            and self._entity_instance_dialog.target_area_id == content_id
+            and self._entity_instance_dialog.target_entity_id == deleted_id
+        ):
+            self._force_close_entity_instance_dialog()
+
+        canvas.refresh_entity_items()
+        if self._active_area_context() is not None and self._active_area_context()[0] == content_id:
+            self._refresh_entity_instance_panel()
+            self._refresh_area_entity_list_panel()
+            self._sync_json_edit_actions()
+            self._update_paint_status()
+        self._tab_widget.set_dirty(content_id, True)
+        self.statusBar().showMessage(f"Deleted {deleted_id}.", 2500)
+        return True
+
+    def _ensure_entity_instance_dialog(self) -> EntityInstanceDialog:
+        if self._entity_instance_dialog is not None:
+            return self._entity_instance_dialog
+        dialog = EntityInstanceDialog(self)
+        editor = dialog.editor_widget
+        editor.set_reference_picker_callbacks(
+            area_picker=self._browse_project_area_id,
+            entity_picker=self._browse_project_entity_id,
+            entity_command_picker=self._browse_project_entity_command_id,
+            item_picker=self._browse_project_item_id,
+            dialogue_picker=self._browse_project_dialogue_id,
+            command_picker=self._browse_project_command_id,
+            asset_picker=lambda _current: self._browse_project_asset(),
+        )
+        editor.set_template_catalog(self._templates)
+        editor.set_editing_enabled(self._json_editing_enabled)
+        editor.apply_requested.connect(self._on_apply_entity_instance_dialog_json)
+        editor.revert_requested.connect(self._on_revert_entity_instance_dialog)
+        editor.dirty_changed.connect(self._on_entity_instance_dialog_dirty_changed)
+        editor.fields_apply_requested.connect(self._on_apply_entity_instance_dialog_fields)
+        editor.fields_revert_requested.connect(self._on_revert_entity_instance_dialog)
+        editor.fields_dirty_changed.connect(self._on_entity_instance_dialog_dirty_changed)
+        dialog.close_requested.connect(self._on_entity_instance_dialog_close_requested)
+        self._entity_instance_dialog = dialog
+        return dialog
+
+    def _load_entity_instance_dialog_target(self, content_id: str, entity_id: str) -> bool:
+        dialog = self._entity_instance_dialog
+        if dialog is None:
+            return False
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return False
+        _content_id, doc, _canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            return False
+        dialog.set_target(content_id, entity_id)
+        dialog.editor_widget.set_area_context(content_id)
+        dialog.editor_widget.set_area_bounds(doc.width, doc.height)
+        dialog.editor_widget.load_entity(entity)
+        dialog.editor_widget.set_editing_enabled(self._json_editing_enabled)
+        return True
+
+    def _prepare_entity_instance_dialog_retarget(
+        self,
+        content_id: str,
+        entity_id: str,
+    ) -> bool:
+        dialog = self._entity_instance_dialog
+        if dialog is None or not dialog.isVisible():
+            return True
+        if dialog.target_area_id == content_id and dialog.target_entity_id == entity_id:
+            return True
+        return self._prepare_entity_instance_dialog_close(
+            prompt_title="Unsaved Entity Dialog",
+            prompt_text="Apply changes before editing another entity?",
+        )
+
+    def _prepare_entity_instance_dialog_for_area_close(self, content_id: str) -> bool:
+        dialog = self._entity_instance_dialog
+        if dialog is None or dialog.target_area_id != content_id:
+            return True
+        if not self._prepare_entity_instance_dialog_close(
+            prompt_title="Unsaved Entity Dialog",
+            prompt_text="Apply changes before closing this area?",
+        ):
+            return False
+        self._force_close_entity_instance_dialog()
+        return True
+
+    def _prepare_entity_instance_dialog_close(
+        self,
+        *,
+        prompt_title: str = "Unsaved Entity Dialog",
+        prompt_text: str = "Apply changes before closing the entity editor?",
+    ) -> bool:
+        dialog = self._entity_instance_dialog
+        if dialog is None:
+            return True
+        if not dialog.has_dirty_changes:
+            return True
+        editor = dialog.editor_widget
+        tab_name = "JSON"
+        apply_handler = self._on_apply_entity_instance_dialog_json
+        dirty_check = lambda: editor.is_dirty
+        if editor.fields_dirty:
+            tab_name = "Fields"
+            apply_handler = self._on_apply_entity_instance_dialog_fields
+            dirty_check = lambda: editor.fields_dirty
+        choice = QMessageBox.question(
+            self,
+            prompt_title,
+            f"{prompt_text}\n\nDirty tab: {tab_name}",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if choice == QMessageBox.StandardButton.Cancel:
+            return False
+        if choice == QMessageBox.StandardButton.Save:
+            apply_handler()
+            return not dirty_check()
+        return True
+
+    def _force_close_entity_instance_dialog(self) -> None:
+        dialog = self._entity_instance_dialog
+        if dialog is None:
+            return
+        self._entity_instance_dialog = None
+        dialog.force_close()
+        dialog.deleteLater()
 
     def _refresh_area_entity_list_panel(self) -> None:
         context = self._active_area_context()
@@ -4147,6 +5384,7 @@ class MainWindow(
         updated: EntityDocument,
         *,
         status_message: str,
+        activate_updated: bool = True,
         ) -> bool:
         error = self._validate_entity_update(content_id, doc, current, updated)
         if error is not None:
@@ -4167,7 +5405,8 @@ class MainWindow(
             or self._active_instance_entity_id == current.id
         )
         doc.entities[index] = updated
-        self._active_instance_entity_id = updated.id
+        if activate_updated or self._active_instance_entity_id == current.id:
+            self._active_instance_entity_id = updated.id
         canvas.refresh_scene_contents()
         if was_selected:
             canvas.set_selected_entity(
@@ -4258,6 +5497,10 @@ class MainWindow(
         if json_widget is not None:
             json_widget.set_editing_enabled(self._json_editing_enabled)
         self._entity_instance_panel.set_editing_enabled(self._json_editing_enabled)
+        if self._entity_instance_dialog is not None:
+            self._entity_instance_dialog.editor_widget.set_editing_enabled(
+                self._json_editing_enabled
+            )
 
     def _selection_status_text(self) -> str:
         context = self._active_area_context()

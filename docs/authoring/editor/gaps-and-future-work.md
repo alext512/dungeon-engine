@@ -6,8 +6,7 @@ The editor has moved well beyond the earliest phase, but it is not fully caught 
 
 The most important current gaps are:
 
-- richer screen-space placement and direct-manipulation workflows
-- drag-to-move entity manipulation
+- richer screen-space placement and direct-manipulation polish
 - runtime handoff or launch integration
 - broader structured editing coverage for newer engine-owned entity fields and workflow values
 - richer structured dialogue and menu editing
@@ -49,7 +48,7 @@ Ideas that are clearly interesting but should still be treated as future work in
 
 - guided command-chain editing for templates and items
 - richer asset previews
-- drag-and-drop placement workflows
+- template drag-and-drop placement workflows
 - "find references" style project refactor support beyond the existing rename or move flows
 
 ## Scope Reminder

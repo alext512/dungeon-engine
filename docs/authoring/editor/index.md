@@ -23,14 +23,15 @@ The current editor is already strong for project and area authoring. It can:
 - browse areas, templates, items, dialogues, commands, and assets
 - load areas into an editable canvas
 - render tile layers, world entities, and area-owned screen-space entities
-- paint tiles and edit `cell_flags`
+- switch between `Target` and `Tool` combinations for tiles, entities, and flags
 - select tile rectangles, copy, cut, paste, and delete them
 - select multi-tile tileset regions and paint them as stamps
 - add, rename, delete, reorder, and duplicate tile layers
-- place, select, delete, and nudge entities, including basic screen-space template placement from the screen pane
+- place, select, drag, delete, nudge, and double-click edit entities, including basic screen-space template placement from the screen pane
 - edit render properties
 - edit area startup behavior through a dedicated `Area Start` surface
-- edit project manifest data, shared variables, items, global entities, templates, and entity instances through structured tabs
+- edit project manifest data, shared variables, items, global entities, templates, and entity instances through structured tabs or focused dialogs
+- tune entity-instance parameters through a focused `Parameters` tab, including typed reference pickers and boolean controls when `parameter_specs` provides them
 - fall back to guarded raw JSON where the structured UI is not enough
 - rename or move file-backed content with reference-update previews
 

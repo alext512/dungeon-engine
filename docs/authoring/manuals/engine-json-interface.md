@@ -401,6 +401,103 @@ Templates may also author top-level `parameters` defaults. The engine merges
 template defaults with instance `parameters` before substitution, so instances
 can override only the values they need to change.
 
+### Template Parameter Specs
+
+Entity templates may also author top-level `parameter_specs`. This is template
+metadata for validation and editor browsing. Entity instances must not define
+`parameter_specs`.
+
+If a template declares `parameter_specs`:
+
+- every authored instance parameter must be listed in `parameter_specs`
+- template default values are type-checked
+- required parameters must resolve to non-blank values when an instance is
+  loaded
+- unknown instance parameters are rejected
+
+Templates without `parameter_specs` keep the older untyped behavior.
+
+Example:
+
+```json
+{
+  "parameters": {
+    "target_area": "areas/start",
+    "destination_entity_id": "spawn_marker",
+    "target_entity_id": "",
+    "target_command_id": "open_now",
+    "required_count": 1,
+    "sprite_path": ""
+  },
+  "parameter_specs": {
+    "target_area": {
+      "type": "area_id"
+    },
+    "target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "destination_entity_id": {
+      "type": "entity_id",
+      "area_parameter": "target_area",
+      "scope": "area",
+      "space": "world"
+    },
+    "target_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    },
+    "required_count": {
+      "type": "int",
+      "min": 1
+    },
+    "sprite_path": {
+      "type": "asset_path",
+      "asset_kind": "image"
+    }
+  }
+}
+```
+
+Supported `type` values:
+
+- `string`
+- `text`
+- `bool`
+- `int`
+- `number`
+- `enum`
+- `array`
+- `json`
+- `entity_id`
+- `entity_command_id`
+- `area_id`
+- `item_id`
+- `dialogue_path`
+- `project_command_id`
+- `entity_template_id`
+- `asset_path`
+- `color_rgb`
+
+Supported constraints:
+
+- `required`: boolean
+- `min` / `max`: numeric bounds for `int` and `number`
+- `values`: allowed values for `enum`
+- `items`: item spec for `array`
+- `scope`: `area` or `global`, only for `entity_id`
+- `space`: `world` or `screen`, only for `entity_id`
+- `area_parameter`: names the `area_id` parameter whose selected area should
+  constrain an `entity_id` picker
+- `entity_parameter`: names the `entity_id` parameter whose command list is
+  used for an `entity_command_id`
+- `asset_kind`: `image`, `audio`, `json`, or `font`, only for `asset_path`
+
+Entity ids are still authored as plain ids. `area_parameter` only tells tools
+and validation which area the id must come from, for cases such as
+`target_area` plus `destination_entity_id` on an area transition.
+
 ### Current Entity Fields
 
 Current engine-known entity fields:

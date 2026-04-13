@@ -2,6 +2,36 @@
   "kind": "system",
   "space": "screen",
   "visible": true,
+  "parameter_specs": {
+    "sprite_path": {
+      "type": "asset_path",
+      "required": true,
+      "asset_kind": "image"
+    },
+    "frame_width": {
+      "type": "int",
+      "required": true,
+      "min": 1
+    },
+    "frame_height": {
+      "type": "int",
+      "required": true,
+      "min": 1
+    },
+    "frames": {
+      "type": "array",
+      "required": true,
+      "items": {
+        "type": "int",
+        "min": 0
+      }
+    },
+    "animation_fps": {
+      "type": "number",
+      "required": true,
+      "min": 0
+    }
+  },
   "visuals": [
     {
       "id": "main",

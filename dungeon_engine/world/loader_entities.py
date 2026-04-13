@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,71 @@ from dungeon_engine.world.entity import (
 logger = get_logger(__name__)
 
 _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
+_PARAMETER_TOKEN_RE = re.compile(
+    r"^\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))$"
+)
+_PARAMETER_SPEC_TYPES = frozenset(
+    {
+        "string",
+        "text",
+        "bool",
+        "int",
+        "number",
+        "enum",
+        "array",
+        "json",
+        "entity_id",
+        "entity_command_id",
+        "area_id",
+        "item_id",
+        "dialogue_path",
+        "project_command_id",
+        "entity_template_id",
+        "asset_path",
+        "color_rgb",
+    }
+)
+_PARAMETER_SPEC_KEYS = frozenset(
+    {
+        "type",
+        "required",
+        "min",
+        "max",
+        "values",
+        "items",
+        "scope",
+        "space",
+        "area_parameter",
+        "entity_parameter",
+        "asset_kind",
+    }
+)
+_ENTITY_PARAMETER_SCOPES = frozenset({"area", "global"})
+_ENTITY_PARAMETER_SPACES = frozenset({"world", "screen"})
+_ASSET_PARAMETER_KINDS = frozenset({"image", "audio", "json", "font"})
+_ASSET_KIND_EXTENSIONS = {
+    "image": {".png"},
+    "audio": {".wav", ".ogg", ".mp3"},
+    "json": {".json", ".json5"},
+    "font": {".json", ".json5"},
+}
+_TEMPLATE_PARAMETER_BUILTINS = frozenset(
+    {
+        "self",
+        "self_id",
+        "refs",
+        "ref_ids",
+        "project",
+        "current_area",
+        "area",
+        "camera",
+        "from_x",
+        "from_y",
+        "to_x",
+        "to_y",
+        "blocking_entity_id",
+    }
+)
 
 
 class EntityTemplateValidationError(ValueError):
@@ -599,11 +665,41 @@ def _resolve_entity_instance(
     source_name: str,
 ) -> dict[str, Any]:
     """Merge a reusable template with a level-specific instance definition."""
+    if "parameter_specs" in instance_data:
+        raise ValueError(
+            f"{source_name} must not define 'parameter_specs'; define parameter specs on the entity template."
+        )
     template_id = _normalize_optional_id(instance_data.get("template"))
     if template_id is None:
+        if "parameters" in instance_data:
+            raise ValueError(
+                f"{source_name} must not define 'parameters' without a 'template'."
+            )
         resolved = copy.deepcopy(instance_data)
     else:
         template_data = _load_entity_template(template_id, project=project)
+        _validate_template_parameter_contract(
+            template_data,
+            source_name=f"template '{template_id}'",
+            project=project,
+        )
+        instance_parameters = instance_data.get("parameters", {})
+        if instance_parameters is None:
+            instance_parameters = {}
+        if not isinstance(instance_parameters, dict):
+            raise ValueError(f"{source_name} field 'parameters' must be a JSON object.")
+        raw_template_specs = template_data.get("parameter_specs")
+        template_specs = _parse_parameter_specs(
+            raw_template_specs,
+            source_name=f"template '{template_id}'",
+        )
+        if raw_template_specs is not None:
+            unknown_parameters = sorted(set(instance_parameters) - set(template_specs))
+            if unknown_parameters:
+                joined = ", ".join(unknown_parameters)
+                raise ValueError(
+                    f"{source_name} field 'parameters' defines unknown template parameter(s): {joined}."
+                )
         resolved = _deep_merge(template_data, instance_data)
 
     parameters = resolved.pop("parameters", {})
@@ -611,11 +707,560 @@ def _resolve_entity_instance(
         parameters = {}
     if not isinstance(parameters, dict):
         raise ValueError(f"{source_name} field 'parameters' must be a JSON object.")
+    parameter_specs = resolved.pop("parameter_specs", {})
+    if parameter_specs is None:
+        parameter_specs = {}
+    if parameter_specs:
+        parsed_specs = _parse_parameter_specs(parameter_specs, source_name=source_name)
+        _validate_parameter_values(
+            parameters,
+            parsed_specs,
+            source_name=source_name,
+            project=project,
+        )
     resolved.pop("template", None)
     substituted = _substitute_parameters(resolved, dict(parameters))
     if not isinstance(substituted, dict):
         raise ValueError(f"{source_name} must resolve to a JSON object after template expansion.")
     return substituted
+
+
+def _validate_template_parameter_contract(
+    template_data: dict[str, Any],
+    *,
+    source_name: str,
+    project: ProjectContext,
+) -> None:
+    raw_specs = template_data.get("parameter_specs")
+    if raw_specs is None:
+        return
+    specs = _parse_parameter_specs(raw_specs, source_name=source_name)
+    defaults = template_data.get("parameters", {})
+    if defaults is None:
+        defaults = {}
+    if not isinstance(defaults, dict):
+        raise ValueError(f"{source_name} field 'parameters' must be a JSON object.")
+
+    parameter_names: set[str] = set()
+    _collect_parameter_tokens(template_data, parameter_names)
+    parameter_names.update(str(key) for key in defaults.keys())
+
+    missing_specs = sorted(parameter_names - set(specs))
+    if missing_specs:
+        joined = ", ".join(missing_specs)
+        raise ValueError(
+            f"{source_name} field 'parameter_specs' is missing spec(s) for parameter(s): {joined}."
+        )
+
+    unused_specs = sorted(set(specs) - parameter_names)
+    if unused_specs:
+        joined = ", ".join(unused_specs)
+        raise ValueError(
+            f"{source_name} field 'parameter_specs' defines unused parameter spec(s): {joined}."
+        )
+
+    _validate_parameter_values(
+        defaults,
+        specs,
+        source_name=source_name,
+        project=project,
+        validate_required=False,
+    )
+
+
+def _parse_parameter_specs(
+    raw_specs: Any,
+    *,
+    source_name: str,
+) -> dict[str, dict[str, Any]]:
+    if raw_specs is None:
+        return {}
+    if not isinstance(raw_specs, dict):
+        raise ValueError(f"{source_name} field 'parameter_specs' must be a JSON object.")
+
+    parsed: dict[str, dict[str, Any]] = {}
+    for raw_name, raw_spec in raw_specs.items():
+        name = str(raw_name).strip()
+        if not name:
+            raise ValueError(f"{source_name} field 'parameter_specs' cannot use a blank parameter name.")
+        parsed[name] = _parse_one_parameter_spec(
+            raw_spec,
+            source_name=source_name,
+            parameter_name=name,
+        )
+    for name, spec in parsed.items():
+        entity_parameter = spec.get("entity_parameter")
+        if isinstance(entity_parameter, str):
+            target_spec = parsed.get(entity_parameter)
+            if target_spec is None:
+                raise ValueError(
+                    f"{source_name} parameter_specs.{name}.entity_parameter references unknown parameter "
+                    f"'{entity_parameter}'."
+                )
+            if target_spec.get("type") != "entity_id":
+                raise ValueError(
+                    f"{source_name} parameter_specs.{name}.entity_parameter must reference an entity_id parameter."
+                )
+
+        area_parameter = spec.get("area_parameter")
+        if not isinstance(area_parameter, str):
+            continue
+        target_spec = parsed.get(area_parameter)
+        if target_spec is None:
+            raise ValueError(
+                f"{source_name} parameter_specs.{name}.area_parameter references unknown parameter "
+                f"'{area_parameter}'."
+            )
+        if target_spec.get("type") != "area_id":
+            raise ValueError(
+                f"{source_name} parameter_specs.{name}.area_parameter must reference an area_id parameter."
+            )
+    return parsed
+
+
+def _parse_one_parameter_spec(
+    raw_spec: Any,
+    *,
+    source_name: str,
+    parameter_name: str,
+) -> dict[str, Any]:
+    location = f"{source_name} parameter_specs.{parameter_name}"
+    if not isinstance(raw_spec, dict):
+        raise ValueError(f"{location} must be a JSON object.")
+    unknown_keys = sorted(set(raw_spec) - _PARAMETER_SPEC_KEYS)
+    if unknown_keys:
+        joined = ", ".join(str(key) for key in unknown_keys)
+        raise ValueError(f"{location} uses unsupported key(s): {joined}.")
+
+    raw_type = raw_spec.get("type")
+    if not isinstance(raw_type, str) or not raw_type.strip():
+        raise ValueError(f"{location}.type must be a non-empty string.")
+    spec_type = raw_type.strip()
+    if spec_type not in _PARAMETER_SPEC_TYPES:
+        allowed = ", ".join(sorted(_PARAMETER_SPEC_TYPES))
+        raise ValueError(f"{location}.type must be one of: {allowed}.")
+
+    spec: dict[str, Any] = {"type": spec_type}
+    if "required" in raw_spec:
+        if not isinstance(raw_spec["required"], bool):
+            raise ValueError(f"{location}.required must be true or false.")
+        spec["required"] = raw_spec["required"]
+
+    if "min" in raw_spec:
+        if spec_type not in {"int", "number"}:
+            raise ValueError(f"{location}.min is only supported for int and number parameters.")
+        if not _is_number(raw_spec["min"]):
+            raise ValueError(f"{location}.min must be a number.")
+        spec["min"] = raw_spec["min"]
+
+    if "max" in raw_spec:
+        if spec_type not in {"int", "number"}:
+            raise ValueError(f"{location}.max is only supported for int and number parameters.")
+        if not _is_number(raw_spec["max"]):
+            raise ValueError(f"{location}.max must be a number.")
+        spec["max"] = raw_spec["max"]
+
+    if "min" in spec and "max" in spec and float(spec["min"]) > float(spec["max"]):
+        raise ValueError(f"{location}.min must be less than or equal to max.")
+
+    if "values" in raw_spec:
+        if spec_type != "enum":
+            raise ValueError(f"{location}.values is only supported for enum parameters.")
+        values = raw_spec["values"]
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"{location}.values must be a non-empty JSON array.")
+        spec["values"] = copy.deepcopy(values)
+
+    if spec_type == "enum" and "values" not in spec:
+        raise ValueError(f"{location}.values is required for enum parameters.")
+
+    if "items" in raw_spec:
+        if spec_type != "array":
+            raise ValueError(f"{location}.items is only supported for array parameters.")
+        spec["items"] = _parse_one_parameter_spec(
+            raw_spec["items"],
+            source_name=source_name,
+            parameter_name=f"{parameter_name}.items",
+        )
+
+    if "scope" in raw_spec:
+        if spec_type != "entity_id":
+            raise ValueError(f"{location}.scope is only supported for entity_id parameters.")
+        scope = str(raw_spec["scope"]).strip()
+        if scope not in _ENTITY_PARAMETER_SCOPES:
+            allowed = ", ".join(sorted(_ENTITY_PARAMETER_SCOPES))
+            raise ValueError(f"{location}.scope must be one of: {allowed}.")
+        spec["scope"] = scope
+
+    if "space" in raw_spec:
+        if spec_type != "entity_id":
+            raise ValueError(f"{location}.space is only supported for entity_id parameters.")
+        space = str(raw_spec["space"]).strip()
+        if space not in _ENTITY_PARAMETER_SPACES:
+            allowed = ", ".join(sorted(_ENTITY_PARAMETER_SPACES))
+            raise ValueError(f"{location}.space must be one of: {allowed}.")
+        spec["space"] = space
+
+    if "area_parameter" in raw_spec:
+        if spec_type != "entity_id":
+            raise ValueError(f"{location}.area_parameter is only supported for entity_id parameters.")
+        area_parameter = str(raw_spec["area_parameter"]).strip()
+        if not area_parameter:
+            raise ValueError(f"{location}.area_parameter must be a non-empty string.")
+        spec["area_parameter"] = area_parameter
+
+    if "entity_parameter" in raw_spec:
+        if spec_type != "entity_command_id":
+            raise ValueError(
+                f"{location}.entity_parameter is only supported for entity_command_id parameters."
+            )
+        entity_parameter = str(raw_spec["entity_parameter"]).strip()
+        if not entity_parameter:
+            raise ValueError(f"{location}.entity_parameter must be a non-empty string.")
+        spec["entity_parameter"] = entity_parameter
+
+    if "asset_kind" in raw_spec:
+        if spec_type != "asset_path":
+            raise ValueError(f"{location}.asset_kind is only supported for asset_path parameters.")
+        asset_kind = str(raw_spec["asset_kind"]).strip()
+        if asset_kind not in _ASSET_PARAMETER_KINDS:
+            allowed = ", ".join(sorted(_ASSET_PARAMETER_KINDS))
+            raise ValueError(f"{location}.asset_kind must be one of: {allowed}.")
+        spec["asset_kind"] = asset_kind
+
+    return spec
+
+
+def _validate_parameter_values(
+    parameters: dict[str, Any],
+    specs: dict[str, dict[str, Any]],
+    *,
+    source_name: str,
+    project: ProjectContext,
+    validate_required: bool = True,
+) -> None:
+    for name, spec in specs.items():
+        has_value = name in parameters
+        value = parameters.get(name)
+        if _parameter_value_is_blank(value):
+            if validate_required and bool(spec.get("required", False)):
+                raise ValueError(f"{source_name} parameter '{name}' is required.")
+            continue
+        if not has_value:
+            continue
+        _validate_one_parameter_value(
+            value,
+            spec,
+            parameter_name=name,
+            source_name=source_name,
+            project=project,
+            all_parameters=parameters,
+        )
+
+    unknown_parameters = sorted(set(parameters) - set(specs))
+    if unknown_parameters:
+        joined = ", ".join(str(name) for name in unknown_parameters)
+        raise ValueError(f"{source_name} defines unknown template parameter(s): {joined}.")
+
+
+def _validate_one_parameter_value(
+    value: Any,
+    spec: dict[str, Any],
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+) -> None:
+    spec_type = str(spec["type"])
+    location = f"{source_name} parameter '{parameter_name}'"
+
+    if spec_type in {"string", "text"}:
+        if not isinstance(value, str):
+            raise ValueError(f"{location} must be a string.")
+        return
+
+    if spec_type == "bool":
+        if not isinstance(value, bool):
+            raise ValueError(f"{location} must be true or false.")
+        return
+
+    if spec_type == "int":
+        if not _is_int(value):
+            raise ValueError(f"{location} must be an integer.")
+        _validate_numeric_bounds(int(value), spec, location=location)
+        return
+
+    if spec_type == "number":
+        if not _is_number(value):
+            raise ValueError(f"{location} must be a number.")
+        _validate_numeric_bounds(float(value), spec, location=location)
+        return
+
+    if spec_type == "enum":
+        if value not in spec["values"]:
+            allowed = ", ".join(repr(item) for item in spec["values"])
+            raise ValueError(f"{location} must be one of: {allowed}.")
+        return
+
+    if spec_type == "array":
+        if not isinstance(value, list):
+            raise ValueError(f"{location} must be a JSON array.")
+        item_spec = spec.get("items")
+        if isinstance(item_spec, dict):
+            for index, item in enumerate(value):
+                _validate_one_parameter_value(
+                    item,
+                    item_spec,
+                    parameter_name=f"{parameter_name}[{index}]",
+                    source_name=source_name,
+                    project=project,
+                    all_parameters=all_parameters,
+                )
+        return
+
+    if spec_type == "json":
+        return
+
+    if spec_type == "color_rgb":
+        if (
+            not isinstance(value, list)
+            or len(value) != 3
+            or not all(_is_int(channel) and 0 <= int(channel) <= 255 for channel in value)
+        ):
+            raise ValueError(f"{location} must be an RGB array of three integers from 0 to 255.")
+        return
+
+    if spec_type == "area_id":
+        _validate_string_reference(value, location=location)
+        if project.resolve_area_reference(str(value)) is None:
+            raise ValueError(f"{location} references unknown area '{value}'.")
+        return
+
+    if spec_type == "item_id":
+        _validate_string_reference(value, location=location)
+        if project.find_item(str(value)) is None:
+            raise ValueError(f"{location} references unknown item '{value}'.")
+        return
+
+    if spec_type == "project_command_id":
+        _validate_string_reference(value, location=location)
+        if project.find_command(str(value)) is None:
+            raise ValueError(f"{location} references unknown project command '{value}'.")
+        return
+
+    if spec_type == "entity_template_id":
+        _validate_string_reference(value, location=location)
+        if project.find_entity_template(str(value)) is None:
+            raise ValueError(f"{location} references unknown entity template '{value}'.")
+        return
+
+    if spec_type == "asset_path":
+        _validate_string_reference(value, location=location)
+        if project.resolve_asset(str(value)) is None:
+            raise ValueError(f"{location} references unknown asset '{value}'.")
+        asset_kind = spec.get("asset_kind")
+        if isinstance(asset_kind, str):
+            allowed_extensions = _ASSET_KIND_EXTENSIONS.get(asset_kind, set())
+            if allowed_extensions and Path(str(value)).suffix.lower() not in allowed_extensions:
+                raise ValueError(f"{location} must reference a {asset_kind} asset.")
+        return
+
+    if spec_type in {"dialogue_path", "entity_id", "entity_command_id"}:
+        _validate_string_reference(value, location=location)
+        if spec_type == "entity_id":
+            _validate_entity_parameter_reference(
+                str(value),
+                spec,
+                parameter_name=parameter_name,
+                source_name=source_name,
+                project=project,
+                all_parameters=all_parameters,
+            )
+        elif spec_type == "entity_command_id":
+            _validate_entity_command_parameter_reference(
+                str(value),
+                spec,
+                parameter_name=parameter_name,
+                source_name=source_name,
+                project=project,
+                all_parameters=all_parameters,
+            )
+        return
+
+
+def _validate_numeric_bounds(value: float, spec: dict[str, Any], *, location: str) -> None:
+    if "min" in spec and value < float(spec["min"]):
+        raise ValueError(f"{location} must be greater than or equal to {spec['min']}.")
+    if "max" in spec and value > float(spec["max"]):
+        raise ValueError(f"{location} must be less than or equal to {spec['max']}.")
+
+
+def _validate_string_reference(value: Any, *, location: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{location} must be a non-empty string.")
+
+
+def _validate_entity_parameter_reference(
+    entity_id: str,
+    spec: dict[str, Any],
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+) -> None:
+    record = _find_authored_entity_record(project, entity_id)
+    if record is None:
+        raise ValueError(f"{source_name} parameter '{parameter_name}' references unknown entity '{entity_id}'.")
+    expected_scope = spec.get("scope")
+    if isinstance(expected_scope, str) and record.get("scope") != expected_scope:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' must reference a {expected_scope} entity."
+        )
+    expected_space = spec.get("space")
+    if isinstance(expected_space, str) and record.get("space") != expected_space:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' must reference a {expected_space}-space entity."
+        )
+    area_parameter = spec.get("area_parameter")
+    if not isinstance(area_parameter, str):
+        return
+    raw_area_id = all_parameters.get(area_parameter)
+    if _parameter_value_is_blank(raw_area_id):
+        return
+    if not isinstance(raw_area_id, str):
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
+            "but that parameter is not a string area id."
+        )
+    if record.get("scope") != "area":
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
+            f"but entity '{entity_id}' is not an area entity."
+        )
+    if record.get("area_id") != raw_area_id:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' must reference an entity in area '{raw_area_id}'."
+        )
+
+
+def _validate_entity_command_parameter_reference(
+    command_id: str,
+    spec: dict[str, Any],
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+) -> None:
+    entity_parameter = spec.get("entity_parameter")
+    if not isinstance(entity_parameter, str):
+        return
+    raw_entity_id = all_parameters.get(entity_parameter)
+    if _parameter_value_is_blank(raw_entity_id):
+        return
+    if not isinstance(raw_entity_id, str):
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' uses entity_parameter '{entity_parameter}', "
+            "but that parameter is not a string entity id."
+        )
+    record = _find_authored_entity_record(project, raw_entity_id)
+    if record is None:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references command '{command_id}' on unknown entity '{raw_entity_id}'."
+        )
+    command_ids = _authored_entity_command_ids(project, record)
+    if command_id not in command_ids:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references unknown entity command '{command_id}' on entity '{raw_entity_id}'."
+        )
+
+
+def _find_authored_entity_record(project: ProjectContext, entity_id: str) -> dict[str, Any] | None:
+    target = str(entity_id).strip()
+    if not target:
+        return None
+
+    for raw_entity in project.global_entities:
+        if not isinstance(raw_entity, dict):
+            continue
+        if str(raw_entity.get("id", "")).strip() == target:
+            return {
+                "raw": raw_entity,
+                "scope": "global",
+                "space": _resolve_authored_entity_space(raw_entity, project),
+            }
+
+    for area_path in project.list_area_files():
+        try:
+            raw_area = load_json_data(area_path)
+        except Exception:
+            continue
+        if not isinstance(raw_area, dict):
+            continue
+        raw_entities = raw_area.get("entities", [])
+        if not isinstance(raw_entities, list):
+            continue
+        for raw_entity in raw_entities:
+            if not isinstance(raw_entity, dict):
+                continue
+            if str(raw_entity.get("id", "")).strip() == target:
+                return {
+                    "raw": raw_entity,
+                    "scope": "area",
+                    "space": _resolve_authored_entity_space(raw_entity, project),
+                    "area_id": project.area_id(area_path),
+                }
+    return None
+
+
+def _resolve_authored_entity_space(raw_entity: dict[str, Any], project: ProjectContext) -> str:
+    raw_space = raw_entity.get("space")
+    if isinstance(raw_space, str) and raw_space.strip():
+        return raw_space.strip().lower()
+    template_id = _normalize_optional_id(raw_entity.get("template"))
+    if template_id is not None:
+        try:
+            template_data = _load_entity_template(template_id, project=project)
+        except Exception:
+            return "world"
+        raw_template_space = template_data.get("space")
+        if isinstance(raw_template_space, str) and raw_template_space.strip():
+            return raw_template_space.strip().lower()
+    return "world"
+
+
+def _authored_entity_command_ids(project: ProjectContext, record: dict[str, Any]) -> set[str]:
+    raw = record.get("raw")
+    if not isinstance(raw, dict):
+        return set()
+    command_ids: set[str] = set()
+    template_id = _normalize_optional_id(raw.get("template"))
+    if template_id is not None:
+        try:
+            template_data = _load_entity_template(template_id, project=project)
+        except Exception:
+            template_data = {}
+        raw_template_commands = template_data.get("entity_commands")
+        if isinstance(raw_template_commands, dict):
+            command_ids.update(str(command_id) for command_id in raw_template_commands.keys())
+    raw_commands = raw.get("entity_commands")
+    if isinstance(raw_commands, dict):
+        command_ids.update(str(command_id) for command_id in raw_commands.keys())
+    return command_ids
+
+
+def _parameter_value_is_blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _load_entity_template(template_id: str, *, project: ProjectContext) -> dict[str, Any]:
@@ -672,16 +1317,19 @@ def extract_template_parameter_names(
 def _collect_parameter_tokens(value: Any, found: set[str]) -> None:
     """Recursively find ``$name`` / ``${name}`` tokens in a data tree."""
     if isinstance(value, dict):
-        for item in value.values():
+        for key, item in value.items():
+            if key == "parameter_specs":
+                continue
             _collect_parameter_tokens(item, found)
     elif isinstance(value, list):
         for item in value:
             _collect_parameter_tokens(item, found)
     elif isinstance(value, str):
-        if value.startswith("${") and value.endswith("}"):
-            found.add(value[2:-1])
-        elif value.startswith("$"):
-            found.add(value[1:])
+        match = _PARAMETER_TOKEN_RE.fullmatch(value)
+        if match:
+            name = match.group("braced") or match.group("plain")
+            if name and name not in _TEMPLATE_PARAMETER_BUILTINS:
+                found.add(name)
 
 
 def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:
@@ -777,6 +1425,7 @@ def validate_project_entity_templates(project: ProjectContext) -> None:
             _validate_entity_template_raw(
                 raw,
                 source_name=str(template_path),
+                project=project,
             )
         except JsonDataDecodeError as exc:
             issues.append(
@@ -799,7 +1448,12 @@ def log_entity_template_validation_error(error: EntityTemplateValidationError) -
     )
 
 
-def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: str) -> None:
+def _validate_entity_template_raw(
+    raw_template: dict[str, Any],
+    *,
+    source_name: str,
+    project: ProjectContext,
+) -> None:
     """Reject removed entity-template fields and command shapes before instantiation."""
     if "sprite" in raw_template:
         raise ValueError(
@@ -813,6 +1467,12 @@ def _validate_entity_template_raw(raw_template: dict[str, Any], *, source_name: 
         raise ValueError(
             f"{source_name} must not use 'events'; define named commands under 'entity_commands' instead."
         )
+
+    _validate_template_parameter_contract(
+        raw_template,
+        source_name=source_name,
+        project=project,
+    )
 
     raw_entity_commands = raw_template.get("entity_commands", {})
     if raw_entity_commands is None:

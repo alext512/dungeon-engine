@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QTabBar
@@ -27,6 +27,8 @@ from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.project_manifest_editor_widget import ProjectManifestEditorWidget
 from area_editor.widgets.shared_variables_editor_widget import SharedVariablesEditorWidget
+from area_editor.widgets.entity_instance_json_panel import EntityReferencePickerRequest
+from area_editor.widgets.tile_canvas import BrushType
 from main_window_test_support import (
     create_basic_project,
     create_dialogue_project,
@@ -42,6 +44,15 @@ from main_window_test_support import (
     panel_file_entries,
     panel_folder_entries,
 )
+
+
+def _find_menu_action(menu, text: str):
+    for action in menu.actions():
+        if action.isSeparator():
+            continue
+        if action.text() == text:
+            return action
+    raise AssertionError(f"Menu action '{text}' was not found.")
 
 
 class TestMainWindowTilesetEditing(unittest.TestCase):
@@ -105,20 +116,203 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             strip = window.findChild(CanvasToolStrip, "CanvasToolStrip")
             self.assertIsNotNone(strip)
             assert strip is not None
-            action_labels = [
-                action.text().replace("&", "")
-                for action in (
-                    window._paint_tiles_action,
-                    window._select_action,
-                    window._tile_select_action,
-                    window._cell_flags_action,
-                )
-            ]
 
             self.assertEqual(
-                action_labels,
-                ["Paint", "Entity Select", "Tile Select", "Cell Flags"],
+                strip.section_labels(),
+                ["Target", "Tool"],
             )
+            self.assertEqual(
+                strip.button_texts(),
+                ["Tiles", "Entities", "Flags", "Select", "Pencil", "Eraser"],
+            )
+            self.assertTrue(window._select_action.isChecked())
+            self.assertTrue(window._target_entities_action.isChecked())
+            self.assertTrue(window._tool_select_mode_action.isChecked())
+            self.assertTrue(window._active_canvas().select_mode)
+            self.assertFalse(window._paint_tiles_action.isChecked())
+
+    def test_canvas_tool_strip_target_and_tool_actions_drive_editor_modes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._target_tiles_action.setChecked(True)
+            window._tool_select_mode_action.setChecked(True)
+            QApplication.processEvents()
+            self.assertTrue(window._tile_select_action.isChecked())
+            self.assertTrue(canvas.tile_select_mode)
+
+            window._tool_pencil_action.setChecked(True)
+            QApplication.processEvents()
+            self.assertTrue(window._paint_tiles_action.isChecked())
+            self.assertTrue(canvas.tile_paint_mode)
+            self.assertEqual(canvas.active_brush_type, BrushType.TILE)
+
+            window._target_flags_action.setChecked(True)
+            window._tool_eraser_action.setChecked(True)
+            QApplication.processEvents()
+            self.assertTrue(window._cell_flags_action.isChecked())
+            self.assertTrue(canvas.cell_flags_edit_mode)
+            self.assertTrue(canvas.cell_flag_erase_mode)
+            self.assertFalse(window._tool_select_mode_action.isEnabled())
+
+            window._on_template_brush_selected("entity_templates/npc")
+            window._tool_eraser_action.setChecked(True)
+            QApplication.processEvents()
+            self.assertTrue(window._paint_tiles_action.isChecked())
+            self.assertTrue(canvas.tile_paint_mode)
+            self.assertEqual(canvas.active_brush_type, BrushType.ENTITY)
+            self.assertTrue(canvas.entity_brush_erase_mode)
+
+    def test_entity_reference_picker_entries_include_globals_and_template_space(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            project.mkdir()
+            areas.mkdir()
+            templates.mkdir()
+
+            (project / "project.json").write_text(
+                json.dumps(
+                    {
+                        "startup_area": "areas/demo",
+                        "entity_template_paths": ["entity_templates/"],
+                        "global_entities": [
+                            {
+                                "id": "hud_global",
+                                "template": "entity_templates/display_sprite",
+                                "pixel_x": 7,
+                                "pixel_y": 9,
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            (templates / "display_sprite.json").write_text(
+                json.dumps({"space": "screen"}, indent=2),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                json.dumps(
+                    {
+                        "tile_size": 16,
+                        "tilesets": [],
+                        "tile_layers": [
+                            {
+                                "name": "ground",
+                                "render_order": 0,
+                                "y_sort": False,
+                                "stack_order": 0,
+                                "grid": [[0]],
+                            }
+                        ],
+                        "entities": [
+                            {
+                                "id": "switch_a",
+                                "grid_x": 0,
+                                "grid_y": 0,
+                            },
+                            {
+                                "id": "hud_local",
+                                "template": "entity_templates/display_sprite",
+                                "pixel_x": 3,
+                                "pixel_y": 5,
+                            },
+                        ],
+                        "variables": {},
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            (areas / "destination.json").write_text(
+                json.dumps(
+                    {
+                        "tile_size": 16,
+                        "tilesets": [],
+                        "tile_layers": [
+                            {
+                                "name": "ground",
+                                "render_order": 0,
+                                "y_sort": False,
+                                "stack_order": 0,
+                                "grid": [[0]],
+                            }
+                        ],
+                        "entities": [
+                            {
+                                "id": "arrival_marker",
+                                "grid_x": 0,
+                                "grid_y": 0,
+                            }
+                        ],
+                        "variables": {},
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project / "project.json")
+
+            by_id = {
+                entry.entity_id: entry
+                for entry in window._build_entity_reference_picker_entries()
+            }
+            self.assertEqual(by_id["switch_a"].scope, "area")
+            self.assertEqual(by_id["switch_a"].space, "world")
+            self.assertEqual(by_id["switch_a"].area_key, "areas/demo")
+            self.assertEqual(by_id["switch_a"].position_text, "world (0, 0)")
+            self.assertEqual(by_id["hud_local"].scope, "area")
+            self.assertEqual(by_id["hud_local"].space, "screen")
+            self.assertEqual(by_id["hud_local"].position_text, "screen (3, 5)")
+            self.assertEqual(by_id["hud_global"].scope, "global")
+            self.assertEqual(by_id["hud_global"].space, "screen")
+
+            filtered = window._entity_reference_picker_entries_for_request(
+                EntityReferencePickerRequest(
+                    parameter_name="target_entity_id",
+                    current_value="",
+                    parameter_spec={
+                        "type": "entity_id",
+                        "scope": "area",
+                        "space": "screen",
+                    },
+                    current_area_id="areas/demo",
+                    entity_id="caller",
+                    entity_template_id="entity_templates/button_target",
+                )
+            )
+            self.assertEqual([entry.entity_id for entry in filtered], ["hud_local"])
+
+            filtered = window._entity_reference_picker_entries_for_request(
+                EntityReferencePickerRequest(
+                    parameter_name="destination_entity_id",
+                    current_value="",
+                    parameter_spec={
+                        "type": "entity_id",
+                        "scope": "area",
+                        "space": "world",
+                        "area_parameter": "target_area",
+                    },
+                    current_area_id="areas/demo",
+                    entity_id="caller",
+                    entity_template_id="entity_templates/area_transition",
+                    parameter_values={"target_area": "areas/destination"},
+                )
+            )
+            self.assertEqual([entry.entity_id for entry in filtered], ["arrival_marker"])
 
     def test_area_start_panel_apply_updates_area_enter_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -530,6 +724,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.addCleanup(window.close)
             window.open_project(project_file)
 
+            self.assertTrue(window._entity_instance_panel.isHidden())
             self.assertEqual(
                 window.dockWidgetArea(window._entity_instance_panel),
                 Qt.DockWidgetArea.LeftDockWidgetArea,
@@ -540,10 +735,14 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 Qt.DockWidgetArea.LeftDockWidgetArea,
             )
             self.assertEqual(window._entity_instance_panel.windowTitle(), "Entity Instance")
-            self.assertEqual(window._entity_instance_panel.tab_count, 2)
+            self.assertEqual(window._entity_instance_panel.tab_count, 3)
             self.assertEqual(
                 window._entity_instance_panel.tab_titles(),
-                ["Entity Instance JSON", "Entity Instance Editor"],
+                ["Parameters", "Entity Instance Editor", "Entity Instance JSON"],
+            )
+            self.assertEqual(
+                window._entity_instance_panel.current_tab_title(),
+                "Entity Instance Editor",
             )
             self.assertEqual(
                 window._browser_workspace.row_titles(1),
@@ -556,6 +755,327 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual(window._browser_workspace.active_key(), "areas")
             self.assertEqual(window._browser_workspace.row_visual_current_index(1), 0)
             self.assertEqual(window._browser_workspace.row_visual_current_index(2), -1)
+
+    def test_entity_instance_dialog_opens_from_entity_edit_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._on_entity_edit_requested("npc_2")
+            QApplication.processEvents()
+
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+            self.assertTrue(dialog.isVisible())
+            self.assertEqual(dialog.target_area_id, "areas/demo")
+            self.assertEqual(dialog.target_entity_id, "npc_2")
+            self.assertEqual(dialog.editor_widget.entity_id, "npc_2")
+            self.assertEqual(
+                dialog.editor_widget.current_tab_title(),
+                "Entity Instance Editor",
+            )
+
+    def test_entity_instance_dialog_stays_pinned_when_selection_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._on_entity_edit_requested("npc_2")
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+
+            fields = dialog.editor_widget._fields_editor
+            fields._id_edit.setText("npc_dirty")
+            QApplication.processEvents()
+            self.assertTrue(dialog.editor_widget.fields_dirty)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            canvas.set_selected_entity("npc_1")
+            QApplication.processEvents()
+
+            self.assertEqual(window._active_instance_entity_id, "npc_1")
+            self.assertEqual(dialog.target_entity_id, "npc_2")
+            self.assertEqual(dialog.editor_widget.entity_id, "npc_2")
+            self.assertEqual(fields._id_edit.text(), "npc_dirty")
+            window._force_close_entity_instance_dialog()
+
+    def test_entity_instance_dialog_dirty_retarget_can_cancel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._on_entity_edit_requested("npc_2")
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+
+            fields = dialog.editor_widget._fields_editor
+            fields._id_edit.setText("npc_dirty")
+            QApplication.processEvents()
+
+            with patch.object(
+                QMessageBox,
+                "question",
+                return_value=QMessageBox.StandardButton.Cancel,
+            ):
+                window._on_entity_edit_requested("npc_1")
+
+            self.assertEqual(dialog.target_entity_id, "npc_2")
+            self.assertEqual(dialog.editor_widget.entity_id, "npc_2")
+            self.assertTrue(dialog.editor_widget.fields_dirty)
+            window._force_close_entity_instance_dialog()
+
+    def test_entity_instance_dialog_applies_pinned_entity_after_selection_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._on_entity_edit_requested("npc_2")
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+
+            fields = dialog.editor_widget._fields_editor
+            fields._x_spin.setValue(1)
+            QApplication.processEvents()
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            canvas.set_selected_entity("npc_1")
+            QApplication.processEvents()
+
+            window._on_apply_entity_instance_dialog_fields()
+
+            doc = window._area_docs["areas/demo"]
+            npc_1 = next(entity for entity in doc.entities if entity.id == "npc_1")
+            npc_2 = next(entity for entity in doc.entities if entity.id == "npc_2")
+            self.assertEqual(npc_1.x, 0)
+            self.assertEqual(npc_2.x, 1)
+            self.assertEqual(window._active_instance_entity_id, "npc_1")
+            self.assertEqual(dialog.target_entity_id, "npc_2")
+            self.assertFalse(dialog.editor_widget.fields_dirty)
+            window._tab_widget.set_dirty("areas/demo", False)
+            window._force_close_entity_instance_dialog()
+
+    def test_entity_context_menu_builds_single_entity_actions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            menu = window._build_area_entity_context_menu("areas/demo", ("npc_1",))
+
+            self.assertIsNotNone(menu)
+            assert menu is not None
+            self.assertEqual(
+                [action.text() for action in menu.actions() if not action.isSeparator()],
+                ["Parameters...", "Edit Instance...", "Edit JSON...", "Copy ID", "Delete"],
+            )
+            self.assertFalse(_find_menu_action(menu, "Parameters...").isEnabled())
+
+    def test_entity_context_menu_builds_stacked_entity_submenus(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            menu = window._build_area_entity_context_menu(
+                "areas/demo",
+                ("npc_2", "npc_1"),
+            )
+
+            self.assertIsNotNone(menu)
+            assert menu is not None
+            submenu_actions = [action for action in menu.actions() if action.menu() is not None]
+            self.assertEqual([action.text() for action in submenu_actions], ["npc_2", "npc_1"])
+            first_submenu = submenu_actions[0].menu()
+            self.assertIsNotNone(first_submenu)
+            assert first_submenu is not None
+            self.assertEqual(
+                [
+                    action.text()
+                    for action in first_submenu.actions()
+                    if not action.isSeparator()
+                ],
+                ["Parameters...", "Edit Instance...", "Edit JSON...", "Copy ID", "Delete"],
+            )
+            self.assertFalse(_find_menu_action(first_submenu, "Parameters...").isEnabled())
+
+    def test_entity_context_menu_parameters_action_opens_parameters_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_fields_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            menu = window._build_area_entity_context_menu("areas/demo", ("house_door",))
+            assert menu is not None
+            parameters_action = _find_menu_action(menu, "Parameters...")
+            self.assertTrue(parameters_action.isEnabled())
+
+            parameters_action.trigger()
+            QApplication.processEvents()
+
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+            self.assertEqual(dialog.target_entity_id, "house_door")
+            self.assertEqual(dialog.editor_widget.current_tab_title(), "Parameters")
+            window._force_close_entity_instance_dialog()
+
+    def test_entity_context_menu_edit_instance_action_opens_advanced_editor_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            menu = window._build_area_entity_context_menu("areas/demo", ("npc_2",))
+            assert menu is not None
+            _find_menu_action(menu, "Edit Instance...").trigger()
+            QApplication.processEvents()
+
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+            self.assertEqual(dialog.target_entity_id, "npc_2")
+            self.assertEqual(
+                dialog.editor_widget.current_tab_title(),
+                "Entity Instance Editor",
+            )
+            window._force_close_entity_instance_dialog()
+
+    def test_entity_context_menu_copy_id_action_updates_clipboard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            QApplication.clipboard().setText("")
+            menu = window._build_area_entity_context_menu("areas/demo", ("npc_1",))
+            assert menu is not None
+
+            _find_menu_action(menu, "Copy ID").trigger()
+            QApplication.processEvents()
+
+            self.assertEqual(QApplication.clipboard().text(), "npc_1")
+
+    def test_entity_context_menu_delete_action_removes_entity_and_closes_dialog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._on_entity_edit_requested("npc_1")
+            self.assertIsNotNone(window._entity_instance_dialog)
+
+            menu = window._build_area_entity_context_menu("areas/demo", ("npc_1",))
+            assert menu is not None
+            _find_menu_action(menu, "Delete").trigger()
+            QApplication.processEvents()
+
+            self.assertEqual(
+                [entity.id for entity in window._area_docs["areas/demo"].entities],
+                ["npc_2"],
+            )
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            self.assertIsNone(window._entity_instance_dialog)
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_context_menu_edit_json_action_opens_dialog_on_json_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            menu = window._build_area_entity_context_menu("areas/demo", ("npc_2",))
+            assert menu is not None
+            _find_menu_action(menu, "Edit JSON...").trigger()
+            QApplication.processEvents()
+
+            dialog = window._entity_instance_dialog
+            self.assertIsNotNone(dialog)
+            assert dialog is not None
+            self.assertEqual(dialog.target_entity_id, "npc_2")
+            self.assertEqual(
+                dialog.editor_widget.current_tab_title(),
+                "Entity Instance JSON",
+            )
+            window._force_close_entity_instance_dialog()
+
+    def test_entity_stack_picker_selects_requested_entity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._show_entity_stack_picker(
+                "areas/demo",
+                ("npc_2", "npc_1"),
+                "select",
+                QPoint(24, 30),
+            )
+
+            popup = window._entity_stack_picker
+            self.assertIsNotNone(popup)
+            assert popup is not None
+            self.assertEqual(popup.entity_ids(), ["npc_2", "npc_1"])
+
+            self.assertTrue(popup.choose_entity("npc_1"))
+            QApplication.processEvents()
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            self.assertEqual(canvas.selected_entity_id, "npc_1")
+            self.assertEqual(window._active_instance_entity_id, "npc_1")
+
+    def test_entity_stack_picker_delete_removes_requested_entity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._show_entity_stack_picker(
+                "areas/demo",
+                ("npc_2", "npc_1"),
+                "delete",
+                QPoint(24, 30),
+            )
+
+            popup = window._entity_stack_picker
+            self.assertIsNotNone(popup)
+            assert popup is not None
+
+            self.assertTrue(popup.choose_entity("npc_1"))
+            QApplication.processEvents()
+
+            self.assertEqual(
+                [entity.id for entity in window._area_docs["areas/demo"].entities],
+                ["npc_2"],
+            )
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            window._tab_widget.set_dirty("areas/demo", False)
 
     def test_browser_workspace_tabs_remain_clickable_when_switching_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -660,10 +1180,11 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             canvas.select_entities_at_cell(0, 0)
             QApplication.processEvents()
 
+            parameters = window._entity_instance_panel._parameters_editor
             fields = window._entity_instance_panel._fields_editor
             self.assertEqual(fields._id_edit.text(), "house_door")
             self.assertEqual(
-                fields._parameter_edits["target_area"].text(),
+                parameters._parameter_edits["target_area"].text(),
                 "areas/village_house",
             )
 
@@ -695,7 +1216,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 '  }\n'
                 ']'
             )
-            fields._parameter_edits["target_area"].setText("areas/updated_house")
+            parameters._parameter_edits["target_area"].setText("areas/updated_house")
             QApplication.processEvents()
 
             self.assertTrue(window._entity_instance_panel.fields_dirty)
@@ -2376,4 +2897,32 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             window._on_clear_selection()
             self.assertIsNone(canvas.selected_entity_id)
             self.assertEqual(window._status_gid.text(), "Select: none")
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_drag_commit_marks_area_dirty_and_refreshes_selection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+
+            window._select_action.setChecked(True)
+            self.assertTrue(canvas.select_entities_at_cell(0, 0))
+            self.assertEqual(canvas.selected_entity_id, "npc_2")
+
+            doc = window._area_docs["areas/demo"]
+            dragged = next(entity for entity in doc.entities if entity.id == "npc_2")
+            dragged.grid_x = 1
+            dragged.grid_y = 1
+            window._tab_widget.set_dirty("areas/demo", False)
+
+            canvas.entity_drag_committed.emit("npc_2", "world", 1, 1)
+
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            self.assertEqual(window._active_instance_entity_id, "npc_2")
+            self.assertIn("Moved npc_2 to grid (1, 1).", window.statusBar().currentMessage())
             window._tab_widget.set_dirty("areas/demo", False)

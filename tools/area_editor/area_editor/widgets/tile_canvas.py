@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap, QTransform, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -59,6 +59,9 @@ _ENTITY_HIDDEN_BORDER = QColor(220, 220, 220, 180)
 _ENTITY_GHOST_FILL = QColor(0, 200, 220, 100)
 _ENTITY_GHOST_BORDER = QColor(0, 200, 220, 180)
 _ENTITY_SELECT_BORDER = QColor(255, 220, 40, 230)
+_ENTITY_COUNT_BADGE_FILL = QColor(20, 20, 20, 190)
+_ENTITY_COUNT_BADGE_BORDER = QColor(250, 250, 250, 190)
+_ENTITY_COUNT_BADGE_TEXT = QColor(255, 255, 255)
 _SCREEN_PANE_FILL = QColor(80, 60, 90, 40)
 _SCREEN_PANE_BORDER = QColor(230, 120, 220, 210)
 _SCREEN_PANE_LABEL = QColor(240, 220, 240)
@@ -69,6 +72,9 @@ _CELL_FLAG_BLOCKED_FILL = QColor(220, 40, 40, 90)
 _CELL_FLAG_BLOCKED_BORDER = QColor(220, 40, 40, 180)
 _TILE_SELECTION_FILL = QColor(80, 160, 255, 45)
 _TILE_SELECTION_BORDER = QColor(80, 160, 255, 220)
+_ENTITY_DRAG_THRESHOLD_PIXELS = 4.0
+_ENTITY_STACK_PICKER_HOVER_DELAY_MS = 500
+_ENTITY_STACK_PICKER_HOVER_ENABLED = False
 
 # Scene background
 _BG_COLOR = QColor(30, 30, 30)
@@ -80,6 +86,20 @@ class _CanvasRenderEntry:
     sort_key: tuple
     item: QGraphicsItem
     entity_id: str | None = None
+
+
+@dataclass(slots=True)
+class _EntityDragState:
+    entity_id: str
+    space: str
+    press_view_pos: QPointF
+    press_scene_pos: QPointF
+    start_grid: tuple[int, int]
+    start_pixel: tuple[int, int]
+    current_grid: tuple[int, int]
+    current_pixel: tuple[int, int]
+    deferred_selection: bool = False
+    active: bool = False
 
 
 class BrushType(str, Enum):
@@ -101,7 +121,12 @@ class TileCanvas(QGraphicsView):
     entity_paint_requested = Signal(str, int, int)
     entity_screen_paint_requested = Signal(str, int, int)
     entity_delete_requested = Signal(int, int)
+    entity_delete_by_id_requested = Signal(str)
     entity_selection_changed = Signal(str, int, int)  # entity_id, position, total
+    entity_edit_requested = Signal(str)
+    entity_context_menu_requested = Signal(object, object)  # entity_ids, global_pos
+    entity_stack_picker_requested = Signal(object, object, str)  # entity_ids, global_pos, purpose
+    entity_drag_committed = Signal(str, str, int, int)  # entity_id, space, x, y
     tile_selection_changed = Signal(bool)
 
     def __init__(self, parent=None) -> None:
@@ -141,6 +166,7 @@ class TileCanvas(QGraphicsView):
         self._grid_visible: bool = True
         self._cell_flags_edit_mode: bool = False
         self._cell_flag_brush: CellFlagBrush = CellFlagBrush("blocked", True)
+        self._cell_flag_erase_mode: bool = False
         self._tile_paint_mode: bool = False
         self._select_mode: bool = False
         self._tile_select_mode: bool = False
@@ -153,6 +179,7 @@ class TileCanvas(QGraphicsView):
         self._entity_brush_template: str | None = None
         self._entity_brush_supported: bool = False
         self._entity_brush_space: str = "world"
+        self._entity_brush_erase_mode: bool = False
         self._entity_ghost_pixmap: QPixmap | None = None
         self._selected_entity_id: str | None = None
         self._selected_entity_cycle_position: int = 0
@@ -163,7 +190,7 @@ class TileCanvas(QGraphicsView):
         self._last_painted: tuple[int, int, str, str] | None = None
         self._last_tile_painted: tuple[int, int, int] | None = None
         self._last_entity_painted: tuple[str, int, int] | None = None
-        self._last_entity_deleted: tuple[int, int] | None = None
+        self._last_entity_deleted: object | None = None
         self._entity_item_by_id: dict[str, QGraphicsItem] = {}
         self._tile_sort_keys: list[tuple] = []
         self._selection_item: QGraphicsRectItem | None = None
@@ -174,6 +201,15 @@ class TileCanvas(QGraphicsView):
         self._tile_selection_anchor: tuple[int, int] | None = None
         self._tile_selection_bounds: tuple[int, int, int, int] | None = None
         self._hover_tile_cell: tuple[int, int] | None = None
+        self._entity_drag_state: _EntityDragState | None = None
+        self._entity_stack_hover_timer = QTimer(self)
+        self._entity_stack_hover_timer.setSingleShot(True)
+        self._entity_stack_hover_timer.timeout.connect(
+            self._emit_entity_stack_hover_request
+        )
+        self._entity_stack_hover_ids: tuple[str, ...] = ()
+        self._entity_stack_hover_global_pos: QPoint | None = None
+        self._entity_stack_hover_emitted_ids: tuple[str, ...] = ()
 
     # ------------------------------------------------------------------
     # Public API
@@ -213,6 +249,8 @@ class TileCanvas(QGraphicsView):
         self._selected_gid_block = None
         self._last_entity_painted = None
         self._last_entity_deleted = None
+        self._entity_drag_state = None
+        self._cancel_entity_stack_hover(reset_emitted=True)
         self._tile_size = area.tile_size or 16
         if display_size is not None:
             self._display_width = max(1, int(display_size[0]))
@@ -244,6 +282,8 @@ class TileCanvas(QGraphicsView):
         self._tile_selection_bounds = None
         self._hover_tile_cell = None
         self._selected_gid_block = None
+        self._entity_drag_state = None
+        self._cancel_entity_stack_hover(reset_emitted=True)
 
     def refresh_scene_contents(self) -> None:
         """Redraw the current area without reinitialising editor state."""
@@ -320,6 +360,14 @@ class TileCanvas(QGraphicsView):
         self._cell_flag_brush = brush
         self._last_painted = None
 
+    @property
+    def cell_flag_erase_mode(self) -> bool:
+        return self._cell_flag_erase_mode
+
+    def set_cell_flag_erase_mode(self, enabled: bool) -> None:
+        self._cell_flag_erase_mode = enabled
+        self._last_painted = None
+
     # -- Tile paint mode -------------------------------------------------
 
     def set_tile_paint_mode(self, enabled: bool) -> None:
@@ -341,6 +389,8 @@ class TileCanvas(QGraphicsView):
         return self._tile_paint_mode
 
     def set_select_mode(self, enabled: bool) -> None:
+        if not enabled:
+            self._entity_drag_state = None
         self._select_mode = enabled
         self._apply_cursor()
         self._update_drag_mode()
@@ -540,6 +590,10 @@ class TileCanvas(QGraphicsView):
         return self._entity_brush_supported
 
     @property
+    def entity_brush_erase_mode(self) -> bool:
+        return self._entity_brush_erase_mode
+
+    @property
     def selected_entity_id(self) -> str | None:
         return self._selected_entity_id
 
@@ -570,6 +624,11 @@ class TileCanvas(QGraphicsView):
         self._entity_ghost_pixmap = ghost_pixmap
         self._entity_brush_supported = supported
         self._entity_brush_space = target_space
+        self._update_ghost_pixmap()
+
+    def set_entity_brush_erase_mode(self, enabled: bool) -> None:
+        self._entity_brush_erase_mode = enabled
+        self._last_entity_deleted = None
         self._update_ghost_pixmap()
 
     def clear_entity_brush(self) -> None:
@@ -694,6 +753,7 @@ class TileCanvas(QGraphicsView):
             self.zoom_changed.emit(self._zoom)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._cancel_entity_stack_hover(reset_emitted=False)
         if event.button() == Qt.MouseButton.MiddleButton:
             self._middle_pan_pos = event.position()
             self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -708,8 +768,27 @@ class TileCanvas(QGraphicsView):
                 return
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        self._cancel_entity_stack_hover(reset_emitted=False)
+        if self._select_mode and event.button() == Qt.MouseButton.LeftButton:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            ids = self._entity_ids_at_scene_pos(scene_pos)
+            if ids:
+                entity_id = self._selected_entity_id if self._selected_entity_id in ids else ids[0]
+                index = ids.index(entity_id)
+                self.set_selected_entity(
+                    entity_id,
+                    cycle_position=index + 1,
+                    cycle_total=len(ids),
+                )
+                self.entity_edit_requested.emit(entity_id)
+                event.accept()
+                return
+        super().mouseDoubleClickEvent(event)
+
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         scene_pos = self.mapToScene(event.position().toPoint())
+        buttons = event.buttons()
         local_screen = self._screen_pixel_from_scene_pos(scene_pos.x(), scene_pos.y())
         if local_screen is not None:
             self.screen_pixel_hovered.emit(*local_screen)
@@ -725,6 +804,12 @@ class TileCanvas(QGraphicsView):
                 self._hover_tile_cell = (col, row)
             else:
                 self._hover_tile_cell = None
+
+        self._update_entity_stack_hover(
+            scene_pos,
+            event.globalPosition().toPoint(),
+            buttons=buttons,
+        )
 
         if self._middle_pan_pos is not None:
             delta = event.position() - self._middle_pan_pos
@@ -756,7 +841,6 @@ class TileCanvas(QGraphicsView):
                 else:
                     self._hide_ghost()
 
-        buttons = event.buttons()
         if buttons & Qt.MouseButton.LeftButton:
             if self._handle_edit_pointer_event(event, Qt.MouseButton.LeftButton):
                 event.accept()
@@ -776,12 +860,21 @@ class TileCanvas(QGraphicsView):
         self.cell_hovered.emit(-1, -1)
         self.screen_pixel_hovered.emit(-1, -1)
         self._hover_tile_cell = None
+        self._cancel_entity_stack_hover(reset_emitted=True)
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.MiddleButton and self._middle_pan_pos is not None:
             self._middle_pan_pos = None
             self._apply_cursor()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self._finish_entity_drag(event):
+            self._last_painted = None
+            self._last_tile_painted = None
+            self._last_entity_painted = None
+            self._last_entity_deleted = None
+            self._tile_selection_anchor = None
             event.accept()
             return
         self._last_painted = None
@@ -840,9 +933,11 @@ class TileCanvas(QGraphicsView):
     ) -> list[_CanvasRenderEntry]:
         items: list[_CanvasRenderEntry] = []
         ts = self._tile_size
+        overlap_counts = self._entity_marker_overlap_counts(area)
 
         for entity in area.entities:
-            if self._effective_space(entity) == "screen":
+            overlap_key = self._entity_marker_overlap_key(entity)
+            if overlap_key[0] == "screen":
                 px = self._screen_pane_origin[0] + (entity.pixel_x or 0)
                 py = self._screen_pane_origin[1] + (entity.pixel_y or 0)
                 fill = _ENTITY_SCREEN_FILL
@@ -871,6 +966,10 @@ class TileCanvas(QGraphicsView):
             marker.setPen(marker_pen)
             marker.setToolTip(tooltip)
             group.addToGroup(marker)
+
+            overlap_count = overlap_counts.get(overlap_key, 0)
+            if overlap_count > 1:
+                self._add_entity_overlap_badge(group, px, py, overlap_count)
 
             # Try to render the actual sprite from the template visual
             sprite_rendered = False
@@ -910,6 +1009,50 @@ class TileCanvas(QGraphicsView):
             )
 
         return items
+
+    def _entity_marker_overlap_key(self, entity: EntityDocument) -> tuple[str, int, int]:
+        if self._effective_space(entity) == "screen":
+            return ("screen", int(entity.pixel_x or 0), int(entity.pixel_y or 0))
+        return ("world", int(entity.x), int(entity.y))
+
+    def _entity_marker_overlap_counts(
+        self,
+        area: AreaDocument,
+    ) -> dict[tuple[str, int, int], int]:
+        counts: dict[tuple[str, int, int], int] = {}
+        for entity in area.entities:
+            key = self._entity_marker_overlap_key(entity)
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def _add_entity_overlap_badge(
+        self,
+        group: QGraphicsItemGroup,
+        px: float,
+        py: float,
+        count: int,
+    ) -> None:
+        label = QGraphicsSimpleTextItem(str(count))
+        font = label.font()
+        font.setBold(True)
+        font.setPointSizeF(7.0)
+        label.setFont(font)
+        label.setBrush(_ENTITY_COUNT_BADGE_TEXT)
+        text_rect = label.boundingRect()
+
+        badge_width = max(9.0, text_rect.width() + 4.0)
+        badge_height = max(9.0, text_rect.height())
+        badge = QGraphicsRectItem(0, 0, badge_width, badge_height)
+        badge.setPos(px, py)
+        badge.setBrush(_ENTITY_COUNT_BADGE_FILL)
+        badge.setPen(QPen(_ENTITY_COUNT_BADGE_BORDER, 1))
+        badge.setZValue(50.0)
+        group.addToGroup(badge)
+
+        label.setPos(px + 2.0, py)
+        label.setToolTip(f"{count} entities")
+        label.setZValue(51.0)
+        group.addToGroup(label)
 
     def _build_screen_pane_group(self) -> QGraphicsItemGroup:
         group = QGraphicsItemGroup()
@@ -1180,7 +1323,9 @@ class TileCanvas(QGraphicsView):
             row = int(scene_pos.y() / self._tile_size)
             if not (0 <= col < self._area.width and 0 <= row < self._area.height):
                 return False
-            clear = button == Qt.MouseButton.RightButton
+            clear = button == Qt.MouseButton.RightButton or (
+                button == Qt.MouseButton.LeftButton and self._cell_flag_erase_mode
+            )
             marker = (col, row, self._cell_flag_brush.key, "clear" if clear else "paint")
             if self._last_painted == marker:
                 return True
@@ -1190,18 +1335,66 @@ class TileCanvas(QGraphicsView):
 
         # --- Entity selection ---
         if self._select_mode:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            if button == Qt.MouseButton.RightButton:
+                self._cancel_entity_stack_hover(reset_emitted=False)
+                if event.type() != QMouseEvent.Type.MouseButtonPress:
+                    return False
+                entity_ids = self._entity_ids_at_scene_pos(scene_pos)
+                if not entity_ids:
+                    return False
+                self.entity_context_menu_requested.emit(
+                    tuple(entity_ids),
+                    event.globalPosition().toPoint(),
+                )
+                return True
             if button != Qt.MouseButton.LeftButton:
                 return False
-            scene_pos = self.mapToScene(event.position().toPoint())
+            if event.type() == QMouseEvent.Type.MouseMove:
+                return self._update_entity_drag(event, scene_pos)
+            if event.type() != QMouseEvent.Type.MouseButtonPress:
+                return False
+            self._entity_drag_state = None
             screen_matches = self._screen_entities_at_scene_pos(scene_pos.x(), scene_pos.y())
             if screen_matches:
-                return self._select_screen_entity_cycle(screen_matches)
+                selected_id = self._selected_entity_id
+                deferred = selected_id in screen_matches
+                if deferred:
+                    entity_id = selected_id or ""
+                else:
+                    self._select_screen_entity_cycle(screen_matches)
+                    entity_id = self._selected_entity_id or ""
+                self._start_entity_drag_candidate(
+                    entity_id,
+                    event.position(),
+                    scene_pos,
+                    deferred_selection=deferred,
+                )
+                return True
             col = int(scene_pos.x() / self._tile_size)
             row = int(scene_pos.y() / self._tile_size)
             if not (0 <= col < self._area.width and 0 <= row < self._area.height):
                 self.clear_selected_entity()
                 return True
-            return self.select_entities_at_cell(col, row)
+            matches = self._world_entities_at_cell(col, row)
+            ids = tuple(entity.id for entity in matches)
+            if not ids:
+                self.clear_selected_entity()
+                return True
+            selected_id = self._selected_entity_id
+            deferred = selected_id in ids
+            if deferred:
+                entity_id = selected_id or ""
+            else:
+                self.select_entities_at_cell(col, row)
+                entity_id = self._selected_entity_id or ""
+            self._start_entity_drag_candidate(
+                entity_id,
+                event.position(),
+                scene_pos,
+                deferred_selection=deferred,
+            )
+            return True
 
         # --- Tile rectangle selection ---
         if self._tile_select_mode:
@@ -1241,16 +1434,40 @@ class TileCanvas(QGraphicsView):
             if self._active_brush_type == BrushType.ENTITY:
                 if self._entity_brush_template is None or not self._entity_brush_supported:
                     return True
+                if button == Qt.MouseButton.RightButton:
+                    entity_ids = tuple(self._entity_ids_at_scene_pos(scene_pos))
+                    if entity_ids:
+                        self.entity_context_menu_requested.emit(
+                            entity_ids,
+                            event.globalPosition().toPoint(),
+                        )
+                        return True
                 if self._entity_brush_space == "screen":
                     if local_screen is None:
                         return True
-                    if button == Qt.MouseButton.LeftButton:
+                    if button == Qt.MouseButton.LeftButton and not self._entity_brush_erase_mode:
                         self.entity_screen_paint_requested.emit(
                             self._entity_brush_template,
                             local_screen[0],
                             local_screen[1],
                         )
                         return True
+                    if button == Qt.MouseButton.LeftButton and self._entity_brush_erase_mode:
+                        entity_ids = tuple(self._entity_ids_at_scene_pos(scene_pos))
+                        if len(entity_ids) > 1:
+                            self.entity_stack_picker_requested.emit(
+                                entity_ids,
+                                event.globalPosition().toPoint(),
+                                "delete",
+                            )
+                            return True
+                        if len(entity_ids) == 1:
+                            marker = ("delete-id", entity_ids[0])
+                            if self._last_entity_deleted == marker:
+                                return True
+                            self._last_entity_deleted = marker
+                            self.entity_delete_by_id_requested.emit(entity_ids[0])
+                            return True
                     return True
             if not (0 <= col < self._area.width and 0 <= row < self._area.height):
                 if local_screen is not None:
@@ -1258,14 +1475,31 @@ class TileCanvas(QGraphicsView):
                 return False
 
             if self._active_brush_type == BrushType.ENTITY:
-                if button == Qt.MouseButton.LeftButton:
+                if button == Qt.MouseButton.LeftButton and not self._entity_brush_erase_mode:
                     marker = (self._entity_brush_template, col, row)
                     if self._last_entity_painted == marker:
                         return True
                     self._last_entity_painted = marker
                     self.entity_paint_requested.emit(self._entity_brush_template, col, row)
                     return True
-                if button == Qt.MouseButton.RightButton:
+                if button == Qt.MouseButton.LeftButton and self._entity_brush_erase_mode:
+                    entity_ids = tuple(self._entity_ids_at_scene_pos(scene_pos))
+                    if len(entity_ids) > 1:
+                        self.entity_stack_picker_requested.emit(
+                            entity_ids,
+                            event.globalPosition().toPoint(),
+                            "delete",
+                        )
+                        return True
+                    if len(entity_ids) == 1:
+                        entity = self._entity_by_id(entity_ids[0])
+                        if entity is not None and self._effective_space(entity) == "screen":
+                            marker = ("delete-id", entity_ids[0])
+                            if self._last_entity_deleted == marker:
+                                return True
+                            self._last_entity_deleted = marker
+                            self.entity_delete_by_id_requested.emit(entity_ids[0])
+                            return True
                     marker = (col, row)
                     if self._last_entity_deleted == marker:
                         return True
@@ -1284,7 +1518,9 @@ class TileCanvas(QGraphicsView):
                 self.tile_eyedropped.emit(gid)
                 return True
 
-            if button == Qt.MouseButton.LeftButton:
+            if self._active_brush_type == BrushType.ERASER:
+                block = ((0,),)
+            elif button == Qt.MouseButton.LeftButton:
                 block = self._selected_gid_block
                 if block is None:
                     return True
@@ -1351,6 +1587,152 @@ class TileCanvas(QGraphicsView):
         self._selection_item = highlight
         self._scene.addItem(highlight)
 
+    def _entity_by_id(self, entity_id: str) -> EntityDocument | None:
+        if self._area is None:
+            return None
+        for entity in self._area.entities:
+            if entity.id == entity_id:
+                return entity
+        return None
+
+    def _start_entity_drag_candidate(
+        self,
+        entity_id: str,
+        press_view_pos: QPointF,
+        press_scene_pos: QPointF,
+        *,
+        deferred_selection: bool,
+    ) -> bool:
+        entity = self._entity_by_id(entity_id)
+        if entity is None:
+            return False
+        effective_space = self._effective_space(entity)
+        start_grid = (int(entity.x), int(entity.y))
+        start_pixel = (int(entity.pixel_x or 0), int(entity.pixel_y or 0))
+        self._entity_drag_state = _EntityDragState(
+            entity_id=entity.id,
+            space=effective_space,
+            press_view_pos=QPointF(press_view_pos),
+            press_scene_pos=QPointF(press_scene_pos),
+            start_grid=start_grid,
+            start_pixel=start_pixel,
+            current_grid=start_grid,
+            current_pixel=start_pixel,
+            deferred_selection=deferred_selection,
+        )
+        return True
+
+    def _update_entity_drag(self, event: QMouseEvent, scene_pos: QPointF) -> bool:
+        state = self._entity_drag_state
+        if state is None:
+            return False
+        entity = self._entity_by_id(state.entity_id)
+        if entity is None:
+            self._entity_drag_state = None
+            return False
+
+        if not state.active:
+            view_delta = event.position() - state.press_view_pos
+            distance = abs(view_delta.x()) + abs(view_delta.y())
+            if distance < _ENTITY_DRAG_THRESHOLD_PIXELS:
+                return True
+            state.active = True
+            self.viewport().setCursor(Qt.CursorShape.SizeAllCursor)
+
+        changed = (
+            self._drag_screen_entity(entity, state, scene_pos)
+            if state.space == "screen"
+            else self._drag_world_entity(entity, state, scene_pos)
+        )
+        if changed:
+            self._selection_cycle_cell = None
+            self._selection_cycle_ids = ()
+            self._screen_selection_cycle_ids = ()
+            self._rebuild_entity_items_only()
+        return True
+
+    def _drag_world_entity(
+        self,
+        entity: EntityDocument,
+        state: _EntityDragState,
+        scene_pos: QPointF,
+    ) -> bool:
+        tile_cell = self._tile_cell_from_scene_pos(scene_pos.x(), scene_pos.y(), clamp=True)
+        if tile_cell is None or tile_cell == state.current_grid:
+            return False
+        entity.x = tile_cell[0]
+        entity.y = tile_cell[1]
+        state.current_grid = tile_cell
+        return True
+
+    def _drag_screen_entity(
+        self,
+        entity: EntityDocument,
+        state: _EntityDragState,
+        scene_pos: QPointF,
+    ) -> bool:
+        delta_x = int(round(scene_pos.x() - state.press_scene_pos.x()))
+        delta_y = int(round(scene_pos.y() - state.press_scene_pos.y()))
+        pixel = (
+            state.start_pixel[0] + delta_x,
+            state.start_pixel[1] + delta_y,
+        )
+        if pixel == state.current_pixel:
+            return False
+        entity.pixel_x = pixel[0]
+        entity.pixel_y = pixel[1]
+        state.current_pixel = pixel
+        return True
+
+    def _finish_entity_drag(self, event: QMouseEvent | None = None) -> bool:
+        state = self._entity_drag_state
+        if state is None:
+            return False
+        if event is not None:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            self._update_entity_drag(event, scene_pos)
+            state = self._entity_drag_state
+            if state is None:
+                self._apply_cursor()
+                return True
+        self._entity_drag_state = None
+        self._apply_cursor()
+
+        if state.active:
+            if state.space == "screen":
+                if state.current_pixel != state.start_pixel:
+                    self.entity_drag_committed.emit(
+                        state.entity_id,
+                        state.space,
+                        state.current_pixel[0],
+                        state.current_pixel[1],
+                    )
+            elif state.current_grid != state.start_grid:
+                self.entity_drag_committed.emit(
+                    state.entity_id,
+                    state.space,
+                    state.current_grid[0],
+                    state.current_grid[1],
+                )
+            return True
+
+        if state.deferred_selection:
+            if state.space == "screen":
+                matches = self._screen_entities_at_scene_pos(
+                    state.press_scene_pos.x(),
+                    state.press_scene_pos.y(),
+                )
+                if matches:
+                    return self._select_screen_entity_cycle(matches)
+            tile_cell = self._tile_cell_from_scene_pos(
+                state.press_scene_pos.x(),
+                state.press_scene_pos.y(),
+                clamp=False,
+            )
+            if tile_cell is not None:
+                return self.select_entities_at_cell(tile_cell[0], tile_cell[1])
+        return True
+
     def _update_tile_selection_overlay(self) -> None:
         if self._tile_selection_item is not None and self._tile_selection_item.scene() is self._scene:
             self._scene.removeItem(self._tile_selection_item)
@@ -1410,6 +1792,56 @@ class TileCanvas(QGraphicsView):
             return (col, row)
         return None
 
+    def _update_entity_stack_hover(
+        self,
+        scene_pos: QPointF,
+        global_pos: QPoint,
+        *,
+        buttons: Qt.MouseButton,
+    ) -> None:
+        if not _ENTITY_STACK_PICKER_HOVER_ENABLED:
+            self._cancel_entity_stack_hover(reset_emitted=True)
+            return
+        if not self._select_mode or buttons != Qt.MouseButton.NoButton:
+            self._cancel_entity_stack_hover(reset_emitted=False)
+            return
+        entity_ids = tuple(self._entity_ids_at_scene_pos(scene_pos))
+        if len(entity_ids) <= 1:
+            self._cancel_entity_stack_hover(reset_emitted=True)
+            return
+        self._entity_stack_hover_global_pos = QPoint(global_pos)
+        if entity_ids != self._entity_stack_hover_ids:
+            self._entity_stack_hover_ids = entity_ids
+            self._entity_stack_hover_emitted_ids = ()
+            self._entity_stack_hover_timer.start(_ENTITY_STACK_PICKER_HOVER_DELAY_MS)
+            return
+        if self._entity_stack_hover_timer.isActive():
+            return
+        if entity_ids == self._entity_stack_hover_emitted_ids:
+            return
+        self._entity_stack_hover_timer.start(_ENTITY_STACK_PICKER_HOVER_DELAY_MS)
+
+    def _emit_entity_stack_hover_request(self) -> None:
+        if not _ENTITY_STACK_PICKER_HOVER_ENABLED:
+            return
+        if not self._select_mode or len(self._entity_stack_hover_ids) <= 1:
+            return
+        if self._entity_stack_hover_global_pos is None:
+            return
+        self.entity_stack_picker_requested.emit(
+            self._entity_stack_hover_ids,
+            QPoint(self._entity_stack_hover_global_pos),
+            "select",
+        )
+        self._entity_stack_hover_emitted_ids = self._entity_stack_hover_ids
+
+    def _cancel_entity_stack_hover(self, *, reset_emitted: bool) -> None:
+        self._entity_stack_hover_timer.stop()
+        self._entity_stack_hover_ids = ()
+        self._entity_stack_hover_global_pos = None
+        if reset_emitted:
+            self._entity_stack_hover_emitted_ids = ()
+
     def _effective_space(self, entity: EntityDocument) -> str:
         """Resolve one entity's effective space with template fallback."""
         if entity.space != "world":
@@ -1436,6 +1868,20 @@ class TileCanvas(QGraphicsView):
             ) if entity.id in self._entity_item_by_id else -1.0,
             reverse=True,
         )
+
+    def _entity_ids_at_scene_pos(self, scene_pos: QPointF) -> list[str]:
+        """Return selectable entity ids under one scene point."""
+        screen_matches = self._screen_entities_at_scene_pos(scene_pos.x(), scene_pos.y())
+        if screen_matches:
+            return screen_matches
+        tile_cell = self._tile_cell_from_scene_pos(
+            scene_pos.x(),
+            scene_pos.y(),
+            clamp=False,
+        )
+        if tile_cell is None:
+            return []
+        return [entity.id for entity in self._world_entities_at_cell(*tile_cell)]
 
     def _screen_pixel_from_scene_pos(self, sx: float, sy: float) -> tuple[int, int] | None:
         """Return screen-pane-local pixel coordinates for one scene position."""
@@ -1538,7 +1984,7 @@ class TileCanvas(QGraphicsView):
             return
 
         if self._active_brush_type == BrushType.ENTITY:
-            if not self._entity_brush_supported:
+            if self._entity_brush_erase_mode or not self._entity_brush_supported:
                 self._ghost_item.setVisible(False)
                 return
             if self._entity_ghost_pixmap is not None and not self._entity_ghost_pixmap.isNull():

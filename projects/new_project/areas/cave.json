@@ -54,18 +54,18 @@
   ],
   "entities": [
     {
-      "id": "destination_to_cave",
+      "id": "cave_entrance_in",
       "grid_x": 4,
       "grid_y": 8,
       "template": "entity_templates/area_transition_target"
     },
     {
-      "id": "transition_to_start",
+      "id": "cave_exit_in",
       "grid_x": 4,
       "grid_y": 9,
       "template": "entity_templates/area_transition",
       "parameters": {
-        "destination_entity_id": "destination_to_start",
+        "destination_entity_id": "cave_exit_out",
         "target_area": "areas/start"
       }
     },
@@ -80,7 +80,12 @@
       "id": "lever_1",
       "grid_x": 6,
       "grid_y": 1,
-      "template": "entity_templates/lever"
+      "template": "entity_templates/lever",
+      "parameters": {
+        "target_activate_command_id": "open_now",
+        "target_deactivate_command_id": "close_now",
+        "target_entity_id": "iron_gate_1"
+      }
     }
   ],
   "variables": {}

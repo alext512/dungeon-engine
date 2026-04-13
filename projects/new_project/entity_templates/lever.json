@@ -25,6 +25,24 @@
     "target_activate_command_id": "contribute_on",
     "target_deactivate_command_id": "contribute_off"
   },
+  "parameter_specs": {
+    "toggleable": {
+      "type": "bool"
+    },
+    "target_entity_id": {
+      "type": "entity_id",
+      "scope": "area",
+      "space": "world"
+    },
+    "target_activate_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    },
+    "target_deactivate_command_id": {
+      "type": "entity_command_id",
+      "entity_parameter": "target_entity_id"
+    }
+  },
   "variables": {
     "active": false
   },

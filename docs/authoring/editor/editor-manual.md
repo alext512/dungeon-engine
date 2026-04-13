@@ -50,16 +50,23 @@ The current editor can:
 - select stacked world entities by cell, select screen-space entities from the
   screen pane, or select any active-area instance from the `Entities` list
 - nudge selected world entities by tiles and selected screen-space entities by pixels
+- open an on-demand entity-instance editor dialog from entity selection
 - use a tabbed right-side area workspace so `Layers` stays focused and area
   startup behavior, entity selection, and cell-flag brush selection live in
   dedicated `Area Start`, `Entities`, and `Cell Flags` tabs
 - edit area `enter_commands` through helper insertions plus direct JSON, including
   common actions like `route_inputs_to_entity`, `run_entity_command`,
   `open_dialogue_session`, `set_camera_follow`, and `play_music`
-- edit selected entity instances through a structured Fields tab that covers
+- edit entity instances through a structured dialog with a focused
+  `Parameters` tab for common template tuning, an advanced instance editor for
   identity, scope, common engine fields, `color`, `input_map`,
-  `entity_commands`, variables, `inventory`, visuals, persistence, and a
+  `entity_commands`, variables, `inventory`, visuals, and persistence, plus a
   guarded raw JSON tab for the rest
+- pick `entity_id` parameters through a dedicated chooser with an area/global
+  selector, search filter, and position-aware entity list instead of relying on
+  free-text ids
+- pick `entity_command_id` parameters from the command names available on the
+  entity selected by another typed `entity_id` parameter
 - edit entity templates through one focused surface with `Basics`, `Visuals`,
   `Input Map`, `Entity Commands`, `Inventory`, `Persistence`, and `Raw JSON`
   sections
@@ -95,6 +102,12 @@ should not drop unrelated layer metadata, and changing entity render controls
 should not strip authored fields such as `kind`, `variables`, or
 `entity_commands`.
 
+The entity-instance raw JSON tab remains an authored-instance view. It does not
+merge in template defaults just for display. That keeps default inheritance
+visible: blank focused-parameter fields mean "use the template default", while
+authored overrides are written only when the user enters a value or toggles a
+boolean into authored state.
+
 When the editor creates a new authored JSON area file, it writes the standard
 file-level notes header at the top of the file. New areas use `.json5` by
 default unless the user explicitly types another JSON data suffix. Existing
@@ -103,8 +116,8 @@ raw JSON viewer does not force it back in.
 
 What is still not implemented:
 
-- richer screen-space direct manipulation such as drag-style placement/editing polish
-- drag-to-move entity manipulation
+- richer screen-space direct manipulation polish beyond the current selection,
+  dragging, nudging, and placement flows
 - broader structured editing for workflow-heavy authored blocks such as entity commands and exposed workflow variables
 - runtime handoff / launch integration
 
@@ -117,7 +130,7 @@ The editor is meant to help with:
 - cell flag editing
 - entity placement
 - editing common per-instance values
-- selecting other entity ids when parameters reference them
+- selecting other entity ids through the picker when parameters reference them
 - editing area-enter behavior without opening the whole area file as raw JSON
 - preserving room JSON without forcing the user to hand-edit common cases
 
@@ -136,33 +149,60 @@ The area canvas now includes a separate screen pane to the right of the world gr
 
 ## Canvas Tool Notes
 
-- The main area tools live in the canvas tool strip above the viewport and are
-  mirrored in the `Edit` menu: `Paint`, `Entity Select`, `Tile Select`, and
-  `Cell Flags`.
-- `Paint` uses the active tile or entity-template brush. Right-click erases
-  tiles or deletes world-space entities.
-- `Entity Select` clicks entity instances on the canvas. Repeated clicks cycle
-  stacked entities.
+- The main area tools live in the canvas tool strip above the viewport as two
+  axes: `Target` (`Tiles`, `Entities`, `Flags`) and `Tool`
+  (`Select`, `Pencil`, `Eraser`).
+- `Tiles + Select` replaces the old dedicated tile-select mode.
+- `Tiles + Pencil` paints the active tile brush. `Tiles + Eraser` clears tiles
+  with left-click.
+- `Entities + Select` clicks entity instances on the canvas. Repeated clicks
+  still cycle stacked entities, and hovering briefly over overlapping entities
+  opens a chooser for directly picking the intended target.
+- Double-click an entity in `Entities + Select` to open its pinned entity-instance
+  editor dialog. The dialog does not automatically switch targets when normal
+  canvas selection changes.
+- The entity-instance dialog opens on `Parameters` when the selected entity has
+  template parameters. Use that tab for common per-instance tuning. Boolean
+  parameters use checkboxes and can be reset back to the template default.
+- The advanced `Entity Instance Editor` tab holds less-frequent fields such as
+  identity, position, variables, inventory, visuals, persistence, and raw
+  `entity_commands` objects.
+- Typed `entity_id` parameters get a picker filtered by `scope` and `space`.
+  Typed `entity_command_id` parameters are picked from the command names on the
+  already selected target entity.
+- If an `entity_id` parameter declares `area_parameter`, the picker locks to
+  the area already chosen in that area parameter instead of offering a separate
+  area selector.
+- Right-clicking an entity opens a context menu with direct actions for
+  `Parameters`, advanced instance editing, raw JSON editing, copying the id, and
+  deleting that exact entity. For stacked entities, each entity gets the same
+  action set in its submenu.
+- `Entities + Pencil` places the selected template. `Entities + Eraser`
+  removes entities with left-click; overlapping targets open a chooser instead
+  of silently deleting the topmost one. Right-click in entity paint modes opens
+  the entity context menu under the pointer.
 - The Area Tools `Entities` tab lists active-area entity instances. Use it when
   entities overlap, are screen-space UI elements, or are otherwise awkward to
-  click directly.
+  click directly. Double-clicking a row opens the same entity-instance editor.
 
 ## Cell Flag Notes
 
-- `Cell Flags` mode uses the brush selected in the Area Tools `Cell Flags` tab.
+- `Flags + Pencil` and `Flags + Eraser` both use the brush selected in the
+  Area Tools `Cell Flags` tab.
 - The built-in preset paints `blocked = true`.
 - Custom flags let you pick a flag name (usually `tags`) and enter a JSON value.
   For `tags`, the value should be a JSON list of strings such as
   `["water", "slow"]`.
-- Left-click places the selected flag. Right-click removes it. For `blocked`,
-  right-click paints `blocked = false`. For other flags, right-click removes
-  the selected key entirely.
+- `Flags + Pencil` places the selected flag with left-click. Right-click still
+  removes it. `Flags + Eraser` clears the selected flag with left-click. For
+  `blocked`, clearing writes `blocked = false`; for other flags, clearing
+  removes the selected key entirely.
 - The runtime gives built-in meaning to `blocked`. All other metadata is read
   through value sources such as `$cell_flags_at`.
 
 ## Tile Selection Notes
 
-- `Tile Select` is a separate tool from `Entity Select`.
+- `Tiles + Select` is separate from `Entities + Select`.
 - It works on the active tile layer only.
 - Drag on the canvas to select a rectangle.
 - `Delete` clears the selected tiles.

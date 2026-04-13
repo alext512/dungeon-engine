@@ -11,7 +11,10 @@ from PySide6.QtWidgets import QApplication
 
 from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
-from area_editor.widgets.entity_instance_json_panel import EntityInstanceJsonPanel
+from area_editor.widgets.entity_instance_json_panel import (
+    EntityInstanceJsonPanel,
+    EntityReferencePickerRequest,
+)
 
 
 class TestEntityInstanceFieldsEditor(unittest.TestCase):
@@ -40,6 +43,31 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         }
         self.catalog._templates["entity_templates/display_sprite"] = {
             "space": "screen",
+            "parameter_specs": {
+                "sprite_path": {
+                    "type": "asset_path",
+                    "asset_kind": "image",
+                },
+                "frame_width": {
+                    "type": "int",
+                    "min": 1,
+                },
+                "frame_height": {
+                    "type": "int",
+                    "min": 1,
+                },
+                "frames": {
+                    "type": "array",
+                    "items": {
+                        "type": "int",
+                        "min": 0,
+                    },
+                },
+                "animation_fps": {
+                    "type": "number",
+                    "min": 0,
+                },
+            },
             "visuals": [{"path": "$sprite_path"}],
         }
         self.catalog._templates["entity_templates/reference_panel"] = {
@@ -64,6 +92,17 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 "target_area": "areas/start",
                 "destination_entity_id": "spawn_marker",
             },
+            "parameter_specs": {
+                "target_area": {
+                    "type": "area_id",
+                },
+                "destination_entity_id": {
+                    "type": "entity_id",
+                    "area_parameter": "target_area",
+                    "scope": "area",
+                    "space": "world",
+                },
+            },
             "entity_commands": {
                 "on_occupant_enter": {
                     "enabled": True,
@@ -82,6 +121,17 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 "target_entity_id": "",
                 "target_press_command_id": "contribute_on",
             },
+            "parameter_specs": {
+                "target_entity_id": {
+                    "type": "entity_id",
+                    "scope": "area",
+                    "space": "world",
+                },
+                "target_press_command_id": {
+                    "type": "entity_command_id",
+                    "entity_parameter": "target_entity_id",
+                },
+            },
             "entity_commands": {
                 "interact": {
                     "enabled": True,
@@ -93,6 +143,37 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                         }
                     ],
                 }
+            },
+        }
+        self.catalog._templates["entity_templates/spec_panel"] = {
+            "parameters": {
+                "arrival_marker": "",
+                "panel_art": "",
+                "commandish_string": "",
+            },
+            "parameter_specs": {
+                "arrival_marker": {
+                    "type": "entity_id",
+                    "scope": "area",
+                    "space": "world",
+                },
+                "panel_art": {
+                    "type": "asset_path",
+                    "asset_kind": "image",
+                },
+                "commandish_string": {
+                    "type": "string",
+                },
+            },
+        }
+        self.catalog._templates["entity_templates/toggle_panel"] = {
+            "parameters": {
+                "toggleable": True,
+            },
+            "parameter_specs": {
+                "toggleable": {
+                    "type": "bool",
+                },
             },
         }
         self.panel.set_template_catalog(self.catalog)
@@ -108,8 +189,9 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.panel.load_entity(entity)
         fields = self.panel._fields_editor
-        fields._parameter_edits["target_area"].setText("001")
-        fields._parameter_edits["target_entry"].setText("[1, 2]")
+        parameters = self.panel._parameters_editor
+        parameters._parameter_edits["target_area"].setText("001")
+        parameters._parameter_edits["target_entry"].setText("[1, 2]")
         fields._id_edit.setText("door_2")
         fields._x_spin.setValue(6)
 
@@ -176,10 +258,10 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         )
 
         self.panel.load_entity(entity)
-        fields = self.panel._fields_editor
+        parameters = self.panel._parameters_editor
 
-        self.assertFalse(fields._parameter_warning.isHidden())
-        self.assertTrue(fields._parameters_widget.isHidden())
+        self.assertFalse(parameters._warning_label.isHidden())
+        self.assertFalse(parameters._empty_label.isHidden())
 
         updated = self.panel.build_entity_from_fields()
 
@@ -672,7 +754,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         )
 
         self.panel.load_entity(entity)
-        fields = self.panel._fields_editor
+        parameters = self.panel._parameters_editor
 
         for name in (
             "target_area",
@@ -681,13 +763,13 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             "dialogue_path",
             "command_id",
         ):
-            self.assertIn(name, fields._parameter_browse_buttons)
+            self.assertIn(name, parameters._parameter_browse_buttons)
 
-        fields._parameter_browse_buttons["target_area"].click()
-        fields._parameter_browse_buttons["target_id"].click()
-        fields._parameter_browse_buttons["item_id"].click()
-        fields._parameter_browse_buttons["dialogue_path"].click()
-        fields._parameter_browse_buttons["command_id"].click()
+        parameters._parameter_browse_buttons["target_area"].click()
+        parameters._parameter_browse_buttons["target_id"].click()
+        parameters._parameter_browse_buttons["item_id"].click()
+        parameters._parameter_browse_buttons["dialogue_path"].click()
+        parameters._parameter_browse_buttons["command_id"].click()
 
         updated = self.panel.build_entity_from_fields()
 
@@ -701,6 +783,140 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 "command_id": "commands/system/open_gate",
             },
         )
+
+    def test_parameter_specs_drive_picker_buttons(self):
+        entity = EntityDocument(
+            id="panel_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/spec_panel",
+        )
+        self.panel.set_reference_picker_callbacks(
+            entity_picker=lambda current: "arrival_marker_1",
+            asset_picker=lambda current: "assets/project/ui/panel.png",
+            command_picker=lambda current: "commands/system/should_not_apply",
+        )
+
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+
+        self.assertIn("arrival_marker", parameters._parameter_browse_buttons)
+        self.assertIn("panel_art", parameters._parameter_browse_buttons)
+        self.assertNotIn("commandish_string", parameters._parameter_browse_buttons)
+
+        parameters._parameter_browse_buttons["arrival_marker"].click()
+        parameters._parameter_browse_buttons["panel_art"].click()
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated.parameters,
+            {
+                "arrival_marker": "arrival_marker_1",
+                "panel_art": "assets/project/ui/panel.png",
+            },
+        )
+
+    def test_entity_parameter_picker_receives_request_context(self):
+        entity = EntityDocument(
+            id="button_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/button_target",
+        )
+        requests: list[EntityReferencePickerRequest] = []
+
+        def pick_entity(
+            current: str,
+            request: EntityReferencePickerRequest,
+        ) -> str | None:
+            self.assertEqual(current, "")
+            requests.append(request)
+            return "gate_1"
+
+        self.panel.set_area_context("areas/demo")
+        self.panel.set_reference_picker_callbacks(entity_picker=pick_entity)
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+
+        parameters._parameter_browse_buttons["target_entity_id"].click()
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(
+            requests[0],
+            EntityReferencePickerRequest(
+                parameter_name="target_entity_id",
+                current_value="",
+                parameter_spec={
+                    "type": "entity_id",
+                    "scope": "area",
+                    "space": "world",
+                },
+                current_area_id="areas/demo",
+                entity_id="button_1",
+                entity_template_id="entity_templates/button_target",
+                parameter_values={
+                    "target_entity_id": "",
+                    "target_press_command_id": "contribute_on",
+                },
+            ),
+        )
+        self.assertEqual(parameters._parameter_edits["target_entity_id"].text(), "gate_1")
+
+    def test_parameter_specs_parse_typed_values(self):
+        entity = EntityDocument(
+            id="sprite_1",
+            pixel_x=0,
+            pixel_y=0,
+            template="entity_templates/display_sprite",
+        )
+
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+        parameters._parameter_edits["sprite_path"].setText("assets/project/ui/sprite.png")
+        parameters._parameter_edits["frame_width"].setText("32")
+        parameters._parameter_edits["frame_height"].setText("16")
+        parameters._parameter_edits["frames"].setText("[0, 1, 2]")
+        parameters._parameter_edits["animation_fps"].setText("12.5")
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated.parameters,
+            {
+                "animation_fps": 12.5,
+                "frame_height": 16,
+                "frame_width": 32,
+                "frames": [0, 1, 2],
+                "sprite_path": "assets/project/ui/sprite.png",
+            },
+        )
+
+    def test_bool_parameters_use_checkbox_and_can_reset_to_default(self):
+        entity = EntityDocument(
+            id="lever_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/toggle_panel",
+        )
+
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+        field = parameters._parameter_fields["toggleable"]
+        self.assertEqual(field.control_kind, "bool")
+        self.assertIsNotNone(field.checkbox)
+        assert field.checkbox is not None
+
+        self.assertTrue(field.checkbox.isChecked())
+        self.assertFalse(field.explicit_override_enabled)
+
+        field.checkbox.setChecked(False)
+        updated = self.panel.build_entity_from_fields()
+        self.assertEqual(updated.parameters, {"toggleable": False})
+
+        parameters._on_bool_parameter_reset("toggleable")
+        reset = self.panel.build_entity_from_fields()
+        self.assertIsNone(reset.parameters)
 
     def test_build_entity_from_fields_rejects_invalid_persistence_variables(self):
         entity = EntityDocument(
@@ -729,20 +945,70 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         )
 
         self.panel.load_entity(entity)
-        fields = self.panel._fields_editor
+        parameters = self.panel._parameters_editor
 
-        self.assertIn("target_area", fields._parameter_edits)
-        self.assertIn("destination_entity_id", fields._parameter_edits)
+        self.assertIn("target_area", parameters._parameter_edits)
+        self.assertIn("destination_entity_id", parameters._parameter_edits)
         self.assertEqual(
-            fields._parameter_edits["target_area"].placeholderText(),
+            parameters._parameter_edits["target_area"].placeholderText(),
             "areas/start",
         )
         self.assertEqual(
-            fields._parameter_edits["destination_entity_id"].placeholderText(),
+            parameters._parameter_edits["destination_entity_id"].placeholderText(),
             "spawn_marker",
         )
 
-    def test_entity_command_parameters_do_not_get_project_command_picker(self):
+    def test_entity_parameter_with_area_parameter_uses_selected_area_context(self):
+        entity = EntityDocument(
+            id="to_cave_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/area_transition",
+            parameters={
+                "target_area": "areas/cave",
+            },
+        )
+        requests: list[EntityReferencePickerRequest] = []
+
+        def pick_entity(
+            current: str,
+            request: EntityReferencePickerRequest,
+        ) -> str | None:
+            requests.append(request)
+            return "cave_exit"
+
+        self.panel.set_reference_picker_callbacks(entity_picker=pick_entity)
+        self.panel.set_area_context("areas/start")
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+
+        self.assertTrue(parameters._parameter_browse_buttons["destination_entity_id"].isEnabled())
+        parameters._parameter_browse_buttons["destination_entity_id"].click()
+
+        self.assertEqual(parameters._parameter_edits["destination_entity_id"].text(), "cave_exit")
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(
+            requests[0],
+            EntityReferencePickerRequest(
+                parameter_name="destination_entity_id",
+                current_value="",
+                parameter_spec={
+                    "type": "entity_id",
+                    "area_parameter": "target_area",
+                    "scope": "area",
+                    "space": "world",
+                },
+                current_area_id="areas/start",
+                entity_id="to_cave_1",
+                entity_template_id="entity_templates/area_transition",
+                parameter_values={
+                    "target_area": "areas/cave",
+                    "destination_entity_id": "spawn_marker",
+                },
+            ),
+        )
+
+    def test_entity_command_parameters_use_entity_command_picker(self):
         entity = EntityDocument(
             id="button_1",
             grid_x=1,
@@ -750,12 +1016,47 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             template="entity_templates/button_target",
         )
 
+        requests: list[EntityReferencePickerRequest] = []
+
+        def pick_command(
+            current: str,
+            request: EntityReferencePickerRequest,
+        ) -> str | None:
+            requests.append(request)
+            return "contribute_off"
+
         self.panel.set_reference_picker_callbacks(
             entity_picker=lambda current: "gate_1",
-            command_picker=lambda current: "commands/system/open_gate",
+            entity_command_picker=pick_command,
         )
+        self.panel.set_area_context("areas/demo")
         self.panel.load_entity(entity)
-        fields = self.panel._fields_editor
+        parameters = self.panel._parameters_editor
 
-        self.assertIn("target_entity_id", fields._parameter_browse_buttons)
-        self.assertNotIn("target_press_command_id", fields._parameter_browse_buttons)
+        self.assertIn("target_entity_id", parameters._parameter_browse_buttons)
+        self.assertIn("target_press_command_id", parameters._parameter_browse_buttons)
+        self.assertFalse(parameters._parameter_browse_buttons["target_press_command_id"].isEnabled())
+
+        parameters._parameter_edits["target_entity_id"].setText("gate_1")
+        parameters._parameter_browse_buttons["target_press_command_id"].click()
+
+        self.assertEqual(parameters._parameter_edits["target_press_command_id"].text(), "contribute_off")
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(
+            requests[0],
+            EntityReferencePickerRequest(
+                parameter_name="target_press_command_id",
+                current_value="",
+                parameter_spec={
+                    "type": "entity_command_id",
+                    "entity_parameter": "target_entity_id",
+                },
+                current_area_id="areas/demo",
+                entity_id="button_1",
+                entity_template_id="entity_templates/button_target",
+                parameter_values={
+                    "target_entity_id": "gate_1",
+                    "target_press_command_id": "contribute_on",
+                },
+            ),
+        )
