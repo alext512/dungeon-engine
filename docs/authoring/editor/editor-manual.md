@@ -76,6 +76,8 @@ The current editor can:
 - edit dialogue/template/command JSON through guarded viewer tabs
 - rename/move areas, templates, items, dialogues, commands, and assets with
   previewed reference updates
+- drag file-backed browser entries onto folders to move them through that same
+  previewed reference-update workflow
 - delete those same content files with a usage preview and explicit warning that
   references are left unchanged
 - show folders in the file-backed browsers, create folders, rename/move folders,

@@ -141,6 +141,7 @@ class EntityVisual:
     offset_y: float = 0.0
     draw_order: int = 0
     default_animation: str | None = None
+    default_animation_by_facing: dict[Direction, str] = field(default_factory=dict)
     animations: dict[str, VisualAnimationClip] = field(default_factory=dict)
     animation_playback: AnimationPlaybackState = field(default_factory=AnimationPlaybackState)
 
@@ -163,6 +164,7 @@ class EntityVisual:
             offset_y=self.offset_y,
             draw_order=self.draw_order,
             default_animation=self.default_animation,
+            default_animation_by_facing=dict(self.default_animation_by_facing),
             animations={
                 animation_id: clip.clone()
                 for animation_id, clip in self.animations.items()
@@ -176,6 +178,25 @@ class EntityVisual:
                 started_this_tick=self.animation_playback.started_this_tick,
             ),
         )
+
+    def resolve_default_animation_id(self, facing: Direction | str | None = None) -> str | None:
+        """Return the authored default animation id, preferring explicit facing mappings."""
+        resolved_facing = str(facing).strip().lower() if facing is not None else ""
+        if resolved_facing in self.default_animation_by_facing:
+            return self.default_animation_by_facing[resolved_facing]  # type: ignore[return-value]
+        return self.default_animation
+
+    def apply_default_state(self, facing: Direction | str | None = None) -> None:
+        """Restore the visual's default frame/flip state for the requested facing."""
+        animation_id = self.resolve_default_animation_id(facing)
+        clip = None if animation_id is None else self.animations.get(animation_id)
+        if clip is not None and clip.frames:
+            self.current_frame = int(clip.frames[0])
+            if clip.flip_x is not None:
+                self.flip_x = bool(clip.flip_x)
+            return
+        if self.frames:
+            self.current_frame = int(self.frames[0])
 
 
 @dataclass(slots=True)
@@ -193,6 +214,7 @@ class Entity:
     present: bool = True
     visible: bool = True
     facing: Direction = "down"
+    authored_facing: Direction | None = None
     solid: bool = False
     pushable: bool = False
     weight: int = 1
@@ -295,6 +317,12 @@ class Entity:
         if resolved_facing not in DIRECTION_VECTORS:
             raise ValueError("Facing must be 'up', 'down', 'left', or 'right'.")
         self.facing = resolved_facing  # type: ignore[assignment]
+
+    def apply_default_visual_state(self) -> None:
+        """Restore each visual to its authored default state for the entity's current facing."""
+        facing = self.get_effective_facing()
+        for visual in self.visuals:
+            visual.apply_default_state(facing)
 
     def is_effectively_solid(self) -> bool:
         """Return whether the entity currently blocks standard movement."""

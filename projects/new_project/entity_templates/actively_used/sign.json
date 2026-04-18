@@ -1,0 +1,47 @@
+/*
+  NOTES
+
+  Simple interactable sign. It opens a dialogue session when the player
+  interacts with it, and instances can override dialogue_path to reuse the
+  same template with different text.
+*/
+{
+  "kind": "sign",
+  "solid": true,
+  "interactable": true,
+  "interaction_priority": 10,
+  "render_order": 10,
+  "y_sort": true,
+  "parameters": {
+    "dialogue_path": "dialogues/signs/simple_sign.json"
+  },
+  "parameter_specs": {
+    "dialogue_path": {
+      "type": "dialogue_path",
+      "required": true
+    }
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/used_tilesets_sprites/overworld_expanded.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [3],
+      "visible": true
+    }
+  ],
+  "entity_commands": {
+    "interact": [
+      {
+        "type": "open_dialogue_session",
+        "dialogue_path": "$dialogue_path",
+        "allow_cancel": true,
+        "entity_refs": {
+          "caller": "$self_id",
+          "instigator": "$ref_ids.instigator"
+        }
+      }
+    ]
+  }
+}

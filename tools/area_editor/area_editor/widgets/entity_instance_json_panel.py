@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 import re
@@ -13,6 +14,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QDockWidget,
     QFormLayout,
     QHBoxLayout,
@@ -31,6 +33,10 @@ from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
 from area_editor.entity_field_coverage import ENTITY_INSTANCE_FIELDS_TAB_EXTRA_FIELDS
 from area_editor.json_io import JsonDataDecodeError, loads_json_data
+from area_editor.widgets.dialogue_definition_dialog import (
+    DialogueDefinitionDialog,
+    summarize_dialogue_definition,
+)
 from area_editor.widgets.entity_structured_fields import (
     DEFAULT_ENTITY_COLOR,
     ENTITY_BOOL_DEFAULTS,
@@ -101,8 +107,11 @@ class _ParameterFieldState:
     edit: QLineEdit | None = None
     checkbox: QCheckBox | None = None
     picker_button: QPushButton | None = None
+    action_button: QPushButton | None = None
     use_default_button: QPushButton | None = None
     status_label: QLabel | None = None
+    summary_label: QLabel | None = None
+    structured_value: object | None = None
 
 
 def _section_label(text: str) -> QLabel:
@@ -270,13 +279,20 @@ def _parse_parameter_text_for_spec(name: str, text: str, spec: object):
     if spec_type == "enum":
         return _parse_parameter_text(text)
 
-    if spec_type in {"array", "json", "color_rgb"}:
+    if spec_type in {"array", "json", "dialogue_definition", "color_rgb"}:
         try:
             parsed = loads_json_data(stripped, source_name=f"Parameter '{name}'")
         except JsonDataDecodeError as exc:
             raise ValueError(f"Parameter '{name}' must be valid JSON.\n{exc}") from exc
         if spec_type == "array" and not isinstance(parsed, list):
             raise ValueError(f"Parameter '{name}' must be a JSON array.")
+        if spec_type == "dialogue_definition":
+            if not isinstance(parsed, dict):
+                raise ValueError(f"Parameter '{name}' must be a JSON object.")
+            if not isinstance(parsed.get("segments"), list):
+                raise ValueError(
+                    f"Parameter '{name}' must include a 'segments' JSON array."
+                )
         if spec_type == "color_rgb":
             if (
                 not isinstance(parsed, list)
@@ -548,6 +564,11 @@ class _EntityInstanceParametersEditor(QWidget):
                     continue
                 parameters[name] = bool(field.checkbox.isChecked())
                 continue
+            if field.control_kind == "dialogue_definition":
+                if not field.explicit_override_enabled:
+                    continue
+                parameters[name] = copy.deepcopy(self._dialogue_parameter_effective_value(field))
+                continue
             if field.edit is None:
                 continue
             value, keep = _parse_parameter_text_for_spec(
@@ -667,6 +688,62 @@ class _EntityInstanceParametersEditor(QWidget):
             self._sync_bool_field_state(name)
             return
 
+        if spec_type == "dialogue_definition":
+            summary_label = QLabel("")
+            summary_label.setWordWrap(True)
+            summary_label.setStyleSheet("color: #444;")
+            status_label = QLabel("")
+            status_label.setStyleSheet("color: #666;")
+            action_button = QPushButton("Edit...")
+            action_button.clicked.connect(
+                lambda _checked=False, parameter_name=name: self._on_edit_dialogue_parameter(
+                    parameter_name
+                )
+            )
+            use_default_button = QPushButton("Use Default")
+            use_default_button.clicked.connect(
+                lambda _checked=False, parameter_name=name: self._on_dialogue_parameter_reset(
+                    parameter_name
+                )
+            )
+
+            text_column = QWidget()
+            text_layout = QVBoxLayout(text_column)
+            text_layout.setContentsMargins(0, 0, 0, 0)
+            text_layout.setSpacing(2)
+            text_layout.addWidget(summary_label)
+            text_layout.addWidget(status_label)
+
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(text_column, 1)
+            row_layout.addWidget(action_button)
+            row_layout.addWidget(use_default_button)
+
+            structured_value = (
+                copy.deepcopy(current_value)
+                if current_value is not None
+                else copy.deepcopy(default_value)
+            )
+            field = _ParameterFieldState(
+                name=name,
+                spec=spec,
+                default_value=default_value,
+                explicit_original=current_value is not None,
+                control_kind="dialogue_definition",
+                explicit_override_enabled=current_value is not None,
+                action_button=action_button,
+                use_default_button=use_default_button,
+                status_label=status_label,
+                summary_label=summary_label,
+                structured_value=structured_value,
+            )
+            self._parameter_fields[name] = field
+            self._form.addRow(label, row_widget)
+            self._sync_dialogue_parameter_state(name)
+            return
+
         edit = QLineEdit()
         if current_value is None:
             edit.setText("")
@@ -760,6 +837,72 @@ class _EntityInstanceParametersEditor(QWidget):
         finally:
             self._loading = False
         self._sync_bool_field_state(name)
+        self._set_dirty(True)
+
+    def _dialogue_parameter_effective_value(self, field: _ParameterFieldState) -> object:
+        if field.structured_value is not None:
+            return field.structured_value
+        if field.default_value is not None:
+            return field.default_value
+        return {"segments": []}
+
+    def _sync_dialogue_parameter_state(self, name: str) -> None:
+        field = self._parameter_fields.get(name)
+        if field is None:
+            return
+        effective_value = self._dialogue_parameter_effective_value(field)
+        if field.summary_label is not None:
+            field.summary_label.setText(summarize_dialogue_definition(effective_value))
+        if field.status_label is not None:
+            if field.explicit_override_enabled:
+                field.status_label.setText("authored override")
+            elif field.default_value is not None:
+                field.status_label.setText("using template default")
+            else:
+                field.status_label.setText("unset")
+        if field.use_default_button is not None:
+            field.use_default_button.setEnabled(
+                field.explicit_override_enabled and field.default_value is not None
+            )
+
+    def _open_dialogue_definition_dialog(
+        self,
+        name: str,
+        value: object,
+    ) -> dict[str, Any] | None:
+        dialog = DialogueDefinitionDialog(
+            self,
+            dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
+            command_picker=self._reference_picker_callbacks.get("command"),
+        )
+        dialog.setWindowTitle(f"Edit Dialogue: {name}")
+        dialog.load_definition(value)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.definition()
+
+    def _on_edit_dialogue_parameter(self, name: str) -> None:
+        field = self._parameter_fields.get(name)
+        if field is None:
+            return
+        updated = self._open_dialogue_definition_dialog(
+            name,
+            self._dialogue_parameter_effective_value(field),
+        )
+        if updated is None:
+            return
+        field.structured_value = copy.deepcopy(updated)
+        field.explicit_override_enabled = True
+        self._sync_dialogue_parameter_state(name)
+        self._set_dirty(True)
+
+    def _on_dialogue_parameter_reset(self, name: str) -> None:
+        field = self._parameter_fields.get(name)
+        if field is None:
+            return
+        field.explicit_override_enabled = False
+        field.structured_value = copy.deepcopy(field.default_value)
+        self._sync_dialogue_parameter_state(name)
         self._set_dirty(True)
 
     def _sync_bool_field_state(self, name: str) -> None:
@@ -1267,6 +1410,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._template_catalog: TemplateCatalog | None = None
         self._entity: EntityDocument | None = None
         self._effective_space = "world"
+        self._effective_field_defaults = self._default_managed_field_defaults()
         self._current_area_id: str | None = None
         self._loading = False
         self._dirty = False
@@ -1555,35 +1699,57 @@ class _EntityInstanceFieldsEditor(QWidget):
         persistence_entity_state: bool,
         persistence_variables: dict[str, bool],
     ) -> None:
+        defaults = self._effective_field_defaults
         self._id_edit.setText(entity.id)
         self._kind_edit.setText(str(entity._extra.get("kind", "")))
         self._tags_edit.setText(tag_text)
         self._template_label.setText(entity.template or "-")
         self._template_label.setCursorPosition(0)
         self._space_label.setText(self._effective_space)
-        self._scope_combo.setCurrentText(str(entity._extra.get("scope", "area")))
+        self._scope_combo.setCurrentText(str(entity._extra.get("scope", defaults["scope"])))
         self._x_spin.setValue(entity.x)
         self._y_spin.setValue(entity.y)
         self._pixel_x_check.setChecked(has_pixel_x)
         self._pixel_y_check.setChecked(has_pixel_y)
         self._pixel_x_spin.setValue(entity.pixel_x or 0)
         self._pixel_y_spin.setValue(entity.pixel_y or 0)
-        self._facing_combo.setCurrentText(str(entity._extra.get("facing", "down")))
-        self._solid_check.setChecked(bool(entity._extra.get("solid", False)))
-        self._pushable_check.setChecked(bool(entity._extra.get("pushable", False)))
-        self._weight_spin.setValue(int(entity._extra.get("weight", 1)))
-        self._push_strength_spin.setValue(int(entity._extra.get("push_strength", 0)))
+        self._facing_combo.setCurrentText(str(entity._extra.get("facing", defaults["facing"])))
+        self._solid_check.setChecked(bool(entity._extra.get("solid", defaults["solid"])))
+        self._pushable_check.setChecked(
+            bool(entity._extra.get("pushable", defaults["pushable"]))
+        )
+        self._weight_spin.setValue(int(entity._extra.get("weight", defaults["weight"])))
+        self._push_strength_spin.setValue(
+            int(entity._extra.get("push_strength", defaults["push_strength"]))
+        )
         self._collision_push_strength_spin.setValue(
-            int(entity._extra.get("collision_push_strength", 0))
+            int(
+                entity._extra.get(
+                    "collision_push_strength",
+                    defaults["collision_push_strength"],
+                )
+            )
         )
-        self._interactable_check.setChecked(bool(entity._extra.get("interactable", False)))
+        self._interactable_check.setChecked(
+            bool(entity._extra.get("interactable", defaults["interactable"]))
+        )
         self._interaction_priority_spin.setValue(
-            int(entity._extra.get("interaction_priority", 0))
+            int(
+                entity._extra.get(
+                    "interaction_priority",
+                    defaults["interaction_priority"],
+                )
+            )
         )
-        self._present_check.setChecked(bool(entity._extra.get("present", True)))
-        self._visible_check.setChecked(bool(entity._extra.get("visible", True)))
+        self._present_check.setChecked(bool(entity._extra.get("present", defaults["present"])))
+        self._visible_check.setChecked(bool(entity._extra.get("visible", defaults["visible"])))
         self._entity_commands_enabled_check.setChecked(
-            bool(entity._extra.get("entity_commands_enabled", True))
+            bool(
+                entity._extra.get(
+                    "entity_commands_enabled",
+                    defaults["entity_commands_enabled"],
+                )
+            )
         )
         has_color = color is not None
         red, green, blue = color or DEFAULT_ENTITY_COLOR
@@ -1718,7 +1884,7 @@ class _EntityInstanceFieldsEditor(QWidget):
                 extra,
                 key=key,
                 value=bool(widget.isChecked()),
-                default=_ENTITY_BOOL_DEFAULTS[key],
+                default=self._effective_field_defaults[key],
             )
 
     def _apply_numeric_extra_values(self, extra: dict[str, object]) -> None:
@@ -1732,12 +1898,13 @@ class _EntityInstanceFieldsEditor(QWidget):
                 extra,
                 key=key,
                 value=int(widget.value()),
-                default=_ENTITY_INT_DEFAULTS[key],
+                default=self._effective_field_defaults[key],
             )
 
     def clear_entity(self) -> None:
         self._entity = None
         self._effective_space = "world"
+        self._effective_field_defaults = self._default_managed_field_defaults()
         self._loading = True
         try:
             blockers = self._field_signal_blockers()
@@ -1775,6 +1942,7 @@ class _EntityInstanceFieldsEditor(QWidget):
     def load_entity(self, entity: EntityDocument) -> None:
         self._entity = entity
         self._effective_space = self._compute_effective_space(entity)
+        self._effective_field_defaults = self._compute_effective_field_defaults(entity)
         has_pixel_x = entity.pixel_x is not None
         has_pixel_y = entity.pixel_y is not None
         raw_tags = entity._extra.get("tags", [])
@@ -1856,7 +2024,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             extra,
             key="scope",
             value=self._scope_combo.currentText(),
-            default="area",
+            default=self._effective_field_defaults["scope"],
         )
 
         tags = parse_tag_list(self._tags_edit.text())
@@ -1867,7 +2035,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             extra,
             key="facing",
             value=self._facing_combo.currentText(),
-            default="down",
+            default=self._effective_field_defaults["facing"],
         )
 
         self._apply_toggle_extra_values(extra)
@@ -1966,6 +2134,45 @@ class _EntityInstanceFieldsEditor(QWidget):
             if template_space is not None:
                 effective_space = template_space
         return effective_space
+
+    @staticmethod
+    def _default_managed_field_defaults() -> dict[str, object]:
+        defaults: dict[str, object] = {
+            "scope": "area",
+            "facing": "down",
+        }
+        defaults.update(_ENTITY_BOOL_DEFAULTS)
+        defaults.update(_ENTITY_INT_DEFAULTS)
+        return defaults
+
+    def _compute_effective_field_defaults(self, entity: EntityDocument) -> dict[str, object]:
+        defaults = self._default_managed_field_defaults()
+        if not entity.template or self._template_catalog is None:
+            return defaults
+
+        template = self._template_catalog.get_template_data(entity.template)
+        if not template:
+            return defaults
+
+        scope = str(template.get("scope", defaults["scope"])).strip().lower()
+        if scope in {"area", "global"}:
+            defaults["scope"] = scope
+
+        facing = template.get("facing")
+        if isinstance(facing, str) and facing in ENTITY_FACING_VALUES:
+            defaults["facing"] = facing
+
+        for key in _ENTITY_BOOL_DEFAULTS:
+            value = template.get(key)
+            if isinstance(value, bool):
+                defaults[key] = value
+
+        for key in _ENTITY_INT_DEFAULTS:
+            value = template.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                defaults[key] = value
+
+        return defaults
 
     def _apply_space_visibility(self, *, has_pixel_x: bool, has_pixel_y: bool) -> None:
         is_screen = self._effective_space == "screen"

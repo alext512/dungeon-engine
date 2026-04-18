@@ -108,6 +108,8 @@ class AnimationSystem:
             for visual in entity.visuals:
                 if self._update_command_playback(visual):
                     continue
+                if self._update_default_visual_state(entity, visual, dt):
+                    continue
                 if not visual.frames:
                     visual.current_frame = 0
                     continue
@@ -125,6 +127,39 @@ class AnimationSystem:
                 visual.current_frame = visual.frames[
                     frame_step % len(visual.frames)
                 ]
+
+    def _update_default_visual_state(self, entity, visual, dt: float) -> bool:
+        """Apply one visual's facing-aware default clip when it has one."""
+        animation_id = visual.resolve_default_animation_id(entity.get_effective_facing())
+        if animation_id is None:
+            return False
+
+        clip = visual.animations.get(animation_id)
+        if clip is None or not clip.frames:
+            return False
+
+        if clip.flip_x is not None:
+            visual.flip_x = bool(clip.flip_x)
+
+        if visual.animate_when_moving and entity.movement_state.active:
+            return False
+
+        if visual.animate_when_moving and not entity.movement_state.active:
+            visual.animation_elapsed = 0.0
+            visual.current_frame = clip.frames[0]
+            return True
+
+        if visual.animation_fps <= 0 or len(clip.frames) == 1:
+            visual.animation_elapsed = 0.0
+            visual.current_frame = clip.frames[0]
+            return True
+
+        visual.animation_elapsed += dt
+        frame_step = int(visual.animation_elapsed * visual.animation_fps)
+        visual.current_frame = clip.frames[
+            frame_step % len(clip.frames)
+        ]
+        return True
 
     def _update_command_playback(self, visual) -> bool:
         """Advance command-driven playback and return True when it handled the frame."""

@@ -104,8 +104,8 @@ Read these files in this order:
 
 Then refresh yourself on the runtime JSON contract:
 
-1. [../../docs/manuals/authoring-guide.md](../../docs/manuals/authoring-guide.md)
-2. [../../docs/manuals/engine-json-interface.md](../../docs/manuals/engine-json-interface.md)
+1. [../../docs/authoring/manuals/authoring-guide.md](../../docs/authoring/manuals/authoring-guide.md)
+2. [../../docs/authoring/manuals/engine-json-interface.md](../../docs/authoring/manuals/engine-json-interface.md)
 3. [../../AGENTS.md](../../AGENTS.md)
 
 The archived built-in editor is available only as historical reference:

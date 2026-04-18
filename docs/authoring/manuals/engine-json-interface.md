@@ -177,6 +177,15 @@ choice-layout presets may define:
 - `choices.panel` plus `choices.x` / `choices.y` / `choices.width` for
   separate-panel choice menus
 
+Current inline-choice behavior:
+
+- if the segment has prompt `text`, the prompt uses exactly one line in the
+  main dialogue panel
+- long inline prompts continuously marquee inside that one line
+- remaining main-panel lines are used for visible choice rows
+- if the segment has no prompt `text`, inline choices can use all available
+  main-panel lines
+
 For the engine-owned inventory runtime, `inventory_ui.presets` is the current
 shared-variable convention for named inventory UI layouts. Current presets may
 define:
@@ -475,6 +484,7 @@ Supported `type` values:
 - `area_id`
 - `item_id`
 - `dialogue_path`
+- `dialogue_definition`
 - `project_command_id`
 - `entity_template_id`
 - `asset_path`
@@ -497,6 +507,8 @@ Supported constraints:
 Entity ids are still authored as plain ids. `area_parameter` only tells tools
 and validation which area the id must come from, for cases such as
 `target_area` plus `destination_entity_id` on an area transition.
+`dialogue_definition` parameters must be JSON objects with a `segments` array,
+using the same dialogue schema as file-backed dialogue JSON.
 
 ### Current Entity Fields
 
@@ -623,6 +635,7 @@ Each `visuals[]` entry currently uses:
 - `frame_height`
 - `frames`
 - `default_animation`
+- `default_animation_by_facing`
 - `animations`
 - `animation_fps`
 - `animate_when_moving`
@@ -646,6 +659,12 @@ Named clips live under `animations`:
   "frame_width": 16,
   "frame_height": 16,
   "default_animation": "idle_down",
+  "default_animation_by_facing": {
+    "up": "idle_up",
+    "down": "idle_down",
+    "left": "idle_left",
+    "right": "idle_right"
+  },
   "animations": {
     "idle_down": { "frames": [0] },
     "idle_up": { "frames": [1] },
@@ -658,6 +677,13 @@ Named clips live under `animations`:
   }
 }
 ```
+
+`default_animation` names the visual's default clip. If top-level `frames` are
+omitted, the loader derives the visual's free-running frame list from
+`default_animation` or the first authored clip. `default_animation_by_facing`
+is optional and lets one visual explicitly map `up`, `down`, `left`, and
+`right` facings to different default clips when the entity is instantiated or
+when transferred visuals are reset after an area change.
 
 Clip fields:
 
@@ -764,6 +790,7 @@ Current rules:
 
 - `raw_data` - keep the parameter raw during `run_project_command` resolution without treating it as a command-bearing payload
 - `command_payload` - keep the parameter raw and audit it as one command object or a list of command objects
+- `dialogue_definition` - keep one inline dialogue definition raw and audit its command-bearing segment and option fields
 - `dialogue_segment_hooks` - keep the parameter raw and audit it as a dialogue segment-hook list
 
 ## Ordinary Project JSON Data
@@ -1679,11 +1706,13 @@ Those hooks receive:
 
 ### Dialogue
 
-- `open_dialogue_session(dialogue_path, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
+- `open_dialogue_session(dialogue_path? | dialogue_definition?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
 - `close_dialogue_session()`
 
 Current engine-owned dialogue runtime behavior:
-- loads ordinary dialogue JSON by `dialogue_path`
+- accepts exactly one dialogue source: either ordinary dialogue JSON by
+  `dialogue_path`, or an inline `dialogue_definition` object with the same
+  `segments` schema as a dialogue file
 - reads named UI presets from `shared_variables.dialogue_ui`
 - owns current segment, page, choice index, choice scroll, timer advance, and
   modal input behavior
@@ -2073,7 +2102,13 @@ Some command params intentionally defer nested command specs instead of resolvin
 Builtin deferred command fields are declared in the command registry with an explicit payload shape:
 
 - `command_payload` - the value is one command object or a list of command objects
+- `dialogue_definition` - the value is one inline dialogue definition whose command-bearing fields run later
 - `dialogue_segment_hooks` - the value is a dialogue segment-hook list with command-bearing hook fields
+
+Deferred builtin command params with `dialogue_definition` shape:
+
+- `run_entity_command.dialogue_definition`
+- `open_dialogue_session.dialogue_definition`
 
 Deferred builtin command params with `command_payload` shape:
 

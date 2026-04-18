@@ -28,7 +28,7 @@ The strict command-authoring pass currently audits known command-bearing JSON su
 - inline area-entity `entity_commands`
 - `project.json` `global_entities[*].entity_commands`
 - dialogue JSON under the conventional `dialogues/` tree
-- nested deferred command payloads such as `segment_hooks`, inline option commands, and `option_commands_by_id`
+- nested deferred command payloads such as inline `dialogue_definition`, `segment_hooks`, inline option commands, and `option_commands_by_id`
 
 One practical benefit is that likely top-level typos on strict primitive commands, such as `persitent` instead of `persistent`, fail before launch.
 

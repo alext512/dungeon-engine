@@ -76,37 +76,20 @@
       "id": "player_1",
       "grid_x": 2,
       "grid_y": 4,
-      "template": "entity_templates/player",
+      "template": "entity_templates/actively_used/player",
       "facing": "up"
     },
     {
       "id": "starting_position",
       "grid_x": 2,
       "grid_y": 4,
-      "template": "entity_templates/area_transition_target"
-    },
-    {
-      "id": "sample_glimmer_berry_pickup",
-      "grid_x": 2,
-      "grid_y": 3,
-      "template": "entity_templates/inventory_pickup",
-      "parameters": {
-        "item_id": "items/consumables/glimmer_berry",
-        "quantity": 1,
-        "pickup_message": "Picked up a glimmer berry."
-      }
-    },
-    {
-      "id": "sample_hook_terminal",
-      "grid_x": 3,
-      "grid_y": 4,
-      "template": "entity_templates/dialogue_hook_terminal"
+      "template": "entity_templates/actively_used/area_transition_target"
     },
     {
       "id": "cave_entrance_out",
       "grid_x": 2,
       "grid_y": 1,
-      "template": "entity_templates/area_transition",
+      "template": "entity_templates/actively_used/area_transition",
       "parameters": {
         "destination_entity_id": "cave_entrance_in",
         "target_area": "areas/cave"
@@ -116,13 +99,13 @@
       "id": "boulder_1",
       "grid_x": 2,
       "grid_y": 2,
-      "template": "entity_templates/boulder"
+      "template": "entity_templates/actively_used/boulder"
     },
     {
       "id": "cave_exit_out",
       "grid_x": 2,
       "grid_y": 2,
-      "template": "entity_templates/area_transition_target"
+      "template": "entity_templates/actively_used/area_transition_target"
     }
   ],
   "camera": {

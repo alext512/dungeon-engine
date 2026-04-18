@@ -16,10 +16,15 @@ from dungeon_engine.commands.runner import CommandContext, CommandHandle
 
 CommandCallable = Callable[[CommandContext], CommandHandle | None]
 CommandValidationMode = Literal["strict", "mixed", "passthrough"]
-DeferredCommandPayloadShape = Literal["command_payload", "dialogue_segment_hooks"]
+DeferredCommandPayloadShape = Literal[
+    "command_payload",
+    "dialogue_definition",
+    "dialogue_segment_hooks",
+]
 _DEFERRED_COMMAND_PAYLOAD_SHAPES = frozenset(
     {
         "command_payload",
+        "dialogue_definition",
         "dialogue_segment_hooks",
     }
 )

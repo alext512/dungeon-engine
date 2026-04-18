@@ -93,6 +93,8 @@ It now supports active authoring workflows such as:
 - render-property editing
 - project manifest, shared-variables, item, and global-entity editing
 - reference-aware `Rename/Move...` for file-backed project content
+- drag-to-folder moves in the file-backed browsers, reusing the same
+  reference-update preview workflow
 - guarded raw JSON editing for the supported document types
 
 The editor is still not fully caught up with every runtime-facing workflow,
@@ -315,6 +317,7 @@ Other useful docs:
   - an engine-owned inventory session opened through `open_inventory_session`
 - Dialogue now has two valid authoring paths:
   - the engine-owned session runtime, opened through `open_dialogue_session`
+    from either `dialogue_path` or inline `dialogue_definition`
   - a controller-authored flow for projects that need command-level UI control
 - Projects can route different logical inputs to different entities at runtime.
 - Save data stores the current area, current routed input targets, camera state,

@@ -66,6 +66,15 @@ Build static output:
 mkdocs build --strict
 ```
 
+Check repo-local Markdown links:
+
+```text
+.venv/Scripts/python tools/check_markdown_links.py
+```
+
+The Markdown link checker is covered by `tests/test_markdown_link_checker.py`
+so stale local doc paths and pointer targets stay visible in the runtime suite.
+
 ## Recommended Maintainer Habit
 
 When you change command surfaces, authoring conventions, repo-local example projects, or editor workflows:

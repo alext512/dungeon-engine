@@ -16,7 +16,7 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 
 ## Dialogue
 
-- `open_dialogue_session` opens the engine-owned dialogue runtime for a dialogue JSON file.
+- `open_dialogue_session` opens the engine-owned dialogue runtime from either a dialogue JSON file or an inline `dialogue_definition`.
 - `close_dialogue_session` closes the current engine-owned dialogue session.
 
 ## Inventory

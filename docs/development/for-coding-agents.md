@@ -64,6 +64,7 @@ If you touch command surfaces, authoring conventions, or repo-local example proj
 5. Do a brief manual smoke start if feasible.
 
 If you touch `tools/area_editor/`, also run its own test suite from inside that folder.
+If you touch repo docs or pointer files, also run `.venv/Scripts/python tools/check_markdown_links.py`.
 
 Use [Startup Checks](../authoring/startup-checks.md) when you need the exact current startup pipeline and the command-bearing surfaces the runtime audits before launch.
 Use [Verification and Validation](verification-and-validation.md) when you need the full maintainer workflow: tests, smoke commands, repo-local project validation, and docs builds.
@@ -73,6 +74,8 @@ Use [Verification and Validation](verification-and-validation.md) when you need 
 - Do not let plans silently become truth.
 - Update canonical contract docs when implementation changes.
 - Update author-facing docs when workflows change.
+- Do not ignore clearly broken low-risk docs such as stale local links, pointer-file targets, or obviously wrong read-order references when the fix is unambiguous and easy to verify.
+- If the issue affects canonical behavior or design truth, resolve it deliberately instead of "tidying" it by guesswork.
 - Keep the changelog historical, not aspirational.
 - If docs disagree and the correct behavior is unclear, stop and resolve the ambiguity instead of guessing.
 

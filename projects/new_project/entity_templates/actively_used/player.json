@@ -25,15 +25,73 @@
       "frame_width": 16,
       "frame_height": 16,
       "default_animation": "idle_down",
+      "default_animation_by_facing": {
+        "up": "idle_up",
+        "down": "idle_down",
+        "left": "idle_left",
+        "right": "idle_right"
+      },
       "animations": {
-        "idle_down": { "frames": [0] },
-        "idle_up": { "frames": [1] },
-        "idle_right": { "frames": [2], "flip_x": false },
-        "idle_left": { "frames": [2], "flip_x": true },
-        "walk_down": { "frames": [0, 3, 6, 3], "preserve_phase": true },
-        "walk_up": { "frames": [1, 4, 7, 4], "preserve_phase": true },
-        "walk_right": { "frames": [2, 5, 8, 5], "flip_x": false, "preserve_phase": true },
-        "walk_left": { "frames": [2, 5, 8, 5], "flip_x": true, "preserve_phase": true }
+        "idle_down": {
+          "frames": [
+            0
+          ]
+        },
+        "idle_up": {
+          "frames": [
+            1
+          ]
+        },
+        "idle_right": {
+          "frames": [
+            2
+          ],
+          "flip_x": false
+        },
+        "idle_left": {
+          "frames": [
+            2
+          ],
+          "flip_x": true
+        },
+        "walk_down": {
+          "frames": [
+            3,
+            0,
+            6,
+            0
+          ],
+          "preserve_phase": true
+        },
+        "walk_up": {
+          "frames": [
+            4,
+            1,
+            7,
+            1
+          ],
+          "preserve_phase": true
+        },
+        "walk_right": {
+          "frames": [
+            5,
+            2,
+            8,
+            2
+          ],
+          "flip_x": false,
+          "preserve_phase": true
+        },
+        "walk_left": {
+          "frames": [
+            5,
+            2,
+            8,
+            2
+          ],
+          "flip_x": true,
+          "preserve_phase": true
+        }
       },
       "visible": true
     }

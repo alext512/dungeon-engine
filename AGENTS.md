@@ -184,6 +184,12 @@ Recommended direct project validation:
 .venv/Scripts/python tools/validate_projects.py --headless-smoke
 ```
 
+If you touch repo docs, pointer files, or onboarding docs, also run:
+
+```text
+.venv/Scripts/python tools/check_markdown_links.py
+```
+
 Why this matters:
 
 - A general engine test pass does not guarantee that every example project's startup validation path is clean.
@@ -192,6 +198,24 @@ Why this matters:
 - Some end-to-end runtime tests use optional repo-local example projects and
   skip when those fixtures are not present. Treat those as bonus integration
   coverage, not as the only safety net.
+
+## Low-Risk Documentation Fixes
+
+Do not ignore clearly broken, low-risk documentation defects just because they
+are adjacent to another task.
+
+Safe opportunistic fixes include:
+
+- broken local Markdown links or pointer-file targets
+- stale filenames or moved-doc paths
+- obviously wrong read-order references
+- straightforward typos that do not change technical meaning
+
+Only make those fixes when the correction is unambiguous and easy to verify.
+
+Do not casually rewrite canonical behavior docs, architecture docs, or planning
+history unless the underlying truth is clear and you are updating the matching
+implementation/tests/docs bundle on purpose.
 
 ## Architectural Debt Guardrails
 

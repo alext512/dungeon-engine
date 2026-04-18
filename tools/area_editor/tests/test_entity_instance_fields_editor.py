@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -175,6 +176,30 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                     "type": "bool",
                 },
             },
+        }
+        self.catalog._templates["entity_templates/dialogue_sign"] = {
+            "parameters": {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Default sign text.",
+                        }
+                    ]
+                }
+            },
+            "parameter_specs": {
+                "dialogue_definition": {
+                    "type": "dialogue_definition",
+                    "required": True,
+                }
+            },
+        }
+        self.catalog._templates["entity_templates/sign"] = {
+            "solid": True,
+            "interactable": True,
+            "interaction_priority": 10,
+            "facing": "left",
         }
         self.panel.set_template_catalog(self.catalog)
 
@@ -457,6 +482,88 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             ],
         )
         self.assertEqual(updated._extra["custom_field"], "keep-me")
+
+    def test_template_managed_field_defaults_drive_ui_without_forcing_overrides(self):
+        entity = EntityDocument(
+            id="sign_1",
+            grid_x=4,
+            grid_y=5,
+            template="entity_templates/sign",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertEqual(fields._facing_combo.currentText(), "left")
+        self.assertTrue(fields._solid_check.isChecked())
+        self.assertTrue(fields._interactable_check.isChecked())
+        self.assertEqual(fields._interaction_priority_spin.value(), 10)
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertNotIn("facing", updated._extra)
+        self.assertNotIn("solid", updated._extra)
+        self.assertNotIn("interactable", updated._extra)
+        self.assertNotIn("interaction_priority", updated._extra)
+
+    def test_dialogue_definition_parameter_uses_popup_editor_and_builds_explicit_override(self):
+        entity = EntityDocument(
+            id="sign_dialogue",
+            grid_x=3,
+            grid_y=2,
+            template="entity_templates/dialogue_sign",
+        )
+
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+        field = parameters._parameter_fields["dialogue_definition"]
+
+        self.assertEqual(field.control_kind, "dialogue_definition")
+        self.assertEqual(
+            field.summary_label.text(),
+            "1 segment, 1 text",
+        )
+        self.assertFalse(field.explicit_override_enabled)
+        self.assertEqual(parameters.build_parameters_value(), None)
+
+        updated_definition = {
+            "segments": [
+                {
+                    "type": "choice",
+                    "text": "Read more?",
+                    "options": [
+                        {
+                            "option_id": "yes",
+                            "text": "Yes",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        with patch.object(
+            parameters,
+            "_open_dialogue_definition_dialog",
+            return_value=updated_definition,
+        ):
+            assert field.action_button is not None
+            field.action_button.click()
+
+        built = parameters.build_parameters_value()
+
+        self.assertEqual(
+            built,
+            {
+                "dialogue_definition": updated_definition,
+            },
+        )
+        self.assertTrue(field.explicit_override_enabled)
+        self.assertEqual(field.status_label.text(), "authored override")
+
+        parameters._on_dialogue_parameter_reset("dialogue_definition")
+
+        self.assertEqual(parameters.build_parameters_value(), None)
+        self.assertFalse(field.explicit_override_enabled)
 
     def test_build_entity_from_fields_updates_scope(self):
         entity = EntityDocument(

@@ -31,6 +31,7 @@ class TemplateListPanel(FileTreePanel):
             "Entity Templates",
             object_name="TemplateListPanel",
             icon_size=24,
+            content_prefix=TEMPLATE_ID_PREFIX,
             parent=parent,
         )
         self.file_selected.connect(self._on_file_selected)
@@ -51,55 +52,36 @@ class TemplateListPanel(FileTreePanel):
         catalog: TilesetCatalog,
     ) -> None:
         """Populate from template paths with sprite icons."""
-        self._tree.blockSignals(True)
-        self._tree.clear()
-
-        folder_nodes: dict[str, object] = {}
-        from PySide6.QtWidgets import QTreeWidgetItem
-
-        for entry in discover_entity_templates(manifest):
-            content_id = entry.template_id
-            display_id = content_id.removeprefix(f"{TEMPLATE_ID_PREFIX}/")
-            parts = display_id.split("/")
-            if len(parts) == 1:
-                parent = self._tree.invisibleRootItem()
-                leaf_name = parts[0]
-            else:
-                parent = self._tree.invisibleRootItem()
-                for depth, folder_name in enumerate(parts[:-1]):
-                    folder_key = "/".join(parts[: depth + 1])
-                    if folder_key not in folder_nodes:
-                        folder_item = QTreeWidgetItem(parent, [folder_name])
-                        folder_item.setData(0, 256, None)
-                        folder_item.setExpanded(True)
-                        folder_nodes[folder_key] = folder_item
-                    parent = folder_nodes[folder_key]
-                leaf_name = parts[-1]
-
-            item = QTreeWidgetItem(parent, [leaf_name])
-            item.setData(0, 256, (content_id, entry.file_path))
-            item.setToolTip(0, content_id)
-
+        def icon_provider(content_id: str, _file_path: Path) -> QIcon | None:
             visual = templates.get_first_visual(content_id)
-            if visual is not None:
-                frame_index = visual.frames[0] if visual.frames else 0
-                pm = catalog.get_sprite_frame(
-                    visual.path,
-                    visual.frame_width,
-                    visual.frame_height,
-                    frame_index,
-                )
-                if pm is not None:
-                    if visual.flip_x:
-                        pm = pm.transformed(QTransform().scale(-1, 1))
-                    scaled = pm.scaled(
-                        QSize(24, 24),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.FastTransformation,
-                    )
-                    item.setIcon(0, QIcon(scaled))
+            if visual is None:
+                return None
+            frame_index = visual.frames[0] if visual.frames else 0
+            pm = catalog.get_sprite_frame(
+                visual.path,
+                visual.frame_width,
+                visual.frame_height,
+                frame_index,
+            )
+            if pm is None:
+                return None
+            if visual.flip_x:
+                pm = pm.transformed(QTransform().scale(-1, 1))
+            scaled = pm.scaled(
+                QSize(24, 24),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.FastTransformation,
+            )
+            return QIcon(scaled)
 
-        self._tree.blockSignals(False)
+        self.populate(
+            list(manifest.entity_template_paths),
+            icon_provider=icon_provider,
+        )
+
+        discovered_ids = {entry.template_id for entry in discover_entity_templates(manifest)}
+        if self._active_brush_template_id not in discovered_ids:
+            self._active_brush_template_id = None
         self._refresh_brush_highlight()
 
     def clear_templates(self) -> None:

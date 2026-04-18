@@ -4,6 +4,29 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Inline Dialogue Definitions
+
+- Added `dialogue_definition` as a first-class inline source for
+  `open_dialogue_session`, alongside file-backed `dialogue_path`
+- Added deferred command-audit handling for inline dialogue definitions so
+  segment and option commands stay raw until the dialogue runtime executes them
+- Added `dialogue_definition` as a typed template parameter spec for embedded
+  entity-owned dialogue data
+
+---
+
+## Facing-Aware Default Visual State
+
+- Added optional visual `default_animation_by_facing` mappings so entities can
+  explicitly pick different default clips for `up`, `down`, `left`, and
+  `right` facings
+- Updated entity construction and transfer-reset logic to restore visuals from
+  the entity's current facing-aware default state instead of always falling
+  back to one hardcoded default clip
+- Updated the sample project player template to use facing-aware idle defaults
+
+---
+
 ## Area Transition Traveler Fixes
 
 - Added an optional `allowed_instigator_kinds` guard to `change_area` so

@@ -1223,7 +1223,7 @@ Those roots should keep their own documented public shapes.
 
 The full proposed future dot-notation contract now lives in:
 
-- [dot_notation_future_spec.md](C:/Syncthing/Vault/projects/puzzle_dungeon_v3/python_puzzle_engine/plans/dot_notation_future_spec.md)
+- [dot_notation_future_spec.md](dot_notation_future_spec.md)
 
 That file is intentionally detailed and should be treated as a proposal only.
 When the implementation is complete, its normative rules should be moved into

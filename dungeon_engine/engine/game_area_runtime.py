@@ -487,37 +487,50 @@ class GameAreaRuntimeMixin:
 
     def _place_transferred_entity(self, area, entity, *, entry_point, destination_entity) -> None:
         """Move one transferred entity onto the destination entry marker when provided."""
-        if entity.space != "world":
-            return
-        if destination_entity is not None:
-            if destination_entity.space != "world":
-                raise ValueError(
-                    f"Destination entity '{destination_entity.entity_id}' must be world-space."
+        if entity.space == "world":
+            if destination_entity is not None:
+                if destination_entity.space != "world":
+                    raise ValueError(
+                        f"Destination entity '{destination_entity.entity_id}' must be world-space."
+                    )
+                entity.grid_x = int(destination_entity.grid_x)
+                entity.grid_y = int(destination_entity.grid_y)
+                if destination_entity.authored_facing is not None:
+                    entity.set_facing_value(str(destination_entity.authored_facing))
+                entity.pixel_x = float(destination_entity.pixel_x)
+                entity.pixel_y = float(destination_entity.pixel_y)
+            elif entry_point is None:
+                entity.sync_pixel_position(area.tile_size)
+            else:
+                entity.grid_x = int(entry_point.grid_x)
+                entity.grid_y = int(entry_point.grid_y)
+                if entry_point.facing is not None:
+                    entity.set_facing_value(str(entry_point.facing))
+                entity.pixel_x = (
+                    float(entry_point.pixel_x)
+                    if entry_point.pixel_x is not None
+                    else float(entity.grid_x * area.tile_size)
                 )
-            entity.grid_x = int(destination_entity.grid_x)
-            entity.grid_y = int(destination_entity.grid_y)
-            if destination_entity.facing:
-                entity.set_facing_value(str(destination_entity.facing))
-            entity.pixel_x = float(destination_entity.pixel_x)
-            entity.pixel_y = float(destination_entity.pixel_y)
-            return
-        if entry_point is None:
-            entity.sync_pixel_position(area.tile_size)
-            return
-        entity.grid_x = int(entry_point.grid_x)
-        entity.grid_y = int(entry_point.grid_y)
-        if entry_point.facing is not None:
-            entity.set_facing_value(str(entry_point.facing))
-        entity.pixel_x = (
-            float(entry_point.pixel_x)
-            if entry_point.pixel_x is not None
-            else float(entity.grid_x * area.tile_size)
-        )
-        entity.pixel_y = (
-            float(entry_point.pixel_y)
-            if entry_point.pixel_y is not None
-            else float(entity.grid_y * area.tile_size)
-        )
+                entity.pixel_y = (
+                    float(entry_point.pixel_y)
+                    if entry_point.pixel_y is not None
+                    else float(entity.grid_y * area.tile_size)
+                )
+
+        self._reset_transferred_entity_visuals(entity)
+
+    def _reset_transferred_entity_visuals(self, entity) -> None:
+        """Clear transferred playback state and restore each visual's authored default frame."""
+        for visual in entity.visuals:
+            playback = visual.animation_playback
+            playback.active = False
+            playback.frame_sequence = []
+            playback.duration_ticks = 0
+            playback.elapsed_ticks = 0
+            playback.current_sequence_index = 0
+            playback.started_this_tick = False
+            visual.animation_elapsed = 0.0
+        entity.apply_default_visual_state()
 
     def _apply_transition_camera_follow(self, camera_follow) -> None:
         """Apply any authored camera-follow request after a transition rebuilds runtime state."""

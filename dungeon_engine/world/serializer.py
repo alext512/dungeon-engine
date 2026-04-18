@@ -218,7 +218,6 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         "scope": entity.scope,
         "present": entity.present,
         "visible": entity.visible,
-        "facing": entity.get_effective_facing(),
         "solid": entity.is_effectively_solid(),
         "pushable": entity.is_effectively_pushable(),
         "weight": int(entity.weight),
@@ -242,6 +241,8 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
         data["input_map"] = copy.deepcopy(entity.input_map)
     if data["inventory"] is None:
         data.pop("inventory", None)
+    if entity.authored_facing is not None or entity.get_effective_facing() != "down":
+        data["facing"] = entity.get_effective_facing()
     data.update(_serialize_pixel_position_fields(entity, tile_size))
     entity_commands = _serialize_entity_commands(entity)
     if entity_commands:
@@ -262,7 +263,6 @@ def _serialize_runtime_entity_fields(
         "scope": entity.scope,
         "present": entity.present,
         "visible": entity.visible,
-        "facing": entity.get_effective_facing(),
         "solid": entity.is_effectively_solid(),
         "pushable": entity.is_effectively_pushable(),
         "weight": int(entity.weight),
@@ -276,6 +276,8 @@ def _serialize_runtime_entity_fields(
         "tags": copy.deepcopy(entity.tags),
         "variables": copy.deepcopy(entity.variables),
     }
+    if entity.authored_facing is not None or entity.get_effective_facing() != "down":
+        data["facing"] = entity.get_effective_facing()
     data.update(
         _serialize_entity_render_fields(
             entity,
@@ -378,6 +380,11 @@ def _serialize_visuals(entity: Any) -> list[dict[str, Any]]:
         }
         if visual.default_animation is not None:
             serialized_visual["default_animation"] = visual.default_animation
+        if visual.default_animation_by_facing:
+            serialized_visual["default_animation_by_facing"] = {
+                str(facing): str(animation_id)
+                for facing, animation_id in sorted(visual.default_animation_by_facing.items())
+            }
         if visual.animations:
             serialized_visual["animations"] = _serialize_visual_animations(visual)
         serialized.append(serialized_visual)

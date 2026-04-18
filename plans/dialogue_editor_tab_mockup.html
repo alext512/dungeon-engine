@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dialogue Tab Mockup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #d9d9d9;
+      --panel: #f7f7f7;
+      --panel-2: #ffffff;
+      --border: #bdbdbd;
+      --border-strong: #8f8f8f;
+      --text: #1e1e1e;
+      --muted: #666666;
+      --accent: #2f6fdb;
+      --accent-soft: #dfeaff;
+      --button: #efefef;
+      --button-hover: #e2e2e2;
+      --danger: #b83f3f;
+      --shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+      --radius: 6px;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #ececec;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .dialog {
+      width: min(1120px, 100%);
+      min-height: min(760px, calc(100vh - 48px));
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .titlebar {
+      height: 34px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f2f2f2;
+      font-size: 14px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 10px 10px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .tab {
+      border: 1px solid var(--border);
+      border-bottom: none;
+      background: #ececec;
+      border-top-left-radius: var(--radius);
+      border-top-right-radius: var(--radius);
+      padding: 8px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      color: #4b4b4b;
+    }
+
+    .tab.active {
+      background: var(--panel-2);
+      color: var(--text);
+    }
+
+    .tab-content {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      background: var(--panel-2);
+      padding: 14px;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2e2e2e;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    .field,
+    .select,
+    .textarea,
+    .json-preview {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    .textarea,
+    .json-preview {
+      min-height: 92px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .json-preview {
+      min-height: 190px;
+      background: #fcfcfc;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    .button {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--button);
+      color: var(--text);
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+      min-width: 72px;
+    }
+
+    .button:hover {
+      background: var(--button-hover);
+    }
+
+    .button.primary {
+      background: var(--accent);
+      border-color: #285fbc;
+      color: #fff;
+    }
+
+    .button.primary:hover {
+      background: #255fbe;
+    }
+
+    .button.danger {
+      color: var(--danger);
+    }
+
+    .parameters-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fafafa;
+      padding: 12px;
+    }
+
+    .dialogue-layout {
+      display: grid;
+      grid-template-columns: 290px minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .pane {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .pane-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: #f2f2f2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .pane-body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .segment-list,
+    .option-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .segment-item,
+    .option-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 9px 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .segment-item.active,
+    .option-item.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .segment-type,
+    .option-type {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #335ea5;
+      letter-spacing: 0;
+    }
+
+    .segment-summary,
+    .option-summary {
+      font-size: 13px;
+      color: #2a2a2a;
+      word-break: break-word;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .option-editor {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .footer {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px 14px;
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+    }
+
+    .placeholder {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--muted);
+      padding: 16px;
+      font-size: 13px;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .muted-panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fdfdfd;
+      padding: 10px;
+    }
+
+    @media (max-width: 980px) {
+      .dialogue-layout,
+      .split {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="dialog">
+    <div class="titlebar">
+      <div>Edit Entity Instance: sign_4</div>
+      <div>×</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab" data-tab="parameters">Parameters</button>
+      <button class="tab active" data-tab="dialogue">Dialogue</button>
+      <button class="tab" data-tab="instance">Entity Instance Editor</button>
+      <button class="tab" data-tab="json">Entity Instance JSON</button>
+    </div>
+
+    <section class="tab-content" id="tab-parameters">
+      <div class="row">
+        <div class="label">Selected Entity: sign_4</div>
+      </div>
+
+      <div class="parameters-grid">
+        <div class="label">dialogue_definition</div>
+        <div class="subtle" id="parameter-summary">4 segments, 1 choice segment</div>
+        <button class="button primary" id="edit-dialogue-button">Edit...</button>
+      </div>
+
+      <div class="parameters-grid">
+        <div class="label">material</div>
+        <input class="field" value="wood" readonly>
+        <button class="button">Browse...</button>
+      </div>
+    </section>
+
+    <section class="tab-content active" id="tab-dialogue">
+      <div class="row">
+        <div class="stack grow">
+          <label class="label" for="dialogue-parameter-select">Dialogue Parameter</label>
+          <select class="select" id="dialogue-parameter-select"></select>
+        </div>
+      </div>
+
+      <div class="dialogue-layout">
+        <div class="pane">
+          <div class="pane-header">
+            <div class="label">Segments</div>
+            <div class="subtle" id="segment-count"></div>
+          </div>
+          <div class="pane-body">
+            <div class="toolbar">
+              <button class="button" id="add-text-segment">Add Text</button>
+              <button class="button" id="add-choice-segment">Add Choice</button>
+              <button class="button" id="duplicate-segment">Duplicate</button>
+              <button class="button danger" id="delete-segment">Delete</button>
+            </div>
+            <div class="toolbar">
+              <button class="button" id="move-segment-up">Move Up</button>
+              <button class="button" id="move-segment-down">Move Down</button>
+            </div>
+            <ul class="segment-list" id="segment-list"></ul>
+          </div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-header">
+            <div class="label" id="editor-title">Segment Editor</div>
+            <div class="subtle" id="editor-subtitle"></div>
+          </div>
+          <div class="pane-body" id="segment-editor"></div>
+        </div>
+      </div>
+
+      <div class="pane" style="min-height: 210px;">
+        <div class="pane-header">
+          <div class="label">JSON Preview</div>
+          <div class="subtle">dialogue_definition</div>
+        </div>
+        <div class="pane-body">
+          <div class="json-preview" id="json-preview"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-content" id="tab-instance">
+      <div class="placeholder">This mockup only fleshes out the Dialogue tab idea.</div>
+    </section>
+
+    <section class="tab-content" id="tab-json">
+      <div class="placeholder">Raw entity JSON would stay here as the escape hatch.</div>
+    </section>
+
+    <div class="footer">
+      <button class="button primary">Apply</button>
+      <button class="button">Revert</button>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      activeTab: "dialogue",
+      selectedParameter: "dialogue_definition",
+      selectedSegmentIndex: 1,
+      selectedOptionIndex: 0,
+      parameterOrder: ["dialogue_definition"],
+      parameters: {
+        dialogue_definition: {
+          segments: [
+            {
+              type: "text",
+              text: "The sign is covered in dust.",
+              speaker_id: "sign",
+              advance: { mode: "interact" }
+            },
+            {
+              type: "choice",
+              text: "What do you do?",
+              options: [
+                {
+                  option_id: "wipe",
+                  text: "Wipe the dust away",
+                  commands: [
+                    {
+                      type: "set_entity_var",
+                      entity_id: "$ref_ids.caller",
+                      name: "sign_wiped",
+                      value: true
+                    }
+                  ]
+                },
+                {
+                  option_id: "read_more",
+                  text: "Read more carefully",
+                  commands: [
+                    {
+                      type: "open_dialogue_session",
+                      dialogue_definition: {
+                        segments: [
+                          {
+                            type: "text",
+                            text: "\"Beware the cave ahead.\""
+                          },
+                          {
+                            type: "text",
+                            text: "\"Do not enter after sunset.\""
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              type: "text",
+              text: "Under the dust, the carved letters become readable."
+            },
+            {
+              type: "text",
+              text: "\"Beware the cave ahead.\""
+            }
+          ]
+        }
+      }
+    };
+
+    const tabButtons = [...document.querySelectorAll(".tab")];
+    const tabContents = [...document.querySelectorAll(".tab-content")];
+    const parameterSelect = document.getElementById("dialogue-parameter-select");
+    const segmentList = document.getElementById("segment-list");
+    const segmentEditor = document.getElementById("segment-editor");
+    const jsonPreview = document.getElementById("json-preview");
+    const parameterSummary = document.getElementById("parameter-summary");
+    const segmentCount = document.getElementById("segment-count");
+    const editorTitle = document.getElementById("editor-title");
+    const editorSubtitle = document.getElementById("editor-subtitle");
+
+    function currentDialogue() {
+      return state.parameters[state.selectedParameter];
+    }
+
+    function currentSegments() {
+      const dialogue = currentDialogue();
+      return Array.isArray(dialogue?.segments) ? dialogue.segments : [];
+    }
+
+    function currentSegment() {
+      const segments = currentSegments();
+      return segments[state.selectedSegmentIndex] ?? null;
+    }
+
+    function currentOptions() {
+      const segment = currentSegment();
+      return Array.isArray(segment?.options) ? segment.options : [];
+    }
+
+    function currentOption() {
+      return currentOptions()[state.selectedOptionIndex] ?? null;
+    }
+
+    function deepClone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function setActiveTab(tabId) {
+      state.activeTab = tabId;
+      tabButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.tab === tabId);
+      });
+      tabContents.forEach((content) => {
+        content.classList.toggle("active", content.id === `tab-${tabId}`);
+      });
+    }
+
+    function clampSelection() {
+      const segments = currentSegments();
+      if (!segments.length) {
+        state.selectedSegmentIndex = -1;
+        state.selectedOptionIndex = -1;
+        return;
+      }
+      state.selectedSegmentIndex = Math.max(0, Math.min(state.selectedSegmentIndex, segments.length - 1));
+      const options = currentOptions();
+      if (!options.length) {
+        state.selectedOptionIndex = -1;
+      } else {
+        state.selectedOptionIndex = Math.max(0, Math.min(state.selectedOptionIndex, options.length - 1));
+      }
+    }
+
+    function summaryForSegment(segment, index) {
+      if (!segment) {
+        return `${index + 1}. empty`;
+      }
+      const kind = String(segment.type || "text");
+      const text = String(segment.text || "").trim();
+      const preview = text ? text.slice(0, 54) + (text.length > 54 ? "..." : "") : "(no text)";
+      if (kind === "choice") {
+        const optionCount = Array.isArray(segment.options) ? segment.options.length : 0;
+        return {
+          type: "choice",
+          summary: `${index + 1}. ${preview}`,
+          detail: `${optionCount} option${optionCount === 1 ? "" : "s"}`
+        };
+      }
+      return {
+        type: kind,
+        summary: `${index + 1}. ${preview}`,
+        detail: ""
+      };
+    }
+
+    function updateParameterSummary() {
+      const segments = currentSegments();
+      const choiceCount = segments.filter((segment) => segment?.type === "choice").length;
+      parameterSummary.textContent = `${segments.length} segments, ${choiceCount} choice segment${choiceCount === 1 ? "" : "s"}`;
+    }
+
+    function renderParameterDropdown() {
+      parameterSelect.innerHTML = "";
+      state.parameterOrder.forEach((parameterName) => {
+        const option = document.createElement("option");
+        option.value = parameterName;
+        option.textContent = parameterName;
+        parameterSelect.appendChild(option);
+      });
+      parameterSelect.value = state.selectedParameter;
+    }
+
+    function renderSegmentList() {
+      clampSelection();
+      const segments = currentSegments();
+      segmentList.innerHTML = "";
+      segmentCount.textContent = `${segments.length} total`;
+
+      segments.forEach((segment, index) => {
+        const item = document.createElement("li");
+        item.className = "segment-item";
+        if (index === state.selectedSegmentIndex) {
+          item.classList.add("active");
+        }
+        item.addEventListener("click", () => {
+          state.selectedSegmentIndex = index;
+          state.selectedOptionIndex = 0;
+          render();
+        });
+
+        const summary = summaryForSegment(segment, index);
+
+        const type = document.createElement("div");
+        type.className = "segment-type";
+        type.textContent = summary.type;
+
+        const main = document.createElement("div");
+        main.className = "segment-summary";
+        main.textContent = summary.summary;
+
+        item.append(type, main);
+
+        if (summary.detail) {
+          const detail = document.createElement("div");
+          detail.className = "subtle";
+          detail.textContent = summary.detail;
+          item.append(detail);
+        }
+
+        segmentList.appendChild(item);
+      });
+    }
+
+    function renderTextSegmentEditor(segment) {
+      segmentEditor.innerHTML = `
+        <div class="stack">
+          <label class="label" for="segment-text">Text</label>
+          <textarea class="textarea" id="segment-text"></textarea>
+        </div>
+        <div class="row">
+          <div class="stack grow">
+            <label class="label" for="segment-speaker">Speaker</label>
+            <input class="field" id="segment-speaker">
+          </div>
+          <div class="stack grow">
+            <label class="label" for="segment-advance">Advance</label>
+            <select class="select" id="segment-advance">
+              <option value="interact">interact</option>
+              <option value="timer">timer</option>
+              <option value="interact_or_timer">interact_or_timer</option>
+            </select>
+          </div>
+        </div>
+        <div class="muted-panel">
+          <div class="subtle">Later fields could live here too: pages, portrait, on_start, on_end.</div>
+        </div>
+      `;
+
+      document.getElementById("segment-text").value = segment.text || "";
+      document.getElementById("segment-speaker").value = segment.speaker_id || "";
+      document.getElementById("segment-advance").value = segment.advance?.mode || "interact";
+
+      document.getElementById("segment-text").addEventListener("input", (event) => {
+        segment.text = event.target.value;
+        renderSegmentList();
+        renderJsonOnly();
+      });
+      document.getElementById("segment-speaker").addEventListener("input", (event) => {
+        const value = event.target.value.trim();
+        if (value) {
+          segment.speaker_id = value;
+        } else {
+          delete segment.speaker_id;
+        }
+        renderJsonOnly();
+      });
+      document.getElementById("segment-advance").addEventListener("change", (event) => {
+        segment.advance = { mode: event.target.value };
+        renderJsonOnly();
+      });
+    }
+
+    function renderOptionList(options) {
+      const list = document.createElement("ul");
+      list.className = "option-list";
+
+      options.forEach((option, index) => {
+        const item = document.createElement("li");
+        item.className = "option-item";
+        if (index === state.selectedOptionIndex) {
+          item.classList.add("active");
+        }
+        item.addEventListener("click", () => {
+          state.selectedOptionIndex = index;
+          render();
+        });
+
+        const type = document.createElement("div");
+        type.className = "option-type";
+        type.textContent = option.option_id || `option_${index + 1}`;
+
+        const summary = document.createElement("div");
+        summary.className = "option-summary";
+        summary.textContent = option.text || "(no option text)";
+
+        item.append(type, summary);
+        list.appendChild(item);
+      });
+
+      return list;
+    }
+
+    function renderChoiceSegmentEditor(segment) {
+      const options = Array.isArray(segment.options) ? segment.options : (segment.options = []);
+      if (options.length && state.selectedOptionIndex < 0) {
+        state.selectedOptionIndex = 0;
+      }
+
+      segmentEditor.innerHTML = "";
+
+      const promptBlock = document.createElement("div");
+      promptBlock.className = "stack";
+      promptBlock.innerHTML = `
+        <label class="label" for="choice-prompt">Prompt</label>
+        <textarea class="textarea" id="choice-prompt"></textarea>
+      `;
+      segmentEditor.appendChild(promptBlock);
+
+      const split = document.createElement("div");
+      split.className = "split";
+
+      const optionColumn = document.createElement("div");
+      optionColumn.className = "stack";
+
+      const optionToolbar = document.createElement("div");
+      optionToolbar.className = "toolbar";
+      optionToolbar.innerHTML = `
+        <button class="button" id="add-option">Add Option</button>
+        <button class="button danger" id="delete-option">Delete Option</button>
+        <button class="button" id="move-option-up">Move Up</button>
+        <button class="button" id="move-option-down">Move Down</button>
+      `;
+      optionColumn.appendChild(optionToolbar);
+      optionColumn.appendChild(renderOptionList(options));
+
+      const optionEditor = document.createElement("div");
+      optionEditor.className = "option-editor";
+
+      const selectedOption = currentOption();
+      if (!selectedOption) {
+        optionEditor.innerHTML = `<div class="subtle">Select an option to edit it.</div>`;
+      } else {
+        optionEditor.innerHTML = `
+          <div class="stack">
+            <label class="label" for="option-id">Option ID</label>
+            <input class="field" id="option-id">
+          </div>
+          <div class="stack">
+            <label class="label" for="option-text">Option Text</label>
+            <textarea class="textarea" id="option-text"></textarea>
+          </div>
+          <div class="stack">
+            <label class="label" for="option-commands">Commands JSON</label>
+            <textarea class="textarea" id="option-commands"></textarea>
+          </div>
+          <div class="subtle">For v1, option commands stay raw JSON rather than a full command form editor.</div>
+        `;
+      }
+
+      split.append(optionColumn, optionEditor);
+      segmentEditor.appendChild(split);
+
+      document.getElementById("choice-prompt").value = segment.text || "";
+      document.getElementById("choice-prompt").addEventListener("input", (event) => {
+        segment.text = event.target.value;
+        renderSegmentList();
+        renderJsonOnly();
+      });
+
+      document.getElementById("add-option").addEventListener("click", () => {
+        options.push({
+          option_id: `option_${options.length + 1}`,
+          text: "New option",
+          commands: []
+        });
+        state.selectedOptionIndex = options.length - 1;
+        render();
+      });
+
+      document.getElementById("delete-option").addEventListener("click", () => {
+        if (state.selectedOptionIndex < 0 || !options.length) {
+          return;
+        }
+        options.splice(state.selectedOptionIndex, 1);
+        if (!options.length) {
+          state.selectedOptionIndex = -1;
+        } else {
+          state.selectedOptionIndex = Math.max(0, Math.min(state.selectedOptionIndex, options.length - 1));
+        }
+        render();
+      });
+
+      document.getElementById("move-option-up").addEventListener("click", () => {
+        const index = state.selectedOptionIndex;
+        if (index <= 0) {
+          return;
+        }
+        [options[index - 1], options[index]] = [options[index], options[index - 1]];
+        state.selectedOptionIndex -= 1;
+        render();
+      });
+
+      document.getElementById("move-option-down").addEventListener("click", () => {
+        const index = state.selectedOptionIndex;
+        if (index < 0 || index >= options.length - 1) {
+          return;
+        }
+        [options[index + 1], options[index]] = [options[index], options[index + 1]];
+        state.selectedOptionIndex += 1;
+        render();
+      });
+
+      if (selectedOption) {
+        document.getElementById("option-id").value = selectedOption.option_id || "";
+        document.getElementById("option-text").value = selectedOption.text || "";
+        document.getElementById("option-commands").value = JSON.stringify(selectedOption.commands || [], null, 2);
+
+        document.getElementById("option-id").addEventListener("input", (event) => {
+          selectedOption.option_id = event.target.value;
+          renderJsonOnly();
+        });
+        document.getElementById("option-text").addEventListener("input", (event) => {
+          selectedOption.text = event.target.value;
+          renderJsonOnly();
+        });
+        document.getElementById("option-commands").addEventListener("input", (event) => {
+          try {
+            selectedOption.commands = JSON.parse(event.target.value || "[]");
+            event.target.style.borderColor = "var(--border)";
+          } catch (error) {
+            event.target.style.borderColor = "#b83f3f";
+          }
+          renderJsonOnly();
+        });
+      }
+    }
+
+    function renderSegmentEditor() {
+      clampSelection();
+      const segment = currentSegment();
+      if (!segment) {
+        editorTitle.textContent = "Segment Editor";
+        editorSubtitle.textContent = "";
+        segmentEditor.innerHTML = `<div class="placeholder">Add a segment to begin editing.</div>`;
+        return;
+      }
+
+      editorTitle.textContent = String(segment.type || "text") === "choice" ? "Choice Segment" : "Text Segment";
+      editorSubtitle.textContent = `Segment ${state.selectedSegmentIndex + 1}`;
+
+      if (String(segment.type || "text") === "choice") {
+        renderChoiceSegmentEditor(segment);
+      } else {
+        renderTextSegmentEditor(segment);
+      }
+    }
+
+    function renderJsonOnly() {
+      jsonPreview.textContent = JSON.stringify(currentDialogue(), null, 2);
+    }
+
+    function render() {
+      renderParameterDropdown();
+      updateParameterSummary();
+      renderSegmentList();
+      renderSegmentEditor();
+      renderJsonOnly();
+    }
+
+    tabButtons.forEach((button) => {
+      button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+    });
+
+    document.getElementById("edit-dialogue-button").addEventListener("click", () => {
+      setActiveTab("dialogue");
+      parameterSelect.value = "dialogue_definition";
+      state.selectedParameter = "dialogue_definition";
+      render();
+    });
+
+    parameterSelect.addEventListener("change", (event) => {
+      state.selectedParameter = event.target.value;
+      state.selectedSegmentIndex = 0;
+      state.selectedOptionIndex = 0;
+      render();
+    });
+
+    document.getElementById("add-text-segment").addEventListener("click", () => {
+      currentSegments().push({ type: "text", text: "New text segment" });
+      state.selectedSegmentIndex = currentSegments().length - 1;
+      state.selectedOptionIndex = -1;
+      render();
+    });
+
+    document.getElementById("add-choice-segment").addEventListener("click", () => {
+      currentSegments().push({
+        type: "choice",
+        text: "New choice prompt",
+        options: [{ option_id: "option_1", text: "Option 1", commands: [] }]
+      });
+      state.selectedSegmentIndex = currentSegments().length - 1;
+      state.selectedOptionIndex = 0;
+      render();
+    });
+
+    document.getElementById("duplicate-segment").addEventListener("click", () => {
+      const segment = currentSegment();
+      if (!segment) {
+        return;
+      }
+      currentSegments().splice(state.selectedSegmentIndex + 1, 0, deepClone(segment));
+      state.selectedSegmentIndex += 1;
+      render();
+    });
+
+    document.getElementById("delete-segment").addEventListener("click", () => {
+      if (state.selectedSegmentIndex < 0) {
+        return;
+      }
+      currentSegments().splice(state.selectedSegmentIndex, 1);
+      render();
+    });
+
+    document.getElementById("move-segment-up").addEventListener("click", () => {
+      const index = state.selectedSegmentIndex;
+      const segments = currentSegments();
+      if (index <= 0) {
+        return;
+      }
+      [segments[index - 1], segments[index]] = [segments[index], segments[index - 1]];
+      state.selectedSegmentIndex -= 1;
+      render();
+    });
+
+    document.getElementById("move-segment-down").addEventListener("click", () => {
+      const index = state.selectedSegmentIndex;
+      const segments = currentSegments();
+      if (index < 0 || index >= segments.length - 1) {
+        return;
+      }
+      [segments[index + 1], segments[index]] = [segments[index], segments[index + 1]];
+      state.selectedSegmentIndex += 1;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -477,6 +477,16 @@ def _serialize_entity_visuals(entity: Any) -> list[dict[str, Any]]:
                 "offset_x": visual.offset_x,
                 "offset_y": visual.offset_y,
                 "draw_order": visual.draw_order,
+                "default_animation": visual.default_animation,
+                "default_animation_by_facing": dict(visual.default_animation_by_facing),
+                "animations": {
+                    str(animation_id): {
+                        "frames": list(clip.frames),
+                        **({"flip_x": bool(clip.flip_x)} if clip.flip_x is not None else {}),
+                        **({"preserve_phase": True} if bool(clip.preserve_phase) else {}),
+                    }
+                    for animation_id, clip in visual.animations.items()
+                },
             }
         )
     return serialized
@@ -1048,6 +1058,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     @registry.register(
         "open_dialogue_session",
         deferred_param_shapes={
+            "dialogue_definition": "dialogue_definition",
             "dialogue_on_start": "command_payload",
             "dialogue_on_end": "command_payload",
             "segment_hooks": "dialogue_segment_hooks",
@@ -1056,7 +1067,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
     def open_dialogue_session(
         context: CommandContext,
         *,
-        dialogue_path: str,
+        dialogue_path: str | None = None,
+        dialogue_definition: dict[str, Any] | None = None,
         dialogue_on_start: list[dict[str, Any]] | dict[str, Any] | None = None,
         dialogue_on_end: list[dict[str, Any]] | dict[str, Any] | None = None,
         segment_hooks: list[Any] | None = None,
@@ -1091,7 +1103,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             resolved_caller_id = str(source_entity_id).strip()
 
         session = dialogue_runtime.open_session(
-            dialogue_path=str(dialogue_path),
+            dialogue_path=dialogue_path,
+            dialogue_definition=dialogue_definition,
             dialogue_on_start=dialogue_on_start,
             dialogue_on_end=dialogue_on_end,
             segment_hooks=segment_hooks,

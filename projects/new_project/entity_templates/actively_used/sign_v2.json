@@ -1,0 +1,116 @@
+/*
+  NOTES
+
+  Variant sign template that stores its dialogue inline as a full
+  dialogue_definition parameter. This exists both as a gameplay example and as
+  an editor fixture for the dialogue popup workflow.
+*/
+{
+  "kind": "sign",
+  "solid": true,
+  "interactable": true,
+  "interaction_priority": 10,
+  "render_order": 10,
+  "y_sort": true,
+  "parameters": {
+    "dialogue_definition": {
+      "segments": [
+        {
+          "type": "choice",
+          "text": "Read which side of the sign?",
+          "options": [
+            {
+              "option_id": "front",
+              "text": "Front",
+              "commands": [
+                {
+                  "type": "open_dialogue_session",
+                  "dialogue_definition": {
+                    "segments": [
+                      {
+                        "type": "text",
+                        "text": "\"North: Old Mine\""
+                      },
+                      {
+                        "type": "text",
+                        "text": "\"East: Fisher's Cave\""
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "option_id": "back",
+              "text": "Back",
+              "commands": [
+                {
+                  "type": "open_dialogue_session",
+                  "dialogue_definition": {
+                    "segments": [
+                      {
+                        "type": "text",
+                        "text": "Someone scratched a warning into the wood."
+                      },
+                      {
+                        "type": "choice",
+                        "text": "Keep reading?",
+                        "options": [
+                          {
+                            "option_id": "yes",
+                            "text": "Yes"
+                          },
+                          {
+                            "option_id": "no",
+                            "text": "Stop"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "text",
+                        "text": "\"Do not enter after sunset.\""
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "You step away from the sign."
+        }
+      ]
+    }
+  },
+  "parameter_specs": {
+    "dialogue_definition": {
+      "type": "dialogue_definition",
+      "required": true
+    }
+  },
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/used_tilesets_sprites/overworld_expanded.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [3],
+      "visible": true
+    }
+  ],
+  "entity_commands": {
+    "interact": [
+      {
+        "type": "open_dialogue_session",
+        "dialogue_definition": "$dialogue_definition",
+        "allow_cancel": true,
+        "entity_refs": {
+          "caller": "$self_id",
+          "instigator": "$ref_ids.instigator"
+        }
+      }
+    ]
+  }
+}

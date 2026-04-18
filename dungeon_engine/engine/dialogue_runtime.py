@@ -68,6 +68,7 @@ class DialogueSession:
     current_pages: list[str] = field(default_factory=list)
     page_index: int = 0
     current_options: list[dict[str, Any]] = field(default_factory=list)
+    prompt_marquee_elapsed: float = 0.0
     choice_index: int = 0
     choice_scroll_offset: int = 0
     choice_marquee_elapsed: float = 0.0
@@ -89,6 +90,7 @@ class DialogueRuntime:
     MARQUEE_DELAY_SECONDS = 0.5
     MARQUEE_STEP_SECONDS = 0.18
     MARQUEE_GAP = "   "
+    INLINE_CHOICE_TEXT_GAP = 0
 
     def __init__(
         self,
@@ -181,6 +183,7 @@ class DialogueRuntime:
         if session.timer_remaining is not None and dt > 0:
             session.timer_remaining = max(0.0, float(session.timer_remaining) - float(dt))
             if session.timer_remaining > 0.0:
+                self._update_inline_prompt_marquee(session, dt)
                 self._update_choice_marquee(session, dt)
                 return
 
@@ -190,13 +193,15 @@ class DialogueRuntime:
                 return
 
         if dt > 0:
+            self._update_inline_prompt_marquee(session, dt)
             self._update_choice_marquee(session, dt)
             return
 
     def open_session(
         self,
         *,
-        dialogue_path: str,
+        dialogue_path: str | None = None,
+        dialogue_definition: dict[str, Any] | None = None,
         dialogue_on_start: Any = None,
         dialogue_on_end: Any = None,
         segment_hooks: Any = None,
@@ -206,15 +211,15 @@ class DialogueRuntime:
         ui_preset_name: str | None = None,
     ) -> DialogueSession:
         """Open one dialogue session, pausing any active parent session."""
-        resolved_dialogue_path = str(dialogue_path).strip()
-        if not resolved_dialogue_path:
-            raise ValueError("open_dialogue_session requires a non-empty dialogue_path.")
+        resolved_dialogue_path, definition = self._resolve_dialogue_source(
+            dialogue_path=dialogue_path,
+            dialogue_definition=dialogue_definition,
+        )
 
         if self.current_session is not None:
             self._clear_ui()
             self.session_stack.append(self.current_session)
 
-        definition = self._load_dialogue_definition(resolved_dialogue_path)
         preset_name, preset = self._resolve_ui_preset(
             definition=definition,
             explicit_preset_name=ui_preset_name,
@@ -238,6 +243,26 @@ class DialogueRuntime:
             on_complete=lambda owner: self._show_current_segment(owner),
         )
         return session
+
+    def _resolve_dialogue_source(
+        self,
+        *,
+        dialogue_path: str | None,
+        dialogue_definition: dict[str, Any] | None,
+    ) -> tuple[str, dict[str, Any]]:
+        """Resolve exactly one dialogue source into a path label and definition."""
+        resolved_dialogue_path = "" if dialogue_path in (None, "") else str(dialogue_path).strip()
+        has_path = bool(resolved_dialogue_path)
+        has_definition = dialogue_definition is not None
+        if has_path == has_definition:
+            raise ValueError(
+                "open_dialogue_session requires exactly one of dialogue_path or dialogue_definition."
+            )
+        if has_path:
+            return resolved_dialogue_path, self._load_dialogue_definition(resolved_dialogue_path)
+        if not isinstance(dialogue_definition, dict):
+            raise ValueError("open_dialogue_session dialogue_definition must be a JSON object.")
+        return "", copy.deepcopy(dialogue_definition)
 
     def close_current_session(self) -> None:
         """Close the current session, optionally resuming a paused parent session."""
@@ -344,6 +369,7 @@ class DialogueRuntime:
                 raw_segment_hook = dict(candidate_hook)
         session.current_segment_hook = raw_segment_hook
         session.page_index = 0
+        session.prompt_marquee_elapsed = 0.0
         session.choice_index = 0
         session.choice_scroll_offset = 0
         session.choice_marquee_elapsed = 0.0
@@ -393,6 +419,14 @@ class DialogueRuntime:
         text_box = self._select_text_box(session, has_portrait=has_portrait)
         text_to_render = self._current_page_text(session)
         if text_to_render:
+            text_max_width: int | None = int(text_box.get("width", 240))
+            if self._inline_choice_prompt_uses_shared_panel(session):
+                text_to_render = self._format_inline_choice_prompt_text(
+                    session,
+                    max_width=int(text_box.get("width", 240)),
+                    font_id=str(session.ui_preset.get("font_id", "pixelbet")),
+                )
+                text_max_width = None
             self.screen_manager.show_text(
                 element_id=self.TEXT_ELEMENT_ID,
                 text=text_to_render,
@@ -401,7 +435,7 @@ class DialogueRuntime:
                 layer=text_layer,
                 color=tuple(int(channel) for channel in session.ui_preset.get("text_color", [245, 232, 190])),
                 font_id=str(session.ui_preset.get("font_id", "pixelbet")),
-                max_width=int(text_box.get("width", 240)),
+                max_width=text_max_width,
             )
 
         if self._current_segment_type(session) == "choice":
@@ -505,6 +539,9 @@ class DialogueRuntime:
         if not text:
             return []
 
+        if self._inline_choice_prompt_uses_shared_panel(session):
+            return [text]
+
         text_box = self._select_text_box(
             session,
             has_portrait=self._resolve_current_portrait(session) is not None,
@@ -520,6 +557,25 @@ class DialogueRuntime:
         """Return the active text box layout."""
         text = dict(session.ui_preset.get("text", {}))
         return dict(text.get("with_portrait" if has_portrait else "plain", {}))
+
+    def _inline_choices_share_text_panel(self, session: DialogueSession) -> bool:
+        """Return whether this segment renders choices inline within the main panel."""
+        choices = dict(session.ui_preset.get("choices", {}))
+        mode = str(choices.get("mode", "inline")).strip() or "inline"
+        return mode == "inline"
+
+    def _inline_choice_prompt_uses_shared_panel(self, session: DialogueSession) -> bool:
+        """Return whether an inline choice prompt currently occupies one shared text line."""
+        return (
+            self._current_segment_type(session) == "choice"
+            and self._inline_choices_share_text_panel(session)
+            and bool(self._current_segment_prompt_text(session))
+        )
+
+    def _current_segment_prompt_text(self, session: DialogueSession) -> str:
+        """Return the authored prompt text for the current segment when any exists."""
+        raw_text = session.current_segment.get("text", "")
+        return "" if raw_text is None else str(raw_text)
 
     def _resolve_current_portrait(self, session: DialogueSession) -> dict[str, Any] | None:
         """Return the current participant portrait payload when it should be shown."""
@@ -566,7 +622,15 @@ class DialogueRuntime:
             return
         session.choice_index = next_index
         session.choice_marquee_elapsed = 0.0
-        visible_rows = max(1, int(dict(session.ui_preset.get("choices", {})).get("visible_rows", 3)))
+        visible_rows = max(
+            1,
+            int(
+                self._resolve_choice_layout(
+                    session,
+                    has_portrait=self._resolve_current_portrait(session) is not None,
+                )["visible_rows"]
+            ),
+        )
         if session.choice_index < session.choice_scroll_offset:
             session.choice_scroll_offset = session.choice_index
         elif session.choice_index >= session.choice_scroll_offset + visible_rows:
@@ -740,13 +804,18 @@ class DialogueRuntime:
             }
 
         choice_box = dict(choices.get("with_portrait" if has_portrait else "plain", {}))
+        text_box = self._select_text_box(session, has_portrait=has_portrait)
+        total_lines = max(1, int(text_box.get("max_lines", 3)))
+        prompt_lines = 1 if self._inline_choice_prompt_uses_shared_panel(session) else 0
+        visible_rows = max(1, total_lines - prompt_lines)
+        choice_y = float(text_box.get("y", 154)) + (row_height * prompt_lines)
         return {
             "mode": "inline",
             "overflow": overflow,
             "visible_rows": visible_rows,
             "row_height": row_height,
             "x": float(choice_box.get("x", choices.get("x", 56 if has_portrait else 8))),
-            "y": float(choices.get("y", choices.get("base_y", 154))),
+            "y": choice_y,
             "width": max(1, int(choice_box.get("width", choices.get("width", 188 if has_portrait else 240)))),
             "panel": {},
         }
@@ -768,6 +837,53 @@ class DialogueRuntime:
         if selected and overflow == "marquee" and self._text_overflows(prefix, option_text, max_width, font_id):
             return self._marquee_text(prefix, option_text, max_width, font_id, session.choice_marquee_elapsed), None
         return self._clip_text(prefix, option_text, max_width, font_id), None
+
+    def _format_inline_choice_prompt_text(
+        self,
+        session: DialogueSession,
+        *,
+        max_width: int,
+        font_id: str,
+    ) -> str:
+        """Return the one-line inline prompt text, using continuous marquee when needed."""
+        prompt_text = self._current_page_text(session)
+        if not self._text_overflows("", prompt_text, max_width, font_id):
+            return prompt_text
+        return self._continuous_marquee_text(
+            prompt_text,
+            max_width,
+            font_id,
+            session.prompt_marquee_elapsed,
+        )
+
+    def _update_inline_prompt_marquee(self, session: DialogueSession, dt: float) -> None:
+        """Advance the inline prompt marquee independently from choice selection."""
+        if dt <= 0 or not self._inline_choice_prompt_uses_shared_panel(session):
+            return
+
+        text_box = self._select_text_box(
+            session,
+            has_portrait=self._resolve_current_portrait(session) is not None,
+        )
+        font_id = str(session.ui_preset.get("font_id", "pixelbet"))
+        prompt_text = self._current_page_text(session)
+        max_width = int(text_box.get("width", 240))
+        if not self._text_overflows("", prompt_text, max_width, font_id):
+            return
+
+        previous_step = self._continuous_marquee_step(session.prompt_marquee_elapsed)
+        session.prompt_marquee_elapsed += float(dt)
+        if self._continuous_marquee_step(session.prompt_marquee_elapsed) == previous_step:
+            return
+
+        self.screen_manager.set_text(
+            self.TEXT_ELEMENT_ID,
+            self._format_inline_choice_prompt_text(
+                session,
+                max_width=max_width,
+                font_id=font_id,
+            ),
+        )
 
     def _update_choice_marquee(self, session: DialogueSession, dt: float) -> None:
         """Advance the selected-option marquee when the preset requests it."""
@@ -797,6 +913,12 @@ class DialogueRuntime:
         if elapsed_seconds < self.MARQUEE_DELAY_SECONDS:
             return 0
         return max(0, int((elapsed_seconds - self.MARQUEE_DELAY_SECONDS) / self.MARQUEE_STEP_SECONDS) + 1)
+
+    def _continuous_marquee_step(self, elapsed_seconds: float) -> int:
+        """Return one continuously advancing marquee step with no initial pause."""
+        if elapsed_seconds <= 0:
+            return 0
+        return max(0, int(elapsed_seconds / self.MARQUEE_STEP_SECONDS))
 
     def _text_overflows(self, prefix: str, text: str, max_width: int, font_id: str) -> bool:
         """Return whether one prefixed option text would overflow the available width."""
@@ -835,3 +957,20 @@ class DialogueRuntime:
         start = step % len(scroll_source)
         rotated = f"{scroll_source[start:]}{scroll_source[:start]}"
         return self._clip_text(prefix, rotated, max_width, font_id)
+
+    def _continuous_marquee_text(
+        self,
+        text: str,
+        max_width: int,
+        font_id: str,
+        elapsed_seconds: float,
+    ) -> str:
+        """Return one continuously scrolling marquee slice for inline prompts."""
+        max_width = max(0, int(max_width))
+        scroll_source = f"{text}{self.MARQUEE_GAP}"
+        if not scroll_source.strip():
+            return ""
+        step = self._continuous_marquee_step(elapsed_seconds)
+        start = step % len(scroll_source)
+        rotated = f"{scroll_source[start:]}{scroll_source[:start]}"
+        return self._clip_text("", rotated, max_width, font_id)

@@ -31,7 +31,9 @@ Current slices:
   global entities, and entity instances, including structured scope, `color`,
   and `input_map`/`inventory` editing for template and instance surfaces plus
   common template defaults through the template `Basics` section
-- reference-aware file/folder reorganization for file-backed content
+- reference-aware file/folder reorganization for file-backed content,
+  including drag-to-folder moves that reuse the same preview/refactor path as
+  explicit rename/move actions
 - project I/O discovery helpers for runtime-aligned area, template, command,
   item, and global-entity ids
 - UI layer

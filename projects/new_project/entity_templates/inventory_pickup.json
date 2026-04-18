@@ -41,7 +41,7 @@
       "path": "assets/used_tilesets_sprites/tiles.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frame": 571,
+      "frames": [571],
       "visible": true
     }
   ],

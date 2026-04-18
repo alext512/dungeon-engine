@@ -20,7 +20,7 @@
       "path": "assets/Lever.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frame": 0,
+      "frames": [0],
       "visible": true
     }
   ],

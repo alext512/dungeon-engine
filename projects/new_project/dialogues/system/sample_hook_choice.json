@@ -9,11 +9,47 @@
   "segments": [
     {
       "type": "choice",
-      "text": "Test the terminal hook?",
+      "text": "Test the terminal hook? Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test ",
       "options": [
         {
-          "text": "Mark hook",
+          "text": "Mark hook1",
           "option_id": "mark_hook",
+          "commands": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$ref_ids.caller",
+              "name": "last_hook_choice",
+              "value": "inline"
+            }
+          ]
+        },
+        {
+          "text": "Mark hook2",
+          "option_id": "mark_hook2",
+          "commands": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$ref_ids.caller",
+              "name": "last_hook_choice",
+              "value": "inline"
+            }
+          ]
+        },
+        {
+          "text": "Mark hook3",
+          "option_id": "mark_hook3",
+          "commands": [
+            {
+              "type": "set_entity_var",
+              "entity_id": "$ref_ids.caller",
+              "name": "last_hook_choice",
+              "value": "inline"
+            }
+          ]
+        },
+        {
+          "text": "Mark hook4",
+          "option_id": "mark_hook4",
           "commands": [
             {
               "type": "set_entity_var",

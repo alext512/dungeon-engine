@@ -216,7 +216,8 @@ class DialogueRuntimeLike(Protocol):
     def open_session(
         self,
         *,
-        dialogue_path: str,
+        dialogue_path: str | None = None,
+        dialogue_definition: dict[str, Any] | None = None,
         dialogue_on_start: Any = None,
         dialogue_on_end: Any = None,
         segment_hooks: Any = None,

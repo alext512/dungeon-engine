@@ -390,11 +390,35 @@ class MainWindow(
 
         # Signals — side panel open requests (double-click / context menu)
         self._area_panel.area_open_requested.connect(self._on_area_open_requested)
+        self._area_panel.file_move_requested.connect(
+            lambda cid, fp, target: self._on_project_content_drag_move(
+                ContentType.AREA,
+                cid,
+                fp,
+                target,
+            )
+        )
         self._template_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ENTITY_TEMPLATE)
         )
+        self._template_panel.file_move_requested.connect(
+            lambda cid, fp, target: self._on_project_content_drag_move(
+                ContentType.ENTITY_TEMPLATE,
+                cid,
+                fp,
+                target,
+            )
+        )
         self._item_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ITEM)
+        )
+        self._item_panel.file_move_requested.connect(
+            lambda cid, fp, target: self._on_project_content_drag_move(
+                ContentType.ITEM,
+                cid,
+                fp,
+                target,
+            )
         )
         self._global_entities_panel.global_entity_open_requested.connect(
             self._open_global_entities_tab
@@ -402,11 +426,35 @@ class MainWindow(
         self._dialogue_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.DIALOGUE)
         )
+        self._dialogue_panel.file_move_requested.connect(
+            lambda cid, fp, target: self._on_project_content_drag_move(
+                ContentType.DIALOGUE,
+                cid,
+                fp,
+                target,
+            )
+        )
         self._command_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.NAMED_COMMAND)
         )
+        self._command_panel.file_move_requested.connect(
+            lambda cid, fp, target: self._on_project_content_drag_move(
+                ContentType.NAMED_COMMAND,
+                cid,
+                fp,
+                target,
+            )
+        )
         self._asset_panel.file_open_requested.connect(
             lambda cid, fp: self._open_content(cid, fp, ContentType.ASSET)
+        )
+        self._asset_panel.file_move_requested.connect(
+            lambda cid, fp, target: self._on_project_content_drag_move(
+                ContentType.ASSET,
+                cid,
+                fp,
+                target,
+            )
         )
         self._area_panel.set_open_action_label_provider(
             lambda _cid, _fp: "Open Area"
@@ -1751,6 +1799,176 @@ class MainWindow(
         )
         menu.addAction(delete_action)
 
+    def _on_project_content_drag_move(
+        self,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+        target_folder_path: Path,
+    ) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            self._restore_project_content_browser_after_aborted_drag(
+                content_type,
+                content_id,
+            )
+            return
+        target_file_path = (target_folder_path.resolve() / file_path.name).resolve()
+        moved = self._apply_project_content_move(
+            content_type=content_type,
+            content_id=content_id,
+            file_path=file_path,
+            new_file_path=target_file_path,
+        )
+        if not moved:
+            self._restore_project_content_browser_after_aborted_drag(
+                content_type,
+                content_id,
+            )
+
+    def _restore_project_content_browser_after_aborted_drag(
+        self,
+        content_type: ContentType,
+        content_id: str,
+    ) -> None:
+        if self._manifest is None:
+            return
+        if content_type == ContentType.AREA:
+            self._refresh_area_panel()
+            self._area_panel.highlight_area(content_id)
+            return
+        self._refresh_project_metadata_surfaces()
+        target_panel = self._panel_for_content_type(content_type)
+        if target_panel is not None:
+            target_panel.select_by_id(content_id)
+
+    def _apply_project_content_move(
+        self,
+        *,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+        new_file_path: Path,
+    ) -> bool:
+        if self._manifest is None:
+            return False
+        rename_config = self._rename_config_for_content(content_type)
+        if rename_config is None:
+            return False
+        prefix, roots, reference_matcher, title = rename_config
+        root_dir = _root_dir_for_content_file(file_path, roots)
+        if root_dir is None:
+            QMessageBox.warning(
+                self,
+                "Rename Unsupported",
+                f"Could not determine the content root for '{file_path.name}'.",
+            )
+            return False
+        resolved_root = root_dir.resolve()
+        resolved_new_file_path = new_file_path.resolve()
+        try:
+            resolved_new_file_path.relative_to(resolved_root)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Destination",
+                "Renamed content must stay inside its configured project root.",
+            )
+            return False
+        if resolved_new_file_path == file_path.resolve():
+            return False
+        if resolved_new_file_path.exists():
+            QMessageBox.warning(
+                self,
+                "Destination Exists",
+                f"'{resolved_new_file_path}' already exists.",
+            )
+            return False
+
+        if content_type == ContentType.ASSET:
+            normalized_relative_name = (
+                str(resolved_new_file_path.relative_to(resolved_root))
+                .replace("\\", "/")
+                .strip("/")
+            )
+        else:
+            normalized_relative_name = (
+                str(strip_json_data_suffix(resolved_new_file_path.relative_to(resolved_root)))
+                .replace("\\", "/")
+                .strip("/")
+            )
+        new_content_id = (
+            f"{prefix}/{normalized_relative_name}" if prefix else normalized_relative_name
+        )
+        old_reference_value = content_id
+        new_reference_value = new_content_id
+        if content_type == ContentType.ASSET:
+            old_reference_value = self._authored_asset_path_for(file_path) or content_id
+            new_reference_value = (
+                self._authored_asset_path_for(resolved_new_file_path) or new_content_id
+            )
+        try:
+            reference_updates = self._collect_reference_updates(
+                old_value=old_reference_value,
+                new_value=new_reference_value,
+                matcher=reference_matcher,
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Rename Failed",
+                f"Could not build the reference update preview:\n{exc}",
+            )
+            return False
+
+        if not self._confirm_content_rename_preview(
+            title=title,
+            old_content_id=content_id,
+            new_content_id=new_content_id,
+            old_file_path=file_path,
+            new_file_path=resolved_new_file_path,
+            reference_updates=reference_updates,
+        ):
+            return False
+
+        was_open = self._tab_widget.content_info(content_id) is not None
+        try:
+            for update in reference_updates:
+                update.file_path.write_text(update.updated_text, encoding="utf-8")
+            resolved_new_file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.rename(resolved_new_file_path)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Rename Failed",
+                f"Could not rename '{content_id}':\n{exc}",
+            )
+            return False
+
+        self._tab_widget.close_all()
+        self._area_docs.clear()
+        self._json_dirty_bound.clear()
+        self._refresh_project_metadata_surfaces()
+        self._refresh_area_panel()
+
+        if content_type == ContentType.AREA:
+            self._area_panel.highlight_area(new_content_id)
+            if was_open:
+                self._open_area(new_content_id, resolved_new_file_path)
+        else:
+            target_panel = self._panel_for_content_type(content_type)
+            if target_panel is not None:
+                target_panel.select_by_id(new_content_id)
+            if was_open:
+                self._open_content(new_content_id, resolved_new_file_path, content_type)
+
+        self.statusBar().showMessage(
+            f"Renamed {content_id} to {new_content_id}.",
+            3500,
+        )
+        return True
+
     def _on_rename_project_content(
         self,
         content_type: ContentType,
@@ -1764,7 +1982,7 @@ class MainWindow(
         rename_config = self._rename_config_for_content(content_type)
         if rename_config is None:
             return
-        prefix, roots, reference_matcher, title = rename_config
+        prefix, roots, _reference_matcher, title = rename_config
         relative_name = _relative_content_name(content_id, prefix)
         if relative_name is None:
             QMessageBox.warning(
@@ -1795,103 +2013,11 @@ class MainWindow(
         candidate_path = root_dir / new_relative_name
         if content_type == ContentType.ASSET or candidate_path.suffix != file_path.suffix:
             candidate_path = candidate_path.with_suffix(file_path.suffix)
-        new_file_path = candidate_path
-        new_file_path = new_file_path.resolve()
-        try:
-            new_file_path.relative_to(root_dir.resolve())
-        except ValueError:
-            QMessageBox.warning(
-                self,
-                "Invalid Destination",
-                "Renamed content must stay inside its configured project root.",
-            )
-            return
-        if new_file_path == file_path.resolve():
-            return
-        if new_file_path.exists():
-            QMessageBox.warning(
-                self,
-                "Destination Exists",
-                f"'{new_file_path}' already exists.",
-            )
-            return
-
-        if content_type == ContentType.ASSET:
-            normalized_relative_name = (
-                str(new_file_path.relative_to(root_dir.resolve()))
-                .replace("\\", "/")
-                .strip("/")
-            )
-        else:
-            normalized_relative_name = new_relative_name.replace("\\", "/").strip("/")
-        new_content_id = (
-            f"{prefix}/{normalized_relative_name}" if prefix else normalized_relative_name
-        )
-        old_reference_value = content_id
-        new_reference_value = new_content_id
-        if content_type == ContentType.ASSET:
-            old_reference_value = self._authored_asset_path_for(file_path) or content_id
-            new_reference_value = (
-                self._authored_asset_path_for(new_file_path) or new_content_id
-            )
-        try:
-            reference_updates = self._collect_reference_updates(
-                old_value=old_reference_value,
-                new_value=new_reference_value,
-                matcher=reference_matcher,
-            )
-        except Exception as exc:
-            QMessageBox.warning(
-                self,
-                "Rename Failed",
-                f"Could not build the reference update preview:\n{exc}",
-            )
-            return
-
-        if not self._confirm_content_rename_preview(
-            title=title,
-            old_content_id=content_id,
-            new_content_id=new_content_id,
-            old_file_path=file_path,
-            new_file_path=new_file_path,
-            reference_updates=reference_updates,
-        ):
-            return
-
-        was_open = self._tab_widget.content_info(content_id) is not None
-        try:
-            for update in reference_updates:
-                update.file_path.write_text(update.updated_text, encoding="utf-8")
-            new_file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.rename(new_file_path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Rename Failed",
-                f"Could not rename '{content_id}':\n{exc}",
-            )
-            return
-
-        self._tab_widget.close_all()
-        self._area_docs.clear()
-        self._json_dirty_bound.clear()
-        self._refresh_project_metadata_surfaces()
-        self._refresh_area_panel()
-
-        if content_type == ContentType.AREA:
-            self._area_panel.highlight_area(new_content_id)
-            if was_open:
-                self._open_area(new_content_id, new_file_path)
-        else:
-            target_panel = self._panel_for_content_type(content_type)
-            if target_panel is not None:
-                target_panel.select_by_id(new_content_id)
-            if was_open:
-                self._open_content(new_content_id, new_file_path, content_type)
-
-        self.statusBar().showMessage(
-            f"Renamed {content_id} to {new_content_id}.",
-            3500,
+        self._apply_project_content_move(
+            content_type=content_type,
+            content_id=content_id,
+            file_path=file_path,
+            new_file_path=candidate_path.resolve(),
         )
 
     def _on_duplicate_area(self, content_id: str, file_path: Path) -> None:

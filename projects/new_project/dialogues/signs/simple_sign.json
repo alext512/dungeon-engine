@@ -1,0 +1,14 @@
+/*
+  NOTES
+
+  Default dialogue for the reusable sign entity template. Individual sign
+  instances can override the template's dialogue_path parameter.
+*/
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "The sign reads: Welcome to the dungeon."
+    }
+  ]
+}

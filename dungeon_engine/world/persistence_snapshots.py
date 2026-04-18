@@ -443,6 +443,11 @@ def _serialize_persistent_visuals(entity: Entity) -> list[dict[str, Any]]:
         }
         if visual.default_animation is not None:
             serialized_visual["default_animation"] = visual.default_animation
+        if visual.default_animation_by_facing:
+            serialized_visual["default_animation_by_facing"] = {
+                str(facing): str(animation_id)
+                for facing, animation_id in sorted(visual.default_animation_by_facing.items())
+            }
         if visual.animations:
             serialized_visual["animations"] = _serialize_persistent_visual_animations(visual)
         serialized.append(serialized_visual)
@@ -481,6 +486,13 @@ def _deserialize_persistent_visuals(raw_visuals: Any) -> list[EntityVisual]:
         default_animation = raw_visual.get("default_animation")
         if default_animation is not None:
             default_animation = str(default_animation).strip() or None
+        default_animation_by_facing = {
+            str(raw_facing).strip().lower(): str(raw_animation_id).strip()
+            for raw_facing, raw_animation_id in dict(
+                raw_visual.get("default_animation_by_facing", {})
+            ).items()
+            if str(raw_facing).strip() and str(raw_animation_id).strip()
+        }
         visuals.append(
             EntityVisual(
                 visual_id=str(raw_visual.get("id", "")).strip() or f"visual_{index}",
@@ -502,6 +514,7 @@ def _deserialize_persistent_visuals(raw_visuals: Any) -> list[EntityVisual]:
                 offset_y=float(raw_visual.get("offset_y", 0.0)),
                 draw_order=int(raw_visual.get("draw_order", index)),
                 default_animation=default_animation,
+                default_animation_by_facing=default_animation_by_facing,
                 animations=animations,
             )
         )

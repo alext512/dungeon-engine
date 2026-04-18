@@ -2197,6 +2197,328 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 entries,
             )
 
+    def test_template_drag_move_updates_known_template_references_and_reselects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            assets.mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+            (templates / "actively_used").mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("magenta"))
+            self.assertTrue(base.save(str(assets / "base.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"],\n'
+                    '  "global_entities": [\n'
+                    '    {\n'
+                    '      "id": "pause_controller",\n'
+                    '      "template": "entity_templates/old_controller"\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [\n'
+                    '    {\n'
+                    '      "id": "switch_a",\n'
+                    '      "template": "entity_templates/old_controller",\n'
+                    '      "grid_x": 0,\n'
+                    '      "grid_y": 0\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "old_controller.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "world",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/base.png",\n'
+                    '      "frame_width": 16,\n'
+                    '      "frame_height": 16\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = templates / "old_controller.json"
+            source_item = window._template_panel._find_item("entity_templates/old_controller")
+            target_item = self._find_tree_item_by_folder_path(window._template_panel, "actively_used")
+            self.assertIsNotNone(source_item)
+            self.assertIsNotNone(target_item)
+            assert source_item is not None
+            assert target_item is not None
+
+            with patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                moved = window._template_panel._request_internal_file_move(
+                    source_item,
+                    target_item,
+                )
+                QApplication.processEvents()
+
+            self.assertTrue(moved)
+            new_path = templates / "actively_used" / "old_controller.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_project = project_file.read_text(encoding="utf-8")
+            self.assertIn(
+                '"template": "entity_templates/actively_used/old_controller"',
+                saved_project,
+            )
+            saved_area = (areas / "demo.json").read_text(encoding="utf-8")
+            self.assertIn(
+                '"template": "entity_templates/actively_used/old_controller"',
+                saved_area,
+            )
+            entries = self._panel_file_entries(window._template_panel)
+            self.assertIn(
+                ("entity_templates/actively_used/old_controller", new_path),
+                entries,
+            )
+            current_item = window._template_panel._tree.currentItem()
+            self.assertIsNotNone(current_item)
+            assert current_item is not None
+            current_data = current_item.data(0, window._template_panel._FILE_ROLE)
+            self.assertEqual(
+                current_data[0],
+                "entity_templates/actively_used/old_controller",
+            )
+            folder_item = self._find_tree_item_by_folder_path(
+                window._template_panel,
+                "actively_used",
+            )
+            self.assertIsNotNone(folder_item)
+            assert folder_item is not None
+            self.assertTrue(folder_item.isExpanded())
+
+    def test_template_drag_move_defers_execution_until_events_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            assets.mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+            (templates / "actively_used").mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("magenta"))
+            self.assertTrue(base.save(str(assets / "base.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [\n'
+                    '    {\n'
+                    '      "id": "switch_a",\n'
+                    '      "template": "entity_templates/old_controller",\n'
+                    '      "grid_x": 0,\n'
+                    '      "grid_y": 0\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "old_controller.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "world",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/base.png",\n'
+                    '      "frame_width": 16,\n'
+                    '      "frame_height": 16\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = templates / "old_controller.json"
+            new_path = templates / "actively_used" / "old_controller.json"
+            source_item = window._template_panel._find_item("entity_templates/old_controller")
+            target_item = self._find_tree_item_by_folder_path(window._template_panel, "actively_used")
+            self.assertIsNotNone(source_item)
+            self.assertIsNotNone(target_item)
+            assert source_item is not None
+            assert target_item is not None
+
+            with patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                moved = window._template_panel._request_internal_file_move(
+                    source_item,
+                    target_item,
+                )
+                self.assertTrue(moved)
+                self.assertTrue(old_path.is_file())
+                self.assertFalse(new_path.exists())
+                QApplication.processEvents()
+
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            entries = self._panel_file_entries(window._template_panel)
+            self.assertIn(
+                ("entity_templates/actively_used/old_controller", new_path),
+                entries,
+            )
+
+    def test_template_drag_move_cancel_refreshes_original_browser_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            assets = project / "assets"
+            areas = project / "areas"
+            templates = project / "entity_templates"
+            assets.mkdir(parents=True)
+            areas.mkdir()
+            templates.mkdir()
+            (templates / "actively_used").mkdir()
+
+            base = QPixmap(16, 16)
+            base.fill(QColor("magenta"))
+            self.assertTrue(base.save(str(assets / "base.png")))
+
+            (project / "project.json").write_text(
+                (
+                    '{\n'
+                    '  "startup_area": "areas/demo",\n'
+                    '  "entity_template_paths": ["entity_templates/"]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (areas / "demo.json").write_text(
+                (
+                    '{\n'
+                    '  "tile_size": 16,\n'
+                    '  "tilesets": [],\n'
+                    '  "tile_layers": [],\n'
+                    '  "entities": [\n'
+                    '    {\n'
+                    '      "id": "switch_a",\n'
+                    '      "template": "entity_templates/old_controller",\n'
+                    '      "grid_x": 0,\n'
+                    '      "grid_y": 0\n'
+                    '    }\n'
+                    '  ],\n'
+                    '  "variables": {}\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+            (templates / "old_controller.json").write_text(
+                (
+                    '{\n'
+                    '  "space": "world",\n'
+                    '  "visuals": [\n'
+                    '    {\n'
+                    '      "id": "main",\n'
+                    '      "path": "assets/base.png",\n'
+                    '      "frame_width": 16,\n'
+                    '      "frame_height": 16\n'
+                    '    }\n'
+                    '  ]\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            project_file = project / "project.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = templates / "old_controller.json"
+            new_path = templates / "actively_used" / "old_controller.json"
+            source_item = window._template_panel._find_item("entity_templates/old_controller")
+            target_item = self._find_tree_item_by_folder_path(window._template_panel, "actively_used")
+            self.assertIsNotNone(source_item)
+            self.assertIsNotNone(target_item)
+            assert source_item is not None
+            assert target_item is not None
+
+            with patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=False,
+            ), patch.object(
+                window,
+                "_refresh_project_metadata_surfaces",
+                wraps=window._refresh_project_metadata_surfaces,
+            ) as refresh_spy:
+                moved = window._template_panel._request_internal_file_move(
+                    source_item,
+                    target_item,
+                )
+                QApplication.processEvents()
+
+            self.assertTrue(moved)
+            refresh_spy.assert_called()
+            self.assertTrue(old_path.is_file())
+            self.assertFalse(new_path.exists())
+            entries = self._panel_file_entries(window._template_panel)
+            self.assertIn(("entity_templates/old_controller", old_path), entries)
+            current_item = window._template_panel._tree.currentItem()
+            self.assertIsNotNone(current_item)
+            assert current_item is not None
+            current_data = current_item.data(0, window._template_panel._FILE_ROLE)
+            self.assertEqual(current_data[0], "entity_templates/old_controller")
+
     def test_item_rename_moves_file_and_updates_known_item_references(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_reference_rich_project(Path(tmp))
@@ -2627,6 +2949,51 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             )
             entries = self._panel_file_entries(window._dialogue_panel)
             self.assertIn(("dialogues/system/prompt_v2", new_path), entries)
+
+    def test_dialogue_drag_move_updates_known_dialogue_references(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            dialogues_root = project / "dialogues"
+            dialogues = dialogues_root / "system"
+            new_folder = dialogues_root / "npc"
+            new_folder.mkdir(parents=True)
+            areas = project / "areas"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            old_path = dialogues / "prompt.json"
+            source_item = window._dialogue_panel._find_item("dialogues/system/prompt")
+            target_item = self._find_tree_item_by_folder_path(window._dialogue_panel, "npc")
+            self.assertIsNotNone(source_item)
+            self.assertIsNotNone(target_item)
+            assert source_item is not None
+            assert target_item is not None
+
+            with patch.object(
+                window,
+                "_confirm_content_rename_preview",
+                return_value=True,
+            ):
+                moved = window._dialogue_panel._request_internal_file_move(
+                    source_item,
+                    target_item,
+                )
+                QApplication.processEvents()
+
+            self.assertTrue(moved)
+            new_path = new_folder / "prompt.json"
+            self.assertFalse(old_path.exists())
+            self.assertTrue(new_path.is_file())
+            saved_area = (areas / "demo.json").read_text(encoding="utf-8")
+            self.assertIn('"dialogue_path": "dialogues/npc/prompt"', saved_area)
+            self.assertIn(
+                '"success_dialogue_path": "dialogues/npc/prompt"',
+                saved_area,
+            )
+            entries = self._panel_file_entries(window._dialogue_panel)
+            self.assertIn(("dialogues/npc/prompt", new_path), entries)
 
     def test_global_entity_id_rename_updates_known_entity_references(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -7,7 +7,9 @@ Read these files in this order:
 3. `docs/authoring/manuals/authoring-guide.md`
 4. `docs/authoring/manuals/engine-json-interface.md`
 5. `docs/project/architecture-direction.md`
-6. `roadmap.md`
+6. `docs/development/engine-contract-truth-map.md`
+
+Treat `roadmap.md` as planning/reference material, not as the current contract.
 
 ## Project direction
 

@@ -156,12 +156,14 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         self.assertEqual(
             open_dialogue.deferred_param_shapes,
             {
+                "dialogue_definition": "dialogue_definition",
                 "dialogue_on_start": "command_payload",
                 "dialogue_on_end": "command_payload",
                 "segment_hooks": "dialogue_segment_hooks",
             },
         )
         self.assertIn("segment_hooks", open_dialogue.allowed_authored_params)
+        self.assertIn("dialogue_definition", open_dialogue.allowed_authored_params)
 
         run_sequence = contracts["run_sequence"]
         self.assertEqual(run_sequence.validation_mode, "mixed")
@@ -350,6 +352,53 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "enter_commands[0].segment_hooks[0].option_commands_by_id.continue[0]" in issue
+                and "persitent" in issue
+                for issue in issues
+            )
+        )
+
+    def test_command_audit_scans_inline_dialogue_definition_command_lists(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "open_dialogue_session",
+                            "dialogue_definition": {
+                                "segments": [
+                                    {
+                                        "type": "choice",
+                                        "text": "Open?",
+                                        "options": [
+                                            {
+                                                "option_id": "open",
+                                                "text": "Open",
+                                                "commands": [
+                                                    {
+                                                        "type": "set_visible",
+                                                        "entity_id": "gate",
+                                                        "visible": False,
+                                                        "persitent": True,
+                                                    }
+                                                ],
+                                            }
+                                        ],
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "enter_commands[0].dialogue_definition.segments[0].options[0].commands[0]"
+                in issue
                 and "persitent" in issue
                 for issue in issues
             )

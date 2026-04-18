@@ -40,3 +40,11 @@ implementation shape has been discussed.
   entities, better handling for large dynamic scenes, and profiling-guided
   cleanup of per-frame render/sort work before content scale makes it
   noticeable again.
+
+- Template string interpolation: template parameters currently replace whole
+  string values such as `"$dialogue_text"` or `"${dialogue_text}"`. Someday it
+  may be useful to support interpolation inside longer strings, such as
+  `"The sign says: $dialogue_text"`, especially for simple parameterized signs
+  or NPC lines. Do not treat this as current behavior; if added, it needs a
+  deliberate escaping/error model so normal authored `$` text is not
+  accidentally rewritten.

@@ -84,6 +84,23 @@ If editor workflows change, review:
 - documenting only tests while skipping real project validation expectations
 - making the docs site nicer but less truthful than the repo docs
 
+## Low-Risk Fixes
+
+Do not leave behind clearly broken, low-risk doc defects just because the
+current task was primarily about code.
+
+Safe opportunistic fixes include:
+
+- broken local Markdown links
+- stale pointer-file targets after doc moves
+- obviously wrong file/path references
+- straightforward typos that do not change technical meaning
+
+Make those fixes only when the correction is unambiguous and easy to verify.
+
+Do not casually rewrite canonical contract docs, architecture docs, or planning
+history unless the underlying truth is already clear.
+
 ## Best Practice
 
 When in doubt, update the canonical repo doc first, then make the docs site explain that updated truth more clearly.

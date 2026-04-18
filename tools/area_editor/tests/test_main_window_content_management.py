@@ -266,6 +266,7 @@ class TestMainWindowContentManagement(unittest.TestCase):
             project = project_file.parent
             (project / "assets" / "empty_assets").mkdir()
             (project / "areas" / "rooms").mkdir()
+            (project / "entity_templates" / "props").mkdir(parents=True)
             (project / "items" / "empty_items").mkdir()
             window = MainWindow()
             self.addCleanup(window.close)
@@ -280,9 +281,25 @@ class TestMainWindowContentManagement(unittest.TestCase):
                 self._panel_folder_entries(window._area_panel),
             )
             self.assertIn(
+                ("props", project / "entity_templates" / "props"),
+                self._panel_folder_entries(window._template_panel),
+            )
+            self.assertIn(
                 ("empty_items", project / "items" / "empty_items"),
                 self._panel_folder_entries(window._item_panel),
             )
+
+            rooms_item = self._find_tree_item_by_folder_path(window._area_panel, "rooms")
+            self.assertIsNotNone(rooms_item)
+            assert rooms_item is not None
+            self.assertTrue(rooms_item.font(0).bold())
+            self.assertFalse(rooms_item.icon(0).isNull())
+
+            props_item = self._find_tree_item_by_folder_path(window._template_panel, "props")
+            self.assertIsNotNone(props_item)
+            assert props_item is not None
+            self.assertTrue(props_item.font(0).bold())
+            self.assertFalse(props_item.icon(0).isNull())
 
     def test_new_and_delete_empty_folder_refreshes_browser(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -312,6 +329,32 @@ class TestMainWindowContentManagement(unittest.TestCase):
             self.assertNotIn(
                 ("project/new_empty", created_path),
                 self._panel_folder_entries(window._asset_panel),
+            )
+
+            template_root = project / "entity_templates"
+            window._apply_new_content_folder(
+                root_dir=template_root,
+                relative_path="props/rocks",
+            )
+            created_template_path = template_root / "props" / "rocks"
+            self.assertTrue(created_template_path.is_dir())
+            self.assertIn(
+                ("props", template_root / "props"),
+                self._panel_folder_entries(window._template_panel),
+            )
+            self.assertIn(
+                ("props/rocks", created_template_path),
+                self._panel_folder_entries(window._template_panel),
+            )
+
+            window._on_delete_empty_content_folder(
+                folder_path=created_template_path,
+                relative_path="props/rocks",
+            )
+            self.assertFalse(created_template_path.exists())
+            self.assertNotIn(
+                ("props/rocks", created_template_path),
+                self._panel_folder_entries(window._template_panel),
             )
 
     def test_file_tree_folders_start_collapsed_and_remember_manual_expansion(self):

@@ -11,6 +11,8 @@ The recommended default for most dialogue and menu flows is:
 
 The engine-owned dialogue runtime currently handles:
 
+- file-backed dialogue through `dialogue_path`
+- inline entity/project-authored dialogue through `dialogue_definition`
 - text pagination
 - choice selection and scrolling
 - modal input ownership while active

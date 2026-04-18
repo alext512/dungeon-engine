@@ -168,8 +168,11 @@ def _audit_dialogue_payload(
     *,
     project: Any,
     source_name: str,
+    location: str = "",
 ) -> list[str]:
     """Audit known inline command surfaces inside one dialogue JSON payload."""
+    if not isinstance(raw_dialogue, dict):
+        return []
     raw_segments = raw_dialogue.get("segments")
     if not isinstance(raw_segments, list):
         return []
@@ -179,6 +182,8 @@ def _audit_dialogue_payload(
         if not isinstance(raw_segment, dict):
             continue
         segment_location = f"segments[{segment_index}]"
+        if location:
+            segment_location = f"{location}.{segment_location}"
         issues.extend(
             _audit_command_list(
                 raw_segment.get("on_start"),
@@ -289,6 +294,17 @@ def _audit_command_spec(
             continue
         deferred_value = raw_command.get(deferred_param)
         deferred_location = f"{location}.{deferred_param}"
+        if payload_shape == "dialogue_definition":
+            issues.extend(
+                _audit_dialogue_payload(
+                    deferred_value,
+                    registry,
+                    project=project,
+                    source_name=source_name,
+                    location=deferred_location,
+                )
+            )
+            continue
         if payload_shape == "dialogue_segment_hooks":
             issues.extend(
                 _audit_segment_hooks(
@@ -375,6 +391,17 @@ def _audit_run_project_command_payloads(
         payload = raw_command.get(param_name)
         payload_location = f"{location}.{param_name}"
         if payload_shape == "raw_data":
+            continue
+        if payload_shape == "dialogue_definition":
+            issues.extend(
+                _audit_dialogue_payload(
+                    payload,
+                    registry,
+                    project=project,
+                    source_name=source_name,
+                    location=payload_location,
+                )
+            )
             continue
         if payload_shape == "dialogue_segment_hooks":
             issues.extend(

@@ -450,6 +450,14 @@ browsed by type in the editor:
     "destination_entity_id": "spawn_marker",
     "target_entity_id": "",
     "target_command_id": "open_now",
+    "dialogue_definition": {
+      "segments": [
+        {
+          "type": "text",
+          "text": "A local one-off line."
+        }
+      ]
+    },
     "toggleable": true
   },
   "parameter_specs": {
@@ -470,6 +478,9 @@ browsed by type in the editor:
     "target_command_id": {
       "type": "entity_command_id",
       "entity_parameter": "target_entity_id"
+    },
+    "dialogue_definition": {
+      "type": "dialogue_definition"
     },
     "toggleable": {
       "type": "bool"
@@ -699,6 +710,7 @@ Each visual can define:
 - `frame_height`
 - `frames`
 - `default_animation`
+- `default_animation_by_facing`
 - `animations`
 - `animation_fps`
 - `animate_when_moving`
@@ -718,6 +730,12 @@ For command-driven animation, prefer one visual with named clips:
   "frame_width": 16,
   "frame_height": 16,
   "default_animation": "idle_down",
+  "default_animation_by_facing": {
+    "up": "idle_up",
+    "down": "idle_down",
+    "left": "idle_left",
+    "right": "idle_right"
+  },
   "animations": {
     "idle_down": { "frames": [0] },
     "idle_up": { "frames": [1] },
@@ -730,6 +748,13 @@ For command-driven animation, prefer one visual with named clips:
   }
 }
 ```
+
+`default_animation` names the visual's default clip. If the visual omits top-level
+`frames`, the loader derives its free-running default frame list from that clip
+or from the first authored clip. `default_animation_by_facing` is optional and
+lets directional entities explicitly choose a different default clip for `up`,
+`down`, `left`, or `right` based on the entity's current facing when the visual
+is initialized or reset after transfer.
 
 Then call clips by name:
 
@@ -894,7 +919,7 @@ Example with deferred hook params:
 }
 ```
 
-`deferred_param_shapes` keeps the passed hook payloads raw while the project command is instantiated. Use `command_payload` for a single command object or command list, `dialogue_segment_hooks` for dialogue hook arrays, and `raw_data` for deferred non-command data. `value_mode: "raw"` keeps a setter from recursively resolving nested command data when you want to store that payload for later execution.
+`deferred_param_shapes` keeps the passed hook payloads raw while the project command is instantiated. Use `command_payload` for a single command object or command list, `dialogue_definition` for an inline dialogue definition, `dialogue_segment_hooks` for dialogue hook arrays, and `raw_data` for deferred non-command data. `value_mode: "raw"` keeps a setter from recursively resolving nested command data when you want to store that payload for later execution.
 
 ### How To Read Command JSON
 
@@ -1173,7 +1198,9 @@ The old authored `run_dialogue` path and the later `start_dialogue_session` / `d
 Recommended new pattern:
 
 1. call `open_dialogue_session`
-2. let the engine-owned dialogue runtime load the dialogue JSON
+2. give it exactly one dialogue source: a reusable `dialogue_path`, or an
+   inline `dialogue_definition` object with the same `segments` shape as a
+   dialogue file
 3. let the runtime own session state, paging, choice selection, timer advance, and modal input behavior
 4. let dialogue content plus hooks decide what commands actually run
 5. if one engine-owned dialogue opens another, the parent session is suspended and resumes when the child closes
@@ -1195,13 +1222,51 @@ Example caller command:
 }
 ```
 
+Inline entity-owned dialogue uses the same dialogue schema:
+
+```json
+{
+  "type": "open_dialogue_session",
+  "dialogue_definition": {
+    "segments": [
+      {
+        "type": "choice",
+        "text": "Read the sign?",
+        "options": [
+          {
+            "option_id": "read",
+            "text": "Read",
+            "commands": [
+              {
+                "type": "open_dialogue_session",
+                "dialogue_path": "dialogues/lore/cave_warning.json"
+              }
+            ]
+          },
+          {
+            "option_id": "leave",
+            "text": "Leave"
+          }
+        ]
+      }
+    ]
+  },
+  "allow_cancel": true
+}
+```
+
 The engine-owned runtime currently expects:
 
 - named dialogue UI presets under `shared_variables.dialogue_ui`
-- ordinary dialogue JSON files, usually under `dialogues/`
-- one common `segments` array in each dialogue file
+- ordinary dialogue JSON files, usually under `dialogues/`, or inline
+  `dialogue_definition` objects on the command call
+- one common `segments` array in each dialogue source
 - choice layout rules inside the chosen preset, including `choices.mode`
   (`inline` or `separate_panel`) and `choices.overflow` such as `marquee`
+- for `choices.mode: "inline"`, prompt `text` uses one shared line in the main
+  panel, long prompts marquee continuously, and the remaining lines are used
+  for visible choice rows; with no prompt, inline choices use all available
+  lines
 
 Controller-authored pattern:
 
@@ -1852,10 +1917,13 @@ Marker template example:
   "kind": "area_transition_target",
   "solid": false,
   "visible": false,
-  "interactable": false,
-  "facing": "down"
+  "interactable": false
 }
 ```
+
+Add `facing` only when the marker should explicitly force the arriving entity
+to face a specific direction. If omitted, transitions keep the traveler's
+current facing.
 
 Transition trigger example:
 

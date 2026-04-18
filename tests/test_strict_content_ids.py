@@ -1221,6 +1221,27 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(asset_manager.calls, 1)
 
+    def test_renderer_centers_undersized_world_areas_in_viewport(self) -> None:
+        import pygame
+
+        area = Area(
+            area_id="areas/test_room",
+            tile_size=16,
+            tilesets=[],
+            tile_layers=[],
+            cell_flags=[[{"blocked": False}] * 2 for _ in range(2)],
+        )
+        camera = Camera(64, 48, area)
+        renderer = Renderer(
+            pygame.Surface((64, 48)),
+            object(),
+            internal_width=64,
+            internal_height=48,
+        )
+
+        self.assertEqual(renderer._world_to_screen(area, 0, 0, camera), (16, 8))
+        self.assertEqual(renderer._world_to_screen(area, 16, 16, camera), (32, 24))
+
     def test_removed_text_session_commands_raise_clear_runtime_errors(self) -> None:
         registry, context = self._make_command_context()
         for command_name in (
@@ -2687,6 +2708,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(
             registry.get_deferred_param_shapes("run_entity_command"),
             {
+                "dialogue_definition": "dialogue_definition",
                 "dialogue_on_start": "command_payload",
                 "dialogue_on_end": "command_payload",
                 "segment_hooks": "dialogue_segment_hooks",
@@ -4241,7 +4263,6 @@ class StrictContentIdTests(unittest.TestCase):
                     "scope": "area",
                     "present": True,
                     "visible": True,
-                    "facing": "down",
                     "solid": False,
                     "pushable": False,
                     "weight": 1,

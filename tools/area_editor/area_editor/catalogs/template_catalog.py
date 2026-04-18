@@ -160,6 +160,13 @@ class TemplateCatalog:
             return {}
         return copy.deepcopy(specs)
 
+    def get_template_data(self, template_id: str) -> dict[str, Any]:
+        """Return one template's authored JSON object, if available."""
+        raw = self._templates.get(template_id)
+        if not isinstance(raw, dict):
+            return {}
+        return copy.deepcopy(raw)
+
     def get_template_entity_command_names(self, template_id: str) -> list[str]:
         """Return authored entity-command names for one template."""
         raw = self._templates.get(template_id)

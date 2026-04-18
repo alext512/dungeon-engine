@@ -258,3 +258,20 @@ class TestTemplateCatalog(unittest.TestCase):
             ]["type"],
             "area_id",
         )
+
+    def test_get_template_data_returns_deep_copy(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/sign"] = {
+            "solid": True,
+            "parameters": {"dialogue_path": "dialogues/sign.json"},
+        }
+
+        data = catalog.get_template_data("entity_templates/sign")
+        data["solid"] = False
+        data["parameters"]["dialogue_path"] = "dialogues/other.json"
+
+        self.assertTrue(catalog._templates["entity_templates/sign"]["solid"])
+        self.assertEqual(
+            catalog._templates["entity_templates/sign"]["parameters"]["dialogue_path"],
+            "dialogues/sign.json",
+        )

@@ -11,8 +11,13 @@
       "path": "assets/boulder.png",
       "frame_width": 16,
       "frame_height": 16,
-      "frames": [0],
+      "frames": [
+        0
+      ],
       "visible": true
     }
-  ]
+  ],
+  "persistence": {
+    "entity_state": true
+  }
 }

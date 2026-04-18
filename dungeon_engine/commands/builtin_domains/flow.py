@@ -480,6 +480,7 @@ def register_flow_commands(
     @registry.register(
         "run_entity_command",
         deferred_param_shapes={
+            "dialogue_definition": "dialogue_definition",
             "dialogue_on_start": "command_payload",
             "dialogue_on_end": "command_payload",
             "segment_hooks": "dialogue_segment_hooks",

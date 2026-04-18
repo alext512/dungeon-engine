@@ -171,13 +171,13 @@
       "id": "from_start_marker",
       "grid_x": 15,
       "grid_y": 19,
-      "template": "entity_templates/area_transition_target"
+      "template": "entity_templates/actively_used/area_transition_target"
     },
     {
       "id": "to_start_1",
       "grid_x": 15,
       "grid_y": 20,
-      "template": "entity_templates/area_transition",
+      "template": "entity_templates/actively_used/area_transition",
       "parameters": {
         "target_area": "areas/start",
         "destination_entity_id": "starting_position"

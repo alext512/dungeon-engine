@@ -23,7 +23,7 @@ It is not trying to solve:
 - a permanent on-screen status log
 - later party/combat UI
 
-This plan builds on [inventory_v1_plan.md](/C:/Syncthing/Vault/projects/puzzle_dungeon_v3/python_puzzle_engine/plans/inventory_v1_plan.md).
+This plan builds on [inventory_v1_plan.md](inventory_v1_plan.md).
 
 ## Why This Change Exists
 

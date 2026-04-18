@@ -27,6 +27,7 @@ from dungeon_engine.world.entity import (
 )
 
 logger = get_logger(__name__)
+_MISSING = object()
 
 _TEMPLATE_CACHE: dict[tuple[Path, str], dict[str, Any]] = {}
 _AUTHORED_ENTITY_INDEX_CACHE: dict[
@@ -52,6 +53,7 @@ _PARAMETER_SPEC_TYPES = frozenset(
         "area_id",
         "item_id",
         "dialogue_path",
+        "dialogue_definition",
         "project_command_id",
         "entity_template_id",
         "asset_path",
@@ -173,7 +175,7 @@ def instantiate_entity(
     persistence = _parse_entity_persistence(entity_data, source_name=source_name)
     visuals = _parse_entity_visuals(entity_data, tile_size=tile_size, source_name=source_name)
     entity_commands = _parse_entity_commands(entity_data)
-    facing = _parse_entity_facing(entity_data, source_name=source_name)
+    facing, authored_facing = _parse_entity_facing(entity_data, source_name=source_name)
     solid = _parse_entity_solid(entity_data)
     pushable = _parse_entity_pushable(entity_data)
     weight = _parse_entity_weight(entity_data, source_name=source_name)
@@ -201,6 +203,7 @@ def instantiate_entity(
         present=bool(entity_data.get("present", True)),
         visible=bool(entity_data.get("visible", True)),
         facing=facing,
+        authored_facing=authored_facing,
         solid=solid,
         pushable=pushable,
         weight=weight,
@@ -224,6 +227,7 @@ def instantiate_entity(
         input_map=_parse_input_map(entity_data.get("input_map")),
         persistence=persistence,
     )
+    entity.apply_default_visual_state()
     return entity
 
 
@@ -372,15 +376,17 @@ def _parse_entity_facing(
     entity_data: dict[str, Any],
     *,
     source_name: str,
-) -> str:
+) -> tuple[str, str | None]:
     """Parse one entity's top-level facing field."""
-    raw_facing = entity_data.get("facing", "down")
+    raw_facing = entity_data.get("facing", _MISSING)
+    if raw_facing is _MISSING:
+        return ("down", None)
     facing = str(raw_facing).strip().lower()
     if facing not in {"up", "down", "left", "right"}:
         raise ValueError(
             f"{source_name} field 'facing' must be 'up', 'down', 'left', or 'right'."
         )
-    return facing
+    return facing, facing
 
 
 def _parse_entity_solid(
@@ -535,6 +541,11 @@ def _parse_entity_visuals(
             animations=animations,
             source_name=f"{source_name} visuals[{index}]",
         )
+        default_animation_by_facing = _parse_default_animation_by_facing(
+            raw_visual.get("default_animation_by_facing"),
+            animations=animations,
+            source_name=f"{source_name} visuals[{index}]",
+        )
 
         frame_width = int(raw_visual.get("frame_width", tile_size))
         frame_height = int(raw_visual.get("frame_height", tile_size))
@@ -570,6 +581,7 @@ def _parse_entity_visuals(
                 offset_y=float(raw_visual.get("offset_y", 0.0)),
                 draw_order=int(raw_visual.get("draw_order", index)),
                 default_animation=default_animation,
+                default_animation_by_facing=default_animation_by_facing,
                 animations=animations,
             )
         )
@@ -651,6 +663,40 @@ def _parse_optional_visual_animation_id(
             f"{source_name} field 'default_animation' references unknown animation '{animation_id}'."
         )
     return animation_id
+
+
+def _parse_default_animation_by_facing(
+    raw_mapping: Any,
+    *,
+    animations: dict[str, VisualAnimationClip],
+    source_name: str,
+) -> dict[str, str]:
+    """Validate an optional facing-to-default-animation mapping."""
+    if raw_mapping is None:
+        return {}
+    if not isinstance(raw_mapping, dict):
+        raise ValueError(
+            f"{source_name} field 'default_animation_by_facing' must be a JSON object."
+        )
+
+    resolved: dict[str, str] = {}
+    for raw_facing, raw_animation_id in raw_mapping.items():
+        facing = str(raw_facing).strip().lower()
+        if facing not in {"up", "down", "left", "right"}:
+            raise ValueError(
+                f"{source_name} field 'default_animation_by_facing' uses unknown facing '{raw_facing}'."
+            )
+        animation_id = _parse_optional_visual_animation_id(
+            raw_animation_id,
+            animations=animations,
+            source_name=f"{source_name} default_animation_by_facing.{facing}",
+        )
+        if animation_id is None:
+            raise ValueError(
+                f"{source_name} field 'default_animation_by_facing.{facing}' must not be null."
+            )
+        resolved[facing] = animation_id
+    return resolved
 
 
 def list_entity_template_ids(project: ProjectContext) -> list[str]:
@@ -1025,6 +1071,14 @@ def _validate_one_parameter_value(
         return
 
     if spec_type == "json":
+        return
+
+    if spec_type == "dialogue_definition":
+        if not isinstance(value, dict):
+            raise ValueError(f"{location} must be a JSON object.")
+        raw_segments = value.get("segments")
+        if not isinstance(raw_segments, list):
+            raise ValueError(f"{location}.segments must be a JSON array.")
         return
 
     if spec_type == "color_rgb":

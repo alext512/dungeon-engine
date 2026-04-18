@@ -178,7 +178,7 @@ class Renderer:
     def _draw_tile_layer(self, area: Area, camera: Camera, layer) -> None:
         """Draw one cached non-y-sorted tile layer batch."""
         cached_surface = self._get_static_tile_layer_surface(area, layer)
-        screen_x, screen_y = self._world_to_screen(0.0, 0.0, camera)
+        screen_x, screen_y = self._world_to_screen(area, 0.0, 0.0, camera)
         self.internal_surface.blit(cached_surface, (screen_x, screen_y))
 
     def _draw_tile_cell(self, area: Area, camera: Camera, layer, grid_x: int, grid_y: int) -> None:
@@ -194,6 +194,7 @@ class Renderer:
             return
         tileset_path, tile_w, tile_h, local_frame = resolved
         screen_x, screen_y = self._world_to_screen(
+            area,
             grid_x * area.tile_size,
             grid_y * area.tile_size,
             camera,
@@ -273,7 +274,7 @@ class Renderer:
         """Draw one world-space entity."""
         if self._draw_entity_visuals(entity, camera=camera):
             return
-        screen_x, screen_y = self._world_to_screen(entity.pixel_x, entity.pixel_y, camera)
+        screen_x, screen_y = self._world_to_screen(area, entity.pixel_x, entity.pixel_y, camera)
         self._draw_entity_fallback(area.tile_size, entity, screen_x, screen_y)
 
     def _draw_screen_entities(self, world: World) -> None:
@@ -323,7 +324,7 @@ class Renderer:
             base_x = entity.pixel_x + visual.offset_x
             base_y = entity.pixel_y + visual.offset_y
             if camera is not None:
-                draw_x, draw_y = self._world_to_screen(base_x, base_y, camera)
+                draw_x, draw_y = self._world_to_screen(camera.area, base_x, base_y, camera)
             else:
                 draw_x, draw_y = (
                     round(base_x) if config.PIXEL_ART_MODE else int(base_x),
@@ -352,17 +353,25 @@ class Renderer:
 
     def _world_to_screen(
         self,
+        area: Area,
         world_x: float,
         world_y: float,
         camera: Camera,
     ) -> tuple[int, int]:
         """Convert world coordinates to screen coordinates with optional snapping."""
-        screen_x = world_x - camera.render_x
-        screen_y = world_y - camera.render_y
+        offset_x, offset_y = self._world_scene_offset(area)
+        screen_x = world_x - camera.render_x + offset_x
+        screen_y = world_y - camera.render_y + offset_y
 
         if config.PIXEL_ART_MODE:
             return round(screen_x), round(screen_y)
         return int(screen_x), int(screen_y)
+
+    def _world_scene_offset(self, area: Area) -> tuple[float, float]:
+        """Center undersized world scenes within the fixed internal viewport."""
+        offset_x = max(0.0, (self.internal_width - area.pixel_width) / 2)
+        offset_y = max(0.0, (self.internal_height - area.pixel_height) / 2)
+        return offset_x, offset_y
 
     def _draw_screen_elements(self, screen_elements: ScreenElementManager) -> None:
         """Draw generic screen-space elements above the world."""

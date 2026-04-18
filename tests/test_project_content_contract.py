@@ -1047,10 +1047,11 @@ class ProjectContentContractTests(unittest.TestCase):
         _, project = self._make_project(
             commands={
                 "call_hook.json": {
-                    "params": ["hook", "raw_blob"],
+                    "params": ["hook", "raw_blob", "dialogue"],
                     "deferred_param_shapes": {
                         "hook": "command_payload",
                         "raw_blob": "raw_data",
+                        "dialogue": "dialogue_definition",
                     },
                     "commands": [],
                 }
@@ -1058,6 +1059,41 @@ class ProjectContentContractTests(unittest.TestCase):
         )
 
         validate_project_commands(project)
+
+    def test_template_parameter_specs_accept_dialogue_definition(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "sign.json": {
+                    "kind": "sign",
+                    "parameters": {
+                        "dialogue_definition": {
+                            "segments": [
+                                {
+                                    "type": "text",
+                                    "text": "A small sign.",
+                                }
+                            ]
+                        }
+                    },
+                    "parameter_specs": {
+                        "dialogue_definition": {
+                            "type": "dialogue_definition",
+                            "required": True,
+                        }
+                    },
+                    "entity_commands": {
+                        "interact": [
+                            {
+                                "type": "open_dialogue_session",
+                                "dialogue_definition": "$dialogue_definition",
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+
+        validate_project_entity_templates(project)
 
     def test_project_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
         _, project = self._make_project(

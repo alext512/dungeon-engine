@@ -129,6 +129,8 @@ The file-backed browsers support:
 
 - folder creation
 - rename or move for supported content types
+- dragging a file entry onto a folder to move it with the same reference-update
+  preview used by `Rename/Move...`
 - reference-update previews before applying changes
 - delete with explicit warnings when references are not automatically repaired
 

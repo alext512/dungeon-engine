@@ -17,6 +17,7 @@ from dungeon_engine.project_context import load_project
 from dungeon_engine.systems.animation import AnimationSystem
 from dungeon_engine.world.area import Area
 from dungeon_engine.world.entity import Entity, EntityVisual, VisualAnimationClip
+from dungeon_engine.world.loader_entities import instantiate_entity
 from dungeon_engine.world.world import World
 
 
@@ -370,6 +371,79 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         self.assertEqual(visual.current_frame, 2)
         self.assertTrue(visual.flip_x)
         self.assertFalse(animation_system.is_entity_animating("player", visual_id="body"))
+
+    def test_instantiate_entity_applies_facing_specific_default_animation(self) -> None:
+        _, project = self._make_project()
+        entity = instantiate_entity(
+            {
+                "id": "npc",
+                "kind": "npc",
+                "grid_x": 1,
+                "grid_y": 2,
+                "facing": "left",
+                "visuals": [
+                    {
+                        "id": "body",
+                        "path": "assets/project/sprites/npc.png",
+                        "frame_width": 16,
+                        "frame_height": 16,
+                        "default_animation": "idle_down",
+                        "default_animation_by_facing": {
+                            "left": "idle_left",
+                            "right": "idle_right",
+                        },
+                        "animations": {
+                            "idle_down": {"frames": [0]},
+                            "idle_left": {"frames": [2], "flip_x": True},
+                            "idle_right": {"frames": [2], "flip_x": False},
+                        },
+                    }
+                ],
+            },
+            16,
+            project=project,
+            source_name="test npc",
+        )
+
+        visual = entity.require_visual("body")
+        self.assertEqual(entity.facing, "left")
+        self.assertEqual(visual.current_frame, 2)
+        self.assertTrue(visual.flip_x)
+
+    def test_animation_system_preserves_facing_specific_default_visual_state(self) -> None:
+        visual = EntityVisual(
+            visual_id="body",
+            path="assets/project/sprites/npc.png",
+            frame_width=16,
+            frame_height=16,
+            frames=[0],
+            animation_fps=0.0,
+            default_animation="idle_down",
+            default_animation_by_facing={
+                "up": "idle_up",
+                "down": "idle_down",
+            },
+            animations={
+                "idle_down": VisualAnimationClip(frames=[0]),
+                "idle_up": VisualAnimationClip(frames=[1]),
+            },
+        )
+        npc = Entity(
+            entity_id="npc",
+            kind="npc",
+            grid_x=0,
+            grid_y=0,
+            facing="up",
+            visuals=[visual],
+        )
+        npc.apply_default_visual_state()
+        world = World()
+        world.add_entity(npc)
+        animation_system = AnimationSystem(world)
+
+        animation_system.update_tick(0.0)
+
+        self.assertEqual(npc.require_visual("body").current_frame, 1)
 
     def test_move_entity_world_position_supports_named_ref_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")

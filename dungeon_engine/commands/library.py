@@ -20,12 +20,14 @@ logger = get_logger(__name__)
 ProjectCommandDeferredPayloadShape = Literal[
     "raw_data",
     "command_payload",
+    "dialogue_definition",
     "dialogue_segment_hooks",
 ]
 _PROJECT_COMMAND_DEFERRED_PAYLOAD_SHAPES = frozenset(
     {
         "raw_data",
         "command_payload",
+        "dialogue_definition",
         "dialogue_segment_hooks",
     }
 )

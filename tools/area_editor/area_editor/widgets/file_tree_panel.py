@@ -13,11 +13,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtCore import QSize, QTimer, Qt, Signal
+from PySide6.QtGui import QAction, QFont, QIcon
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QDockWidget,
     QMenu,
+    QStyle,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -27,11 +29,77 @@ from PySide6.QtWidgets import (
 from area_editor.json_io import strip_json_data_suffix
 
 
+class _ContentTreeWidget(QTreeWidget):
+    """Tree widget that reports internal file-drop intents to its parent panel."""
+
+    def __init__(self, owner: "FileTreePanel") -> None:
+        super().__init__()
+        self._owner = owner
+        self._drag_source_data: tuple[str, Path] | None = None
+        self._pending_move_request: tuple[str, Path, Path] | None = None
+        self.setDragEnabled(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+    def startDrag(self, supportedActions) -> None:  # type: ignore[override]
+        item = self.currentItem()
+        if item is None:
+            return
+        source_data = item.data(0, self._owner._FILE_ROLE)
+        if source_data is None:
+            return
+        content_id, file_path = source_data
+        self._drag_source_data = (str(content_id), Path(file_path).resolve())
+        try:
+            super().startDrag(supportedActions)
+        finally:
+            pending_move_request = self._pending_move_request
+            self._pending_move_request = None
+            self._drag_source_data = None
+            if pending_move_request is not None:
+                content_id, file_path, target_folder = pending_move_request
+                self._owner._queue_file_move_request(
+                    content_id,
+                    file_path,
+                    target_folder,
+                )
+
+    def dragEnterEvent(self, event) -> None:  # type: ignore[override]
+        if self._drag_source_data is not None:
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dragMoveEvent(self, event) -> None:  # type: ignore[override]
+        if self._owner._can_accept_internal_drop_data(
+            self._drag_source_data,
+            self.itemAt(event.position().toPoint()),
+        ):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:  # type: ignore[override]
+        move_request = self._owner._internal_file_move_request_data(
+            self._drag_source_data,
+            self.itemAt(event.position().toPoint()),
+        )
+        if move_request is not None:
+            self._pending_move_request = move_request
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+
 class FileTreePanel(QDockWidget):
     """Generic dock panel showing a folder tree of project files."""
 
     _FILE_ROLE = 256
     _FOLDER_ROLE = 257
+    file_move_requested = Signal(str, Path, Path)
 
     file_selected = Signal(str, Path)  # (content_id, file_path) — single-click
     file_open_requested = Signal(str, Path)  # (content_id, file_path) — double-click / context menu
@@ -69,12 +137,14 @@ class FileTreePanel(QDockWidget):
         self._root_dirs: list[Path] = []
         self._expanded_folder_paths: set[str] = set()
         self._root_signature: tuple[str, ...] = ()
+        self._folder_font = QFont()
+        self._folder_font.setBold(True)
 
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(4, 4, 4, 4)
 
-        self._tree = QTreeWidget()
+        self._tree = _ContentTreeWidget(self)
         self._tree.setHeaderHidden(True)
         if icon_size > 0:
             self._tree.setIconSize(QSize(icon_size, icon_size))
@@ -124,6 +194,10 @@ class FileTreePanel(QDockWidget):
                 folder_key = (root_dir, relative_path)
                 if folder_key not in folder_nodes:
                     folder_item = QTreeWidgetItem(parent, [folder_name])
+                    folder_item.setFlags(
+                        (folder_item.flags() | Qt.ItemFlag.ItemIsDropEnabled)
+                        & ~Qt.ItemFlag.ItemIsDragEnabled
+                    )
                     folder_item.setData(
                         0,
                         self._FOLDER_ROLE,
@@ -131,6 +205,7 @@ class FileTreePanel(QDockWidget):
                     )
                     folder_item.setToolTip(0, relative_path)
                     folder_item.setExpanded(relative_path in self._expanded_folder_paths)
+                    self._apply_folder_item_style(folder_item)
                     folder_nodes[folder_key] = folder_item
                 current_item = folder_nodes[folder_key]
                 parent = current_item
@@ -155,6 +230,10 @@ class FileTreePanel(QDockWidget):
                 leaf_name = parts[-1]
 
             item = QTreeWidgetItem(parent, [leaf_name])
+            item.setFlags(
+                (item.flags() | Qt.ItemFlag.ItemIsDragEnabled)
+                & ~Qt.ItemFlag.ItemIsDropEnabled
+            )
             item.setData(0, self._FILE_ROLE, (content_id, file_path))
             item.setToolTip(0, content_id)
 
@@ -373,6 +452,7 @@ class FileTreePanel(QDockWidget):
             return
         relative_path, _folder_path, _root_dir = folder_data
         self._expanded_folder_paths.add(str(relative_path))
+        self._apply_folder_item_style(item)
 
     def _on_item_collapsed(self, item: QTreeWidgetItem) -> None:
         folder_data = item.data(0, self._FOLDER_ROLE)
@@ -380,3 +460,145 @@ class FileTreePanel(QDockWidget):
             return
         relative_path, _folder_path, _root_dir = folder_data
         self._expanded_folder_paths.discard(str(relative_path))
+        self._apply_folder_item_style(item)
+
+    def _apply_folder_item_style(self, item: QTreeWidgetItem) -> None:
+        """Give folder rows a clearer visual identity than plain file names."""
+        item.setFont(0, self._folder_font)
+        style = self.style()
+        icon = style.standardIcon(
+            QStyle.StandardPixmap.SP_DirOpenIcon
+            if item.isExpanded()
+            else QStyle.StandardPixmap.SP_DirClosedIcon
+        )
+        if icon.isNull():
+            icon = style.standardIcon(QStyle.StandardPixmap.SP_DirIcon)
+        if not icon.isNull():
+            item.setIcon(0, icon)
+
+    def _folder_path_for_drop_target(
+        self,
+        item: QTreeWidgetItem | None,
+        *,
+        source_file_path: Path | None = None,
+    ) -> Path | None:
+        if item is None:
+            if len(self._root_dirs) == 1:
+                return self._root_dirs[0]
+            resolved_file = source_file_path.resolve() if source_file_path is not None else None
+            if resolved_file is None:
+                source_item = self._tree.currentItem()
+                if source_item is None:
+                    return None
+                source_data = source_item.data(0, self._FILE_ROLE)
+                if source_data is None:
+                    return None
+                _content_id, file_path = source_data
+                resolved_file = Path(file_path).resolve()
+            for root_dir in self._root_dirs:
+                try:
+                    resolved_file.relative_to(root_dir.resolve())
+                except ValueError:
+                    continue
+                return root_dir
+            return None
+
+        folder_data = item.data(0, self._FOLDER_ROLE)
+        if folder_data is not None:
+            _relative_path, folder_path, _root_dir = folder_data
+            return Path(folder_path)
+
+        file_data = item.data(0, self._FILE_ROLE)
+        if file_data is not None:
+            _content_id, file_path = file_data
+            return Path(file_path).resolve().parent
+        return None
+
+    def _can_accept_internal_drop(
+        self,
+        source_item: QTreeWidgetItem | None,
+        target_item: QTreeWidgetItem | None,
+    ) -> bool:
+        if source_item is None:
+            return False
+        source_data = source_item.data(0, self._FILE_ROLE)
+        return self._can_accept_internal_drop_data(source_data, target_item)
+
+    def _can_accept_internal_drop_data(
+        self,
+        source_data: tuple[str, Path] | None,
+        target_item: QTreeWidgetItem | None,
+    ) -> bool:
+        if source_data is None:
+            return False
+        _content_id, file_path = source_data
+        resolved_file = Path(file_path).resolve()
+        target_folder = self._folder_path_for_drop_target(
+            target_item,
+            source_file_path=resolved_file,
+        )
+        if target_folder is None:
+            return False
+        candidate_target = (target_folder.resolve() / resolved_file.name).resolve()
+        return candidate_target != resolved_file
+
+    def _request_internal_file_move(
+        self,
+        source_item: QTreeWidgetItem | None,
+        target_item: QTreeWidgetItem | None,
+    ) -> bool:
+        if source_item is None:
+            return False
+        source_data = source_item.data(0, self._FILE_ROLE)
+        return self._request_internal_file_move_data(source_data, target_item)
+
+    def _request_internal_file_move_data(
+        self,
+        source_data: tuple[str, Path] | None,
+        target_item: QTreeWidgetItem | None,
+    ) -> bool:
+        move_request = self._internal_file_move_request_data(source_data, target_item)
+        if move_request is None:
+            return False
+        content_id, resolved_file, resolved_target_folder = move_request
+        self._queue_file_move_request(content_id, resolved_file, resolved_target_folder)
+        return True
+
+    def _internal_file_move_request_data(
+        self,
+        source_data: tuple[str, Path] | None,
+        target_item: QTreeWidgetItem | None,
+    ) -> tuple[str, Path, Path] | None:
+        if source_data is None:
+            return None
+        content_id, file_path = source_data
+        resolved_file = Path(file_path).resolve()
+        target_folder = self._folder_path_for_drop_target(
+            target_item,
+            source_file_path=resolved_file,
+        )
+        if target_folder is None:
+            return None
+        resolved_target_folder = target_folder.resolve()
+        if (resolved_target_folder / resolved_file.name).resolve() == resolved_file:
+            return None
+        return str(content_id), resolved_file, resolved_target_folder
+
+    def _queue_file_move_request(
+        self,
+        content_id: str,
+        resolved_file: Path,
+        resolved_target_folder: Path,
+    ) -> None:
+        # Defer the actual move until after the tree widget finishes the whole
+        # drag operation. Opening the guarded refactor dialog from inside Qt's
+        # drag/drop stack can leave drop indicators or refreshed rows visually
+        # stale, especially when the user cancels.
+        QTimer.singleShot(
+            0,
+            lambda: self.file_move_requested.emit(
+                content_id,
+                resolved_file,
+                resolved_target_folder,
+            ),
+        )
