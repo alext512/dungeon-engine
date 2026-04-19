@@ -1722,6 +1722,19 @@ Current engine-owned dialogue runtime behavior:
   `segment_hooks`
 - currently also supports inline segment `on_start` / `on_end` and inline
   option `commands`
+- choice options may also author exactly one first-class child branch through
+  `next_dialogue_path` or `next_dialogue_definition`
+- segments and choice options may author `end_dialogue: true` to make a path
+  terminal without reaching later sibling segments
+- when a choice option authors both side effects and a child branch, the
+  runtime runs the option `commands` first, then opens the child branch, then
+  resumes the parent and finishes the original segment after the child closes
+- text segments with `end_dialogue: true` close after that segment finishes
+- choice segments with `end_dialogue: true` close after the chosen option path
+  finishes, including any child branch that option opens
+- choice options with `end_dialogue: true` run their `commands` first and then
+  close immediately without opening `next_dialogue_path` or
+  `next_dialogue_definition`
 - opening a child engine-owned dialogue suspends the parent session and
   resumes it after the child closes
 - when both caller-provided hooks and inline dialogue commands exist for the
@@ -1730,6 +1743,11 @@ Current engine-owned dialogue runtime behavior:
 
 Practical note:
 - inline option `commands` are appropriate for simple direct actions, including queued built-ins such as `new_game`, `load_game`, and `quit_game`
+- `next_dialogue_path` / `next_dialogue_definition` are the preferred way for a
+  choice option to continue into another dialogue branch without hiding that
+  branch inside generic command JSON
+- `end_dialogue: true` is the preferred way to mark a segment or option as a
+  terminal authored path when the conversation should stop there
 - `dialogue_on_end` is better when you need one shared post-close branch or cleanup after the session is fully closed
 
 Controller-owned dialogue flows are valid advanced authored content for

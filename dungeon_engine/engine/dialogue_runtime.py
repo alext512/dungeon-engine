@@ -649,7 +649,7 @@ class DialogueRuntime:
         self._finish_segment(session)
 
     def _confirm_choice(self, session: DialogueSession) -> None:
-        """Execute the selected option's commands, then finish the segment."""
+        """Execute the selected option's commands, then branch or finish the segment."""
         if self.current_session is not session:
             return
         if not session.current_options:
@@ -659,6 +659,14 @@ class DialogueRuntime:
         option = dict(session.current_options[session.choice_index])
         option_id = str(option.get("option_id", "")).strip()
         commands = self._resolve_option_commands(session, option_id=option_id)
+        if self._option_branch_is_authored(option) and self._command_list_contains_type(
+            commands,
+            "open_dialogue_session",
+        ):
+            raise ValueError(
+                "Dialogue choice options must not combine next_dialogue_path or "
+                "next_dialogue_definition with open_dialogue_session in their commands."
+            )
         runtime_params: dict[str, Any] = {
             "selected_option_id": option_id,
             "selected_option_index": int(session.choice_index),
@@ -666,11 +674,44 @@ class DialogueRuntime:
         self._run_command_list(
             session,
             commands,
-            on_complete=lambda owner: self._finish_segment(owner),
+            on_complete=lambda owner, raw_option=copy.deepcopy(option): self._continue_after_option_commands(
+                owner,
+                raw_option,
+            ),
             extra_runtime_params=runtime_params,
         )
 
-    def _finish_segment(self, session: DialogueSession) -> None:
+    def _continue_after_option_commands(
+        self,
+        session: DialogueSession,
+        option: dict[str, Any],
+    ) -> None:
+        """Open one authored child branch when present, otherwise finish the segment."""
+        if self.current_session is not session:
+            return
+        if self._option_ends_dialogue(option):
+            self._finish_segment(session, close_after_finish=True)
+            return
+        next_dialogue_path, next_dialogue_definition = self._resolve_option_branch_source(option)
+        if not next_dialogue_path and next_dialogue_definition is None:
+            self._finish_segment(session)
+            return
+
+        child_session = self.open_session(
+            dialogue_path=next_dialogue_path,
+            dialogue_definition=next_dialogue_definition,
+            allow_cancel=session.allow_cancel,
+            actor_id=session.actor_id,
+            caller_id=session.caller_id,
+        )
+        wait_handle = DialogueSessionWaitHandle(self, child_session)
+        if wait_handle.complete:
+            self._finish_segment(session)
+            return
+        session.pending_handle = wait_handle
+        session.pending_on_complete = lambda owner: self._finish_segment(owner)
+
+    def _finish_segment(self, session: DialogueSession, *, close_after_finish: bool = False) -> None:
         """Run end hooks, then advance to the next segment or close the session."""
         if self.current_session is not session:
             return
@@ -678,8 +719,25 @@ class DialogueRuntime:
         self._run_command_list(
             session,
             self._resolve_segment_hook_commands(session, "on_end"),
-            on_complete=lambda owner: self._advance_segment(owner),
+            on_complete=lambda owner, force_close=close_after_finish: self._complete_segment_after_on_end(
+                owner,
+                close_after_finish=force_close,
+            ),
         )
+
+    def _complete_segment_after_on_end(
+        self,
+        session: DialogueSession,
+        *,
+        close_after_finish: bool,
+    ) -> None:
+        """Advance or close after one segment's end hooks finish."""
+        if self.current_session is not session:
+            return
+        if close_after_finish or self._segment_ends_dialogue(session):
+            self.close_current_session()
+            return
+        self._advance_segment(session)
 
     def _advance_segment(self, session: DialogueSession) -> None:
         """Move to the next segment or close the dialogue at the end."""
@@ -732,6 +790,63 @@ class DialogueRuntime:
 
         option = dict(session.current_options[session.choice_index])
         return _normalize_command_list(option.get("commands"))
+
+    def _resolve_option_branch_source(
+        self,
+        option: dict[str, Any],
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Resolve one option's authored child-branch source."""
+        next_dialogue_path = None
+        raw_path = option.get("next_dialogue_path")
+        if raw_path not in (None, ""):
+            next_dialogue_path = str(raw_path).strip() or None
+
+        next_dialogue_definition = None
+        raw_definition = option.get("next_dialogue_definition")
+        if raw_definition is not None:
+            if not isinstance(raw_definition, dict):
+                raise ValueError(
+                    "Dialogue choice option next_dialogue_definition must be a JSON object."
+                )
+            next_dialogue_definition = copy.deepcopy(raw_definition)
+
+        if next_dialogue_path and next_dialogue_definition is not None:
+            raise ValueError(
+                "Dialogue choice options must define at most one of next_dialogue_path "
+                "or next_dialogue_definition."
+            )
+        return next_dialogue_path, next_dialogue_definition
+
+    def _option_branch_is_authored(self, option: dict[str, Any]) -> bool:
+        """Return whether the option authors any first-class child dialogue branch."""
+        return option.get("next_dialogue_definition") is not None or bool(
+            str(option.get("next_dialogue_path", "")).strip()
+        )
+
+    def _segment_ends_dialogue(self, session: DialogueSession) -> bool:
+        """Return whether the current segment closes the dialogue after it finishes."""
+        raw_value = session.current_segment.get("end_dialogue", False)
+        if raw_value in (None, False):
+            return False
+        if raw_value is True:
+            return True
+        raise ValueError("Dialogue segment end_dialogue must be a boolean.")
+
+    def _option_ends_dialogue(self, option: dict[str, Any]) -> bool:
+        """Return whether the chosen option closes the dialogue after its commands."""
+        raw_value = option.get("end_dialogue", False)
+        if raw_value in (None, False):
+            return False
+        if raw_value is True:
+            return True
+        raise ValueError("Dialogue choice option end_dialogue must be a boolean.")
+
+    def _command_list_contains_type(self, commands: Any, command_type: str) -> bool:
+        """Return whether one authored command list contains the provided command type."""
+        for command in _normalize_command_list(commands):
+            if str(command.get("type", "")).strip() == command_type:
+                return True
+        return False
 
     def _run_command_list(
         self,

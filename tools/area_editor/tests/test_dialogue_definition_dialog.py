@@ -76,8 +76,12 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
 
         editor = dialog._structured_editor
         editor._insert_choice_segment()
-        editor._option_id_edit.setText("inspect")
-        editor._option_text_edit.setPlainText("Inspect the carving")
+        segment_item = editor._find_tree_item(("segment", (), 0))
+        self.assertIsNotNone(segment_item)
+        editor._tree.setCurrentItem(segment_item)
+
+        option_item = editor._find_tree_item(("option", (), 0, 0))
+        self.assertIsNotNone(option_item)
 
         with patch.object(
             editor,
@@ -88,6 +92,11 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
             ],
         ):
             editor._edit_segment_commands("on_start")
+            option_item = editor._find_tree_item(("option", (), 0, 0))
+            self.assertIsNotNone(option_item)
+            editor._tree.setCurrentItem(option_item)
+            editor._option_id_edit.setText("inspect")
+            editor._option_text_edit.setPlainText("Inspect the carving")
             editor._edit_option_commands()
 
         definition = dialog.definition()
@@ -120,7 +129,9 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
         )
 
         editor = dialog._structured_editor
-        editor._segment_list.setCurrentRow(1)
+        segment_item = editor._find_tree_item(("segment", (), 1))
+        self.assertIsNotNone(segment_item)
+        editor._tree.setCurrentItem(segment_item)
         editor._on_segment_visual_order_changed([1, 0, 2])
 
         definition = dialog.definition()
@@ -150,7 +161,9 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
         )
 
         editor = dialog._structured_editor
-        editor._option_list.setCurrentRow(2)
+        option_item = editor._find_tree_item(("option", (), 0, 2))
+        self.assertIsNotNone(option_item)
+        editor._tree.setCurrentItem(option_item)
         editor._on_option_visual_order_changed([2, 0, 1])
 
         definition = dialog.definition()
@@ -159,3 +172,164 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
             [option["option_id"] for option in definition["segments"][0]["options"]],
             ["c", "a", "b"],
         )
+
+    def test_structured_editor_can_create_inline_branch_in_tree(self):
+        dialog = DialogueDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_definition(
+            {
+                "segments": [
+                    {
+                        "type": "choice",
+                        "text": "Pick one",
+                        "options": [
+                            {"option_id": "read", "text": "Read"},
+                        ],
+                    }
+                ]
+            }
+        )
+
+        editor = dialog._structured_editor
+        option_item = editor._find_tree_item(("option", (), 0, 0))
+        self.assertIsNotNone(option_item)
+        editor._tree.setCurrentItem(option_item)
+        editor._on_add_inline_branch_from_detail()
+
+        branch_item = editor._find_tree_item(("dialogue", ((0, 0),)))
+        self.assertIsNotNone(branch_item)
+        editor._tree.setCurrentItem(branch_item)
+        editor._on_add_text_for_selected_dialogue()
+
+        definition = dialog.definition()
+
+        self.assertEqual(
+            definition["segments"][0]["options"][0]["next_dialogue_definition"]["segments"][0]["text"],
+            "New text segment",
+        )
+
+    def test_structured_editor_marks_terminal_segment_and_unreachable_siblings(self):
+        dialog = DialogueDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_definition(
+            {
+                "segments": [
+                    {"type": "text", "text": "First"},
+                    {"type": "text", "text": "Second"},
+                ]
+            }
+        )
+
+        editor = dialog._structured_editor
+        segment_item = editor._find_tree_item(("segment", (), 0))
+        self.assertIsNotNone(segment_item)
+        editor._tree.setCurrentItem(segment_item)
+        editor._segment_end_dialogue_checkbox.setChecked(True)
+
+        first_item = editor._find_tree_item(("segment", (), 0))
+        second_item = editor._find_tree_item(("segment", (), 1))
+        self.assertIsNotNone(first_item)
+        self.assertIsNotNone(second_item)
+        self.assertIn("[Ends]", first_item.text(0))
+        self.assertIn("[Unreachable]", second_item.text(0))
+
+        definition = dialog.definition()
+        self.assertTrue(definition["segments"][0]["end_dialogue"])
+
+    def test_choice_segment_terminal_note_explains_path_finishes_before_close(self):
+        dialog = DialogueDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_definition(
+            {
+                "segments": [
+                    {
+                        "type": "choice",
+                        "text": "Pick one",
+                        "options": [
+                            {"option_id": "a", "text": "Alpha"},
+                        ],
+                    },
+                    {"type": "text", "text": "After"},
+                ]
+            }
+        )
+
+        editor = dialog._structured_editor
+        segment_item = editor._find_tree_item(("segment", (), 0))
+        self.assertIsNotNone(segment_item)
+        editor._tree.setCurrentItem(segment_item)
+        editor._segment_end_dialogue_checkbox.setChecked(True)
+
+        self.assertIn(
+            "runs the selected option path first",
+            editor._segment_end_dialogue_note.text(),
+        )
+
+    def test_structured_editor_marks_terminal_option_branch_unreachable(self):
+        dialog = DialogueDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_definition(
+            {
+                "segments": [
+                    {
+                        "type": "choice",
+                        "text": "Pick one",
+                        "options": [
+                            {
+                                "option_id": "read",
+                                "text": "Read",
+                                "next_dialogue_definition": {
+                                    "segments": [
+                                        {"type": "text", "text": "Child"},
+                                    ]
+                                },
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+
+        editor = dialog._structured_editor
+        option_item = editor._find_tree_item(("option", (), 0, 0))
+        self.assertIsNotNone(option_item)
+        editor._tree.setCurrentItem(option_item)
+        editor._option_end_dialogue_checkbox.setChecked(True)
+
+        option_item = editor._find_tree_item(("option", (), 0, 0))
+        branch_item = editor._find_tree_item(("dialogue", ((0, 0),)))
+        self.assertIsNotNone(option_item)
+        self.assertIsNotNone(branch_item)
+        self.assertIn("[Ends]", option_item.text(0))
+        self.assertIn("[Unreachable]", branch_item.text(0))
+
+        definition = dialog.definition()
+        self.assertTrue(definition["segments"][0]["options"][0]["end_dialogue"])
+
+    def test_file_branch_warning_mentions_shallow_inline_copy(self):
+        dialog = DialogueDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_definition(
+            {
+                "segments": [
+                    {
+                        "type": "choice",
+                        "text": "Pick one",
+                        "options": [
+                            {
+                                "option_id": "read",
+                                "text": "Read",
+                                "next_dialogue_path": "dialogues/lore/warning.json",
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+
+        editor = dialog._structured_editor
+        file_branch_item = editor._find_tree_item(("file_branch", (), 0, 0))
+        self.assertIsNotNone(file_branch_item)
+        editor._tree.setCurrentItem(file_branch_item)
+
+        self.assertIn("shallow", editor._file_branch_warning.text())

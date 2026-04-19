@@ -1069,6 +1069,448 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         parent_handle.update(0.0)
         self.assertTrue(parent_handle.complete)
 
+    def test_choice_next_dialogue_definition_runs_commands_before_child_and_finishes_on_resume(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Open branch?",
+                            "on_end": [
+                                {
+                                    "type": "set_entity_var",
+                                    "entity_id": "$self_id",
+                                    "name": "finished",
+                                    "value": True,
+                                }
+                            ],
+                            "options": [
+                                {
+                                    "text": "Open",
+                                    "option_id": "open",
+                                    "commands": [
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "phase",
+                                            "value": "before_child",
+                                        }
+                                    ],
+                                    "next_dialogue_definition": {
+                                        "segments": [
+                                            {
+                                                "type": "text",
+                                                "text": "Child branch",
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        dialogue_runtime.handle_action("interact")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "")
+        self.assertEqual(session.current_segment["text"], "Child branch")
+        self.assertEqual(caller.variables["phase"], "before_child")
+        self.assertNotIn("finished", caller.variables)
+
+        dialogue_runtime.handle_action("menu")
+        resumed = dialogue_runtime.current_session
+        assert resumed is not None
+        self.assertEqual(resumed.current_segment["text"], "Open branch?")
+        dialogue_runtime.update(0.0)
+
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertTrue(caller.variables["finished"])
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
+
+    def test_choice_next_dialogue_path_opens_file_backed_child_after_option_commands(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/runtime_child.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "File child branch",
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Open branch?",
+                            "options": [
+                                {
+                                    "text": "Open",
+                                    "option_id": "open",
+                                    "commands": [
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "phase",
+                                            "value": "before_file_child",
+                                        }
+                                    ],
+                                    "next_dialogue_path": "dialogues/system/runtime_child.json",
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        dialogue_runtime.handle_action("interact")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/runtime_child.json")
+        self.assertEqual(caller.variables["phase"], "before_file_child")
+
+        dialogue_runtime.handle_action("menu")
+        dialogue_runtime.update(0.0)
+
+        self.assertFalse(dialogue_runtime.is_active())
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
+
+    def test_choice_next_dialogue_rejects_command_based_dialogue_open_in_same_option(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "options": [
+                                {
+                                    "text": "Open",
+                                    "option_id": "open",
+                                    "commands": [
+                                        {
+                                            "type": "open_dialogue_session",
+                                            "dialogue_definition": {
+                                                "segments": [
+                                                    {
+                                                        "type": "text",
+                                                        "text": "Command child",
+                                                    }
+                                                ]
+                                            },
+                                        }
+                                    ],
+                                    "next_dialogue_definition": {
+                                        "segments": [
+                                            {
+                                                "type": "text",
+                                                "text": "Field child",
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "must not combine next_dialogue_path"):
+            dialogue_runtime.handle_action("interact")
+
+    def test_text_segment_end_dialogue_closes_after_segment_finish(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Last line",
+                            "end_dialogue": True,
+                            "on_end": [
+                                {
+                                    "type": "set_entity_var",
+                                    "entity_id": "$self_id",
+                                    "name": "finished",
+                                    "value": True,
+                                }
+                            ],
+                        },
+                        {
+                            "type": "text",
+                            "text": "Unreachable",
+                        },
+                    ]
+                },
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        dialogue_runtime.handle_action("interact")
+
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertTrue(caller.variables["finished"])
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
+
+    def test_choice_segment_end_dialogue_closes_after_child_branch_finishes(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Ask one thing?",
+                            "end_dialogue": True,
+                            "on_end": [
+                                {
+                                    "type": "set_entity_var",
+                                    "entity_id": "$self_id",
+                                    "name": "choice_finished",
+                                    "value": True,
+                                }
+                            ],
+                            "options": [
+                                {
+                                    "option_id": "yes",
+                                    "text": "Yes",
+                                    "next_dialogue_definition": {
+                                        "segments": [
+                                            {
+                                                "type": "text",
+                                                "text": "Child branch",
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "type": "text",
+                            "text": "Unreachable sibling",
+                        },
+                    ]
+                },
+                "allow_cancel": True,
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        dialogue_runtime.handle_action("interact")
+
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.current_segment["text"], "Child branch")
+
+        dialogue_runtime.handle_action("menu")
+        dialogue_runtime.update(0.0)
+        dialogue_runtime.update(0.0)
+
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertTrue(caller.variables["choice_finished"])
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
+
+    def test_option_end_dialogue_closes_after_commands_without_opening_child_branch(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        caller = _make_runtime_entity("terminal", kind="terminal")
+        world.add_entity(caller)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        parent_handle = execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "text": "Leave now?",
+                            "on_end": [
+                                {
+                                    "type": "set_entity_var",
+                                    "entity_id": "$self_id",
+                                    "name": "segment_finished",
+                                    "value": True,
+                                }
+                            ],
+                            "options": [
+                                {
+                                    "option_id": "leave",
+                                    "text": "Leave",
+                                    "end_dialogue": True,
+                                    "commands": [
+                                        {
+                                            "type": "set_entity_var",
+                                            "entity_id": "$self_id",
+                                            "name": "option_ran",
+                                            "value": True,
+                                        }
+                                    ],
+                                    "next_dialogue_definition": {
+                                        "segments": [
+                                            {
+                                                "type": "text",
+                                                "text": "Unreachable child",
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "type": "text",
+                            "text": "Unreachable sibling",
+                        },
+                    ]
+                },
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        dialogue_runtime.handle_action("interact")
+
+        self.assertFalse(dialogue_runtime.is_active())
+        self.assertTrue(caller.variables["option_ran"])
+        self.assertTrue(caller.variables["segment_finished"])
+        parent_handle.update(0.0)
+        self.assertTrue(parent_handle.complete)
+
+    def test_dialogue_runtime_rejects_non_boolean_end_dialogue_values(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        world.add_entity(_make_runtime_entity("terminal", kind="terminal"))
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        execute_registered_command(
+            registry,
+            context,
+            "open_dialogue_session",
+            {
+                "dialogue_definition": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Oops",
+                            "end_dialogue": "yes",
+                        }
+                    ]
+                },
+                "entity_refs": {"instigator": "player", "caller": "terminal"},
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "segment end_dialogue must be a boolean"):
+            dialogue_runtime.handle_action("interact")
+
     def test_wrapped_lines_and_text_window_value_sources_store_visible_text(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("dialogue_controller", space="screen"))

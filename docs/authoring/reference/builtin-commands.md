@@ -19,6 +19,10 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 - `open_dialogue_session` opens the engine-owned dialogue runtime from either a dialogue JSON file or an inline `dialogue_definition`.
 - `close_dialogue_session` closes the current engine-owned dialogue session.
 
+Normal dialogue-option branching may now use option-level
+`next_dialogue_path` / `next_dialogue_definition`; keep `open_dialogue_session`
+for the general command path and advanced/custom cases.
+
 ## Inventory
 
 - `add_inventory_item` adds stacks or quantities to an entity-owned inventory.

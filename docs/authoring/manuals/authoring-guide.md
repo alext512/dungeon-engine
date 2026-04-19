@@ -1175,6 +1175,7 @@ Example:
 - `speaker_id`
 - `show_portrait`
 - `advance`
+- `end_dialogue`
 
 `text` is for single-page segments. `pages` is a string array for multi-page segments. Use one or the other.
 
@@ -1190,6 +1191,79 @@ Example:
 ```
 
 When omitted, the segment advances on player interaction (the default). When `mode` is `"timer"`, the segment auto-advances after the specified `seconds`.
+
+`end_dialogue: true` makes the current segment terminal:
+
+- text segments close after that segment finishes
+- choice segments close after the chosen option path fully resolves
+- later sibling segments in the same dialogue block will not run while that
+  flag is enabled
+
+### Choice option fields
+
+Each choice option currently supports:
+
+- `text`
+- `option_id`
+- `commands`
+- `next_dialogue_path`
+- `next_dialogue_definition`
+- `end_dialogue`
+
+`commands` are still the place for side effects such as setting variables,
+granting items, or closing the current dialogue.
+
+`next_dialogue_path` / `next_dialogue_definition` are the preferred way for one
+option to continue into another dialogue branch.
+
+Rules:
+
+- use at most one of `next_dialogue_path` / `next_dialogue_definition`
+- if both side effects and a branch are needed, the runtime runs `commands`
+  first and then opens the child dialogue
+- do not mix those branch fields with `open_dialogue_session` inside that same
+  option's `commands`
+- `end_dialogue: true` runs the option's `commands` first and then closes the
+  dialogue instead of continuing
+- when `end_dialogue: true` is enabled on an option, its
+  `next_dialogue_path` / `next_dialogue_definition` child branch is preserved
+  as authored content but will not currently run
+
+Example:
+
+```json
+{
+  "type": "choice",
+  "text": "Keep reading?",
+  "options": [
+    {
+      "option_id": "yes",
+      "text": "Yes",
+      "commands": [
+        {
+          "type": "set_entity_var",
+          "entity_id": "$ref_ids.caller",
+          "name": "warning_seen",
+          "value": true
+        }
+      ],
+      "next_dialogue_definition": {
+        "segments": [
+          {
+            "type": "text",
+            "text": "\"Do not enter after sunset.\""
+          }
+        ]
+      }
+    },
+    {
+      "option_id": "stop",
+      "text": "Stop",
+      "end_dialogue": true
+    }
+  ]
+}
+```
 
 ## Starting Dialogue
 
@@ -1236,12 +1310,7 @@ Inline entity-owned dialogue uses the same dialogue schema:
           {
             "option_id": "read",
             "text": "Read",
-            "commands": [
-              {
-                "type": "open_dialogue_session",
-                "dialogue_path": "dialogues/lore/cave_warning.json"
-              }
-            ]
+            "next_dialogue_path": "dialogues/lore/cave_warning.json"
           },
           {
             "option_id": "leave",
@@ -1406,6 +1475,8 @@ Use `option_commands_by_id` when your choice options have stable `option_id` val
 Practical note:
 
 - inline option `commands` are often the simplest choice when one menu option should immediately queue a built-in action like `new_game`, `load_game`, or `quit_game`
+- `next_dialogue_path` / `next_dialogue_definition` are the preferred authored
+  branch path when one option should continue into another dialogue block
 - use `dialogue_on_end` when you specifically need one shared post-close path or cleanup that should only run after the dialogue session fully closes
 - use `option_commands_by_id` / `option_commands` when the caller needs to override or augment the option behavior from outside the dialogue JSON
 

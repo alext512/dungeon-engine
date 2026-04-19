@@ -404,6 +404,199 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
             )
         )
 
+    def test_command_audit_scans_next_inline_dialogue_definition_command_lists(self) -> None:
+        _, project = self._make_project(
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "open_dialogue_session",
+                            "dialogue_definition": {
+                                "segments": [
+                                    {
+                                        "type": "choice",
+                                        "options": [
+                                            {
+                                                "option_id": "open",
+                                                "text": "Open",
+                                                "next_dialogue_definition": {
+                                                    "segments": [
+                                                        {
+                                                            "type": "choice",
+                                                            "options": [
+                                                                {
+                                                                    "option_id": "continue",
+                                                                    "text": "Continue",
+                                                                    "commands": [
+                                                                        {
+                                                                            "type": "set_visible",
+                                                                            "entity_id": "gate",
+                                                                            "visible": False,
+                                                                            "persitent": True,
+                                                                        }
+                                                                    ],
+                                                                }
+                                                            ],
+                                                        }
+                                                    ]
+                                                },
+                                            }
+                                        ],
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "enter_commands[0].dialogue_definition.segments[0].options[0]."
+                "next_dialogue_definition.segments[0].options[0].commands[0]" in issue
+                and "persitent" in issue
+                for issue in issues
+            )
+        )
+
+    def test_command_audit_rejects_option_with_both_next_dialogue_fields(self) -> None:
+        _, project = self._make_project(
+            dialogues={
+                "system/test.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "options": [
+                                {
+                                    "option_id": "open",
+                                    "text": "Open",
+                                    "next_dialogue_path": "dialogues/system/child.json",
+                                    "next_dialogue_definition": {
+                                        "segments": [
+                                            {
+                                                "type": "text",
+                                                "text": "Child",
+                                            }
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "dialogue choice option must not define both 'next_dialogue_path' and "
+                "'next_dialogue_definition'" in issue
+                for issue in issues
+            )
+        )
+
+    def test_command_audit_rejects_option_next_dialogue_mixed_with_open_dialogue_command(self) -> None:
+        _, project = self._make_project(
+            dialogues={
+                "system/test.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "options": [
+                                {
+                                    "option_id": "open",
+                                    "text": "Open",
+                                    "next_dialogue_definition": {
+                                        "segments": [
+                                            {
+                                                "type": "text",
+                                                "text": "Child",
+                                            }
+                                        ]
+                                    },
+                                    "commands": [
+                                        {
+                                            "type": "open_dialogue_session",
+                                            "dialogue_path": "dialogues/system/other_child.json",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "must not combine 'next_dialogue_path' or 'next_dialogue_definition' with "
+                "'open_dialogue_session' in its commands" in issue
+                for issue in issues
+            )
+        )
+
+    def test_command_audit_rejects_non_boolean_segment_end_dialogue(self) -> None:
+        _, project = self._make_project(
+            dialogues={
+                "system/test.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Bad",
+                            "end_dialogue": "yes",
+                        }
+                    ]
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "dialogue segment 'end_dialogue' must be a boolean" in issue
+                for issue in issues
+            )
+        )
+
+    def test_command_audit_rejects_non_boolean_option_end_dialogue(self) -> None:
+        _, project = self._make_project(
+            dialogues={
+                "system/test.json": {
+                    "segments": [
+                        {
+                            "type": "choice",
+                            "options": [
+                                {
+                                    "option_id": "leave",
+                                    "text": "Leave",
+                                    "end_dialogue": 1,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "dialogue choice option 'end_dialogue' must be a boolean" in issue
+                for issue in issues
+            )
+        )
+
     def test_command_audit_scans_project_command_deferred_command_payloads(self) -> None:
         _, project = self._make_project(
             commands={
@@ -514,6 +707,54 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "missing dialogue 'dialogues/system/missing_title.json'" in issue
+                for issue in error.issues
+            )
+        )
+
+    def test_startup_validation_rejects_missing_literal_next_dialogue_reference(self) -> None:
+        project_root, _ = self._make_project(
+            startup_area="areas/test_room",
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "enter_commands": [
+                        {
+                            "type": "open_dialogue_session",
+                            "dialogue_definition": {
+                                "segments": [
+                                    {
+                                        "type": "choice",
+                                        "options": [
+                                            {
+                                                "option_id": "open",
+                                                "text": "Open",
+                                                "next_dialogue_path": "dialogues/system/missing_branch.json",
+                                            }
+                                        ],
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            },
+        )
+        asset_path = project_root / "assets" / "project" / "tiles" / "test.png"
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        asset_path.write_bytes(b"fake")
+        project = load_project(project_root / "project.json")
+
+        error = validate_project_startup(
+            project,
+            ui_title="Test",
+            show_dialog=False,
+        )
+
+        self.assertIsInstance(error, StaticReferenceValidationError)
+        assert isinstance(error, StaticReferenceValidationError)
+        self.assertTrue(
+            any(
+                "missing dialogue 'dialogues/system/missing_branch.json'" in issue
                 for issue in error.issues
             )
         )

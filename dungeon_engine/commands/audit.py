@@ -185,6 +185,14 @@ def _audit_dialogue_payload(
         if location:
             segment_location = f"{location}.{segment_location}"
         issues.extend(
+            _audit_dialogue_end_flag(
+                raw_segment.get("end_dialogue"),
+                source_name=source_name,
+                location=f"{segment_location}.end_dialogue",
+                subject_name="dialogue segment",
+            )
+        )
+        issues.extend(
             _audit_command_list(
                 raw_segment.get("on_start"),
                 registry,
@@ -208,16 +216,86 @@ def _audit_dialogue_payload(
         for option_index, raw_option in enumerate(raw_options):
             if not isinstance(raw_option, dict):
                 continue
+            option_location = f"{segment_location}.options[{option_index}]"
+            issues.extend(
+                _audit_dialogue_end_flag(
+                    raw_option.get("end_dialogue"),
+                    source_name=source_name,
+                    location=f"{option_location}.end_dialogue",
+                    subject_name="dialogue choice option",
+                )
+            )
             issues.extend(
                 _audit_command_list(
                     raw_option.get("commands"),
                     registry,
                     project=project,
                     source_name=source_name,
-                    location=f"{segment_location}.options[{option_index}].commands",
+                    location=f"{option_location}.commands",
+                )
+            )
+            issues.extend(
+                _audit_dialogue_option_branch(
+                    raw_option,
+                    registry,
+                    project=project,
+                    source_name=source_name,
+                    location=option_location,
                 )
             )
     return issues
+
+
+def _audit_dialogue_option_branch(
+    raw_option: dict[str, Any],
+    registry: CommandRegistry,
+    *,
+    project: Any,
+    source_name: str,
+    location: str,
+) -> list[str]:
+    """Audit first-class child dialogue branches authored on one choice option."""
+    issues: list[str] = []
+    has_next_path = bool(str(raw_option.get("next_dialogue_path", "")).strip())
+    has_next_definition = raw_option.get("next_dialogue_definition") is not None
+    if has_next_path and has_next_definition:
+        issues.append(
+            f"{source_name} ({location}): dialogue choice option must not define both "
+            f"'next_dialogue_path' and 'next_dialogue_definition'."
+        )
+    if has_next_definition:
+        issues.extend(
+            _audit_dialogue_payload(
+                raw_option.get("next_dialogue_definition"),
+                registry,
+                project=project,
+                source_name=source_name,
+                location=f"{location}.next_dialogue_definition",
+            )
+        )
+    if (has_next_path or has_next_definition) and _command_list_contains_type(
+        raw_option.get("commands"),
+        "open_dialogue_session",
+    ):
+        issues.append(
+            f"{source_name} ({location}.commands): dialogue choice option must not combine "
+            f"'next_dialogue_path' or 'next_dialogue_definition' with "
+            f"'open_dialogue_session' in its commands."
+        )
+    return issues
+
+
+def _audit_dialogue_end_flag(
+    raw_value: Any,
+    *,
+    source_name: str,
+    location: str,
+    subject_name: str,
+) -> list[str]:
+    """Validate one optional authored end_dialogue flag."""
+    if raw_value is None or isinstance(raw_value, bool):
+        return []
+    return [f"{source_name} ({location}): {subject_name} 'end_dialogue' must be a boolean."]
 
 
 def _audit_command_list(
@@ -492,3 +570,15 @@ def _audit_segment_hooks(
                     )
                 )
     return issues
+
+
+def _command_list_contains_type(raw_commands: Any, command_type: str) -> bool:
+    """Return whether one authored command list contains the provided command type."""
+    if not isinstance(raw_commands, list):
+        return False
+    for raw_command in raw_commands:
+        if not isinstance(raw_command, dict):
+            continue
+        if str(raw_command.get("type", "")).strip() == command_type:
+            return True
+    return False
