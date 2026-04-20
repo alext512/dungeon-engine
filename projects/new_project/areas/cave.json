@@ -123,41 +123,51 @@
       "grid_x": 3,
       "grid_y": 2,
       "template": "entity_templates/actively_used/sign_v2",
-      "parameters": {
-        "dialogue_definition": {
-          "segments": [
-            {
-              "type": "text",
-              "text": "Welcome to the cave!"
-            },
-            {
-              "type": "choice",
-              "text": "You notice that something is written in small letters. Do you want to approach closer and read?",
-              "options": [
-                {
-                  "option_id": "option_1",
-                  "text": "Yea.",
-                  "next_dialogue_definition": {
-                    "segments": [
-                      {
-                        "type": "text",
-                        "text": "Alex was here."
-                      }
-                    ]
+      "variables": {
+        "active_dialogue": "dialogue_1"
+      },
+      "dialogues": {
+        "dialogue_1": {
+          "dialogue_definition": {
+            "segments": [
+              {
+                "type": "text",
+                "text": "Welcome to the cave!"
+              },
+              {
+                "type": "choice",
+                "text": "You notice that something is written in small letters. Do you want to approach closer and read?",
+                "options": [
+                  {
+                    "option_id": "option_1",
+                    "text": "Yea.",
+                    "next_dialogue_definition": {
+                      "segments": [
+                        {
+                          "type": "text",
+                          "text": "Alex was here."
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "option_id": "option_2",
+                    "text": "Nay!",
+                    "end_dialogue": true
                   }
-                },
-                {
-                  "option_id": "option_2",
-                  "text": "Nay!",
-                  "end_dialogue": true
-                }
-              ]
-            },
-            {
-              "type": "text",
-              "text": "You walk away."
-            }
-          ]
+                ]
+              },
+              {
+                "type": "text",
+                "text": "You walk away."
+              }
+            ]
+          }
+        },
+        "dialogue_2": {
+          "dialogue_definition": {
+            "segments": []
+          }
         }
       }
     }

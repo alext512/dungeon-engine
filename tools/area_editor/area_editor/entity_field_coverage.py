@@ -41,6 +41,7 @@ ENGINE_KNOWN_ENTITY_FIELDS = frozenset(
         "entity_commands",
         "inventory",
         "persistence",
+        "dialogues",
         "entity_commands",
     }
 )
@@ -76,6 +77,7 @@ ENTITY_INSTANCE_FIELDS_TAB_FIELDS = frozenset(
         "entity_commands",
         "inventory",
         "persistence",
+        "dialogues",
     }
 )
 
@@ -101,6 +103,7 @@ ENTITY_INSTANCE_FIELDS_TAB_EXTRA_FIELDS = frozenset(
         "input_map",
         "inventory",
         "persistence",
+        "dialogues",
     }
 )
 
@@ -155,6 +158,7 @@ ENTITY_TEMPLATE_STRUCTURED_FIELDS = frozenset(
         "entity_commands",
         "inventory",
         "persistence",
+        "dialogues",
     }
 )
 

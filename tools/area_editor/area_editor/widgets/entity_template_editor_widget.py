@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
@@ -51,6 +53,13 @@ from area_editor.widgets.entity_structured_fields import (
     parse_persistence_policy,
     parse_tag_list,
 )
+from area_editor.widgets.dialogue_definition_dialog import (
+    EntityDialoguesDialog,
+    normalize_entity_dialogues,
+    rename_active_dialogue_value,
+    rename_self_target_dialogue_id_references,
+    summarize_entity_dialogues,
+)
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 
@@ -74,6 +83,8 @@ class _TemplateFieldsEditor(QWidget):
         self._entity_commands_editable = True
         self._inventory_editable = True
         self._persistence_editable = True
+        self._dialogues_editable = True
+        self._dialogues_value: dict[str, dict[str, Any]] = {}
         self._render_default_space = "world"
         self._render_defaults_explicit: dict[str, bool] = {
             "render_order": False,
@@ -237,9 +248,40 @@ class _TemplateFieldsEditor(QWidget):
         self._variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._variables_text.setPlaceholderText("{\n  \"opened\": false\n}")
         self._variables_text.setFont(font)
-        self._variables_text.textChanged.connect(self._on_text_changed)
+        self._variables_text.textChanged.connect(self._on_variables_text_changed)
         basics_layout.addWidget(self._variables_text, 1)
         self._sections_tabs.addTab(basics_tab, "Basics")
+
+        dialogues_tab = QWidget()
+        dialogues_layout = QVBoxLayout(dialogues_tab)
+        dialogues_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._dialogues_warning = QLabel("")
+        self._dialogues_warning.setWordWrap(True)
+        self._dialogues_warning.setStyleSheet("color: #a25b00;")
+        self._dialogues_warning.hide()
+        dialogues_layout.addWidget(self._dialogues_warning)
+
+        dialogues_note = QLabel(
+            "Manage the template's named dialogues here. Mark one active to drive "
+            "`open_entity_dialogue` when no dialogue id is passed."
+        )
+        dialogues_note.setWordWrap(True)
+        dialogues_note.setStyleSheet("color: #666; font-style: italic;")
+        dialogues_layout.addWidget(dialogues_note)
+
+        self._dialogues_summary = QLabel("No dialogues")
+        self._dialogues_summary.setWordWrap(True)
+        dialogues_layout.addWidget(self._dialogues_summary)
+
+        dialogues_buttons = QHBoxLayout()
+        self._dialogues_edit_button = QPushButton("Edit Dialogues...")
+        self._dialogues_edit_button.clicked.connect(self._on_edit_dialogues_clicked)
+        dialogues_buttons.addWidget(self._dialogues_edit_button)
+        dialogues_buttons.addStretch(1)
+        dialogues_layout.addLayout(dialogues_buttons)
+        dialogues_layout.addStretch(1)
+        self._sections_tabs.addTab(dialogues_tab, "Dialogues")
 
         visuals_tab = QWidget()
         visuals_layout = QVBoxLayout(visuals_tab)
@@ -460,6 +502,7 @@ class _TemplateFieldsEditor(QWidget):
         self._sort_y_offset_spin.setEnabled(enabled)
         self._stack_order_spin.setEnabled(enabled)
         self._variables_text.setReadOnly(not enabled)
+        self._dialogues_edit_button.setEnabled(enabled and self._dialogues_editable)
         self._visuals_text.setReadOnly(not enabled)
         self._input_map_text.setReadOnly(not (enabled and self._input_map_editable))
         self._entity_commands_text.setReadOnly(
@@ -485,6 +528,7 @@ class _TemplateFieldsEditor(QWidget):
         entity_commands: dict[str, Any] = {}
         inventory_warning: str | None = None
         inventory: dict[str, Any] | None = None
+        dialogues_warning: str | None = None
         try:
             color = parse_color(data.get("color"))
             self._color_editable = True
@@ -525,6 +569,17 @@ class _TemplateFieldsEditor(QWidget):
                 f"{exc}"
             )
             self._inventory_editable = False
+        try:
+            self._dialogues_value = normalize_entity_dialogues(data.get("dialogues"))
+            self._dialogues_editable = True
+        except ValueError as exc:
+            dialogues_warning = (
+                "Dialogues are not using the supported named-dialogue shape. "
+                "Use the Raw JSON tab to edit them.\n"
+                f"{exc}"
+            )
+            self._dialogues_value = {}
+            self._dialogues_editable = False
         try:
             persistence_entity_state, persistence_variables = parse_persistence_policy(
                 raw_persistence
@@ -647,6 +702,13 @@ class _TemplateFieldsEditor(QWidget):
             self._entity_commands_warning.show()
         else:
             self._entity_commands_warning.hide()
+        if dialogues_warning:
+            self._dialogues_warning.setText(dialogues_warning)
+            self._dialogues_warning.show()
+        else:
+            self._dialogues_warning.hide()
+        self._dialogues_edit_button.setEnabled(self._editing_enabled and self._dialogues_editable)
+        self._sync_dialogues_summary()
         if inventory_warning:
             self._inventory_warning.setText(inventory_warning)
             self._inventory_warning.show()
@@ -667,6 +729,124 @@ class _TemplateFieldsEditor(QWidget):
             not (self._editing_enabled and self._persistence_editable)
         )
         self._set_dirty(False)
+
+    def _current_variables_value_for_dialogues(self) -> dict[str, Any] | None:
+        variables_text = self._variables_text.toPlainText().strip()
+        if not variables_text:
+            return {}
+        try:
+            parsed = loads_json_data(
+                variables_text,
+                source_name="Template variables",
+            )
+        except JsonDataDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    def _current_active_dialogue_name(self) -> str | None:
+        variables = self._current_variables_value_for_dialogues()
+        if not isinstance(variables, dict):
+            return None
+        active = str(variables.get("active_dialogue", "")).strip()
+        if active:
+            return active
+        if len(self._dialogues_value) == 1:
+            return next(iter(self._dialogues_value), None)
+        return None
+
+    def _sync_dialogues_summary(self) -> None:
+        active_dialogue = self._current_active_dialogue_name()
+        if self._current_variables_value_for_dialogues() is None:
+            self._dialogues_summary.setText(
+                f"{summarize_entity_dialogues(self._dialogues_value)}; active: unavailable (invalid variables)"
+            )
+            return
+        self._dialogues_summary.setText(
+            summarize_entity_dialogues(self._dialogues_value, active_dialogue)
+        )
+
+    def _open_entity_dialogues_dialog(
+        self,
+        dialogues: object,
+        *,
+        active_dialogue: object,
+    ) -> tuple[dict[str, dict[str, Any]], str | None, dict[str, str]] | None:
+        dialog = EntityDialoguesDialog(self, current_entity_id=None)
+        dialog.load_dialogues(dialogues, active_dialogue=active_dialogue)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return None
+        return dialog.dialogues(), dialog.active_dialogue(), dialog.rename_map()
+
+    def _on_edit_dialogues_clicked(self) -> None:
+        if not self._dialogues_editable:
+            return
+        variables = self._current_variables_value_for_dialogues()
+        if variables is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Variables",
+                "Fix the Variables JSON before editing named dialogues.",
+            )
+            return
+        updated = self._open_entity_dialogues_dialog(
+            self._dialogues_value,
+            active_dialogue=variables.get("active_dialogue"),
+        )
+        if updated is None:
+            return
+        if len(updated) == 3:
+            dialogues_value, active_dialogue, rename_map = updated
+        else:
+            dialogues_value, active_dialogue = updated
+            rename_map = {}
+        self._dialogues_value = copy.deepcopy(dialogues_value)
+        next_variables = rename_active_dialogue_value(variables, rename_map)
+        if active_dialogue:
+            next_variables["active_dialogue"] = active_dialogue
+        else:
+            next_variables.pop("active_dialogue", None)
+        self._loading = True
+        try:
+            self._variables_text.setPlainText(
+                json.dumps(next_variables, indent=2, ensure_ascii=False)
+                if next_variables
+                else ""
+            )
+        finally:
+            self._loading = False
+        self._apply_dialogue_rename_map_to_entity_commands(rename_map)
+        self._sync_dialogues_summary()
+        self._set_dirty(True)
+
+    def _apply_dialogue_rename_map_to_entity_commands(
+        self,
+        rename_map: dict[str, str],
+    ) -> None:
+        if not rename_map or not self._entity_commands_editable:
+            return
+        raw_text = self._entity_commands_text.toPlainText().strip()
+        if not raw_text:
+            return
+        try:
+            parsed = loads_json_data(raw_text, source_name="Template entity commands")
+        except JsonDataDecodeError:
+            return
+        if not isinstance(parsed, dict):
+            return
+        rewritten = rename_self_target_dialogue_id_references(
+            parsed,
+            rename_map,
+            current_entity_id=None,
+        )
+        if rewritten == parsed:
+            return
+        self._loading = True
+        try:
+            self._entity_commands_text.setPlainText(
+                json.dumps(rewritten, indent=2, ensure_ascii=False)
+            )
+        finally:
+            self._loading = False
 
     def build_updated_template_data(self, base_data: dict[str, Any]) -> dict[str, Any]:
         visuals_text = self._visuals_text.toPlainText().strip()
@@ -790,6 +970,16 @@ class _TemplateFieldsEditor(QWidget):
         else:
             updated.pop("variables", None)
 
+        if self._dialogues_editable:
+            if self._dialogues_value:
+                updated["dialogues"] = copy.deepcopy(self._dialogues_value)
+            else:
+                updated.pop("dialogues", None)
+        elif "dialogues" in base_data:
+            updated["dialogues"] = copy.deepcopy(base_data["dialogues"])
+        else:
+            updated.pop("dialogues", None)
+
         updated["visuals"] = visuals_value
         if self._input_map_editable:
             input_map_value = build_input_map(
@@ -900,6 +1090,12 @@ class _TemplateFieldsEditor(QWidget):
     def _on_text_changed(self) -> None:
         if self._loading:
             return
+        self._set_dirty(True)
+
+    def _on_variables_text_changed(self) -> None:
+        if self._loading:
+            return
+        self._sync_dialogues_summary()
         self._set_dirty(True)
 
     def _on_color_check_toggled(self) -> None:

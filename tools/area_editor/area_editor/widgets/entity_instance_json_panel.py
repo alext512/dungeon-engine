@@ -35,6 +35,11 @@ from area_editor.entity_field_coverage import ENTITY_INSTANCE_FIELDS_TAB_EXTRA_F
 from area_editor.json_io import JsonDataDecodeError, loads_json_data
 from area_editor.widgets.dialogue_definition_dialog import (
     DialogueDefinitionDialog,
+    EntityDialoguesDialog,
+    normalize_entity_dialogues,
+    rename_active_dialogue_value,
+    rename_self_target_dialogue_id_references,
+    summarize_entity_dialogues,
     summarize_dialogue_definition,
 )
 from area_editor.widgets.entity_structured_fields import (
@@ -56,6 +61,9 @@ from area_editor.widgets.entity_structured_fields import (
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
+_EXACT_TEMPLATE_TOKEN_RE = re.compile(
+    r"^\$(?:{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))$"
+)
 _ENTITY_BOOL_DEFAULTS = ENTITY_BOOL_DEFAULTS
 _ENTITY_INT_DEFAULTS = ENTITY_INT_DEFAULTS
 _MANAGED_EXTRA_KEYS = set(ENTITY_INSTANCE_FIELDS_TAB_EXTRA_FIELDS)
@@ -150,6 +158,15 @@ def _parse_parameter_text(text: str):
         except json.JSONDecodeError:
             return text, True
     return text, True
+
+
+def _extract_exact_template_token_name(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    match = _EXACT_TEMPLATE_TOKEN_RE.fullmatch(value.strip())
+    if match is None:
+        return None
+    return match.group("braced") or match.group("plain")
 
 
 def _filtered_unmanaged_extra(extra: dict[str, object]) -> dict[str, object]:
@@ -496,6 +513,16 @@ class _EntityInstanceParametersEditor(QWidget):
             "command": None,
             "asset": None,
         }
+        self._named_dialogues_edit_callback: (
+            Callable[[], tuple[dict[str, dict[str, Any]], str | None] | None] | None
+        ) = None
+        self._dialogues_shortcut_visible = False
+        self._dialogues_shortcut_value: dict[str, dict[str, Any]] = {}
+        self._dialogues_shortcut_active: str | None = None
+        self._dialogues_shortcut_summary: QLabel | None = None
+        self._dialogues_shortcut_button: QPushButton | None = None
+        self._hidden_bridge_parameter_names: set[str] = set()
+        self._preserve_hidden_bridge_parameters = True
         self._set_buttons_enabled(False)
 
     @property
@@ -504,7 +531,7 @@ class _EntityInstanceParametersEditor(QWidget):
 
     @property
     def has_parameters(self) -> bool:
-        return bool(self._parameter_fields)
+        return bool(self._parameter_fields or self._dialogues_shortcut_visible)
 
     def set_template_catalog(self, catalog: TemplateCatalog | None) -> None:
         self._template_catalog = catalog
@@ -534,12 +561,29 @@ class _EntityInstanceParametersEditor(QWidget):
         }
         self._sync_entity_command_picker_buttons()
 
+    def set_named_dialogues_edit_callback(
+        self,
+        callback: Callable[
+            [],
+            tuple[dict[str, dict[str, Any]], str | None] | None,
+        ]
+        | None,
+    ) -> None:
+        self._named_dialogues_edit_callback = callback
+
     def clear_entity(self) -> None:
         self._entity = None
         self._target_label.setText("Selected Entity: None")
         self._warning_label.hide()
         self._template_defaults = {}
         self._parameters_editable = True
+        self._dialogues_shortcut_visible = False
+        self._dialogues_shortcut_value = {}
+        self._dialogues_shortcut_active = None
+        self._dialogues_shortcut_summary = None
+        self._dialogues_shortcut_button = None
+        self._hidden_bridge_parameter_names = set()
+        self._preserve_hidden_bridge_parameters = True
         self._clear_parameter_rows()
         self._set_empty_visible(False)
         self._set_dirty(False)
@@ -579,6 +623,13 @@ class _EntityInstanceParametersEditor(QWidget):
             if not keep:
                 continue
             parameters[name] = value
+        if (
+            self._preserve_hidden_bridge_parameters
+            and isinstance(self._entity.parameters, dict)
+        ):
+            for name in self._hidden_bridge_parameter_names:
+                if name in self._entity.parameters:
+                    parameters[name] = copy.deepcopy(self._entity.parameters[name])
         return parameters or None
 
     def _rebuild_parameter_rows(self, entity: EntityDocument) -> None:
@@ -586,6 +637,13 @@ class _EntityInstanceParametersEditor(QWidget):
         parameters = entity.parameters
         self._template_defaults = {}
         self._parameter_specs = {}
+        self._dialogues_shortcut_visible = False
+        self._dialogues_shortcut_value = {}
+        self._dialogues_shortcut_active = None
+        self._dialogues_shortcut_summary = None
+        self._dialogues_shortcut_button = None
+        self._hidden_bridge_parameter_names = set()
+        self._preserve_hidden_bridge_parameters = True
         if parameters is not None and not isinstance(parameters, dict):
             self._parameters_editable = False
             self._warning_label.setText(
@@ -599,6 +657,7 @@ class _EntityInstanceParametersEditor(QWidget):
         self._parameters_editable = True
         self._warning_label.hide()
         parameter_names: set[str] = set()
+        dialogue_bridge_parameter_names: set[str] = set()
         if entity.template and self._template_catalog is not None:
             parameter_names.update(
                 self._template_catalog.get_template_parameter_names(entity.template)
@@ -609,16 +668,29 @@ class _EntityInstanceParametersEditor(QWidget):
             self._parameter_specs = self._template_catalog.get_template_parameter_specs(
                 entity.template
             )
+            (
+                self._dialogues_shortcut_value,
+                self._dialogues_shortcut_active,
+                dialogue_bridge_parameter_names,
+            ) = self._compute_template_dialogues_shortcut(entity)
+            self._dialogues_shortcut_visible = bool(self._dialogues_shortcut_value)
+            if not self._dialogues_shortcut_visible:
+                dialogue_bridge_parameter_names.clear()
         if isinstance(parameters, dict):
             parameter_names.update(parameters.keys())
         parameter_names.update(self._template_defaults.keys())
         parameter_names.update(self._parameter_specs.keys())
 
-        if not parameter_names:
+        parameter_names.difference_update(dialogue_bridge_parameter_names)
+        self._hidden_bridge_parameter_names = set(dialogue_bridge_parameter_names)
+
+        if not parameter_names and not self._dialogues_shortcut_visible:
             self._set_empty_visible(True)
             return
 
         self._set_empty_visible(False)
+        if self._dialogues_shortcut_visible:
+            self._add_dialogues_shortcut_row()
         for name in sorted(parameter_names):
             self._add_parameter_row(
                 name,
@@ -629,6 +701,109 @@ class _EntityInstanceParametersEditor(QWidget):
                 else None,
             )
         self._sync_entity_command_picker_buttons()
+
+    def _compute_template_dialogues_shortcut(
+        self,
+        entity: EntityDocument,
+    ) -> tuple[dict[str, dict[str, Any]], str | None, set[str]]:
+        if not entity.template or self._template_catalog is None:
+            return {}, None, set()
+        template = self._template_catalog.get_template_data(entity.template)
+        raw_dialogues = template.get("dialogues")
+        bridge_names: set[str] = set()
+        if isinstance(raw_dialogues, dict):
+            for raw_entry in raw_dialogues.values():
+                if not isinstance(raw_entry, dict):
+                    continue
+                definition_name = _extract_exact_template_token_name(
+                    raw_entry.get("dialogue_definition")
+                )
+                if definition_name:
+                    bridge_names.add(definition_name)
+                path_name = _extract_exact_template_token_name(
+                    raw_entry.get("dialogue_path")
+                )
+                if path_name:
+                    bridge_names.add(path_name)
+
+        template_parameters = self._template_defaults or self._template_catalog.get_template_parameter_defaults(
+            entity.template
+        )
+        resolved_parameters = copy.deepcopy(template_parameters)
+        if isinstance(entity.parameters, dict):
+            resolved_parameters.update(copy.deepcopy(entity.parameters))
+        resolved_template = self._template_catalog.substitute_template_parameters(
+            template,
+            resolved_parameters,
+        )
+        try:
+            dialogues = normalize_entity_dialogues(resolved_template.get("dialogues"))
+        except ValueError:
+            dialogues = {}
+        active_dialogue = None
+        raw_variables = resolved_template.get("variables")
+        if isinstance(raw_variables, dict):
+            active_value = str(raw_variables.get("active_dialogue", "")).strip()
+            active_dialogue = active_value or None
+        if not active_dialogue and len(dialogues) == 1:
+            active_dialogue = next(iter(dialogues), None)
+        return dialogues, active_dialogue, bridge_names
+
+    def _add_dialogues_shortcut_row(self) -> None:
+        label = QLabel("dialogues")
+        summary_label = QLabel("")
+        summary_label.setWordWrap(True)
+        status_label = QLabel("Named entity-owned dialogues.")
+        status_label.setStyleSheet("color: #666;")
+        text_column = QWidget()
+        text_layout = QVBoxLayout(text_column)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+        text_layout.addWidget(summary_label)
+        text_layout.addWidget(status_label)
+
+        action_button = QPushButton("Edit...")
+        action_button.clicked.connect(self._on_edit_dialogues_shortcut)
+
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.addWidget(text_column, 1)
+        row_layout.addWidget(action_button)
+
+        self._dialogues_shortcut_summary = summary_label
+        self._dialogues_shortcut_button = action_button
+        self._form.addRow(label, row_widget)
+        self._sync_dialogues_shortcut_row()
+
+    def _sync_dialogues_shortcut_row(self) -> None:
+        if self._dialogues_shortcut_summary is None:
+            return
+        self._dialogues_shortcut_summary.setText(
+            summarize_entity_dialogues(
+                self._dialogues_shortcut_value,
+                self._dialogues_shortcut_active,
+            )
+        )
+        if self._dialogues_shortcut_button is not None:
+            self._dialogues_shortcut_button.setEnabled(
+                self._parameters_editable and self._named_dialogues_edit_callback is not None
+            )
+
+    def set_dialogues_shortcut_state(
+        self,
+        dialogues_value: object,
+        active_dialogue: object,
+    ) -> None:
+        if not self._dialogues_shortcut_visible:
+            return
+        self._dialogues_shortcut_value = normalize_entity_dialogues(dialogues_value)
+        active_name = str(active_dialogue).strip() if active_dialogue is not None else ""
+        if not active_name and len(self._dialogues_shortcut_value) == 1:
+            active_name = next(iter(self._dialogues_shortcut_value), "")
+        self._dialogues_shortcut_active = active_name or None
+        self._preserve_hidden_bridge_parameters = False
+        self._sync_dialogues_shortcut_row()
 
     def _add_parameter_row(
         self,
@@ -865,6 +1040,21 @@ class _EntityInstanceParametersEditor(QWidget):
                 field.explicit_override_enabled and field.default_value is not None
             )
 
+    def _on_edit_dialogues_shortcut(self) -> None:
+        if self._named_dialogues_edit_callback is None:
+            return
+        updated = self._named_dialogues_edit_callback()
+        if updated is None:
+            return
+        dialogues_value, active_dialogue = updated
+        self._dialogues_shortcut_value = copy.deepcopy(dialogues_value)
+        self._preserve_hidden_bridge_parameters = False
+        active_name = str(active_dialogue).strip() if active_dialogue is not None else ""
+        if not active_name and len(self._dialogues_shortcut_value) == 1:
+            active_name = next(iter(self._dialogues_shortcut_value), "")
+        self._dialogues_shortcut_active = active_name or None
+        self._sync_dialogues_shortcut_row()
+
     def _open_dialogue_definition_dialog(
         self,
         name: str,
@@ -1020,6 +1210,7 @@ class _EntityInstanceFieldsEditor(QWidget):
     apply_requested = Signal()
     revert_requested = Signal()
     dirty_changed = Signal(bool)
+    named_dialogues_changed = Signal(object, object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -1272,6 +1463,33 @@ class _EntityInstanceFieldsEditor(QWidget):
         )
         self._form.addRow(self._parameters_widget)
 
+        self._form.addRow(_section_label("Dialogues"))
+        self._dialogues_warning = QLabel("")
+        self._dialogues_warning.setWordWrap(True)
+        self._dialogues_warning.setStyleSheet("color: #a25b00;")
+        self._dialogues_warning.hide()
+        self._form.addRow(self._dialogues_warning)
+
+        self._dialogues_note = QLabel(
+            "Manage named entity-owned dialogues here. Mark one active to drive "
+            "`open_entity_dialogue` when no dialogue id is passed."
+        )
+        self._dialogues_note.setWordWrap(True)
+        self._dialogues_note.setStyleSheet("color: #666; font-style: italic;")
+        self._form.addRow(self._dialogues_note)
+
+        self._dialogues_row_label = QLabel("dialogues")
+        self._dialogues_row = QWidget()
+        dialogues_row_layout = QHBoxLayout(self._dialogues_row)
+        dialogues_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._dialogues_summary = QLabel("No dialogues")
+        self._dialogues_summary.setWordWrap(True)
+        dialogues_row_layout.addWidget(self._dialogues_summary, 1)
+        self._dialogues_edit_button = QPushButton("Edit...")
+        self._dialogues_edit_button.clicked.connect(self._on_edit_dialogues_clicked)
+        dialogues_row_layout.addWidget(self._dialogues_edit_button)
+        self._form.addRow(self._dialogues_row_label, self._dialogues_row)
+
         self._form.addRow(_section_label("Variables"))
         self._variables_text = QPlainTextEdit()
         self._variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -1436,6 +1654,10 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity_commands_editable = True
         self._inventory_editable = True
         self._persistence_editable = True
+        self._dialogues_editable = True
+        self._dialogues_value: dict[str, dict[str, Any]] = {}
+        self._dialogues_default_value: dict[str, dict[str, Any]] = {}
+        self._template_active_dialogue_default: str | None = None
 
         self._id_edit.textChanged.connect(self._on_field_changed)
         self._kind_edit.textChanged.connect(self._on_field_changed)
@@ -1464,7 +1686,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._color_blue_spin.valueChanged.connect(self._on_field_changed)
         self._input_map_text.textChanged.connect(self._on_field_changed)
         self._entity_commands_text.textChanged.connect(self._on_field_changed)
-        self._variables_text.textChanged.connect(self._on_field_changed)
+        self._variables_text.textChanged.connect(self._on_variables_text_changed)
         self._inventory_check.toggled.connect(self._on_inventory_check_toggled)
         self._inventory_max_stacks_spin.valueChanged.connect(self._on_field_changed)
         self._inventory_stacks_text.textChanged.connect(self._on_field_changed)
@@ -1594,6 +1816,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._color_blue_spin.setValue(DEFAULT_ENTITY_COLOR[2])
         self._input_map_text.clear()
         self._entity_commands_text.clear()
+        self._dialogues_summary.setText("No dialogues")
         self._variables_text.clear()
         self._inventory_check.setChecked(False)
         self._inventory_max_stacks_spin.setValue(0)
@@ -1665,6 +1888,22 @@ class _EntityInstanceFieldsEditor(QWidget):
                 f"Use the JSON tab to edit it.\n{exc}"
             )
             return None, warning
+
+    def _load_dialogues_ui_state(
+        self,
+        raw_dialogues: object,
+    ) -> tuple[dict[str, dict[str, Any]], str | None]:
+        try:
+            dialogues = normalize_entity_dialogues(raw_dialogues)
+            self._dialogues_editable = True
+            return dialogues, None
+        except ValueError as exc:
+            self._dialogues_editable = False
+            warning = (
+                "Dialogues are not using the supported named-dialogue shape. "
+                f"Use the JSON tab to edit them.\n{exc}"
+            )
+            return {}, warning
 
     def _load_color_ui_state(
         self,
@@ -1871,6 +2110,166 @@ class _EntityInstanceFieldsEditor(QWidget):
             raise ValueError(invalid_shape_message)
         return parsed
 
+    def _current_variables_value_for_dialogues(self) -> dict[str, Any] | None:
+        stripped = self._variables_text.toPlainText().strip()
+        if not stripped:
+            return {}
+        try:
+            parsed = loads_json_data(stripped, source_name="Variables")
+        except JsonDataDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    def _current_active_dialogue_name(self) -> str | None:
+        variables = self._current_variables_value_for_dialogues()
+        if not isinstance(variables, dict):
+            return None
+        active = str(variables.get("active_dialogue", "")).strip()
+        if active:
+            return active
+        if len(self._dialogues_value) == 1:
+            return next(iter(self._dialogues_value), None)
+        return self._template_active_dialogue_default
+
+    def _sync_dialogues_summary(self) -> None:
+        active_dialogue = self._current_active_dialogue_name()
+        if self._current_variables_value_for_dialogues() is None:
+            self._dialogues_summary.setText(
+                f"{summarize_entity_dialogues(self._dialogues_value)}; active: unavailable (invalid variables)"
+            )
+            return
+        self._dialogues_summary.setText(
+            summarize_entity_dialogues(self._dialogues_value, active_dialogue)
+        )
+
+    def _compute_template_dialogues_default(
+        self,
+        entity: EntityDocument,
+    ) -> tuple[dict[str, dict[str, Any]], str | None]:
+        if not entity.template or self._template_catalog is None:
+            return {}, None
+        template = self._template_catalog.get_template_data(entity.template)
+        template_parameters = self._template_catalog.get_template_parameter_defaults(
+            entity.template
+        )
+        if isinstance(entity.parameters, dict):
+            template_parameters.update(copy.deepcopy(entity.parameters))
+        template = self._template_catalog.substitute_template_parameters(
+            template,
+            template_parameters,
+        )
+        try:
+            dialogues = normalize_entity_dialogues(template.get("dialogues"))
+        except ValueError:
+            dialogues = {}
+        raw_variables = template.get("variables")
+        active_dialogue = None
+        if isinstance(raw_variables, dict):
+            active_value = str(raw_variables.get("active_dialogue", "")).strip()
+            active_dialogue = active_value or None
+        if not active_dialogue and len(dialogues) == 1:
+            active_dialogue = next(iter(dialogues), None)
+        return dialogues, active_dialogue
+
+    def current_named_dialogues_state(
+        self,
+    ) -> tuple[dict[str, dict[str, Any]], str | None]:
+        return copy.deepcopy(self._dialogues_value), self._current_active_dialogue_name()
+
+    def _open_entity_dialogues_dialog(
+        self,
+        dialogues: object,
+        *,
+        active_dialogue: object,
+    ) -> tuple[dict[str, dict[str, Any]], str | None, dict[str, str]] | None:
+        dialog = EntityDialoguesDialog(
+            self,
+            dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
+            command_picker=self._reference_picker_callbacks.get("command"),
+            current_entity_id=self._entity.id if self._entity is not None else None,
+        )
+        dialog.load_dialogues(dialogues, active_dialogue=active_dialogue)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return None
+        return dialog.dialogues(), dialog.active_dialogue(), dialog.rename_map()
+
+    def edit_named_dialogues(
+        self,
+    ) -> tuple[dict[str, dict[str, Any]], str | None] | None:
+        if not self._dialogues_editable:
+            return None
+        variables = self._current_variables_value_for_dialogues()
+        if variables is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Variables",
+                "Fix the Variables JSON before editing named dialogues.",
+            )
+            return None
+        updated = self._open_entity_dialogues_dialog(
+            self._dialogues_value,
+            active_dialogue=variables.get("active_dialogue"),
+        )
+        if updated is None:
+            return None
+        if len(updated) == 3:
+            dialogues_value, active_dialogue, rename_map = updated
+        else:
+            dialogues_value, active_dialogue = updated
+            rename_map = {}
+        self._dialogues_value = copy.deepcopy(dialogues_value)
+        next_variables = rename_active_dialogue_value(variables, rename_map)
+        if active_dialogue:
+            next_variables["active_dialogue"] = active_dialogue
+        else:
+            next_variables.pop("active_dialogue", None)
+        blockers = [QSignalBlocker(self._variables_text)]
+        self._variables_text.setPlainText(
+            json.dumps(next_variables, indent=2, ensure_ascii=False)
+            if next_variables
+            else ""
+        )
+        del blockers
+        self._apply_dialogue_rename_map_to_entity_commands(rename_map)
+        self._sync_dialogues_summary()
+        self._set_dirty(True)
+        self.named_dialogues_changed.emit(
+            copy.deepcopy(self._dialogues_value),
+            self._current_active_dialogue_name(),
+        )
+        return self.current_named_dialogues_state()
+
+    def _on_edit_dialogues_clicked(self) -> None:
+        self.edit_named_dialogues()
+
+    def _apply_dialogue_rename_map_to_entity_commands(
+        self,
+        rename_map: dict[str, str],
+    ) -> None:
+        if not rename_map or not self._entity_commands_editable:
+            return
+        raw_text = self._entity_commands_text.toPlainText().strip()
+        if not raw_text:
+            return
+        try:
+            parsed = loads_json_data(raw_text, source_name="Entity commands")
+        except JsonDataDecodeError:
+            return
+        if not isinstance(parsed, dict):
+            return
+        rewritten = rename_self_target_dialogue_id_references(
+            parsed,
+            rename_map,
+            current_entity_id=self._entity.id if self._entity is not None else None,
+        )
+        if rewritten == parsed:
+            return
+        blockers = [QSignalBlocker(self._entity_commands_text)]
+        self._entity_commands_text.setPlainText(
+            json.dumps(rewritten, indent=2, ensure_ascii=False)
+        )
+        del blockers
+
     def _apply_toggle_extra_values(self, extra: dict[str, object]) -> None:
         for key, widget in (
             ("solid", self._solid_check),
@@ -1927,6 +2326,13 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity_commands_warning.hide()
         self._entity_commands_editable = True
         self._set_entity_commands_controls_enabled(True)
+        self._dialogues_warning.hide()
+        self._dialogues_editable = True
+        self._dialogues_value = {}
+        self._dialogues_default_value = {}
+        self._template_active_dialogue_default = None
+        self._dialogues_edit_button.setEnabled(True)
+        self._dialogues_summary.setText("No dialogues")
         self._inventory_warning.hide()
         self._inventory_editable = True
         self._set_inventory_controls_enabled(True)
@@ -1943,6 +2349,10 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity = entity
         self._effective_space = self._compute_effective_space(entity)
         self._effective_field_defaults = self._compute_effective_field_defaults(entity)
+        (
+            self._dialogues_default_value,
+            self._template_active_dialogue_default,
+        ) = self._compute_template_dialogues_default(entity)
         has_pixel_x = entity.pixel_x is not None
         has_pixel_y = entity.pixel_y is not None
         raw_tags = entity._extra.get("tags", [])
@@ -1951,6 +2361,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         raw_input_map = entity._extra.get("input_map")
         raw_entity_commands = entity._extra.get("entity_commands")
         raw_variables = entity._extra.get("variables", {})
+        raw_dialogues = entity._extra.get("dialogues")
         raw_inventory = entity._extra.get("inventory")
         has_visuals_override = "visuals" in entity._extra
         raw_visuals = entity._extra.get("visuals", [])
@@ -1958,6 +2369,12 @@ class _EntityInstanceFieldsEditor(QWidget):
         entity_commands, entity_commands_warning = self._load_entity_commands_ui_state(
             raw_entity_commands
         )
+        effective_raw_dialogues = (
+            raw_dialogues
+            if "dialogues" in entity._extra
+            else self._dialogues_default_value
+        )
+        dialogues, dialogues_warning = self._load_dialogues_ui_state(effective_raw_dialogues)
         inventory, inventory_warning = self._load_inventory_ui_state(raw_inventory)
         raw_persistence = entity._extra.get("persistence")
         persistence_entity_state, persistence_variables, persistence_warning = (
@@ -1998,6 +2415,14 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._set_input_map_controls_enabled(self._input_map_editable)
         self._apply_entity_commands_warning(entity_commands_warning)
         self._set_entity_commands_controls_enabled(self._entity_commands_editable)
+        self._dialogues_value = copy.deepcopy(dialogues)
+        if dialogues_warning:
+            self._dialogues_warning.setText(dialogues_warning)
+            self._dialogues_warning.show()
+        else:
+            self._dialogues_warning.hide()
+        self._dialogues_edit_button.setEnabled(self._dialogues_editable)
+        self._sync_dialogues_summary()
         self._apply_inventory_warning(inventory_warning)
         self._set_inventory_controls_enabled(self._inventory_editable)
         self._apply_persistence_warning(persistence_warning)
@@ -2075,6 +2500,16 @@ class _EntityInstanceFieldsEditor(QWidget):
         )
         if variables_value:
             extra["variables"] = variables_value
+
+        if self._dialogues_editable:
+            has_authored_override = "dialogues" in self._entity._extra
+            if (
+                self._dialogues_value != self._dialogues_default_value
+                or has_authored_override
+            ):
+                extra["dialogues"] = copy.deepcopy(self._dialogues_value)
+        elif "dialogues" in self._entity._extra:
+            extra["dialogues"] = self._entity._extra["dialogues"]
 
         if self._inventory_editable:
             inventory_value = build_inventory(
@@ -2375,6 +2810,12 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._set_inventory_controls_enabled(self._inventory_editable)
         self._set_dirty(True)
 
+    def _on_variables_text_changed(self) -> None:
+        if self._loading:
+            return
+        self._sync_dialogues_summary()
+        self._set_dirty(True)
+
     def _sync_pixel_spin_enabled(self) -> None:
         screen_space = self._effective_space == "screen"
         self._pixel_x_spin.setEnabled(screen_space or self._pixel_x_check.isChecked())
@@ -2418,6 +2859,9 @@ class EntityInstanceEditorWidget(QWidget):
         self._parameters_editor = _EntityInstanceParametersEditor()
         self._json_editor = _EntityInstanceJsonEditor()
         self._fields_editor = _EntityInstanceFieldsEditor()
+        self._parameters_editor.set_named_dialogues_edit_callback(
+            self._edit_named_dialogues_from_parameters
+        )
 
         self._tabs.addTab(self._parameters_editor, "Parameters")
         self._tabs.addTab(self._fields_editor, "Entity Instance Editor")
@@ -2442,6 +2886,9 @@ class EntityInstanceEditorWidget(QWidget):
         self._fields_editor.apply_requested.connect(self.fields_apply_requested.emit)
         self._fields_editor.revert_requested.connect(self.fields_revert_requested.emit)
         self._fields_editor.dirty_changed.connect(self._on_fields_dirty_changed)
+        self._fields_editor.named_dialogues_changed.connect(
+            self._parameters_editor.set_dialogues_shortcut_state
+        )
         self._sync_editor_lock_state()
 
     @property
@@ -2559,6 +3006,11 @@ class EntityInstanceEditorWidget(QWidget):
         document = self._fields_editor.build_entity_document()
         document.parameters = self._parameters_editor.build_parameters_value()
         return document
+
+    def _edit_named_dialogues_from_parameters(
+        self,
+    ) -> tuple[dict[str, dict[str, Any]], str | None] | None:
+        return self._fields_editor.edit_named_dialogues()
 
     def _on_json_dirty_changed(self, dirty: bool) -> None:
         self._sync_editor_lock_state()

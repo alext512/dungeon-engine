@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -148,6 +149,162 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
 
             saved = json.loads(template_path.read_text(encoding="utf-8"))
             self.assertEqual(saved["color"], [255, "warm", 160])
+
+    def test_invalid_dialogues_uses_warning_and_preserves_original_value(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(
+                template_path,
+                {
+                    "visuals": [],
+                    "dialogues": {
+                        "broken": {
+                            "dialogue_path": "dialogues/intro",
+                            "dialogue_definition": {"segments": []},
+                        }
+                    },
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            self.assertFalse(widget.fields_editor._dialogues_warning.isHidden())
+            self.assertFalse(widget.fields_editor._dialogues_edit_button.isEnabled())
+
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["dialogues"],
+                {
+                    "broken": {
+                        "dialogue_path": "dialogues/intro",
+                        "dialogue_definition": {"segments": []},
+                    }
+                },
+            )
+
+    def test_structured_fields_can_update_named_dialogues_and_active_dialogue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(
+                template_path,
+                {
+                    "visuals": [],
+                    "variables": {"seen": False},
+                    "dialogues": {
+                        "starting_dialogue": {
+                            "dialogue_definition": {
+                                "segments": [{"type": "text", "text": "Hello"}]
+                            }
+                        }
+                    },
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            updated_dialogues = {
+                "starting_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Hello"}]
+                    }
+                },
+                "repeat_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Back again?"}]
+                    }
+                },
+            }
+
+            with patch.object(
+                widget.fields_editor,
+                "_open_entity_dialogues_dialog",
+                return_value=(updated_dialogues, "repeat_dialogue"),
+            ):
+                widget.fields_editor._dialogues_edit_button.click()
+
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["dialogues"], updated_dialogues)
+            self.assertEqual(
+                saved["variables"],
+                {"seen": False, "active_dialogue": "repeat_dialogue"},
+            )
+
+    def test_named_dialogue_rename_updates_self_targeting_template_entity_command_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(
+                template_path,
+                {
+                    "visuals": [],
+                    "variables": {"active_dialogue": "starting_dialogue"},
+                    "dialogues": {
+                        "starting_dialogue": {
+                            "dialogue_definition": {
+                                "segments": [{"type": "text", "text": "Hello"}]
+                            }
+                        }
+                    },
+                    "entity_commands": {
+                        "interact": {
+                            "enabled": True,
+                            "commands": [
+                                {
+                                    "type": "open_entity_dialogue",
+                                    "entity_id": "$self_id",
+                                    "dialogue_id": "starting_dialogue",
+                                }
+                            ],
+                        }
+                    },
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            with patch.object(
+                widget.fields_editor,
+                "_open_entity_dialogues_dialog",
+                return_value=(
+                    {
+                        "intro_dialogue": {
+                            "dialogue_definition": {
+                                "segments": [{"type": "text", "text": "Hello"}]
+                            }
+                        }
+                    },
+                    "intro_dialogue",
+                    {"starting_dialogue": "intro_dialogue"},
+                ),
+            ):
+                widget.fields_editor._dialogues_edit_button.click()
+
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["variables"]["active_dialogue"], "intro_dialogue")
+            self.assertEqual(
+                saved["entity_commands"]["interact"]["commands"][0]["dialogue_id"],
+                "intro_dialogue",
+            )
 
     def test_structured_fields_can_update_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

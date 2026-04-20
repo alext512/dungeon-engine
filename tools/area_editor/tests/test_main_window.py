@@ -1384,6 +1384,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 widget.fields_editor.section_labels(),
                 [
                     "Basics",
+                    "Dialogues",
                     "Visuals",
                     "Input Map",
                     "Entity Commands",

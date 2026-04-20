@@ -275,3 +275,32 @@ class TestTemplateCatalog(unittest.TestCase):
             catalog._templates["entity_templates/sign"]["parameters"]["dialogue_path"],
             "dialogues/sign.json",
         )
+
+    def test_substitute_template_parameters_resolves_exact_object_tokens(self):
+        catalog = TemplateCatalog()
+        value = {
+            "dialogues": {
+                "starting_dialogue": {
+                    "dialogue_definition": "$dialogue_definition",
+                }
+            }
+        }
+        parameters = {
+            "dialogue_definition": {
+                "segments": [{"type": "text", "text": "Hello"}],
+            }
+        }
+
+        resolved = catalog.substitute_template_parameters(value, parameters)
+        resolved["dialogues"]["starting_dialogue"]["dialogue_definition"]["segments"][0][
+            "text"
+        ] = "Changed"
+
+        self.assertEqual(
+            value["dialogues"]["starting_dialogue"]["dialogue_definition"],
+            "$dialogue_definition",
+        )
+        self.assertEqual(
+            parameters["dialogue_definition"]["segments"][0]["text"],
+            "Hello",
+        )

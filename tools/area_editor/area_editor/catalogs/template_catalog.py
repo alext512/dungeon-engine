@@ -167,6 +167,16 @@ class TemplateCatalog:
             return {}
         return copy.deepcopy(raw)
 
+    def substitute_template_parameters(
+        self,
+        value: Any,
+        parameters: dict[str, Any] | None = None,
+    ) -> Any:
+        """Return ``value`` with template tokens resolved against ``parameters``."""
+        return copy.deepcopy(
+            self._substitute_template_parameters(value, parameters or {})
+        )
+
     def get_template_entity_command_names(self, template_id: str) -> list[str]:
         """Return authored entity-command names for one template."""
         raw = self._templates.get(template_id)

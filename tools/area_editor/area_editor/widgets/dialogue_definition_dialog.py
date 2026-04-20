@@ -6,7 +6,7 @@ import copy
 import json
 from typing import Any, Callable
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -41,6 +42,34 @@ _DIALOGUE_SUGGESTED_COMMAND_NAMES = (
     "set_entity_var",
     "close_dialogue_session",
 )
+
+
+class _ReorderTreeWidget(QTreeWidget):
+    """Tree widget that emits one stable top-level order snapshot after drops."""
+
+    visual_order_changed = Signal(list)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setDragDropMode(self.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+    def dropEvent(self, event) -> None:  # type: ignore[override]
+        super().dropEvent(event)
+        order: list[str] = []
+        for row in range(self.topLevelItemCount()):
+            item = self.topLevelItem(row)
+            if item is None:
+                continue
+            value = item.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(value, str) and value.strip():
+                order.append(value)
+        if order:
+            self.visual_order_changed.emit(order)
 
 
 def summarize_dialogue_definition(definition: object) -> str:
@@ -73,6 +102,132 @@ def _ensure_dialogue_definition(value: object) -> dict[str, Any]:
     if not isinstance(definition.get("segments"), list):
         definition["segments"] = []
     return definition
+
+
+def normalize_entity_dialogues(value: object) -> dict[str, dict[str, Any]]:
+    """Return a validated copy of an entity-owned dialogue map."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("Dialogues must be a JSON object keyed by dialogue id.")
+
+    normalized: dict[str, dict[str, Any]] = {}
+    for raw_name, raw_entry in value.items():
+        name = str(raw_name).strip()
+        if not name:
+            raise ValueError("Dialogue ids must not be blank.")
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"Dialogue '{name}' must be a JSON object.")
+        entry = copy.deepcopy(raw_entry)
+        has_definition = isinstance(entry.get("dialogue_definition"), dict)
+        raw_path = entry.get("dialogue_path", "")
+        path = str(raw_path).strip() if raw_path is not None else ""
+        has_path = bool(path)
+        if has_definition == has_path:
+            raise ValueError(
+                f"Dialogue '{name}' must define exactly one of "
+                "'dialogue_definition' or 'dialogue_path'."
+            )
+        if has_definition:
+            entry["dialogue_definition"] = _ensure_dialogue_definition(
+                entry.get("dialogue_definition")
+            )
+            entry.pop("dialogue_path", None)
+        else:
+            entry["dialogue_path"] = path
+            entry.pop("dialogue_definition", None)
+        normalized[name] = entry
+    return normalized
+
+
+def summarize_entity_dialogues(
+    dialogues: object,
+    active_dialogue: object = None,
+) -> str:
+    """Return a short summary for an entity-owned dialogue map."""
+    try:
+        normalized = normalize_entity_dialogues(dialogues)
+    except ValueError:
+        return "Dialogues use an unsupported shape"
+    count = len(normalized)
+    if count == 0:
+        return "No dialogues"
+    summary = f"{count} dialogue{'s' if count != 1 else ''}"
+    active_name = str(active_dialogue).strip() if active_dialogue is not None else ""
+    if not active_name and count == 1:
+        active_name = next(iter(normalized), "")
+    if active_name:
+        if active_name in normalized:
+            summary += f"; active: {active_name}"
+        else:
+            summary += f"; active: {active_name} (missing)"
+    return summary
+
+
+def rename_active_dialogue_value(
+    variables: object,
+    rename_map: dict[str, str],
+) -> object:
+    """Return ``variables`` with ``active_dialogue`` rewritten when needed."""
+    if not isinstance(variables, dict) or not rename_map:
+        return copy.deepcopy(variables)
+    rewritten = copy.deepcopy(variables)
+    active_value = rewritten.get("active_dialogue")
+    if isinstance(active_value, str):
+        stripped = active_value.strip()
+        if stripped in rename_map:
+            rewritten["active_dialogue"] = rename_map[stripped]
+    return rewritten
+
+
+def rename_self_target_dialogue_id_references(
+    value: object,
+    rename_map: dict[str, str],
+    *,
+    current_entity_id: str | None = None,
+) -> object:
+    """Return ``value`` with known self-targeting dialogue-id command refs renamed."""
+    rewritten = copy.deepcopy(value)
+    if not rename_map:
+        return rewritten
+
+    self_tokens = {"$self_id", "${self_id}"}
+
+    def targets_local_entity(command: dict[str, Any]) -> bool:
+        raw_entity_id = command.get("entity_id")
+        if not isinstance(raw_entity_id, str):
+            return False
+        normalized = raw_entity_id.strip()
+        if not normalized:
+            return False
+        if normalized in self_tokens:
+            return True
+        if current_entity_id and normalized == current_entity_id:
+            return True
+        return False
+
+    def walk(node: object) -> None:
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, dict):
+            return
+
+        command_type = str(node.get("type", "")).strip()
+        if command_type in {"open_entity_dialogue", "set_entity_active_dialogue"}:
+            if targets_local_entity(node):
+                raw_dialogue_id = node.get("dialogue_id")
+                if isinstance(raw_dialogue_id, str):
+                    stripped = raw_dialogue_id.strip()
+                    if stripped in rename_map:
+                        node["dialogue_id"] = rename_map[stripped]
+
+        for child in node.values():
+            walk(child)
+
+    walk(rewritten)
+    return rewritten
 
 
 def _segment_summary(segment: object, index: int) -> str:
@@ -214,6 +369,7 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         *,
         dialogue_picker=None,
         command_picker=None,
+        current_entity_id: str | None = None,
     ) -> None:
         super().__init__(parent)
 
@@ -1675,6 +1831,7 @@ class DialogueDefinitionDialog(QDialog):
         *,
         dialogue_picker=None,
         command_picker=None,
+        current_entity_id: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("DialogueDefinitionDialog")
@@ -1785,3 +1942,489 @@ class DialogueDefinitionDialog(QDialog):
                 self._structured_editor.load_definition(definition)
         finally:
             self._syncing_tabs = False
+
+
+class EntityDialoguesDialog(QDialog):
+    """Popup editor for an entity-owned map of named dialogues."""
+
+    def __init__(
+        self,
+        parent=None,
+        *,
+        dialogue_picker=None,
+        command_picker=None,
+        current_entity_id: str | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("EntityDialoguesDialog")
+        self.setWindowTitle("Edit Entity Dialogues")
+        self.resize(980, 680)
+
+        self._dialogue_picker = dialogue_picker
+        self._command_picker = command_picker
+        self._current_entity_id = current_entity_id
+        self._dialogues: dict[str, dict[str, Any]] = {}
+        self._active_dialogue: str | None = None
+        self._rename_map: dict[str, str] = {}
+        self._loading = False
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+
+        note = QLabel(
+            "Right-click dialogues to add, rename, mark active, or delete them. "
+            "Drag to reorder them. "
+            "Inline dialogues open in the regular dialogue editor; dialogue-file entries "
+            "stay shared references."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #666;")
+        outer.addWidget(note)
+
+        warning = QLabel(
+            "Warning: dialogue order affects by-order helpers such as "
+            "'step_entity_active_dialogue' and 'set_entity_active_dialogue_by_order'. "
+            "If you reorder dialogues, those commands may target different entries."
+        )
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #8a4b00;")
+        outer.addWidget(warning)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        outer.addWidget(splitter, 1)
+
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addWidget(QLabel("Dialogues"))
+        self._dialogue_list = _ReorderTreeWidget()
+        self._dialogue_list.setHeaderHidden(True)
+        self._dialogue_list.setMinimumWidth(300)
+        left_layout.addWidget(self._dialogue_list, 1)
+        splitter.addWidget(left)
+
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
+
+        self._detail_header = QLabel("No dialogue selected")
+        header_font = self._detail_header.font()
+        header_font.setBold(True)
+        self._detail_header.setFont(header_font)
+        right_layout.addWidget(self._detail_header)
+
+        self._detail_stack = QStackedWidget()
+        right_layout.addWidget(self._detail_stack, 1)
+
+        self._empty_page = QWidget()
+        empty_layout = QVBoxLayout(self._empty_page)
+        empty_layout.setContentsMargins(0, 0, 0, 0)
+        empty_label = QLabel("Select a named dialogue from the list.")
+        empty_label.setWordWrap(True)
+        empty_layout.addWidget(empty_label)
+        empty_layout.addStretch(1)
+        self._detail_stack.addWidget(self._empty_page)
+
+        self._inline_page = QWidget()
+        inline_layout = QVBoxLayout(self._inline_page)
+        inline_layout.setContentsMargins(0, 0, 0, 0)
+        self._inline_summary_label = QLabel("Inline dialogue")
+        self._inline_summary_label.setWordWrap(True)
+        inline_layout.addWidget(self._inline_summary_label)
+        self._inline_active_label = QLabel("")
+        self._inline_active_label.setWordWrap(True)
+        self._inline_active_label.setStyleSheet("color: #8a4b00;")
+        inline_layout.addWidget(self._inline_active_label)
+        self._inline_note_label = QLabel(
+            "Use the existing dialogue editor for the selected named dialogue."
+        )
+        self._inline_note_label.setWordWrap(True)
+        self._inline_note_label.setStyleSheet("color: #666;")
+        inline_layout.addWidget(self._inline_note_label)
+        inline_buttons = QHBoxLayout()
+        self._edit_inline_button = QPushButton("Edit Dialogue...")
+        self._edit_inline_button.setAutoDefault(False)
+        self._edit_inline_button.setDefault(False)
+        self._edit_inline_button.clicked.connect(self._on_edit_inline_dialogue)
+        inline_buttons.addWidget(self._edit_inline_button)
+        inline_buttons.addStretch(1)
+        inline_layout.addLayout(inline_buttons)
+        inline_layout.addStretch(1)
+        self._detail_stack.addWidget(self._inline_page)
+
+        self._file_page = QWidget()
+        file_layout = QVBoxLayout(self._file_page)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        self._file_summary_label = QLabel("Dialogue file")
+        self._file_summary_label.setWordWrap(True)
+        file_layout.addWidget(self._file_summary_label)
+        self._file_active_label = QLabel("")
+        self._file_active_label.setWordWrap(True)
+        self._file_active_label.setStyleSheet("color: #8a4b00;")
+        file_layout.addWidget(self._file_active_label)
+        self._file_note_label = QLabel(
+            "This dialogue stays shared through its dialogue file path."
+        )
+        self._file_note_label.setWordWrap(True)
+        self._file_note_label.setStyleSheet("color: #666;")
+        file_layout.addWidget(self._file_note_label)
+        file_form = QFormLayout()
+        file_row = QWidget()
+        file_row_layout = QHBoxLayout(file_row)
+        file_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._dialogue_path_edit = QLineEdit()
+        self._dialogue_path_edit.textChanged.connect(self._on_dialogue_path_text_changed)
+        self._dialogue_path_browse = QPushButton("Browse...")
+        self._dialogue_path_browse.setAutoDefault(False)
+        self._dialogue_path_browse.setDefault(False)
+        self._dialogue_path_browse.clicked.connect(self._on_browse_dialogue_path)
+        self._dialogue_path_browse.setEnabled(self._dialogue_picker is not None)
+        file_row_layout.addWidget(self._dialogue_path_edit, 1)
+        file_row_layout.addWidget(self._dialogue_path_browse)
+        file_form.addRow("dialogue_path", file_row)
+        file_layout.addLayout(file_form)
+        file_layout.addStretch(1)
+        self._detail_stack.addWidget(self._file_page)
+
+        splitter.addWidget(right)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 620])
+
+        self._buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        self._buttons.accepted.connect(self.accept)
+        self._buttons.rejected.connect(self.reject)
+        outer.addWidget(self._buttons)
+
+        self._dialogue_list.currentItemChanged.connect(
+            self._on_dialogue_selection_changed
+        )
+        self._dialogue_list.customContextMenuRequested.connect(
+            self._on_dialogue_context_menu_requested
+        )
+        self._dialogue_list.visual_order_changed.connect(
+            self._on_dialogue_visual_order_changed
+        )
+
+    def load_dialogues(
+        self,
+        dialogues: object,
+        *,
+        active_dialogue: object = None,
+    ) -> None:
+        self._dialogues = normalize_entity_dialogues(dialogues)
+        active_name = str(active_dialogue).strip() if active_dialogue is not None else ""
+        if not active_name and len(self._dialogues) == 1:
+            active_name = next(iter(self._dialogues), "")
+        self._active_dialogue = active_name or None
+        self._rename_map = {}
+        select_name = self._active_dialogue
+        if select_name is None and self._dialogues:
+            select_name = next(iter(self._dialogues))
+        self._refresh_dialogue_list(select_name=select_name)
+
+    def dialogues(self) -> dict[str, dict[str, Any]]:
+        return copy.deepcopy(self._dialogues)
+
+    def active_dialogue(self) -> str | None:
+        return self._active_dialogue
+
+    def rename_map(self) -> dict[str, str]:
+        return dict(self._rename_map)
+
+    def accept(self) -> None:  # noqa: D401
+        try:
+            self._dialogues = normalize_entity_dialogues(self._dialogues)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid Dialogues", str(exc))
+            return
+        super().accept()
+
+    def _selected_dialogue_name(self) -> str | None:
+        item = self._dialogue_list.currentItem()
+        if item is None:
+            return None
+        name = item.data(0, Qt.ItemDataRole.UserRole)
+        return name if isinstance(name, str) and name in self._dialogues else None
+
+    def _refresh_dialogue_list(self, *, select_name: str | None = None) -> None:
+        self._loading = True
+        try:
+            blocker = QSignalBlocker(self._dialogue_list)
+            self._dialogue_list.clear()
+            for name, entry in self._dialogues.items():
+                item = QTreeWidgetItem([self._dialogue_list_label(name, entry)])
+                item.setData(0, Qt.ItemDataRole.UserRole, name)
+                if name == self._active_dialogue:
+                    item.setFont(0, _tree_item_font(bold=True))
+                    item.setForeground(0, QBrush(QColor("#8a4b00")))
+                item.setToolTip(0, self._dialogue_entry_tooltip(name, entry))
+                self._dialogue_list.addTopLevelItem(item)
+            del blocker
+            if select_name and select_name in self._dialogues:
+                self._select_dialogue_item(select_name)
+            elif self._dialogue_list.topLevelItemCount() > 0:
+                self._dialogue_list.setCurrentItem(self._dialogue_list.topLevelItem(0))
+            else:
+                self._dialogue_list.setCurrentItem(None)
+                self._detail_header.setText("No dialogue selected")
+                self._detail_stack.setCurrentWidget(self._empty_page)
+        finally:
+            self._loading = False
+        self._sync_detail_panel()
+
+    def _dialogue_list_label(self, name: str, entry: dict[str, Any]) -> str:
+        parts = [name]
+        if name == self._active_dialogue:
+            parts.append("[Active]")
+        if isinstance(entry.get("dialogue_definition"), dict):
+            parts.append("- Inline Dialogue")
+        else:
+            parts.append("- Dialogue File")
+        return " ".join(parts)
+
+    def _dialogue_entry_tooltip(self, name: str, entry: dict[str, Any]) -> str:
+        if isinstance(entry.get("dialogue_definition"), dict):
+            return f"{name}: {summarize_dialogue_definition(entry.get('dialogue_definition'))}"
+        return f"{name}: dialogue file {str(entry.get('dialogue_path', '')).strip() or '(unset)'}"
+
+    def _select_dialogue_item(self, name: str) -> None:
+        for index in range(self._dialogue_list.topLevelItemCount()):
+            item = self._dialogue_list.topLevelItem(index)
+            if item.data(0, Qt.ItemDataRole.UserRole) == name:
+                self._dialogue_list.setCurrentItem(item)
+                return
+
+    def _sync_detail_panel(self) -> None:
+        name = self._selected_dialogue_name()
+        if name is None:
+            self._detail_header.setText("No dialogue selected")
+            self._detail_stack.setCurrentWidget(self._empty_page)
+            return
+        entry = self._dialogues.get(name)
+        if not isinstance(entry, dict):
+            self._detail_header.setText(name)
+            self._detail_stack.setCurrentWidget(self._empty_page)
+            return
+        self._detail_header.setText(name)
+        active_text = (
+            "This dialogue is currently the active default."
+            if name == self._active_dialogue
+            else "Right-click this dialogue and choose 'Set Active Dialogue' to make it the current default."
+        )
+        if isinstance(entry.get("dialogue_definition"), dict):
+            self._inline_summary_label.setText(
+                summarize_dialogue_definition(entry.get("dialogue_definition"))
+            )
+            self._inline_active_label.setText(active_text)
+            self._detail_stack.setCurrentWidget(self._inline_page)
+            return
+        blocker = QSignalBlocker(self._dialogue_path_edit)
+        self._dialogue_path_edit.setText(str(entry.get("dialogue_path", "")).strip())
+        del blocker
+        self._file_summary_label.setText(
+            "Dialogue file reference for the selected named dialogue."
+        )
+        self._file_active_label.setText(active_text)
+        self._detail_stack.setCurrentWidget(self._file_page)
+
+    def _prompt_for_dialogue_name(
+        self,
+        *,
+        title: str,
+        label: str,
+        initial: str,
+        existing_name: str | None = None,
+    ) -> str | None:
+        name, accepted = QInputDialog.getText(self, title, label, text=initial)
+        if not accepted:
+            return None
+        normalized = str(name).strip()
+        if not normalized:
+            QMessageBox.warning(self, "Invalid Dialogue Name", "Dialogue names must not be blank.")
+            return None
+        if normalized != existing_name and normalized in self._dialogues:
+            QMessageBox.warning(
+                self,
+                "Duplicate Dialogue Name",
+                f"A dialogue named '{normalized}' already exists.",
+            )
+            return None
+        return normalized
+
+    def _default_new_dialogue_name(self) -> str:
+        if "starting_dialogue" not in self._dialogues:
+            return "starting_dialogue"
+        counter = 2
+        while True:
+            candidate = f"dialogue_{counter}"
+            if candidate not in self._dialogues:
+                return candidate
+            counter += 1
+
+    def _add_named_dialogue(self) -> None:
+        name = self._prompt_for_dialogue_name(
+            title="Add Dialogue",
+            label="Dialogue name",
+            initial=self._default_new_dialogue_name(),
+        )
+        if name is None:
+            return
+        self._dialogues[name] = {"dialogue_definition": {"segments": []}}
+        if self._active_dialogue is None:
+            self._active_dialogue = name
+        self._refresh_dialogue_list(select_name=name)
+
+    def _rename_selected_dialogue(self) -> None:
+        current_name = self._selected_dialogue_name()
+        if current_name is None:
+            return
+        renamed = self._prompt_for_dialogue_name(
+            title="Rename Dialogue",
+            label="Dialogue name",
+            initial=current_name,
+            existing_name=current_name,
+        )
+        if renamed is None or renamed == current_name:
+            return
+        rebuilt: dict[str, dict[str, Any]] = {}
+        for name, value in self._dialogues.items():
+            if name == current_name:
+                rebuilt[renamed] = value
+            else:
+                rebuilt[name] = value
+        self._dialogues = rename_self_target_dialogue_id_references(
+            rebuilt,
+            {current_name: renamed},
+            current_entity_id=self._current_entity_id,
+        )
+        next_rename_map: dict[str, str] = {}
+        for original_name, final_name in self._rename_map.items():
+            next_rename_map[original_name] = (
+                renamed if final_name == current_name else final_name
+            )
+        if current_name not in next_rename_map:
+            next_rename_map[current_name] = renamed
+        self._rename_map = next_rename_map
+        if self._active_dialogue == current_name:
+            self._active_dialogue = renamed
+        self._refresh_dialogue_list(select_name=renamed)
+
+    def _set_selected_dialogue_active(self) -> None:
+        current_name = self._selected_dialogue_name()
+        if current_name is None:
+            return
+        self._active_dialogue = current_name
+        self._refresh_dialogue_list(select_name=current_name)
+
+    def _delete_selected_dialogue(self) -> None:
+        current_name = self._selected_dialogue_name()
+        if current_name is None:
+            return
+        self._dialogues.pop(current_name, None)
+        if self._active_dialogue == current_name:
+            self._active_dialogue = next(iter(self._dialogues), None)
+        next_name = self._active_dialogue or next(iter(self._dialogues), None)
+        self._refresh_dialogue_list(select_name=next_name)
+
+    def _on_dialogue_selection_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        self._sync_detail_panel()
+
+    def _on_dialogue_visual_order_changed(self, visual_order: list[str]) -> None:
+        if len(visual_order) != len(self._dialogues):
+            self._refresh_dialogue_list(select_name=self._selected_dialogue_name())
+            return
+        current_name = self._selected_dialogue_name()
+        reordered: dict[str, dict[str, Any]] = {}
+        for name in visual_order:
+            if name not in self._dialogues:
+                self._refresh_dialogue_list(select_name=current_name)
+                return
+            reordered[name] = self._dialogues[name]
+        if len(reordered) != len(self._dialogues):
+            self._refresh_dialogue_list(select_name=current_name)
+            return
+        self._dialogues = reordered
+        self._refresh_dialogue_list(select_name=current_name or self._active_dialogue)
+
+    def _on_dialogue_context_menu_requested(self, position) -> None:
+        item = self._dialogue_list.itemAt(position)
+        if item is not None:
+            self._dialogue_list.setCurrentItem(item)
+        menu = QMenu(self)
+        add_action = menu.addAction("Add Dialogue")
+        rename_action = None
+        active_action = None
+        delete_action = None
+        if item is not None:
+            rename_action = menu.addAction("Rename Dialogue")
+            active_action = menu.addAction("Set Active Dialogue")
+            menu.addSeparator()
+            delete_action = menu.addAction("Delete Dialogue")
+        chosen = menu.exec(self._dialogue_list.viewport().mapToGlobal(position))
+        if chosen == add_action:
+            self._add_named_dialogue()
+        elif rename_action is not None and chosen == rename_action:
+            self._rename_selected_dialogue()
+        elif active_action is not None and chosen == active_action:
+            self._set_selected_dialogue_active()
+        elif delete_action is not None and chosen == delete_action:
+            self._delete_selected_dialogue()
+
+    def _on_edit_inline_dialogue(self) -> None:
+        name = self._selected_dialogue_name()
+        if name is None:
+            return
+        entry = self._dialogues.get(name)
+        if not isinstance(entry, dict):
+            return
+        definition = entry.get("dialogue_definition")
+        if not isinstance(definition, dict):
+            return
+        dialog = DialogueDefinitionDialog(
+            self,
+            dialogue_picker=self._dialogue_picker,
+            command_picker=self._command_picker,
+        )
+        dialog.load_definition(definition)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return
+        entry["dialogue_definition"] = dialog.definition()
+        self._refresh_dialogue_list(select_name=name)
+
+    def _on_dialogue_path_text_changed(self, text: str) -> None:
+        if self._loading:
+            return
+        name = self._selected_dialogue_name()
+        if name is None:
+            return
+        entry = self._dialogues.get(name)
+        if not isinstance(entry, dict):
+            return
+        entry["dialogue_path"] = text.strip()
+        self._sync_detail_panel()
+
+    def _on_browse_dialogue_path(self) -> None:
+        if self._dialogue_picker is None:
+            return
+        name = self._selected_dialogue_name()
+        if name is None:
+            return
+        entry = self._dialogues.get(name)
+        if not isinstance(entry, dict):
+            return
+        current_path = str(entry.get("dialogue_path", "")).strip()
+        selected = self._dialogue_picker(current_path)
+        if selected is None:
+            return
+        blocker = QSignalBlocker(self._dialogue_path_edit)
+        self._dialogue_path_edit.setText(selected)
+        del blocker
+        entry["dialogue_path"] = selected
+        self._sync_detail_panel()

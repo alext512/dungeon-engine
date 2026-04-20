@@ -8,10 +8,12 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from area_editor.widgets.dialogue_definition_dialog import (
     DialogueDefinitionDialog,
+    EntityDialoguesDialog,
+    summarize_entity_dialogues,
     summarize_dialogue_definition,
 )
 
@@ -33,6 +35,170 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
             ),
             "2 segments, 1 text, 1 choice",
         )
+
+    def test_entity_dialogues_summary_reports_active_dialogue(self):
+        self.assertEqual(
+            summarize_entity_dialogues(
+                {
+                    "starting_dialogue": {
+                        "dialogue_definition": {
+                            "segments": [{"type": "text", "text": "Hi"}]
+                        }
+                    }
+                },
+                "starting_dialogue",
+            ),
+            "1 dialogue; active: starting_dialogue",
+        )
+
+    def test_entity_dialogues_summary_infers_active_for_single_dialogue(self):
+        self.assertEqual(
+            summarize_entity_dialogues(
+                {
+                    "starting_dialogue": {
+                        "dialogue_definition": {
+                            "segments": [{"type": "text", "text": "Hi"}]
+                        }
+                    }
+                }
+            ),
+            "1 dialogue; active: starting_dialogue",
+        )
+
+    def test_entity_dialogues_dialog_can_add_rename_and_mark_active(self):
+        dialog = EntityDialoguesDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_dialogues(
+            {
+                "starting_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Hello"}]
+                    }
+                }
+            },
+            active_dialogue="starting_dialogue",
+        )
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.QInputDialog.getText",
+            side_effect=[("repeat_dialogue", True), ("renamed_dialogue", True)],
+        ):
+            dialog._add_named_dialogue()
+            dialog._select_dialogue_item("repeat_dialogue")
+            dialog._rename_selected_dialogue()
+
+        dialog._select_dialogue_item("renamed_dialogue")
+        dialog._set_selected_dialogue_active()
+
+        self.assertIn("starting_dialogue", dialog.dialogues())
+        self.assertIn("renamed_dialogue", dialog.dialogues())
+        self.assertEqual(dialog.active_dialogue(), "renamed_dialogue")
+
+    def test_entity_dialogues_dialog_keeps_single_existing_dialogue_active_when_adding(self):
+        dialog = EntityDialoguesDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_dialogues(
+            {
+                "starting_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Hello"}]
+                    }
+                }
+            }
+        )
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.QInputDialog.getText",
+            return_value=("repeat_dialogue", True),
+        ):
+            dialog._add_named_dialogue()
+
+        self.assertEqual(dialog.active_dialogue(), "starting_dialogue")
+
+    def test_entity_dialogues_dialog_can_reorder_dialogues_and_keep_active_selection(self):
+        dialog = EntityDialoguesDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_dialogues(
+            {
+                "starting_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Hello"}]
+                    }
+                },
+                "repeat_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Again"}]
+                    }
+                },
+            },
+            active_dialogue="starting_dialogue",
+        )
+        dialog._select_dialogue_item("repeat_dialogue")
+
+        dialog._on_dialogue_visual_order_changed(
+            ["repeat_dialogue", "starting_dialogue"]
+        )
+
+        self.assertEqual(
+            list(dialog.dialogues().keys()),
+            ["repeat_dialogue", "starting_dialogue"],
+        )
+        self.assertEqual(dialog.active_dialogue(), "starting_dialogue")
+
+    def test_entity_dialogues_dialog_rename_updates_self_targeting_dialogue_id_refs(self):
+        dialog = EntityDialoguesDialog(current_entity_id="sign_1")
+        self.addCleanup(dialog.close)
+        dialog.load_dialogues(
+            {
+                "starting_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Hello"}]
+                    }
+                },
+                "followup": {
+                    "dialogue_definition": {
+                        "segments": [
+                            {
+                                "type": "text",
+                                "text": "Branch",
+                                "on_end": [
+                                    {
+                                        "type": "open_entity_dialogue",
+                                        "entity_id": "$self_id",
+                                        "dialogue_id": "starting_dialogue",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                },
+            },
+            active_dialogue="starting_dialogue",
+        )
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.QInputDialog.getText",
+            return_value=("intro_dialogue", True),
+        ):
+            dialog._rename_selected_dialogue()
+
+        dialogues = dialog.dialogues()
+        self.assertIn("intro_dialogue", dialogues)
+        self.assertEqual(dialog.rename_map(), {"starting_dialogue": "intro_dialogue"})
+        self.assertEqual(
+            dialogues["followup"]["dialogue_definition"]["segments"][0]["on_end"][0]["dialogue_id"],
+            "intro_dialogue",
+        )
+
+    def test_entity_dialogues_dialog_note_warns_about_by_order_helpers(self):
+        dialog = EntityDialoguesDialog()
+        self.addCleanup(dialog.close)
+
+        labels = [label.text() for label in dialog.findChildren(QLabel)]
+        self.assertTrue(
+            any("set_entity_active_dialogue_by_order" in text for text in labels)
+        )
+
 
     def test_json_tab_can_replace_structured_definition(self):
         dialog = DialogueDefinitionDialog()

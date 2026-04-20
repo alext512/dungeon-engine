@@ -88,6 +88,33 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 }
             }
         }
+        self.catalog._templates["entity_templates/dialogue_owner"] = {
+            "variables": {
+                "active_dialogue": "starting_dialogue",
+            },
+            "dialogues": {
+                "starting_dialogue": {
+                    "dialogue_definition": {
+                        "segments": [{"type": "text", "text": "Hello"}]
+                    }
+                }
+            },
+        }
+        self.catalog._templates["entity_templates/parameterized_dialogue_owner"] = {
+            "parameters": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Default parameterized hello"}]
+                }
+            },
+            "variables": {
+                "active_dialogue": "starting_dialogue",
+            },
+            "dialogues": {
+                "starting_dialogue": {
+                    "dialogue_definition": "$dialogue_definition",
+                }
+            },
+        }
         self.catalog._templates["entity_templates/area_transition"] = {
             "parameters": {
                 "target_area": "areas/start",
@@ -564,6 +591,266 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.assertEqual(parameters.build_parameters_value(), None)
         self.assertFalse(field.explicit_override_enabled)
+
+    def test_build_entity_from_fields_updates_named_dialogues_and_active_dialogue(self):
+        entity = EntityDocument(
+            id="sign_dialogues",
+            grid_x=2,
+            grid_y=2,
+            _extra={
+                "variables": {"seen": False},
+                "dialogues": {
+                    "starting_dialogue": {
+                        "dialogue_definition": {
+                            "segments": [{"type": "text", "text": "Hello"}]
+                        }
+                    }
+                },
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        updated_dialogues = {
+            "starting_dialogue": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Hello"}]
+                }
+            },
+            "repeat_dialogue": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Back again?"}]
+                }
+            },
+        }
+
+        with patch.object(
+            fields,
+            "_open_entity_dialogues_dialog",
+            return_value=(updated_dialogues, "repeat_dialogue"),
+        ):
+            fields._dialogues_edit_button.click()
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["dialogues"], updated_dialogues)
+        self.assertEqual(
+            updated._extra["variables"],
+            {"seen": False, "active_dialogue": "repeat_dialogue"},
+        )
+
+    def test_template_owned_dialogues_show_in_summary_without_forcing_override(self):
+        entity = EntityDocument(
+            id="templated_dialogue_sign",
+            grid_x=2,
+            grid_y=2,
+            template="entity_templates/dialogue_owner",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertEqual(
+            fields._dialogues_summary.text(),
+            "1 dialogue; active: starting_dialogue",
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertNotIn("dialogues", updated._extra)
+        self.assertNotIn("variables", updated._extra)
+
+    def test_parameterized_template_dialogues_show_in_summary_without_override(self):
+        entity = EntityDocument(
+            id="templated_parameter_dialogue_sign",
+            grid_x=3,
+            grid_y=2,
+            template="entity_templates/parameterized_dialogue_owner",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertEqual(
+            fields._dialogues_summary.text(),
+            "1 dialogue; active: starting_dialogue",
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertNotIn("dialogues", updated._extra)
+        self.assertNotIn("variables", updated._extra)
+
+    def test_hidden_dialogue_bridge_parameter_override_is_preserved_when_unchanged(self):
+        entity = EntityDocument(
+            id="templated_parameter_dialogue_sign",
+            grid_x=3,
+            grid_y=2,
+            template="entity_templates/parameterized_dialogue_owner",
+            parameters={
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Overridden hello"}]
+                }
+            },
+        )
+
+        self.panel.load_entity(entity)
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated.parameters,
+            {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Overridden hello"}]
+                }
+            },
+        )
+        self.assertNotIn("dialogues", updated._extra)
+
+    def test_parameters_tab_exposes_named_dialogues_shortcut_instead_of_bridge_parameter(self):
+        entity = EntityDocument(
+            id="templated_parameter_dialogue_sign",
+            grid_x=3,
+            grid_y=2,
+            template="entity_templates/parameterized_dialogue_owner",
+        )
+
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+        fields = self.panel._fields_editor
+
+        self.assertTrue(parameters._dialogues_shortcut_visible)
+        self.assertNotIn("dialogue_definition", parameters._parameter_fields)
+        self.assertEqual(
+            parameters._dialogues_shortcut_summary.text(),
+            "1 dialogue; active: starting_dialogue",
+        )
+
+        updated_dialogues = {
+            "starting_dialogue": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Hello"}]
+                }
+            },
+            "repeat_dialogue": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Back again?"}]
+                }
+            },
+        }
+        with patch.object(
+            fields,
+            "_open_entity_dialogues_dialog",
+            return_value=(updated_dialogues, "starting_dialogue"),
+        ):
+            assert parameters._dialogues_shortcut_button is not None
+            parameters._dialogues_shortcut_button.click()
+
+        self.assertEqual(
+            parameters._dialogues_shortcut_summary.text(),
+            "2 dialogues; active: starting_dialogue",
+        )
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["dialogues"], updated_dialogues)
+        self.assertEqual(updated._extra["variables"], {"active_dialogue": "starting_dialogue"})
+        self.assertIsNone(updated.parameters)
+
+    def test_fields_dialogue_edit_syncs_parameters_shortcut_summary(self):
+        entity = EntityDocument(
+            id="templated_parameter_dialogue_sign",
+            grid_x=3,
+            grid_y=2,
+            template="entity_templates/parameterized_dialogue_owner",
+        )
+
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+        fields = self.panel._fields_editor
+
+        updated_dialogues = {
+            "intro_dialogue": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Hello"}]
+                }
+            },
+            "repeat_dialogue": {
+                "dialogue_definition": {
+                    "segments": [{"type": "text", "text": "Back again?"}]
+                }
+            },
+        }
+        with patch.object(
+            fields,
+            "_open_entity_dialogues_dialog",
+            return_value=(updated_dialogues, "intro_dialogue"),
+        ):
+            fields._dialogues_edit_button.click()
+
+        self.assertEqual(
+            parameters._dialogues_shortcut_summary.text(),
+            "2 dialogues; active: intro_dialogue",
+        )
+
+    def test_named_dialogue_rename_updates_self_targeting_entity_command_refs(self):
+        entity = EntityDocument(
+            id="speaker",
+            grid_x=1,
+            grid_y=1,
+            _extra={
+                "variables": {"active_dialogue": "starting_dialogue"},
+                "dialogues": {
+                    "starting_dialogue": {
+                        "dialogue_definition": {
+                            "segments": [{"type": "text", "text": "Hello"}]
+                        }
+                    }
+                },
+                "entity_commands": {
+                    "interact": {
+                        "enabled": True,
+                        "commands": [
+                            {
+                                "type": "set_entity_active_dialogue",
+                                "entity_id": "speaker",
+                                "dialogue_id": "starting_dialogue",
+                            }
+                        ],
+                    }
+                },
+            },
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        with patch.object(
+            fields,
+            "_open_entity_dialogues_dialog",
+            return_value=(
+                {
+                    "intro_dialogue": {
+                        "dialogue_definition": {
+                            "segments": [{"type": "text", "text": "Hello"}]
+                        }
+                    }
+                },
+                "intro_dialogue",
+                {"starting_dialogue": "intro_dialogue"},
+            ),
+        ):
+            fields._dialogues_edit_button.click()
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(updated._extra["variables"]["active_dialogue"], "intro_dialogue")
+        self.assertEqual(
+            updated._extra["entity_commands"]["interact"]["commands"][0]["dialogue_id"],
+            "intro_dialogue",
+        )
 
     def test_build_entity_from_fields_updates_scope(self):
         entity = EntityDocument(
