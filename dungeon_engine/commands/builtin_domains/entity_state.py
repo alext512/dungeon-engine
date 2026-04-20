@@ -49,6 +49,73 @@ def register_entity_state_commands(
             resolved_persistence = services.persistence.persistence_runtime
         return resolved_world, resolved_area, resolved_persistence
 
+    def _require_entity_dialogue_ids(entity: Any, *, command_name: str) -> list[str]:
+        """Return one entity's authored dialogue ids in authored order."""
+        dialogue_ids = list(getattr(entity, "dialogues", {}).keys())
+        if not dialogue_ids:
+            raise ValueError(
+                f"{command_name} requires entity '{entity.entity_id}' to define a non-empty 'dialogues' map."
+            )
+        return dialogue_ids
+
+    def _require_known_entity_dialogue_id(
+        entity: Any,
+        dialogue_id: Any,
+        *,
+        command_name: str,
+    ) -> str:
+        """Return one explicit dialogue id when the entity owns it."""
+        resolved_dialogue_id = str(dialogue_id).strip()
+        if not resolved_dialogue_id:
+            raise ValueError(f"{command_name} requires a non-empty dialogue_id.")
+        if resolved_dialogue_id not in getattr(entity, "dialogues", {}):
+            raise KeyError(
+                f"Entity '{entity.entity_id}' has no dialogue '{resolved_dialogue_id}'."
+            )
+        return resolved_dialogue_id
+
+    def _require_current_entity_dialogue_index(
+        entity: Any,
+        *,
+        command_name: str,
+    ) -> tuple[list[str], int]:
+        """Return the authored dialogue ids plus the current active-dialogue index."""
+        dialogue_ids = _require_entity_dialogue_ids(entity, command_name=command_name)
+        current_dialogue_id = entity.variables.get("active_dialogue")
+        if not isinstance(current_dialogue_id, str) or not current_dialogue_id.strip():
+            raise ValueError(
+                f"{command_name} requires entity '{entity.entity_id}' to have a non-empty "
+                "'active_dialogue' variable."
+            )
+        resolved_current_dialogue_id = current_dialogue_id.strip()
+        if resolved_current_dialogue_id not in entity.dialogues:
+            raise KeyError(
+                f"Entity '{entity.entity_id}' active_dialogue '{resolved_current_dialogue_id}' "
+                "does not exist in its 'dialogues' map."
+            )
+        return dialogue_ids, dialogue_ids.index(resolved_current_dialogue_id)
+
+    def _set_active_dialogue_value(
+        *,
+        entity: Any,
+        dialogue_id: str,
+        world: Any,
+        area: Any,
+        persistence_runtime: PersistenceRuntimeLike | None,
+        persistent: bool | None,
+    ) -> None:
+        """Store one active-dialogue id and persist it when policy requires."""
+        entity.variables["active_dialogue"] = dialogue_id
+        if should_persist_entity_variable(entity, name="active_dialogue", persistent=persistent):
+            persist_exact_entity_variable_value(
+                world=world,
+                area=area,
+                persistence_runtime=persistence_runtime,
+                entity_id=entity.entity_id,
+                name="active_dialogue",
+                value=dialogue_id,
+            )
+
     @registry.register("set_entity_command_enabled")
     def set_entity_command_enabled(
         services: CommandServices | None,
@@ -433,6 +500,126 @@ def register_entity_state_commands(
                 name=name,
                 value=persisted_value,
             )
+        return ImmediateHandle()
+
+    @registry.register("set_entity_active_dialogue")
+    def set_entity_active_dialogue(
+        services: CommandServices | None,
+        world: Any,
+        area: Any,
+        persistence_runtime: PersistenceRuntimeLike | None,
+        *,
+        entity_id: str,
+        dialogue_id: str,
+        persistent: bool | None = None,
+    ) -> CommandHandle:
+        """Set one entity's active_dialogue variable to a named authored dialogue."""
+        resolved_world, resolved_area, resolved_persistence = _resolve_state_services(
+            services=services,
+            world=world,
+            area=area,
+            persistence_runtime=persistence_runtime,
+        )
+        entity = require_exact_entity(resolved_world, entity_id)
+        resolved_dialogue_id = _require_known_entity_dialogue_id(
+            entity,
+            dialogue_id,
+            command_name="set_entity_active_dialogue",
+        )
+        _set_active_dialogue_value(
+            entity=entity,
+            dialogue_id=resolved_dialogue_id,
+            world=resolved_world,
+            area=resolved_area,
+            persistence_runtime=resolved_persistence,
+            persistent=persistent,
+        )
+        return ImmediateHandle()
+
+    @registry.register("step_entity_active_dialogue")
+    def step_entity_active_dialogue(
+        services: CommandServices | None,
+        world: Any,
+        area: Any,
+        persistence_runtime: PersistenceRuntimeLike | None,
+        *,
+        entity_id: str,
+        delta: int = 1,
+        wrap: bool = False,
+        persistent: bool | None = None,
+    ) -> CommandHandle:
+        """Move an entity's active dialogue forward/backward in authored order."""
+        resolved_world, resolved_area, resolved_persistence = _resolve_state_services(
+            services=services,
+            world=world,
+            area=area,
+            persistence_runtime=persistence_runtime,
+        )
+        entity = require_exact_entity(resolved_world, entity_id)
+        dialogue_ids, current_index = _require_current_entity_dialogue_index(
+            entity,
+            command_name="step_entity_active_dialogue",
+        )
+        next_index = current_index + int(delta)
+        if wrap:
+            next_index %= len(dialogue_ids)
+        elif next_index < 0 or next_index >= len(dialogue_ids):
+            raise IndexError(
+                f"step_entity_active_dialogue would move entity '{entity.entity_id}' outside "
+                f"its dialogue range (size {len(dialogue_ids)})."
+            )
+        _set_active_dialogue_value(
+            entity=entity,
+            dialogue_id=dialogue_ids[next_index],
+            world=resolved_world,
+            area=resolved_area,
+            persistence_runtime=resolved_persistence,
+            persistent=persistent,
+        )
+        return ImmediateHandle()
+
+    @registry.register("set_entity_active_dialogue_by_order")
+    def set_entity_active_dialogue_by_order(
+        services: CommandServices | None,
+        world: Any,
+        area: Any,
+        persistence_runtime: PersistenceRuntimeLike | None,
+        *,
+        entity_id: str,
+        order: int,
+        wrap: bool = False,
+        persistent: bool | None = None,
+    ) -> CommandHandle:
+        """Set one entity's active dialogue using 1-based authored order."""
+        resolved_world, resolved_area, resolved_persistence = _resolve_state_services(
+            services=services,
+            world=world,
+            area=area,
+            persistence_runtime=persistence_runtime,
+        )
+        entity = require_exact_entity(resolved_world, entity_id)
+        dialogue_ids = _require_entity_dialogue_ids(
+            entity,
+            command_name="set_entity_active_dialogue_by_order",
+        )
+        resolved_order = int(order)
+        if wrap:
+            next_index = (resolved_order - 1) % len(dialogue_ids)
+        else:
+            if resolved_order < 1 or resolved_order > len(dialogue_ids):
+                raise IndexError(
+                    f"set_entity_active_dialogue_by_order requires order between 1 and "
+                    f"{len(dialogue_ids)} for entity '{entity.entity_id}'."
+                )
+            next_index = resolved_order - 1
+        _set_active_dialogue_value(
+            entity=entity,
+            dialogue_id=dialogue_ids[next_index],
+            world=resolved_world,
+            area=resolved_area,
+            persistence_runtime=resolved_persistence,
+            persistent=persistent,
+        )
         return ImmediateHandle()
 
     @registry.register("add_current_area_var")

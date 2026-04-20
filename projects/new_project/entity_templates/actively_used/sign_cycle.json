@@ -1,9 +1,9 @@
 /*
   NOTES
 
-  Simple interactable sign. It owns one named dialogue entry and opens the
-  currently active one when the player interacts. Instances can still override
-  the dialogue_path parameter to reuse the same template with different text.
+  Sign template that owns multiple named dialogues. It opens whichever named
+  dialogue is currently active, then switches itself to the repeat entry so
+  later interactions show the shorter follow-up line.
 */
 {
   "kind": "sign",
@@ -12,22 +12,23 @@
   "interaction_priority": 10,
   "render_order": 10,
   "y_sort": true,
-  "parameters": {
-    "dialogue_path": "dialogues/signs/simple_sign.json"
-  },
-  "parameter_specs": {
-    "dialogue_path": {
-      "type": "dialogue_path",
-      "required": true
-    }
-  },
   "dialogues": {
-    "starting_dialogue": {
-      "dialogue_path": "$dialogue_path"
+    "intro": {
+      "dialogue_path": "dialogues/signs/cycle_intro.json"
+    },
+    "repeat": {
+      "dialogue_definition": {
+        "segments": [
+          {
+            "type": "text",
+            "text": "\"The warning is still drying into the wood.\""
+          }
+        ]
+      }
     }
   },
   "variables": {
-    "active_dialogue": "starting_dialogue"
+    "active_dialogue": "intro"
   },
   "visuals": [
     {
@@ -49,6 +50,12 @@
           "caller": "$self_id",
           "instigator": "$ref_ids.instigator"
         }
+      },
+      {
+        "type": "set_entity_active_dialogue",
+        "entity_id": "$self_id",
+        "dialogue_id": "repeat",
+        "persistent": true
       }
     ]
   }

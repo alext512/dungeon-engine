@@ -1055,16 +1055,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             return handles[0]
         return CompositeCommandHandle(handles)
 
-    @registry.register(
-        "open_dialogue_session",
-        deferred_param_shapes={
-            "dialogue_definition": "dialogue_definition",
-            "dialogue_on_start": "command_payload",
-            "dialogue_on_end": "command_payload",
-            "segment_hooks": "dialogue_segment_hooks",
-        },
-    )
-    def open_dialogue_session(
+    def _open_dialogue_session_handle(
         context: CommandContext,
         *,
         dialogue_path: str | None = None,
@@ -1078,7 +1069,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         ui_preset: str | None = None,
         source_entity_id: str | None = None,
         entity_refs: dict[str, str] | None = None,
-        **_: Any,
     ) -> CommandHandle:
         """Open one engine-owned dialogue session using the canonical modal runtime."""
         from dungeon_engine.engine.dialogue_runtime import DialogueSessionWaitHandle
@@ -1114,6 +1104,124 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             ui_preset_name=None if ui_preset in (None, "") else str(ui_preset).strip(),
         )
         return DialogueSessionWaitHandle(dialogue_runtime, session)
+
+    @registry.register(
+        "open_dialogue_session",
+        deferred_param_shapes={
+            "dialogue_definition": "dialogue_definition",
+            "dialogue_on_start": "command_payload",
+            "dialogue_on_end": "command_payload",
+            "segment_hooks": "dialogue_segment_hooks",
+        },
+    )
+    def open_dialogue_session(
+        context: CommandContext,
+        *,
+        dialogue_path: str | None = None,
+        dialogue_definition: dict[str, Any] | None = None,
+        dialogue_on_start: list[dict[str, Any]] | dict[str, Any] | None = None,
+        dialogue_on_end: list[dict[str, Any]] | dict[str, Any] | None = None,
+        segment_hooks: list[Any] | None = None,
+        allow_cancel: bool = False,
+        actor_id: str | None = None,
+        caller_id: str | None = None,
+        ui_preset: str | None = None,
+        source_entity_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Open one engine-owned dialogue session using the canonical modal runtime."""
+        return _open_dialogue_session_handle(
+            context,
+            dialogue_path=dialogue_path,
+            dialogue_definition=dialogue_definition,
+            dialogue_on_start=dialogue_on_start,
+            dialogue_on_end=dialogue_on_end,
+            segment_hooks=segment_hooks,
+            allow_cancel=allow_cancel,
+            actor_id=actor_id,
+            caller_id=caller_id,
+            ui_preset=ui_preset,
+            source_entity_id=source_entity_id,
+            entity_refs=entity_refs,
+        )
+
+    @registry.register(
+        "open_entity_dialogue",
+        deferred_param_shapes={
+            "dialogue_on_start": "command_payload",
+            "dialogue_on_end": "command_payload",
+            "segment_hooks": "dialogue_segment_hooks",
+        },
+    )
+    def open_entity_dialogue(
+        context: CommandContext,
+        world: Any,
+        *,
+        entity_id: str,
+        dialogue_id: str | None = None,
+        dialogue_on_start: list[dict[str, Any]] | dict[str, Any] | None = None,
+        dialogue_on_end: list[dict[str, Any]] | dict[str, Any] | None = None,
+        segment_hooks: list[Any] | None = None,
+        allow_cancel: bool = False,
+        actor_id: str | None = None,
+        caller_id: str | None = None,
+        ui_preset: str | None = None,
+        source_entity_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
+        **_: Any,
+    ) -> CommandHandle:
+        """Open one named entity-owned dialogue or the entity's current active dialogue."""
+        entity = _require_exact_entity(world, entity_id)
+        if not entity.dialogues:
+            raise ValueError(
+                f"open_entity_dialogue requires entity '{entity.entity_id}' to define a non-empty 'dialogues' map."
+            )
+
+        resolved_dialogue_id: str
+        if dialogue_id in (None, ""):
+            current_dialogue_id = entity.variables.get("active_dialogue")
+            if not isinstance(current_dialogue_id, str) or not current_dialogue_id.strip():
+                raise ValueError(
+                    f"open_entity_dialogue requires entity '{entity.entity_id}' to have a non-empty "
+                    "'active_dialogue' variable when dialogue_id is omitted."
+                )
+            resolved_dialogue_id = current_dialogue_id.strip()
+        else:
+            resolved_dialogue_id = str(dialogue_id).strip()
+
+        dialogue_entry = entity.dialogues.get(resolved_dialogue_id)
+        if dialogue_entry is None:
+            raise KeyError(
+                f"Entity '{entity.entity_id}' has no dialogue '{resolved_dialogue_id}'."
+            )
+
+        resolved_dialogue_path = dialogue_entry.get("dialogue_path")
+        resolved_dialogue_definition = dialogue_entry.get("dialogue_definition")
+        if (resolved_dialogue_path is None) == (resolved_dialogue_definition is None):
+            raise ValueError(
+                f"Entity '{entity.entity_id}' dialogue '{resolved_dialogue_id}' must define exactly one "
+                "of 'dialogue_path' or 'dialogue_definition'."
+            )
+
+        return _open_dialogue_session_handle(
+            context,
+            dialogue_path=None if resolved_dialogue_path is None else str(resolved_dialogue_path).strip(),
+            dialogue_definition=(
+                None
+                if resolved_dialogue_definition is None
+                else copy.deepcopy(resolved_dialogue_definition)
+            ),
+            dialogue_on_start=dialogue_on_start,
+            dialogue_on_end=dialogue_on_end,
+            segment_hooks=segment_hooks,
+            allow_cancel=allow_cancel,
+            actor_id=actor_id,
+            caller_id=entity.entity_id if caller_id in (None, "") else caller_id,
+            ui_preset=ui_preset,
+            source_entity_id=source_entity_id,
+            entity_refs=entity_refs,
+        )
 
     @registry.register("close_dialogue_session")
     def close_dialogue_session(

@@ -1095,6 +1095,105 @@ class ProjectContentContractTests(unittest.TestCase):
 
         validate_project_entity_templates(project)
 
+    def test_template_parameter_specs_accept_entity_dialogue_map_definitions(self) -> None:
+        raw_area = _minimal_area()
+        raw_area["entities"] = [
+            {
+                "id": "speaker",
+                "grid_x": 0,
+                "grid_y": 0,
+                "template": "entity_templates/speaker",
+                "parameters": {
+                    "intro_dialogue": {
+                        "segments": [
+                            {
+                                "type": "text",
+                                "text": "Hello there.",
+                            }
+                        ]
+                    }
+                },
+            }
+        ]
+        _, project = self._make_project(
+            entity_templates={
+                "speaker.json": {
+                    "kind": "npc",
+                    "parameters": {
+                        "intro_dialogue": {
+                            "segments": [
+                                {
+                                    "type": "text",
+                                    "text": "Fallback.",
+                                }
+                            ]
+                        }
+                    },
+                    "parameter_specs": {
+                        "intro_dialogue": {
+                            "type": "dialogue_definition",
+                            "required": True,
+                        }
+                    },
+                    "dialogues": {
+                        "intro": {
+                            "dialogue_definition": "$intro_dialogue",
+                        }
+                    },
+                    "variables": {
+                        "active_dialogue": "intro",
+                    },
+                }
+            },
+            areas={"room.json": raw_area},
+        )
+
+        area, world = load_area_from_data(raw_area, source_name="<memory>", project=project)
+        speaker = world.get_entity("speaker")
+        self.assertIsNotNone(speaker)
+        assert speaker is not None
+        self.assertEqual(
+            speaker.dialogues["intro"]["dialogue_definition"]["segments"][0]["text"],
+            "Hello there.",
+        )
+
+        serialized = serialize_area(area, world, project=project)
+        speaker_data = next(entity for entity in serialized["entities"] if entity["id"] == "speaker")
+        self.assertNotIn("dialogues", speaker_data)
+        self.assertEqual(speaker_data["parameters"]["intro_dialogue"]["segments"][0]["text"], "Hello there.")
+
+    def test_entity_template_validation_rejects_dialogue_entry_with_both_sources(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "speaker.json": {
+                    "kind": "npc",
+                    "dialogues": {
+                        "intro": {
+                            "dialogue_path": "dialogues/npcs/intro.json",
+                            "dialogue_definition": {
+                                "segments": [
+                                    {
+                                        "type": "text",
+                                        "text": "Hello.",
+                                    }
+                                ]
+                            },
+                        }
+                    },
+                }
+            }
+        )
+
+        with self.assertRaises(EntityTemplateValidationError) as raised:
+            validate_project_entity_templates(project)
+
+        self.assertTrue(
+            any(
+                "must define exactly one of 'dialogue_path' or 'dialogue_definition'" in issue
+                for issue in raised.exception.issues
+            )
+        )
+
     def test_project_command_validation_rejects_symbolic_entity_refs_for_strict_primitives(self) -> None:
         _, project = self._make_project(
             commands={

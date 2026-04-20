@@ -541,6 +541,7 @@ Current engine-known entity fields:
 - `tags`
 - `visuals`
 - `entity_commands`
+- `dialogues`
 - `variables`
 - `persistence`
 - `inventory`
@@ -739,6 +740,45 @@ Notes:
 - Another command chain can invoke one named entity command with `run_entity_command`.
 - Standard engine-dispatched hook names currently include `interact`, `on_blocked`,
   `on_occupant_enter`, and `on_occupant_leave`.
+
+### Entity-Owned Dialogue Variants
+
+Entities and templates may also own a named dialogue set directly:
+
+```json
+"dialogues": {
+  "intro": {
+    "dialogue_path": "dialogues/npcs/greeter_intro.json"
+  },
+  "repeat": {
+    "dialogue_definition": {
+      "segments": [
+        {
+          "type": "text",
+          "text": "Back again?"
+        }
+      ]
+    }
+  }
+},
+"variables": {
+  "active_dialogue": "intro"
+}
+```
+
+Current rules:
+
+- `dialogues` is a JSON object keyed by dialogue id
+- each dialogue entry must define exactly one of:
+  - `dialogue_path`
+  - `dialogue_definition`
+- `dialogue_definition` entries use the same `segments` schema as ordinary
+  dialogue JSON files
+- authored entry order is preserved and used by the order-based helper commands
+- `variables.active_dialogue`, when used, is an ordinary entity variable whose
+  value should be one of the keys in `dialogues`
+- dialogue selection is stable by name; order-based helpers still store the
+  chosen dialogue id back into `variables.active_dialogue`
 
 ### Input Map
 
@@ -1707,6 +1747,7 @@ Those hooks receive:
 ### Dialogue
 
 - `open_dialogue_session(dialogue_path? | dialogue_definition?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
+- `open_entity_dialogue(entity_id, dialogue_id?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
 - `close_dialogue_session()`
 
 Current engine-owned dialogue runtime behavior:
@@ -2034,6 +2075,9 @@ Notes:
 
 - `set_current_area_var(name, value, persistent?)`
 - `set_entity_var(entity_id, name, value, persistent?)`
+- `set_entity_active_dialogue(entity_id, dialogue_id, persistent?)`
+- `step_entity_active_dialogue(entity_id, delta?, wrap?, persistent?)`
+- `set_entity_active_dialogue_by_order(entity_id, order, wrap?, persistent?)`
 - `add_current_area_var(name, amount?, persistent?)`
 - `value_mode: "raw"` is a valid authored top-level field on `set_current_area_var`, `set_entity_var`, `append_current_area_var`, and `append_entity_var`. It stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_sequence`.
 - `add_entity_var(entity_id, name, amount?, persistent?)`
@@ -2061,6 +2105,15 @@ Current comparison operators:
 Notes:
 - `set_current_area_var` and related current-area-variable commands operate on the live current-area/runtime variable store for the active play session
 - in normal play, this is the authored surface for current area/runtime state that can also be persisted
+- `open_entity_dialogue` resolves a named entry from the target entity's
+  `dialogues` map; when `dialogue_id` is omitted it reads
+  `entity.variables.active_dialogue`
+- `set_entity_active_dialogue` writes one named dialogue id into the target
+  entity's `active_dialogue` variable
+- `step_entity_active_dialogue` moves forward/backward through the target
+  entity's authored dialogue order; `delta` defaults to `1`
+- `set_entity_active_dialogue_by_order` uses human-facing 1-based order; with
+  `wrap: true`, out-of-range values wrap around the available dialogue list
 - `toggle_current_area_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
 - entity-targeted mutation commands (`set_entity_var`, `add_entity_var`, `toggle_entity_var`, `set_entity_var_length`, `append_entity_var`, `pop_entity_var`, `set_entity_field`, `set_entity_fields`, `set_visible`, `set_present`, `set_color`, `destroy_entity`, `spawn_entity`, `set_entity_command_enabled`, `set_entity_commands_enabled`) inherit from the target entity's authored `persistence` block when `persistent` is omitted
 - movement/position commands (`set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_in_direction`, `push_facing`, `move_entity_world_position`, `move_entity_screen_position`) also follow that same override-or-inherit rule

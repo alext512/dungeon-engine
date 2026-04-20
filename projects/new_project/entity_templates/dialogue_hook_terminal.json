@@ -1,8 +1,9 @@
 /*
   NOTES
 
-  Interactable sample terminal that opens a dialogue with caller-supplied
-  segment hooks. The hook overrides the dialogue option's inline command.
+  Interactable sample terminal that opens one named dialogue entry with
+  caller-supplied segment hooks. The hook overrides the dialogue option's
+  inline command.
 */
 {
   "kind": "dialogue_hook_terminal",
@@ -12,7 +13,13 @@
   "render_order": 10,
   "y_sort": true,
   "variables": {
-    "last_hook_choice": ""
+    "last_hook_choice": "",
+    "active_dialogue": "starting_dialogue"
+  },
+  "dialogues": {
+    "starting_dialogue": {
+      "dialogue_path": "dialogues/system/sample_hook_choice.json"
+    }
   },
   "visuals": [
     {
@@ -27,8 +34,8 @@
   "entity_commands": {
     "interact": [
       {
-        "type": "open_dialogue_session",
-        "dialogue_path": "dialogues/system/sample_hook_choice.json",
+        "type": "open_entity_dialogue",
+        "entity_id": "$self_id",
         "allow_cancel": true,
         "entity_refs": {
           "caller": "$self_id",

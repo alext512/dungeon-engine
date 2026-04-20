@@ -1,9 +1,9 @@
 /*
   NOTES
 
-  Variant sign template that stores its dialogue inline as a full
-  dialogue_definition parameter. This exists both as a gameplay example and as
-  an editor fixture for the dialogue popup workflow.
+  Variant sign template that stores one named inline dialogue entry through a
+  full dialogue_definition parameter. This exists both as a gameplay example
+  and as an editor fixture for the dialogue popup workflow.
 */
 {
   "kind": "sign",
@@ -84,6 +84,14 @@
       "required": true
     }
   },
+  "dialogues": {
+    "starting_dialogue": {
+      "dialogue_definition": "$dialogue_definition"
+    }
+  },
+  "variables": {
+    "active_dialogue": "starting_dialogue"
+  },
   "visuals": [
     {
       "id": "main",
@@ -97,8 +105,8 @@
   "entity_commands": {
     "interact": [
       {
-        "type": "open_dialogue_session",
-        "dialogue_definition": "$dialogue_definition",
+        "type": "open_entity_dialogue",
+        "entity_id": "$self_id",
         "allow_cancel": true,
         "entity_refs": {
           "caller": "$self_id",

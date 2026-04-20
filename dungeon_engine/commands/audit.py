@@ -57,6 +57,15 @@ def audit_project_command_surfaces(project) -> list[str]:
                 source_name=str(template_path),
             )
         )
+        issues.extend(
+            _audit_entity_dialogue_map(
+                raw.get("dialogues"),
+                registry,
+                project=project,
+                source_name=str(template_path),
+                location="dialogues",
+            )
+        )
 
     for area_path in project.list_area_files():
         raw = _load_json_object(area_path)
@@ -84,6 +93,15 @@ def audit_project_command_surfaces(project) -> list[str]:
                         source_name=f"{area_path} entities[{index}]",
                     )
                 )
+                issues.extend(
+                    _audit_entity_dialogue_map(
+                        entity_data.get("dialogues"),
+                        registry,
+                        project=project,
+                        source_name=f"{area_path} entities[{index}]",
+                        location="dialogues",
+                    )
+                )
 
     for index, entity_data in enumerate(project.global_entities):
         if not isinstance(entity_data, dict):
@@ -94,6 +112,15 @@ def audit_project_command_surfaces(project) -> list[str]:
                 registry,
                 project=project,
                 source_name=f"project.json global_entities[{index}]",
+            )
+        )
+        issues.extend(
+            _audit_entity_dialogue_map(
+                entity_data.get("dialogues"),
+                registry,
+                project=project,
+                source_name=f"project.json global_entities[{index}]",
+                location="dialogues",
             )
         )
 
@@ -159,6 +186,37 @@ def _audit_entity_command_map(
                     location=f"entity_commands.{command_id}.commands",
                 )
             )
+    return issues
+
+
+def _audit_entity_dialogue_map(
+    raw_dialogues: Any,
+    registry: CommandRegistry,
+    *,
+    project: Any,
+    source_name: str,
+    location: str,
+) -> list[str]:
+    """Audit one entity-owned dialogue map and any inline dialogue definitions."""
+    if not isinstance(raw_dialogues, dict):
+        return []
+    issues: list[str] = []
+    for raw_dialogue_id, raw_dialogue_entry in raw_dialogues.items():
+        dialogue_id = str(raw_dialogue_id).strip()
+        if not dialogue_id or not isinstance(raw_dialogue_entry, dict):
+            continue
+        raw_definition = raw_dialogue_entry.get("dialogue_definition")
+        if not isinstance(raw_definition, dict):
+            continue
+        issues.extend(
+            _audit_dialogue_payload(
+                raw_definition,
+                registry,
+                project=project,
+                source_name=source_name,
+                location=f"{location}.{dialogue_id}.dialogue_definition",
+            )
+        )
     return issues
 
 

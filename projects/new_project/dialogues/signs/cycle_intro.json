@@ -1,0 +1,14 @@
+/*
+  NOTES
+
+  File-backed intro dialogue for the sign_cycle template. The template switches
+  itself to a shorter inline repeat line after the first interaction.
+*/
+{
+  "segments": [
+    {
+      "type": "text",
+      "text": "\"Fresh paint. Beware the collapsing tunnel ahead.\""
+    }
+  ]
+}

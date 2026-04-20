@@ -234,6 +234,7 @@ class Entity:
     inventory: InventoryState | None = None
     visuals: list[EntityVisual] = field(default_factory=list)
     entity_commands: dict[str, EntityCommandDefinition] = field(default_factory=dict)
+    dialogues: dict[str, dict[str, Any]] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
     input_map: dict[str, str] = field(default_factory=dict)
     persistence: EntityPersistencePolicy = field(default_factory=EntityPersistencePolicy)

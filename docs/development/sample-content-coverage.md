@@ -38,6 +38,9 @@ for what the sample proves today and what it still does not prove.
   `dialogues/system/sample_hook_choice.json`
 - inline dialogue-definition authoring through
   `entity_templates/actively_used/sign_v2.json`
+- entity-owned named dialogue variants plus active-dialogue switching through
+  `entity_templates/actively_used/sign_cycle.json` and
+  `dialogues/signs/cycle_intro.json`
 - area transitions through `change_area` and `area_transition` templates
 - transferred entity ids through `transfer_entity_ids`
 - entity templates with typed parameter specs, visuals, render order,
@@ -58,6 +61,10 @@ Use these files as the first examples when checking sample behavior:
   sample segment-hook override workflow
 - `projects/new_project/entity_templates/actively_used/sign_v2.json` for an
   inline `dialogue_definition` example with nested child dialogue branches
+- `projects/new_project/entity_templates/actively_used/sign_cycle.json` and
+  `projects/new_project/dialogues/signs/cycle_intro.json` for an entity-owned
+  `dialogues` map, `active_dialogue` selection, file-backed plus inline
+  variants, and post-interaction dialogue switching
 - `projects/new_project/commands/player/move_one_tile.json` for reusable project
   command loading and command composition
 - `projects/new_project/entity_templates/player.json` for player input,

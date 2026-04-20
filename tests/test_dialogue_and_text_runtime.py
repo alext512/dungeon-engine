@@ -404,6 +404,172 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
         handle.update(0.0)
         self.assertTrue(handle.complete)
 
+    def test_open_entity_dialogue_uses_active_dialogue_file_entry(self) -> None:
+        _, project = self._make_project(
+            shared_variables=_dialogue_shared_variables(),
+            dialogues={
+                "system/entity_intro.json": {
+                    "segments": [
+                        {
+                            "type": "text",
+                            "text": "Hello from the active dialogue.",
+                        }
+                    ]
+                }
+            },
+        )
+        world = World()
+        world.add_entity(_make_runtime_entity("player", kind="player"))
+        speaker = Entity(
+            entity_id="speaker",
+            kind="npc",
+            grid_x=0,
+            grid_y=0,
+            visuals=[],
+            dialogues={
+                "intro": {
+                    "dialogue_path": "dialogues/system/entity_intro.json",
+                }
+            },
+            variables={"active_dialogue": "intro"},
+        )
+        world.add_entity(speaker)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "open_entity_dialogue",
+            {
+                "entity_id": "speaker",
+                "entity_refs": {"instigator": "player"},
+            },
+        )
+
+        self.assertFalse(handle.complete)
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "dialogues/system/entity_intro.json")
+        self.assertEqual(session.caller_id, "speaker")
+        self.assertEqual(session.actor_id, "player")
+        self.assertEqual(session.current_segment["text"], "Hello from the active dialogue.")
+
+    def test_open_entity_dialogue_accepts_inline_entry_by_name(self) -> None:
+        _, project = self._make_project(shared_variables=_dialogue_shared_variables())
+        world = World()
+        speaker = Entity(
+            entity_id="speaker",
+            kind="npc",
+            grid_x=0,
+            grid_y=0,
+            visuals=[],
+            dialogues={
+                "intro": {
+                    "dialogue_definition": {
+                        "segments": [
+                            {
+                                "type": "text",
+                                "text": "Inline greeting.",
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+        world.add_entity(speaker)
+        registry, context = self._make_command_context(project=project, world=world)
+        dialogue_runtime = self._install_dialogue_runtime(
+            registry=registry,
+            context=context,
+            project=project,
+        )
+
+        handle = execute_registered_command(
+            registry,
+            context,
+            "open_entity_dialogue",
+            {
+                "entity_id": "speaker",
+                "dialogue_id": "intro",
+            },
+        )
+
+        self.assertFalse(handle.complete)
+        session = dialogue_runtime.current_session
+        assert session is not None
+        self.assertEqual(session.dialogue_path, "")
+        self.assertEqual(session.caller_id, "speaker")
+        self.assertEqual(session.current_segment["text"], "Inline greeting.")
+
+    def test_entity_dialogue_selection_helpers_store_dialogue_ids(self) -> None:
+        world = World()
+        speaker = Entity(
+            entity_id="speaker",
+            kind="npc",
+            grid_x=0,
+            grid_y=0,
+            visuals=[],
+            dialogues={
+                "intro": {"dialogue_definition": {"segments": [{"type": "text", "text": "Intro"}]}},
+                "repeat": {"dialogue_definition": {"segments": [{"type": "text", "text": "Repeat"}]}},
+                "farewell": {"dialogue_definition": {"segments": [{"type": "text", "text": "Farewell"}]}},
+            },
+            variables={"active_dialogue": "intro"},
+        )
+        world.add_entity(speaker)
+        registry, context = self._make_command_context(world=world)
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_active_dialogue",
+            {
+                "entity_id": "speaker",
+                "dialogue_id": "repeat",
+            },
+        )
+        self.assertEqual(speaker.variables["active_dialogue"], "repeat")
+
+        execute_registered_command(
+            registry,
+            context,
+            "step_entity_active_dialogue",
+            {
+                "entity_id": "speaker",
+                "delta": 1,
+            },
+        )
+        self.assertEqual(speaker.variables["active_dialogue"], "farewell")
+
+        execute_registered_command(
+            registry,
+            context,
+            "step_entity_active_dialogue",
+            {
+                "entity_id": "speaker",
+                "delta": 1,
+                "wrap": True,
+            },
+        )
+        self.assertEqual(speaker.variables["active_dialogue"], "intro")
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_active_dialogue_by_order",
+            {
+                "entity_id": "speaker",
+                "order": 0,
+                "wrap": True,
+            },
+        )
+        self.assertEqual(speaker.variables["active_dialogue"], "farewell")
+
     def test_dialogue_runtime_choice_window_scrolls_after_three_visible_rows(self) -> None:
         _, project = self._make_project(
             shared_variables=_dialogue_shared_variables(),

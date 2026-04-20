@@ -463,6 +463,51 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
             )
         )
 
+    def test_command_audit_scans_entity_owned_dialogue_definition_command_lists(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "speaker.json": {
+                    "kind": "npc",
+                    "dialogues": {
+                        "intro": {
+                            "dialogue_definition": {
+                                "segments": [
+                                    {
+                                        "type": "choice",
+                                        "options": [
+                                            {
+                                                "option_id": "open",
+                                                "text": "Open",
+                                                "commands": [
+                                                    {
+                                                        "type": "set_visible",
+                                                        "entity_id": "gate",
+                                                        "visible": False,
+                                                        "persitent": True,
+                                                    }
+                                                ],
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+            },
+        )
+
+        issues = audit_project_command_surfaces(project)
+
+        self.assertTrue(
+            any(
+                "dialogues.intro.dialogue_definition.segments[0].options[0].commands[0]"
+                in issue
+                and "persitent" in issue
+                for issue in issues
+            )
+        )
+
     def test_command_audit_rejects_option_with_both_next_dialogue_fields(self) -> None:
         _, project = self._make_project(
             dialogues={
@@ -755,6 +800,65 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "missing dialogue 'dialogues/system/missing_branch.json'" in issue
+                for issue in error.issues
+            )
+        )
+
+    def test_startup_validation_rejects_missing_resolved_entity_dialogue_reference(self) -> None:
+        project_root, _ = self._make_project(
+            startup_area="areas/test_room",
+            entity_templates={
+                "speaker.json": {
+                    "kind": "npc",
+                    "parameters": {
+                        "intro_dialogue_ref": "dialogues/system/fallback.json",
+                    },
+                    "parameter_specs": {
+                        "intro_dialogue_ref": {
+                            "type": "dialogue_path",
+                            "required": True,
+                        }
+                    },
+                    "dialogues": {
+                        "intro": {
+                            "dialogue_path": "$intro_dialogue_ref",
+                        }
+                    },
+                }
+            },
+            areas={
+                "test_room.json": {
+                    **_minimal_area(),
+                    "entities": [
+                        {
+                            "id": "speaker",
+                            "template": "entity_templates/speaker",
+                            "grid_x": 0,
+                            "grid_y": 0,
+                            "parameters": {
+                                "intro_dialogue_ref": "dialogues/system/missing_variant.json",
+                            },
+                        }
+                    ],
+                }
+            },
+        )
+        asset_path = project_root / "assets" / "project" / "tiles" / "test.png"
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        asset_path.write_bytes(b"fake")
+        project = load_project(project_root / "project.json")
+
+        error = validate_project_startup(
+            project,
+            ui_title="Test",
+            show_dialog=False,
+        )
+
+        self.assertIsInstance(error, StaticReferenceValidationError)
+        assert isinstance(error, StaticReferenceValidationError)
+        self.assertTrue(
+            any(
+                "missing dialogue 'dialogues/system/missing_variant.json'" in issue
                 for issue in error.issues
             )
         )

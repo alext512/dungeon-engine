@@ -425,6 +425,7 @@ def _collect_loaded_entity_reference_issues(entity, *, project, source_name: str
 def _entity_reference_payload(entity) -> dict[str, Any]:
     return {
         "visuals": [{"path": visual.path} for visual in entity.visuals],
+        "dialogues": entity.dialogues,
         "entity_commands": {
             command_id: {"commands": definition.commands}
             for command_id, definition in entity.entity_commands.items()

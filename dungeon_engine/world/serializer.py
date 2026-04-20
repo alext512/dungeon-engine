@@ -244,6 +244,9 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
     if entity.authored_facing is not None or entity.get_effective_facing() != "down":
         data["facing"] = entity.get_effective_facing()
     data.update(_serialize_pixel_position_fields(entity, tile_size))
+    dialogues = _serialize_entity_dialogues(entity)
+    if dialogues:
+        data["dialogues"] = dialogues
     entity_commands = _serialize_entity_commands(entity)
     if entity_commands:
         data["entity_commands"] = entity_commands
@@ -292,6 +295,9 @@ def _serialize_runtime_entity_fields(
     if data["inventory"] is None:
         data.pop("inventory", None)
     data.update(_serialize_pixel_position_fields(entity, tile_size))
+    dialogues = _serialize_entity_dialogues(entity)
+    if dialogues:
+        data["dialogues"] = dialogues
     entity_commands = _serialize_entity_commands(entity)
     if entity_commands:
         data["entity_commands"] = entity_commands
@@ -389,6 +395,11 @@ def _serialize_visuals(entity: Any) -> list[dict[str, Any]]:
             serialized_visual["animations"] = _serialize_visual_animations(visual)
         serialized.append(serialized_visual)
     return serialized
+
+
+def _serialize_entity_dialogues(entity: Any) -> dict[str, dict[str, Any]]:
+    """Serialize an entity's named dialogue map."""
+    return copy.deepcopy(entity.dialogues)
 
 
 def _serialize_visual_animations(visual: Any) -> dict[str, dict[str, Any]]:

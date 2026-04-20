@@ -172,6 +172,7 @@ def instantiate_entity(
         default_pixel_y = 0.0
 
     variables = _parse_entity_variables(entity_data, source_name=source_name)
+    dialogues = _parse_entity_dialogues(entity_data, source_name=source_name)
     persistence = _parse_entity_persistence(entity_data, source_name=source_name)
     visuals = _parse_entity_visuals(entity_data, tile_size=tile_size, source_name=source_name)
     entity_commands = _parse_entity_commands(entity_data)
@@ -223,6 +224,7 @@ def instantiate_entity(
         inventory=clone_inventory_state(inventory),
         visuals=visuals,
         entity_commands=entity_commands,
+        dialogues=dialogues,
         variables=variables,
         input_map=_parse_input_map(entity_data.get("input_map")),
         persistence=persistence,
@@ -239,6 +241,79 @@ def _parse_entity_variables(entity_data: dict[str, Any], *, source_name: str) ->
     if not isinstance(raw_variables, dict):
         raise ValueError(f"{source_name} field 'variables' must be a JSON object.")
     return copy.deepcopy(raw_variables)
+
+
+def _parse_entity_dialogues(
+    entity_data: dict[str, Any],
+    *,
+    source_name: str,
+    allow_parameter_tokens: bool = False,
+) -> dict[str, dict[str, Any]]:
+    """Parse one entity-owned named dialogue map."""
+    raw_dialogues = entity_data.get("dialogues", {})
+    if raw_dialogues is None:
+        return {}
+    if not isinstance(raw_dialogues, dict):
+        raise ValueError(f"{source_name} field 'dialogues' must be a JSON object.")
+
+    parsed: dict[str, dict[str, Any]] = {}
+    for raw_dialogue_id, raw_dialogue_entry in raw_dialogues.items():
+        dialogue_id = str(raw_dialogue_id).strip()
+        if not dialogue_id:
+            raise ValueError(f"{source_name} field 'dialogues' must not use blank dialogue ids.")
+        location = f"{source_name} field 'dialogues.{dialogue_id}'"
+        if not isinstance(raw_dialogue_entry, dict):
+            raise ValueError(f"{location} must be a JSON object.")
+
+        unknown_keys = sorted(
+            str(key) for key in raw_dialogue_entry.keys()
+            if str(key) not in {"dialogue_path", "dialogue_definition"}
+        )
+        if unknown_keys:
+            joined = ", ".join(unknown_keys)
+            raise ValueError(
+                f"{location} contains unsupported field(s): {joined}."
+            )
+
+        raw_dialogue_path = raw_dialogue_entry.get("dialogue_path")
+        raw_dialogue_definition = raw_dialogue_entry.get("dialogue_definition")
+        has_dialogue_path = raw_dialogue_path is not None
+        has_dialogue_definition = raw_dialogue_definition is not None
+        if has_dialogue_path == has_dialogue_definition:
+            raise ValueError(
+                f"{location} must define exactly one of 'dialogue_path' or 'dialogue_definition'."
+            )
+
+        if has_dialogue_path:
+            if (
+                allow_parameter_tokens
+                and isinstance(raw_dialogue_path, str)
+                and _PARAMETER_TOKEN_RE.fullmatch(raw_dialogue_path.strip())
+            ):
+                parsed[dialogue_id] = {"dialogue_path": raw_dialogue_path.strip()}
+                continue
+            if not isinstance(raw_dialogue_path, str) or not raw_dialogue_path.strip():
+                raise ValueError(f"{location}.dialogue_path must be a non-empty string.")
+            parsed[dialogue_id] = {"dialogue_path": raw_dialogue_path.strip()}
+            continue
+
+        if (
+            allow_parameter_tokens
+            and isinstance(raw_dialogue_definition, str)
+            and _PARAMETER_TOKEN_RE.fullmatch(raw_dialogue_definition.strip())
+        ):
+            parsed[dialogue_id] = {"dialogue_definition": raw_dialogue_definition.strip()}
+            continue
+        if not isinstance(raw_dialogue_definition, dict):
+            raise ValueError(f"{location}.dialogue_definition must be a JSON object.")
+        validate_authored_command_tree(
+            raw_dialogue_definition,
+            source_name=source_name,
+            location=f"dialogues.{dialogue_id}.dialogue_definition",
+        )
+        parsed[dialogue_id] = {"dialogue_definition": copy.deepcopy(raw_dialogue_definition)}
+
+    return parsed
 
 
 def _parse_entity_persistence(
@@ -1593,6 +1668,11 @@ def _validate_entity_template_raw(
         raw_template,
         source_name=source_name,
         project=project,
+    )
+    _parse_entity_dialogues(
+        raw_template,
+        source_name=source_name,
+        allow_parameter_tokens=True,
     )
 
     raw_entity_commands = raw_template.get("entity_commands", {})

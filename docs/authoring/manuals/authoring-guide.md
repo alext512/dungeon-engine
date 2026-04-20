@@ -576,6 +576,7 @@ For named entity commands:
 - `stack_order`
 - `tags`
 - `variables`
+- `dialogues`
 - `inventory`
 - `input_map`
 - `entity_commands`
@@ -674,6 +675,66 @@ the authored JSON and only write the ones that truly differ.
 
 Project-specific state like `toggled`, `dialogue_path`, and custom puzzle data
 should live under `variables`.
+
+### Entity-owned dialogue sets
+
+When one entity should choose between several dialogue variants over time, keep
+those variants on the entity and store the current selection by name:
+
+```json
+{
+  "kind": "sign",
+  "dialogues": {
+    "intro": {
+      "dialogue_path": "dialogues/signs/fresh_warning.json"
+    },
+    "repeat": {
+      "dialogue_definition": {
+        "segments": [
+          {
+            "type": "text",
+            "text": "\"The warning is still drying.\""
+          }
+        ]
+      }
+    }
+  },
+  "variables": {
+    "active_dialogue": "intro"
+  },
+  "entity_commands": {
+    "interact": [
+      {
+        "type": "open_entity_dialogue",
+        "entity_id": "$self_id",
+        "allow_cancel": true,
+        "entity_refs": {
+          "instigator": "$ref_ids.instigator",
+          "caller": "$self_id"
+        }
+      },
+      {
+        "type": "set_entity_active_dialogue",
+        "entity_id": "$self_id",
+        "dialogue_id": "repeat",
+        "persistent": true
+      }
+    ]
+  }
+}
+```
+
+Rules:
+
+- `dialogues` is a named map keyed by dialogue id
+- each entry defines exactly one source:
+  - `dialogue_path`
+  - `dialogue_definition`
+- `variables.active_dialogue` is ordinary entity state; helper commands write
+  the selected dialogue id there
+- authored order is preserved, so `step_entity_active_dialogue` and
+  `set_entity_active_dialogue_by_order` can walk the list without storing
+  fragile numeric state
 
 The engine now also recognizes several top-level gameplay fields directly:
 
@@ -1278,6 +1339,15 @@ Recommended new pattern:
 3. let the runtime own session state, paging, choice selection, timer advance, and modal input behavior
 4. let dialogue content plus hooks decide what commands actually run
 5. if one engine-owned dialogue opens another, the parent session is suspended and resumes when the child closes
+
+If the dialogue source already lives inside an entity-owned `dialogues` map,
+use `open_entity_dialogue` instead. That command opens one named entry from the
+target entity, or falls back to `variables.active_dialogue` when `dialogue_id`
+is omitted. Pair it with:
+
+- `set_entity_active_dialogue`
+- `step_entity_active_dialogue`
+- `set_entity_active_dialogue_by_order`
 
 Example caller command:
 

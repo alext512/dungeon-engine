@@ -113,6 +113,12 @@
       "template": "entity_templates/actively_used/sign_v2"
     },
     {
+      "id": "sign_cycle_demo",
+      "grid_x": 4,
+      "grid_y": 7,
+      "template": "entity_templates/actively_used/sign_cycle"
+    },
+    {
       "id": "sign_v2_1",
       "grid_x": 3,
       "grid_y": 2,
