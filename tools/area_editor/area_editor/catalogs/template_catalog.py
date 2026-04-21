@@ -192,6 +192,21 @@ class TemplateCatalog:
         ]
         return sorted(set(names))
 
+    def get_template_dialogue_names(self, template_id: str) -> list[str]:
+        """Return authored named-dialogue ids for one template."""
+        raw = self._templates.get(template_id)
+        if raw is None:
+            return []
+        dialogues = raw.get("dialogues")
+        if not isinstance(dialogues, dict):
+            return []
+        names = [
+            str(name).strip()
+            for name in dialogues.keys()
+            if str(name).strip()
+        ]
+        return sorted(set(names))
+
     def clear(self) -> None:
         self._templates.clear()
         self._template_parameter_names.clear()

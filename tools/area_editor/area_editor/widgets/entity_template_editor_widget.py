@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
@@ -85,6 +85,11 @@ class _TemplateFieldsEditor(QWidget):
         self._persistence_editable = True
         self._dialogues_editable = True
         self._dialogues_value: dict[str, dict[str, Any]] = {}
+        self._reference_picker_callbacks: dict[str, Callable[..., str | None] | None] = {
+            "entity": None,
+            "dialogue": None,
+            "command": None,
+        }
         self._render_default_space = "world"
         self._render_defaults_explicit: dict[str, bool] = {
             "render_order": False,
@@ -462,6 +467,21 @@ class _TemplateFieldsEditor(QWidget):
 
         self.set_editing_enabled(False)
 
+    def set_reference_picker_callbacks(
+        self,
+        *,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+    ) -> None:
+        self._reference_picker_callbacks = {
+            "entity": entity_picker,
+            "entity_dialogue": entity_dialogue_picker,
+            "dialogue": dialogue_picker,
+            "command": command_picker,
+        }
+
     @property
     def is_dirty(self) -> bool:
         return self._dirty
@@ -771,7 +791,14 @@ class _TemplateFieldsEditor(QWidget):
         *,
         active_dialogue: object,
     ) -> tuple[dict[str, dict[str, Any]], str | None, dict[str, str]] | None:
-        dialog = EntityDialoguesDialog(self, current_entity_id=None)
+        dialog = EntityDialoguesDialog(
+            self,
+            entity_picker=self._reference_picker_callbacks.get("entity"),
+            entity_dialogue_picker=self._reference_picker_callbacks.get("entity_dialogue"),
+            dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
+            command_picker=self._reference_picker_callbacks.get("command"),
+            current_entity_id=None,
+        )
         dialog.load_dialogues(dialogues, active_dialogue=active_dialogue)
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return None
@@ -1182,6 +1209,21 @@ class EntityTemplateEditorWidget(QWidget):
     @property
     def fields_editor(self) -> _TemplateFieldsEditor:
         return self._fields_editor
+
+    def set_reference_picker_callbacks(
+        self,
+        *,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+    ) -> None:
+        self._fields_editor.set_reference_picker_callbacks(
+            entity_picker=entity_picker,
+            entity_dialogue_picker=entity_dialogue_picker,
+            dialogue_picker=dialogue_picker,
+            command_picker=command_picker,
+        )
 
     def set_editing_enabled(self, enabled: bool) -> None:
         self._editing_enabled = enabled

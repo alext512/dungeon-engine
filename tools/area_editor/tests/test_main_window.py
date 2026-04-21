@@ -17,6 +17,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QTabBar
 
 from area_editor.app.main_window import MainWindow
+from area_editor.catalogs.template_catalog import TemplateCatalog
+from area_editor.documents.area_document import EntityDocument
 from area_editor.json_io import DEFAULT_JSON5_FILE_HEADER, load_json_data
 from area_editor.widgets.document_tab_widget import ContentType
 from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
@@ -73,6 +75,51 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
     _panel_file_entries = staticmethod(panel_file_entries)
     _panel_folder_entries = staticmethod(panel_folder_entries)
     _find_tree_item_by_folder_path = staticmethod(find_tree_item_by_folder_path)
+
+    def test_entity_dialogue_picker_browses_dialogues_for_target_entity(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._templates = TemplateCatalog()
+        window._templates._templates["entity_templates/sign"] = {
+            "dialogues": {
+                "starting_dialogue": {},
+                "repeat_dialogue": {},
+            }
+        }
+        entity = EntityDocument(
+            id="sign_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/sign",
+        )
+
+        with (
+            patch.object(window, "_resolve_project_entity_by_id", return_value=entity),
+            patch.object(window, "_browse_known_reference", return_value="repeat_dialogue") as browse,
+        ):
+            selected = window._browse_project_entity_dialogue_id(
+                "",
+                EntityReferencePickerRequest(
+                    parameter_name="dialogue_id",
+                    current_value="",
+                    parameter_spec={
+                        "type": "entity_dialogue_id",
+                        "entity_parameter": "entity_id",
+                    },
+                    current_area_id=None,
+                    entity_id="trigger_1",
+                    entity_template_id=None,
+                    parameter_values={"entity_id": "sign_1"},
+                ),
+            )
+
+        self.assertEqual(selected, "repeat_dialogue")
+        browse.assert_called_once_with(
+            title="Choose Dialogue for sign_1",
+            label="Dialogue",
+            values=["repeat_dialogue", "starting_dialogue"],
+            current_value="",
+        )
 
     def test_add_tileset_appends_safe_firstgid(self):
         with tempfile.TemporaryDirectory() as tmp:

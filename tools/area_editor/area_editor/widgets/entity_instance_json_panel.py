@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import inspect
 import json
 import re
 from dataclasses import dataclass
@@ -41,6 +40,10 @@ from area_editor.widgets.dialogue_definition_dialog import (
     rename_self_target_dialogue_id_references,
     summarize_entity_dialogues,
     summarize_dialogue_definition,
+)
+from area_editor.widgets.reference_picker_support import (
+    EntityReferencePickerRequest,
+    call_reference_picker_callback,
 )
 from area_editor.widgets.entity_structured_fields import (
     DEFAULT_ENTITY_COLOR,
@@ -91,17 +94,6 @@ _AREA_REFERENCE_PARAMETER_NAMES = {
     "source_area_id",
     "destination_area_id",
 }
-
-
-@dataclass(frozen=True)
-class EntityReferencePickerRequest:
-    parameter_name: str
-    current_value: str
-    parameter_spec: dict[str, Any] | None
-    current_area_id: str | None
-    entity_id: str | None
-    entity_template_id: str | None
-    parameter_values: dict[str, object] | None = None
 
 
 @dataclass
@@ -218,37 +210,6 @@ def _parameter_spec_reference_kind(spec: object) -> str | None:
     if spec_type == "asset_path":
         return "asset"
     return None
-
-
-def _call_reference_picker_callback(
-    callback: Callable[..., str | None] | None,
-    current_value: str,
-    *,
-    request: EntityReferencePickerRequest | None = None,
-) -> str | None:
-    if callback is None:
-        return None
-    if request is None:
-        return callback(current_value)
-    try:
-        signature = inspect.signature(callback)
-    except (TypeError, ValueError):
-        return callback(current_value)
-
-    positional_count = 0
-    has_varargs = False
-    for parameter in signature.parameters.values():
-        if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
-            has_varargs = True
-            break
-        if parameter.kind in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        ):
-            positional_count += 1
-    if has_varargs or positional_count >= 2:
-        return callback(current_value, request)
-    return callback(current_value)
 
 
 def _parse_parameter_text_for_spec(name: str, text: str, spec: object):
@@ -545,6 +506,7 @@ class _EntityInstanceParametersEditor(QWidget):
         area_picker: Callable[..., str | None] | None = None,
         entity_picker: Callable[..., str | None] | None = None,
         entity_command_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
@@ -554,6 +516,7 @@ class _EntityInstanceParametersEditor(QWidget):
             "area": area_picker,
             "entity": entity_picker,
             "entity_command": entity_command_picker,
+            "entity_dialogue": entity_dialogue_picker,
             "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
@@ -1062,8 +1025,11 @@ class _EntityInstanceParametersEditor(QWidget):
     ) -> dict[str, Any] | None:
         dialog = DialogueDefinitionDialog(
             self,
+            entity_picker=self._reference_picker_callbacks.get("entity"),
+            entity_dialogue_picker=self._reference_picker_callbacks.get("entity_dialogue"),
             dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
             command_picker=self._reference_picker_callbacks.get("command"),
+            current_entity_id=self._entity.id if self._entity is not None else None,
         )
         dialog.setWindowTitle(f"Edit Dialogue: {name}")
         dialog.load_definition(value)
@@ -1185,7 +1151,7 @@ class _EntityInstanceParametersEditor(QWidget):
             entity_template_id=self._entity.template if self._entity is not None else None,
             parameter_values=self._current_parameter_values_for_picker(),
         )
-        selected = _call_reference_picker_callback(
+        selected = call_reference_picker_callback(
             callback,
             field.edit.text().strip(),
             request=request,
@@ -1717,6 +1683,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         *,
         area_picker: Callable[..., str | None] | None = None,
         entity_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
@@ -1725,6 +1692,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._reference_picker_callbacks = {
             "area": area_picker,
             "entity": entity_picker,
+            "entity_dialogue": entity_dialogue_picker,
             "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
@@ -2184,6 +2152,8 @@ class _EntityInstanceFieldsEditor(QWidget):
     ) -> tuple[dict[str, dict[str, Any]], str | None, dict[str, str]] | None:
         dialog = EntityDialoguesDialog(
             self,
+            entity_picker=self._reference_picker_callbacks.get("entity"),
+            entity_dialogue_picker=self._reference_picker_callbacks.get("entity_dialogue"),
             dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
             command_picker=self._reference_picker_callbacks.get("command"),
             current_entity_id=self._entity.id if self._entity is not None else None,
@@ -2784,7 +2754,7 @@ class _EntityInstanceFieldsEditor(QWidget):
                 entity_id=self._entity.id if self._entity is not None else None,
                 entity_template_id=self._entity.template if self._entity is not None else None,
             )
-        selected = _call_reference_picker_callback(
+        selected = call_reference_picker_callback(
             callback,
             edit.text().strip(),
             request=request,
@@ -2956,6 +2926,7 @@ class EntityInstanceEditorWidget(QWidget):
         area_picker: Callable[..., str | None] | None = None,
         entity_picker: Callable[..., str | None] | None = None,
         entity_command_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
@@ -2965,6 +2936,7 @@ class EntityInstanceEditorWidget(QWidget):
             area_picker=area_picker,
             entity_picker=entity_picker,
             entity_command_picker=entity_command_picker,
+            entity_dialogue_picker=entity_dialogue_picker,
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
@@ -2973,6 +2945,7 @@ class EntityInstanceEditorWidget(QWidget):
         self._fields_editor.set_reference_picker_callbacks(
             area_picker=area_picker,
             entity_picker=entity_picker,
+            entity_dialogue_picker=entity_dialogue_picker,
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
@@ -3121,6 +3094,7 @@ class EntityInstanceJsonPanel(QDockWidget):
         area_picker: Callable[..., str | None] | None = None,
         entity_picker: Callable[..., str | None] | None = None,
         entity_command_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
@@ -3130,6 +3104,7 @@ class EntityInstanceJsonPanel(QDockWidget):
             area_picker=area_picker,
             entity_picker=entity_picker,
             entity_command_picker=entity_command_picker,
+            entity_dialogue_picker=entity_dialogue_picker,
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,

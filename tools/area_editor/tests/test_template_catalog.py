@@ -217,6 +217,20 @@ class TestTemplateCatalog(unittest.TestCase):
 
         self.assertEqual(names, ["contribute_off", "contribute_on"])
 
+    def test_get_template_dialogue_names_returns_authored_named_dialogues(self):
+        catalog = TemplateCatalog()
+        catalog._templates["entity_templates/sign"] = {
+            "dialogues": {
+                "starting_dialogue": {},
+                "repeat_dialogue": {},
+                "": {},
+            }
+        }
+
+        names = catalog.get_template_dialogue_names("entity_templates/sign")
+
+        self.assertEqual(names, ["repeat_dialogue", "starting_dialogue"])
+
     def test_get_template_parameter_specs_returns_authored_specs(self):
         catalog = TemplateCatalog()
         catalog._templates["entity_templates/transition"] = {

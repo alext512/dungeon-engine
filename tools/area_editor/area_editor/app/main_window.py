@@ -331,6 +331,7 @@ class MainWindow(
             area_picker=self._browse_project_area_id,
             entity_picker=self._browse_project_entity_id,
             entity_command_picker=self._browse_project_entity_command_id,
+            entity_dialogue_picker=self._browse_project_entity_dialogue_id,
             item_picker=self._browse_project_item_id,
             dialogue_picker=self._browse_project_dialogue_id,
             command_picker=self._browse_project_command_id,
@@ -1324,6 +1325,12 @@ class MainWindow(
     ) -> QWidget:
         if widget is None and content_type == ContentType.ENTITY_TEMPLATE:
             widget = EntityTemplateEditorWidget(content_id, file_path)
+            widget.set_reference_picker_callbacks(
+                entity_picker=self._browse_project_entity_id,
+                entity_dialogue_picker=self._browse_project_entity_dialogue_id,
+                dialogue_picker=self._browse_project_dialogue_id,
+                command_picker=self._browse_project_command_id,
+            )
         if widget is None and content_type == ContentType.ITEM:
             widget = ItemEditorWidget(
                 content_id,
@@ -4452,6 +4459,18 @@ class MainWindow(
                     names.add(name)
         return sorted(names)
 
+    def _entity_dialogue_names_for_entity(self, entity: EntityDocument) -> list[str]:
+        names: set[str] = set()
+        if entity.template and self._templates is not None:
+            names.update(self._templates.get_template_dialogue_names(entity.template))
+        raw_dialogues = entity._extra.get("dialogues")
+        if isinstance(raw_dialogues, dict):
+            for raw_name in raw_dialogues.keys():
+                name = str(raw_name).strip()
+                if name:
+                    names.add(name)
+        return sorted(names)
+
     def _browse_project_entity_command_id(
         self,
         current_value: str = "",
@@ -4495,6 +4514,52 @@ class MainWindow(
             title=f"Choose Command for {target_entity_id}",
             label="Command",
             values=command_names,
+            current_value=current_value,
+        )
+
+    def _browse_project_entity_dialogue_id(
+        self,
+        current_value: str = "",
+        request: EntityReferencePickerRequest | None = None,
+    ) -> str | None:
+        spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
+        entity_parameter = str(spec.get("entity_parameter", "")).strip()
+        parameter_values = request.parameter_values if request is not None else None
+        target_entity_id = (
+            str(parameter_values.get(entity_parameter, "")).strip()
+            if isinstance(parameter_values, dict)
+            else ""
+        )
+        if not target_entity_id:
+            QMessageBox.information(
+                self,
+                "Choose Entity Dialogue",
+                "Pick the target entity first.",
+            )
+            return None
+
+        entity = self._resolve_project_entity_by_id(target_entity_id)
+        if entity is None:
+            QMessageBox.information(
+                self,
+                "Choose Entity Dialogue",
+                f"Could not find entity '{target_entity_id}' in this project.",
+            )
+            return None
+
+        dialogue_names = self._entity_dialogue_names_for_entity(entity)
+        if not dialogue_names:
+            QMessageBox.information(
+                self,
+                "Choose Entity Dialogue",
+                f"Entity '{target_entity_id}' has no available named dialogues.",
+            )
+            return None
+
+        return self._browse_known_reference(
+            title=f"Choose Dialogue for {target_entity_id}",
+            label="Dialogue",
+            values=dialogue_names,
             current_value=current_value,
         )
 
@@ -5304,6 +5369,7 @@ class MainWindow(
             area_picker=self._browse_project_area_id,
             entity_picker=self._browse_project_entity_id,
             entity_command_picker=self._browse_project_entity_command_id,
+            entity_dialogue_picker=self._browse_project_entity_dialogue_id,
             item_picker=self._browse_project_item_id,
             dialogue_picker=self._browse_project_dialogue_id,
             command_picker=self._browse_project_command_id,
