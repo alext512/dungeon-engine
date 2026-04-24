@@ -64,7 +64,7 @@
         "then": [
           {
             "type": "run_entity_command",
-            "entity_id": "$ref_ids.instigator",
+            "entity_id": "$instigator_id",
             "command_id": "fall_into_triangle_hole",
             "hole_id": "$self_id"
           }

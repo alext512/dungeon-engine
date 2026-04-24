@@ -7,7 +7,7 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 - `set_entity_grid_position` sets a world entity in grid coordinates.
 - `set_entity_world_position` sets a world entity in world-pixel coordinates.
 - `set_entity_screen_position` sets a screen-space entity in screen-pixel coordinates.
-- `move_in_direction` performs standard grid movement with engine physics support.
+- `step_in_direction` performs standard grid movement with engine physics support.
 - `push_facing` pushes in a direction, usually from the actor's facing.
 - `move_entity_world_position` interpolates movement in world-pixel space.
 - `move_entity_screen_position` interpolates movement in screen space.
@@ -116,12 +116,16 @@ These debug commands are gated behind `debug_inspection_enabled`.
 
 ## Camera
 
-- `set_camera_follow` sets follow behavior.
-- `set_camera_state` updates follow, bounds, or deadzone in one command.
+- `set_camera_follow_entity` follows one explicit entity.
+- `set_camera_follow_input_target` follows the current routed target for one logical action.
+- `clear_camera_follow` clears follow behavior.
+- `set_camera_policy` updates follow, bounds, or deadzone in one command.
 - `push_camera_state` saves the current camera state.
 - `pop_camera_state` restores the most recently pushed camera state.
 - `set_camera_bounds` defines camera bounds.
+- `clear_camera_bounds` removes camera bounds.
 - `set_camera_deadzone` defines a camera deadzone.
+- `clear_camera_deadzone` removes the camera deadzone.
 - `move_camera` interpolates camera movement.
 - `teleport_camera` jumps the camera immediately.
 

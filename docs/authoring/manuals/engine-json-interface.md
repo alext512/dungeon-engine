@@ -83,7 +83,7 @@ Notes:
   - `items/`
 - `shared_variables_path` falls back to `shared_variables.json` if that file exists.
 - `save_dir` defaults to `saves`.
-- `global_entities` uses the same instance shape as area `entities`. Global entities are project-level runtime entities — the runtime injects them into the active play world whenever an area is built. Their persistent state is stored separately from per-area state and is not affected by area resets. Unlike travelers (entities transferred between areas via `change_area`), globals don't physically move — the runtime always includes them.
+- `global_entities` uses the same instance shape as area `entities`. Global entities are project-level runtime entities â€” the runtime injects them into the active play world whenever an area is built. Their persistent state is stored separately from per-area state and is not affected by area resets. Unlike travelers (entities transferred between areas via `change_area`), globals don't physically move â€” the runtime always includes them.
 - `input_targets` is a project-level logical-action routing table.
 - `command_runtime` is optional; omitted fields use engine defaults.
 
@@ -954,7 +954,7 @@ Do not assume every command object accepts arbitrary extra fields. Current mixed
 - `run_entity_command`
 - `run_project_command`
 - `if`
-- `move_in_direction`
+- `step_in_direction`
 - `push_facing`
 - `interact_facing`
 
@@ -1003,6 +1003,10 @@ Meaning:
   - lookup in source entity `variables`
 - `$some_named_param`
 - lookup in runtime params passed by project commands, collection loops, or composition commands
+
+Important split:
+- `entity_refs` is only the explicit named-ref map you pass in JSON
+- engine-owned context such as `instigator_id`, `direction`, or `from_x` arrives as ordinary runtime params and is read through `$<runtime_param>`
 
 Important limitation:
 - `$self...` and `$refs.<name>...` read entity `variables`, not built-in entity fields
@@ -1725,7 +1729,7 @@ Current builtin commands, grouped by role.
 - `set_entity_grid_position(entity_id, x, y, mode?, persistent?)`
 - `set_entity_world_position(entity_id, x, y, mode?, persistent?)`
 - `set_entity_screen_position(entity_id, x, y, mode?, persistent?)`
-- `move_in_direction(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
+- `step_in_direction(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
 - `push_facing(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
 - `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
 - `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
@@ -1741,13 +1745,16 @@ standalone builtin commands:
 - `on_occupant_leave`
 
 Those hooks receive:
-- `entity_refs.instigator`
+- runtime param `instigator_id`
 - runtime params `from_x`, `from_y`, `to_x`, `to_y` when the relevant endpoints exist
+
+`interact_facing` also supplies `instigator_id` to the target entity's `interact`
+command.
 
 ### Dialogue
 
-- `open_dialogue_session(dialogue_path? | dialogue_definition?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
-- `open_entity_dialogue(entity_id, dialogue_id?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?)`
+- `open_dialogue_session(dialogue_path? | dialogue_definition?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?, entity_refs?)`
+- `open_entity_dialogue(entity_id, dialogue_id?, dialogue_on_start?, dialogue_on_end?, segment_hooks?, allow_cancel?, actor_id?, caller_id?, ui_preset?, entity_refs?)`
 - `close_dialogue_session()`
 
 Current engine-owned dialogue runtime behavior:
@@ -1761,6 +1768,14 @@ Current engine-owned dialogue runtime behavior:
   panels, and marquee overflow for long selected options
 - supports caller hooks through `dialogue_on_start`, `dialogue_on_end`, and
   `segment_hooks`
+- dialogue command flows use `$self_id` as the dialogue owner/source entity and
+  receive `$instigator_id` when that acting entity context exists
+- explicit `entity_refs` are preserved as explicit named refs only; the runtime
+  no longer invents implicit `caller` / `instigator` refs
+- `actor_id` remains an explicit override, but when it is omitted and runtime
+  `instigator_id` exists, the runtime uses that value as the dialogue actor
+- `open_entity_dialogue` defaults `caller_id` to the target entity id when the
+  caller does not override it
 - currently also supports inline segment `on_start` / `on_end` and inline
   option `commands`
 - choice options may also author exactly one first-class child branch through
@@ -1880,7 +1895,7 @@ Example movement-oriented command chain:
       "wait": false
     },
     {
-      "type": "move_in_direction",
+      "type": "step_in_direction",
       "entity_id": "$self_id",
       "direction": "$direction",
       "frames_needed": "$project.movement.ticks_per_tile",
@@ -1903,8 +1918,8 @@ Example movement-oriented command chain:
 
 ### Screen-Space UI Elements
 
-- `show_screen_image(element_id, path, x, y, frame_width?, frame_height?, frame?, layer?, anchor?, flip_x?, tint?, visible?)` — `anchor` defaults to `"topleft"`; valid values: `topleft`, `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright`
-- `show_screen_text(element_id, text, x, y, layer?, anchor?, color?, font_id?, max_width?, visible?)` — `anchor` values same as `show_screen_image`
+- `show_screen_image(element_id, path, x, y, frame_width?, frame_height?, frame?, layer?, anchor?, flip_x?, tint?, visible?)` â€” `anchor` defaults to `"topleft"`; valid values: `topleft`, `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright`
+- `show_screen_text(element_id, text, x, y, layer?, anchor?, color?, font_id?, max_width?, visible?)` â€” `anchor` values same as `show_screen_image`
 - `set_screen_text(element_id, text)`
 - `remove_screen_element(element_id)`
 - `clear_screen_elements(layer?)`
@@ -1918,7 +1933,7 @@ Example movement-oriented command chain:
 - `spawn_flow(commands?, source_entity_id?, entity_refs?, refs_mode?)`
 - `run_sequence(commands?, source_entity_id?, entity_refs?, refs_mode?)`
 - `run_parallel(commands?, completion?, source_entity_id?, entity_refs?, refs_mode?)`
-- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, entity_refs?, refs_mode?)` — iterates a list/tuple and runs `commands` once per item, injecting the current item and index as runtime params
+- `run_commands_for_collection(value?, commands?, item_param?, index_param?, source_entity_id?, entity_refs?, refs_mode?)` â€” iterates a list/tuple and runs `commands` once per item, injecting the current item and index as runtime params
 
 Timing notes:
 
@@ -2014,9 +2029,11 @@ Notes:
 - `quit_game()`
 
 Notes:
-- `camera_follow` uses the same structured follow object as `set_camera_follow`
+- `camera_follow` uses the same structured follow object as `set_camera_policy.follow`
+- omit `camera_follow` to leave the destination area's camera defaults alone
+- set `camera_follow: null` to clear destination-area follow after load
 - in `change_area` / `new_game`, `camera_follow.entity_id` may use runtime
-  ref tokens such as `$ref_ids.instigator` when the command runs from a
+  params/tokens such as `$instigator_id` when the command runs from a
   higher-level entity command
 - `destination_entity_id` lets transferred entities land on a world-space entity
   in the destination area instead of only using an authored `entry_id`
@@ -2024,7 +2041,7 @@ Notes:
   `destination_entity_id` wins
 - `allowed_instigator_kinds` is an optional `change_area` guard for occupancy
   hooks. When present, the command only queues the active scene transition if
-  `entity_refs.instigator` exists in the current world and its `kind` is in
+  runtime `instigator_id` exists in the current world and its `kind` is in
   the list. For direct occupancy-triggered uses, standard grid movement and
   push commands also treat that trigger cell as closed to entrants whose kind
   is not listed.
@@ -2043,19 +2060,27 @@ These commands are gated by project `debug_inspection_enabled`.
 
 ### Camera
 
-- `set_camera_follow(follow)`
-- `set_camera_state(follow?, bounds?, deadzone?)`
+- `set_camera_follow_entity(entity_id, offset_x?, offset_y?)`
+- `set_camera_follow_input_target(action, offset_x?, offset_y?)`
+- `clear_camera_follow()`
+- `set_camera_policy(follow?, bounds?, deadzone?)`
 - `push_camera_state()`
 - `pop_camera_state()`
 - `set_camera_bounds(x, y, width, height, space?)`
+- `clear_camera_bounds()`
 - `set_camera_deadzone(x, y, width, height, space?)`
+- `clear_camera_deadzone()`
 - `move_camera(x, y, space?, mode?, duration?, frames_needed?, speed_px_per_second?)`
 - `teleport_camera(x, y, space?, mode?)`
 
 Notes:
-- `follow.mode` can be `none`, `entity`, or `input_target`
-- structured `follow` objects must declare `mode` explicitly
-- `set_camera_state` keeps omitted sections unchanged and clears explicit `null` sections
+- authored `follow.mode` can be `entity` or `input_target`
+- `set_camera_policy` uses patch semantics:
+  - omitted section = unchanged
+  - `null` section = clear
+  - object = set
+- use `clear_camera_follow`, `clear_camera_bounds`, and `clear_camera_deadzone`
+  when you want the focused single-purpose clear commands
 - `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`
 - `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`
 - `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"`
@@ -2116,7 +2141,7 @@ Notes:
   `wrap: true`, out-of-range values wrap around the available dialogue list
 - `toggle_current_area_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
 - entity-targeted mutation commands (`set_entity_var`, `add_entity_var`, `toggle_entity_var`, `set_entity_var_length`, `append_entity_var`, `pop_entity_var`, `set_entity_field`, `set_entity_fields`, `set_visible`, `set_present`, `set_color`, `destroy_entity`, `spawn_entity`, `set_entity_command_enabled`, `set_entity_commands_enabled`) inherit from the target entity's authored `persistence` block when `persistent` is omitted
-- movement/position commands (`set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `move_in_direction`, `push_facing`, `move_entity_world_position`, `move_entity_screen_position`) also follow that same override-or-inherit rule
+- movement/position commands (`set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `step_in_direction`, `push_facing`, `move_entity_world_position`, `move_entity_screen_position`) also follow that same override-or-inherit rule
 - inventory mutation commands (`add_inventory_item`, `remove_inventory_item`, `use_inventory_item`, `set_inventory_max_stacks`) treat inventory as coarse entity state and also follow that same override-or-inherit rule
 - on those entity-targeted commands, explicit `persistent: true` / `persistent: false` overrides the entity policy
 - current-area variable commands still use command-level persistence only; omitted `persistent` there means transient

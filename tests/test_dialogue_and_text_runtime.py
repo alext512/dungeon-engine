@@ -323,7 +323,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     }
                 ],
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
         self.assertFalse(handle.complete)
@@ -387,7 +388,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "sign"},
+                "instigator_id": "player",
+                "caller_id": "sign",
             },
         )
 
@@ -447,7 +449,7 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             "open_entity_dialogue",
             {
                 "entity_id": "speaker",
-                "entity_refs": {"instigator": "player"},
+                "instigator_id": "player",
             },
         )
 
@@ -607,7 +609,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             {
                 "dialogue_path": "dialogues/system/runtime_choices.json",
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
         session = dialogue_runtime.current_session
@@ -677,7 +680,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             "open_dialogue_session",
             {
                 "dialogue_path": "dialogues/system/runtime_inline_layout.json",
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -730,7 +734,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             "open_dialogue_session",
             {
                 "dialogue_path": "dialogues/system/runtime_inline_budget.json",
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -778,7 +783,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             "open_dialogue_session",
             {
                 "dialogue_path": "dialogues/system/runtime_inline_no_prompt.json",
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -829,7 +835,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             "open_dialogue_session",
             {
                 "dialogue_path": "dialogues/system/runtime_inline_prompt_marquee.json",
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -879,7 +886,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             {
                 "dialogue_path": "dialogues/system/runtime_separate_panel.json",
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -932,7 +940,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             {
                 "dialogue_path": "dialogues/system/runtime_marquee.json",
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1007,7 +1016,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                         }
                     }
                 ],
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1054,7 +1064,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             "open_dialogue_session",
             {
                 "dialogue_path": "dialogues/system/runtime_timer.json",
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1130,7 +1141,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
             {
                 "dialogue_path": "dialogues/system/runtime_parent.json",
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
         self.assertFalse(parent_handle.complete)
@@ -1217,7 +1229,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1292,7 +1305,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1370,7 +1384,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1440,7 +1455,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1487,7 +1503,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1552,7 +1569,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                     ]
                 },
                 "allow_cancel": True,
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1632,7 +1650,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                         },
                     ]
                 },
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 
@@ -1670,7 +1689,8 @@ class DialogueAndTextRuntimeTests(unittest.TestCase):
                         }
                     ]
                 },
-                "entity_refs": {"instigator": "player", "caller": "terminal"},
+                "instigator_id": "player",
+                "caller_id": "terminal",
             },
         )
 

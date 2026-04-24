@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel, QDialog
 
 from area_editor.widgets.dialogue_definition_dialog import (
     DialogueDefinitionDialog,
@@ -198,6 +198,145 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
         self.assertTrue(
             any("set_entity_active_dialogue_by_order" in text for text in labels)
         )
+
+    def test_dialogue_definition_editor_passes_live_dialogue_names_to_command_editor(self):
+        captured: dict[str, object] = {}
+
+        class FakeCommandListDialog:
+            def __init__(self, *_args, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def setWindowTitle(self, _title: str) -> None:
+                return
+
+            def load_commands(self, _commands: object) -> None:
+                return
+
+            def exec(self) -> int:
+                return int(QDialog.DialogCode.Rejected)
+
+        dialog = DialogueDefinitionDialog(
+            current_entity_id="sign_1",
+            current_entity_dialogue_names=["dialogue_1", "dialogue_2"],
+        )
+        self.addCleanup(dialog.close)
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.CommandListDialog",
+            FakeCommandListDialog,
+        ):
+            result = dialog._structured_editor._open_command_list_dialog(
+                "Edit Segment on_end",
+                [],
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            captured.get("current_entity_dialogue_names"),
+            ("dialogue_1", "dialogue_2"),
+        )
+
+    def test_dialogue_definition_editor_passes_live_command_names_to_command_editor(self):
+        captured: dict[str, object] = {}
+
+        class FakeCommandListDialog:
+            def __init__(self, *_args, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def setWindowTitle(self, _title: str) -> None:
+                return
+
+            def load_commands(self, _commands: object) -> None:
+                return
+
+            def exec(self) -> int:
+                return int(QDialog.DialogCode.Rejected)
+
+        dialog = DialogueDefinitionDialog(
+            current_entity_id="sign_1",
+            current_entity_command_names=["interact", "repeat"],
+        )
+        self.addCleanup(dialog.close)
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.CommandListDialog",
+            FakeCommandListDialog,
+        ):
+            result = dialog._structured_editor._open_command_list_dialog(
+                "Edit Segment on_end",
+                [],
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            captured.get("current_entity_command_names"),
+            ("interact", "repeat"),
+        )
+
+    def test_dialogue_definition_editor_passes_current_area_to_command_editor(self):
+        captured: dict[str, object] = {}
+
+        class FakeCommandListDialog:
+            def __init__(self, *_args, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def setWindowTitle(self, _title: str) -> None:
+                return
+
+            def load_commands(self, _commands: object) -> None:
+                return
+
+            def exec(self) -> int:
+                return int(QDialog.DialogCode.Rejected)
+
+        dialog = DialogueDefinitionDialog(current_area_id="areas/cave")
+        self.addCleanup(dialog.close)
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.CommandListDialog",
+            FakeCommandListDialog,
+        ):
+            result = dialog._structured_editor._open_command_list_dialog(
+                "Edit Segment on_end",
+                [],
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(captured.get("current_area_id"), "areas/cave")
+
+    def test_dialogue_definition_editor_passes_asset_picker_to_command_editor(self):
+        captured: dict[str, object] = {}
+
+        class FakeCommandListDialog:
+            def __init__(self, *_args, **kwargs) -> None:
+                captured.update(kwargs)
+
+            def setWindowTitle(self, _title: str) -> None:
+                return
+
+            def load_commands(self, _commands: object) -> None:
+                return
+
+            def exec(self) -> int:
+                return int(QDialog.DialogCode.Rejected)
+
+        def browse_asset(_current: str) -> str | None:
+            return "assets/project/sfx/open.wav"
+
+        dialog = DialogueDefinitionDialog(asset_picker=browse_asset)
+        self.addCleanup(dialog.close)
+
+        with patch(
+            "area_editor.widgets.dialogue_definition_dialog.CommandListDialog",
+            FakeCommandListDialog,
+        ):
+            result = dialog._structured_editor._open_command_list_dialog(
+                "Edit Segment on_end",
+                [],
+            )
+
+        self.assertIsNone(result)
+        self.assertIs(captured.get("asset_picker"), browse_asset)
 
 
     def test_json_tab_can_replace_structured_definition(self):

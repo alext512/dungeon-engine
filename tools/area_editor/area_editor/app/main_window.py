@@ -1326,8 +1326,12 @@ class MainWindow(
         if widget is None and content_type == ContentType.ENTITY_TEMPLATE:
             widget = EntityTemplateEditorWidget(content_id, file_path)
             widget.set_reference_picker_callbacks(
+                area_picker=self._browse_project_area_id,
+                asset_picker=lambda _current: self._browse_project_asset(),
                 entity_picker=self._browse_project_entity_id,
+                entity_command_picker=self._browse_project_entity_command_id,
                 entity_dialogue_picker=self._browse_project_entity_dialogue_id,
+                item_picker=self._browse_project_item_id,
                 dialogue_picker=self._browse_project_dialogue_id,
                 command_picker=self._browse_project_command_id,
             )
@@ -4471,6 +4475,53 @@ class MainWindow(
                     names.add(name)
         return sorted(names)
 
+    @staticmethod
+    def _picker_override_names(
+        request: EntityReferencePickerRequest | None,
+        *,
+        raw_target_entity_id: str,
+        resolved_target_entity_id: str,
+        kind: str,
+    ) -> list[str] | None:
+        if request is None:
+            return None
+        raw_target = str(raw_target_entity_id).strip()
+        resolved_target = str(resolved_target_entity_id).strip()
+        request_entity_id = str(request.entity_id or "").strip()
+        use_override = raw_target in {"$self_id", "${self_id}"}
+        if not use_override and request_entity_id:
+            use_override = resolved_target == request_entity_id
+        if not use_override:
+            return None
+        raw_names = (
+            request.entity_dialogue_names_override
+            if kind == "dialogue"
+            else request.entity_command_names_override
+        )
+        if not raw_names:
+            return None
+        names = sorted(
+            {
+                str(raw_name).strip()
+                for raw_name in raw_names
+                if str(raw_name).strip()
+            }
+        )
+        return names or None
+
+    @staticmethod
+    def _resolve_entity_target_id_for_picker(
+        target_entity_id: str,
+        request: EntityReferencePickerRequest | None,
+    ) -> str:
+        normalized = str(target_entity_id).strip()
+        if normalized not in {"$self_id", "${self_id}"}:
+            return normalized
+        if request is None:
+            return normalized
+        resolved = str(request.entity_id or "").strip()
+        return resolved or normalized
+
     def _browse_project_entity_command_id(
         self,
         current_value: str = "",
@@ -4479,11 +4530,30 @@ class MainWindow(
         spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
         entity_parameter = str(spec.get("entity_parameter", "")).strip()
         parameter_values = request.parameter_values if request is not None else None
-        target_entity_id = (
+        raw_target_entity_id = (
             str(parameter_values.get(entity_parameter, "")).strip()
             if isinstance(parameter_values, dict)
             else ""
         )
+        target_entity_id = raw_target_entity_id
+        target_entity_id = self._resolve_entity_target_id_for_picker(
+            target_entity_id,
+            request,
+        )
+        command_names_override = self._picker_override_names(
+            request,
+            raw_target_entity_id=raw_target_entity_id,
+            resolved_target_entity_id=target_entity_id,
+            kind="command",
+        )
+        if command_names_override:
+            target_label = target_entity_id or raw_target_entity_id or "$self_id"
+            return self._browse_known_reference(
+                title=f"Choose Command for {target_label}",
+                label="Command",
+                values=command_names_override,
+                current_value=current_value,
+            )
         if not target_entity_id:
             QMessageBox.information(
                 self,
@@ -4525,11 +4595,30 @@ class MainWindow(
         spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
         entity_parameter = str(spec.get("entity_parameter", "")).strip()
         parameter_values = request.parameter_values if request is not None else None
-        target_entity_id = (
+        raw_target_entity_id = (
             str(parameter_values.get(entity_parameter, "")).strip()
             if isinstance(parameter_values, dict)
             else ""
         )
+        target_entity_id = raw_target_entity_id
+        target_entity_id = self._resolve_entity_target_id_for_picker(
+            target_entity_id,
+            request,
+        )
+        dialogue_names_override = self._picker_override_names(
+            request,
+            raw_target_entity_id=raw_target_entity_id,
+            resolved_target_entity_id=target_entity_id,
+            kind="dialogue",
+        )
+        if dialogue_names_override:
+            target_label = target_entity_id or raw_target_entity_id or "$self_id"
+            return self._browse_known_reference(
+                title=f"Choose Dialogue for {target_label}",
+                label="Dialogue",
+                values=dialogue_names_override,
+                current_value=current_value,
+            )
         if not target_entity_id:
             QMessageBox.information(
                 self,

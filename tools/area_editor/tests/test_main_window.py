@@ -76,7 +76,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
     _panel_folder_entries = staticmethod(panel_folder_entries)
     _find_tree_item_by_folder_path = staticmethod(find_tree_item_by_folder_path)
 
-    def test_entity_dialogue_picker_browses_dialogues_for_target_entity(self):
+    def test_entity_dialogue_picker_resolves_self_target_and_browses_dialogues(self):
         window = MainWindow()
         self.addCleanup(window.close)
         window._templates = TemplateCatalog()
@@ -107,9 +107,9 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                         "entity_parameter": "entity_id",
                     },
                     current_area_id=None,
-                    entity_id="trigger_1",
+                    entity_id="sign_1",
                     entity_template_id=None,
-                    parameter_values={"entity_id": "sign_1"},
+                    parameter_values={"entity_id": "$self_id"},
                 ),
             )
 
@@ -119,6 +119,143 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             label="Dialogue",
             values=["repeat_dialogue", "starting_dialogue"],
             current_value="",
+        )
+
+    def test_entity_dialogue_picker_prefers_live_self_override_names(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._templates = TemplateCatalog()
+        window._templates._templates["entity_templates/sign"] = {
+            "dialogues": {
+                "starting_dialogue": {},
+                "repeat_dialogue": {},
+            }
+        }
+        entity = EntityDocument(
+            id="sign_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/sign",
+        )
+
+        with (
+            patch.object(window, "_resolve_project_entity_by_id", return_value=entity),
+            patch.object(window, "_browse_known_reference", return_value="dialogue_2") as browse,
+        ):
+            selected = window._browse_project_entity_dialogue_id(
+                "dialogue_1",
+                EntityReferencePickerRequest(
+                    parameter_name="dialogue_id",
+                    current_value="dialogue_1",
+                    parameter_spec={
+                        "type": "entity_dialogue_id",
+                        "entity_parameter": "entity_id",
+                    },
+                    current_area_id=None,
+                    entity_id="sign_1",
+                    entity_template_id=None,
+                    parameter_values={"entity_id": "$self_id", "dialogue_id": "dialogue_1"},
+                    entity_dialogue_names_override=("dialogue_1", "dialogue_2"),
+                ),
+            )
+
+        self.assertEqual(selected, "dialogue_2")
+        browse.assert_called_once_with(
+            title="Choose Dialogue for sign_1",
+            label="Dialogue",
+            values=["dialogue_1", "dialogue_2"],
+            current_value="dialogue_1",
+        )
+
+    def test_entity_command_picker_resolves_self_target_and_browses_commands(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._templates = TemplateCatalog()
+        window._templates._templates["entity_templates/gate"] = {
+            "entity_commands": {
+                "open": {"commands": []},
+                "close": {"commands": []},
+            }
+        }
+        entity = EntityDocument(
+            id="gate_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/gate",
+        )
+
+        with (
+            patch.object(window, "_resolve_project_entity_by_id", return_value=entity),
+            patch.object(window, "_browse_known_reference", return_value="open") as browse,
+        ):
+            selected = window._browse_project_entity_command_id(
+                "",
+                EntityReferencePickerRequest(
+                    parameter_name="command_id",
+                    current_value="",
+                    parameter_spec={
+                        "type": "entity_command_id",
+                        "entity_parameter": "entity_id",
+                    },
+                    current_area_id=None,
+                    entity_id="gate_1",
+                    entity_template_id=None,
+                    parameter_values={"entity_id": "$self_id"},
+                ),
+            )
+
+        self.assertEqual(selected, "open")
+        browse.assert_called_once_with(
+            title="Choose Command for gate_1",
+            label="Command",
+            values=["close", "open"],
+            current_value="",
+        )
+
+    def test_entity_command_picker_prefers_live_self_override_names(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._templates = TemplateCatalog()
+        window._templates._templates["entity_templates/gate"] = {
+            "entity_commands": {
+                "open": {"commands": []},
+                "close": {"commands": []},
+            }
+        }
+        entity = EntityDocument(
+            id="gate_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/gate",
+        )
+
+        with (
+            patch.object(window, "_resolve_project_entity_by_id", return_value=entity),
+            patch.object(window, "_browse_known_reference", return_value="toggle") as browse,
+        ):
+            selected = window._browse_project_entity_command_id(
+                "toggle",
+                EntityReferencePickerRequest(
+                    parameter_name="command_id",
+                    current_value="toggle",
+                    parameter_spec={
+                        "type": "entity_command_id",
+                        "entity_parameter": "entity_id",
+                    },
+                    current_area_id=None,
+                    entity_id="gate_1",
+                    entity_template_id=None,
+                    parameter_values={"entity_id": "$self_id", "command_id": "toggle"},
+                    entity_command_names_override=("lock", "toggle"),
+                ),
+            )
+
+        self.assertEqual(selected, "toggle")
+        browse.assert_called_once_with(
+            title="Choose Command for gate_1",
+            label="Command",
+            values=["lock", "toggle"],
+            current_value="toggle",
         )
 
     def test_add_tileset_appends_safe_firstgid(self):

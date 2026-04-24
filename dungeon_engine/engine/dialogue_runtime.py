@@ -32,6 +32,24 @@ def _normalize_segment_hooks(segment_hooks: Any) -> list[Any]:
     return copy.deepcopy(segment_hooks)
 
 
+def _normalize_entity_refs(entity_refs: Any) -> dict[str, str]:
+    """Return one normalized explicit entity-ref map for dialogue command context."""
+    if entity_refs in (None, ""):
+        return {}
+    if not isinstance(entity_refs, dict):
+        raise TypeError("Dialogue entity_refs must be a JSON object or null.")
+    normalized: dict[str, str] = {}
+    for raw_name, raw_entity_id in entity_refs.items():
+        ref_name = str(raw_name).strip()
+        if not ref_name:
+            raise ValueError("Dialogue entity_refs cannot use blank names.")
+        entity_id = str(raw_entity_id).strip()
+        if not entity_id:
+            raise ValueError(f"Dialogue entity_refs.{ref_name} must resolve to a non-empty entity id.")
+        normalized[ref_name] = entity_id
+    return normalized
+
+
 class DialogueSessionWaitHandle(CommandHandle):
     """Wait until one specific dialogue session fully closes."""
 
@@ -61,6 +79,7 @@ class DialogueSession:
     allow_cancel: bool
     actor_id: str | None
     caller_id: str | None
+    entity_refs: dict[str, str]
     segment_index: int = 0
     speaker_id: str | None = None
     current_segment: dict[str, Any] = field(default_factory=dict)
@@ -208,6 +227,7 @@ class DialogueRuntime:
         allow_cancel: bool = False,
         actor_id: str | None = None,
         caller_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
         ui_preset_name: str | None = None,
     ) -> DialogueSession:
         """Open one dialogue session, pausing any active parent session."""
@@ -235,6 +255,7 @@ class DialogueRuntime:
             allow_cancel=bool(allow_cancel),
             actor_id=None if actor_id in (None, "") else str(actor_id),
             caller_id=None if caller_id in (None, "") else str(caller_id),
+            entity_refs=_normalize_entity_refs(entity_refs),
         )
         self.current_session = session
         self._run_command_list(
@@ -866,13 +887,10 @@ class DialogueRuntime:
         source_entity_id = session.caller_id or session.actor_id
         if source_entity_id:
             base_params["source_entity_id"] = source_entity_id
-        entity_refs: dict[str, str] = {}
         if session.actor_id:
-            entity_refs["instigator"] = session.actor_id
-        if session.caller_id:
-            entity_refs["caller"] = session.caller_id
-        if entity_refs:
-            base_params["entity_refs"] = entity_refs
+            base_params["instigator_id"] = session.actor_id
+        if session.entity_refs:
+            base_params["entity_refs"] = copy.deepcopy(session.entity_refs)
         if extra_runtime_params:
             base_params.update(copy.deepcopy(extra_runtime_params))
 

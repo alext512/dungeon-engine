@@ -56,7 +56,7 @@ The current editor can:
   dedicated `Area Start`, `Entities`, and `Cell Flags` tabs
 - edit area `enter_commands` through helper insertions plus direct JSON, including
   common actions like `route_inputs_to_entity`, `run_entity_command`,
-  `open_dialogue_session`, `set_camera_follow`, and `play_music`
+  `open_dialogue_session`, `set_camera_follow_entity`, and `play_music`
 - edit entity instances through a structured dialog with a focused
   `Parameters` tab for common template tuning, an advanced instance editor for
   identity, scope, common engine fields, `color`, `input_map`,
@@ -85,6 +85,158 @@ The current editor can:
 - save edited area files back to JSON with unknown-field preservation
 - write known dense JSON matrices such as tile grids in a more readable compact form
 - run focused automated tests around manifest loading, canvas interaction, editor panels, and document round-tripping
+
+## Structured Command Editor Coverage
+
+The command-list popup now includes a dedicated structured command editor for a growing set of common builtin commands.
+
+When a command is covered here, the editor provides typed fields, pickers, and token helpers for the owned parameters it understands. Unsupported commands, or unsupported fields on an otherwise supported command, still fall back to the command JSON tab and are expected to round-trip without data loss.
+
+Nested flow commands such as `run_sequence`, `spawn_flow`, `run_parallel`, and `if` open their child command lists in separate popup windows. The `run_parallel` branch editor also exposes optional `branch_id` values so child-based completion can stay in the structured UI instead of falling back to raw JSON, while `if` opens separate `then` and `else` command-list popups.
+
+`run_commands_for_collection` keeps its `value` field as free-text JSON/value input on purpose. The editor surfaces `item_param` and `index_param` alongside the nested child-command popup so authors can see which loop tokens (for example `$item` / `$index`) are available inside the child flow.
+
+Current structured command coverage:
+
+- dialogue and flow launching
+  - `open_dialogue_session`
+  - `open_entity_dialogue`
+  - `run_project_command`
+  - `run_entity_command`
+  - `run_sequence`
+  - `spawn_flow`
+  - `run_parallel`
+  - `run_commands_for_collection`
+  - `if`
+  - `close_dialogue_session`
+
+- entity dialogue-state helpers
+  - `set_entity_active_dialogue`
+  - `step_entity_active_dialogue`
+  - `set_entity_active_dialogue_by_order`
+
+- movement and position
+  - `step_in_direction`
+  - `set_entity_grid_position`
+  - `set_entity_world_position`
+  - `set_entity_screen_position`
+  - `move_entity_world_position`
+  - `move_entity_screen_position`
+  - `push_facing`
+  - `wait_for_move`
+  - `interact_facing`
+
+- area, game, and camera control
+  - `change_area`
+  - `new_game`
+  - `set_camera_follow_entity`
+  - `set_camera_follow_input_target`
+  - `clear_camera_follow`
+  - `set_camera_policy`
+  - `push_camera_state`
+  - `pop_camera_state`
+  - `set_camera_bounds`
+  - `clear_camera_bounds`
+  - `set_camera_deadzone`
+  - `clear_camera_deadzone`
+  - `move_camera`
+  - `teleport_camera`
+
+- runtime/session controls
+  - `load_game`
+  - `save_game`
+  - `quit_game`
+  - `set_simulation_paused`
+  - `toggle_simulation_paused`
+  - `step_simulation_tick`
+  - `adjust_output_scale`
+
+- audio
+  - `play_audio`
+  - `set_sound_volume`
+  - `play_music`
+  - `stop_music`
+  - `pause_music`
+  - `resume_music`
+  - `set_music_volume`
+
+- screen-space element commands
+  - `show_screen_image`
+  - `show_screen_text`
+  - `set_screen_text`
+  - `remove_screen_element`
+  - `clear_screen_elements`
+  - `play_screen_animation`
+  - `wait_for_screen_animation`
+
+- entity state and presentation
+  - `add_inventory_item`
+  - `remove_inventory_item`
+  - `use_inventory_item`
+  - `set_inventory_max_stacks`
+  - `open_inventory_session`
+  - `close_inventory_session`
+  - `set_current_area_var`
+  - `add_current_area_var`
+  - `add_entity_var`
+  - `toggle_current_area_var`
+  - `toggle_entity_var`
+  - `set_current_area_var_length`
+  - `set_entity_var_length`
+  - `append_current_area_var`
+  - `append_entity_var`
+  - `pop_current_area_var`
+  - `pop_entity_var`
+  - `set_area_var`
+  - `set_area_entity_var`
+  - `set_area_entity_field`
+  - `set_entity_var`
+  - `set_entity_field`
+  - `set_entity_fields`
+  - `set_visible`
+  - `set_present`
+  - `set_color`
+  - `destroy_entity`
+  - `spawn_entity`
+  - `reset_transient_state`
+  - `reset_persistent_state`
+  - `set_visual_frame`
+  - `set_visual_flip_x`
+  - `set_entity_command_enabled`
+  - `set_entity_commands_enabled`
+  - `play_animation`
+  - `wait_for_animation`
+  - `stop_animation`
+
+- input routing and waiting
+  - `set_input_target`
+  - `route_inputs_to_entity`
+  - `push_input_routes`
+  - `pop_input_routes`
+  - `wait_frames`
+  - `wait_seconds`
+
+The structured command editor also supports a small advanced named-ref surface for the commands that expose `entity_refs` in the UI today:
+
+- `open_dialogue_session`
+- `open_entity_dialogue`
+- `run_project_command`
+- `run_entity_command`
+- `change_area`
+
+Those ref rows allow custom ref names plus typed entity picking and token insertion. Commands outside this list may still support `entity_refs` at runtime, but currently require the JSON tab for those fields.
+
+To keep the add-command picker less noisy, the more niche collection-shaping
+commands are grouped under **Advanced / Rare Commands**:
+
+- `set_current_area_var_length`
+- `set_entity_var_length`
+- `append_current_area_var`
+- `append_entity_var`
+- `pop_current_area_var`
+- `pop_entity_var`
+- `run_commands_for_collection`
+- `if`
 
 For correctness, focused editors are expected to preserve engine-used data they
 do not fully model as custom UI. For entity instances and templates, `color`,

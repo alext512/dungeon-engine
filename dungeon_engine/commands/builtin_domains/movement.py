@@ -91,9 +91,10 @@ def _run_on_blocked_if_present(
         context=context,
         entity_id=actor.entity_id,
         command_id="on_blocked",
-        runtime_params=runtime_params,
-        entity_refs={"instigator": actor.entity_id},
-        refs_mode="merge",
+        runtime_params={
+            **dict(runtime_params or {}),
+            "instigator_id": actor.entity_id,
+        },
     )
 
 
@@ -543,8 +544,8 @@ def register_movement_commands(
             persistent=persistent,
         )
 
-    @registry.register("move_in_direction", validation_mode="mixed")
-    def move_in_direction(
+    @registry.register("step_in_direction", validation_mode="mixed")
+    def step_in_direction(
         context: CommandContext,
         services: CommandServices | None,
         world: Any,
@@ -573,13 +574,13 @@ def register_movement_commands(
             interaction_system=None,
         )
         if resolved_movement_system is None:
-            raise ValueError("move_in_direction requires an active movement system.")
+            raise ValueError("step_in_direction requires an active movement system.")
         if resolved_collision_system is None:
-            raise ValueError("move_in_direction requires an active collision system.")
+            raise ValueError("step_in_direction requires an active collision system.")
 
         resolved_id = resolve_entity_id(entity_id, source_entity_id=source_entity_id)
         if not resolved_id:
-            logger.warning("move_in_direction: skipping because entity_id resolved to blank.")
+            logger.warning("step_in_direction: skipping because entity_id resolved to blank.")
             return ImmediateHandle()
         actor = resolved_world.get_entity(resolved_id)
         if actor is None:
@@ -587,7 +588,7 @@ def register_movement_commands(
         if not actor.present:
             return ImmediateHandle()
         if actor.space != "world":
-            raise ValueError("move_in_direction only supports world-space entities.")
+            raise ValueError("step_in_direction only supports world-space entities.")
         if actor.movement_state.active:
             return ImmediateHandle()
 
@@ -617,7 +618,7 @@ def register_movement_commands(
 
         resolved_push_strength = int(actor.push_strength if push_strength is None else push_strength)
         if resolved_push_strength < 0:
-            raise ValueError("move_in_direction push_strength must be zero or positive.")
+            raise ValueError("step_in_direction push_strength must be zero or positive.")
 
         if (
             resolved_push_strength > 0
@@ -818,9 +819,10 @@ def register_movement_commands(
             context=context,
             entity_id=target.entity_id,
             command_id="interact",
-            runtime_params=runtime_params,
-            entity_refs={"instigator": actor.entity_id},
-            refs_mode="merge",
+            runtime_params={
+                **dict(runtime_params or {}),
+                "instigator_id": actor.entity_id,
+            },
         )
 
     @registry.register("wait_for_move")

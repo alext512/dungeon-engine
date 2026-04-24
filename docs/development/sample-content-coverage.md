@@ -29,13 +29,16 @@ for what the sample proves today and what it still does not prove.
   `entity_templates/inventory_pickup.json`
 - persistent restoration of the sample pickup/item-use result through
   `tests/test_sample_project_workflows.py`
-- authored camera defaults in `areas/start.json` plus transition camera follow
-  in `dialogues/system/title_menu.json`
+- authored camera defaults in `areas/start.json`, title-screen camera clearing
+  through `areas/title_screen.json`, and transition camera follow in
+  `dialogues/system/title_menu.json`
 - project-level global entity state through
   `project.json` `global_entities.sample_global_tracker`
 - caller-supplied dialogue segment hooks through
   `entity_templates/dialogue_hook_terminal.json` and
   `dialogues/system/sample_hook_choice.json`
+- engine-owned `instigator_id` context through interaction, occupancy-driven
+  area transitions, pickup/item use, and hole templates
 - inline dialogue-definition authoring through
   `entity_templates/actively_used/sign_v2.json`
 - entity-owned named dialogue variants plus active-dialogue switching through
@@ -54,11 +57,14 @@ Use these files as the first examples when checking sample behavior:
 
 - `projects/new_project/project.json` for manifest paths, startup area, input
   targets, title-screen state, global entities, and runtime UI defaults
-- `projects/new_project/dialogues/system/title_menu.json` for dialogue/menu data
-  plus runtime-control and transition camera-follow commands
+- `projects/new_project/dialogues/system/title_menu.json` plus
+  `projects/new_project/areas/title_screen.json` for dialogue/menu data,
+  title-screen camera clearing, and runtime-control / transition camera-follow
+  commands
 - `projects/new_project/dialogues/system/sample_hook_choice.json` and
   `projects/new_project/entity_templates/dialogue_hook_terminal.json` for the
-  sample segment-hook override workflow
+  sample segment-hook override workflow plus an explicit `entity_refs.caller`
+  example
 - `projects/new_project/entity_templates/actively_used/sign_v2.json` for an
   inline `dialogue_definition` example with nested child dialogue branches
 - `projects/new_project/entity_templates/actively_used/sign_cycle.json` and
@@ -72,11 +78,11 @@ Use these files as the first examples when checking sample behavior:
   rendering
 - `projects/new_project/items/consumables/glimmer_berry.json` and
   `projects/new_project/entity_templates/inventory_pickup.json` for the sample
-  item pickup/use workflow
+  item pickup/use workflow using engine-owned `$instigator_id`
 - `projects/new_project/entity_templates/area_transition.json` and
   `projects/new_project/entity_templates/area_transition_target.json` for
   player-gated area-change handoff behavior, traveler transfer, and transition
-  camera follow
+  camera follow through `$instigator_id`
 - `projects/new_project/areas/start.json` and
   `projects/new_project/areas/levels/first_area.json` for tile layers,
   template-backed entities, camera defaults, transitions, and puzzle objects
@@ -92,8 +98,8 @@ The project is checked by:
   for two frames when that fixture is present
 - runtime tests that use repo-local fixtures opportunistically when available
 - `tests/test_sample_project_workflows.py`, which executes the sample item
-  pickup/use path, segment-hook override, global-entity mutation, camera-default
-  assertions, and save-data roundtrip to a freshly loaded area
+  pickup/use path, segment-hook override, global-entity mutation, sample camera
+  command assertions, and save-data roundtrip to a freshly loaded area
 
 When this sample changes, prefer validating through the same paths the runtime
 uses:

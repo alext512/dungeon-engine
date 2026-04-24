@@ -34,6 +34,8 @@ The current editor is already strong for project and area authoring. It can:
 - tune entity-instance parameters through a focused `Parameters` tab, including typed reference pickers and boolean controls when `parameter_specs` provides them
 - fall back to guarded raw JSON where the structured UI is not enough
 - rename or move file-backed content with reference-update previews
+- use a growing structured command editor for common builtin command families;
+  the current coverage list lives in the [full editor manual](editor-manual.md#structured-command-editor-coverage)
 
 ## What The Editor Does Not Try To Be
 

@@ -30,7 +30,7 @@ A typical command object has a `type` plus fields specific to that command:
 
 ```json
 {
-  "type": "move_in_direction",
+  "type": "step_in_direction",
   "entity_id": "$self_id",
   "direction": "up",
   "frames_needed": "$project.movement.ticks_per_tile",
@@ -87,7 +87,7 @@ The repo-local player template uses entity commands for input-driven behavior:
       }
     },
     {
-      "type": "move_in_direction",
+      "type": "step_in_direction",
       "entity_id": "$self_id",
       "direction": "up",
       "frames_needed": "$project.movement.ticks_per_tile",
@@ -112,7 +112,7 @@ the long object form only when you need metadata such as `enabled: false`.
 
 Use commands such as:
 
-- `move_in_direction`
+- `step_in_direction`
 - `push_facing`
 - `interact_facing`
 - `set_entity_grid_position`

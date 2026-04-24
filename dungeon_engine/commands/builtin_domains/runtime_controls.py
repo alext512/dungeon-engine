@@ -24,6 +24,8 @@ from dungeon_engine.commands.runner import (
 )
 from dungeon_engine.commands.registry import CommandRegistry
 
+_UNSET = object()
+
 
 def register_runtime_control_commands(
     registry: CommandRegistry,
@@ -98,11 +100,11 @@ def register_runtime_control_commands(
         destination_entity_id: str | None = None,
         transfer_entity_id: str | None = None,
         transfer_entity_ids: list[str] | None = None,
-        camera_follow: dict[str, Any] | None = None,
+        camera_follow: Any = _UNSET,
         allowed_instigator_kinds: list[str] | None = None,
         source_entity_id: str | None = None,
         entity_refs: dict[str, str] | None = None,
-        **_: Any,
+        **runtime_params: Any,
     ) -> CommandHandle:
         """Queue a transition into another authored area at the next scene boundary."""
         if request_area_change is None:
@@ -111,7 +113,7 @@ def register_runtime_control_commands(
         if allowed_instigator_kinds is not None and not _instigator_kind_is_allowed(
             world,
             allowed_instigator_kinds,
-            entity_refs=entity_refs,
+            instigator_id=runtime_params.get("instigator_id"),
         ):
             return ImmediateHandle()
 
@@ -139,7 +141,9 @@ def register_runtime_control_commands(
                 resolved_transfer_ids.append(resolved_entity_id)
 
         camera_follow_request: CameraFollowRequest | None = None
-        if camera_follow is not None:
+        if camera_follow is None:
+            camera_follow_request = CameraFollowRequest(mode="clear")
+        elif camera_follow is not _UNSET:
             follow_spec = normalize_camera_follow_spec(
                 camera_follow,
                 command_name="change_area",
@@ -187,7 +191,7 @@ def register_runtime_control_commands(
         area_id: str = "",
         entry_id: str | None = None,
         destination_entity_id: str | None = None,
-        camera_follow: dict[str, Any] | None = None,
+        camera_follow: Any = _UNSET,
         source_entity_id: str | None = None,
         **_: Any,
     ) -> CommandHandle:
@@ -200,7 +204,9 @@ def register_runtime_control_commands(
             raise ValueError("new_game requires a non-empty area_id.")
 
         camera_follow_request: CameraFollowRequest | None = None
-        if camera_follow is not None:
+        if camera_follow is None:
+            camera_follow_request = CameraFollowRequest(mode="clear")
+        elif camera_follow is not _UNSET:
             follow_spec = normalize_camera_follow_spec(
                 camera_follow,
                 command_name="new_game",
@@ -346,7 +352,7 @@ def _instigator_kind_is_allowed(
     world: Any | None,
     allowed_instigator_kinds: list[str],
     *,
-    entity_refs: dict[str, str] | None,
+    instigator_id: Any = None,
 ) -> bool:
     """Return whether the hook instigator may request an active area change."""
     if not isinstance(allowed_instigator_kinds, list):
@@ -363,13 +369,11 @@ def _instigator_kind_is_allowed(
     if not allowed_kinds:
         return False
 
-    instigator_id = ""
-    if isinstance(entity_refs, dict):
-        instigator_id = str(entity_refs.get("instigator", "")).strip()
-    if not instigator_id or world is None:
+    resolved_instigator_id = "" if instigator_id in (None, "") else str(instigator_id).strip()
+    if not resolved_instigator_id or world is None:
         return False
 
-    instigator = world.get_entity(instigator_id)
+    instigator = world.get_entity(resolved_instigator_id)
     if instigator is None:
         return False
     return str(instigator.kind).strip() in allowed_kinds

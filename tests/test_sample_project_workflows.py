@@ -347,6 +347,15 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         new_game_command = title_menu["segments"][0]["options"][0]["commands"][0]
         self.assertEqual(new_game_command["camera_follow"]["entity_id"], "player_1")
 
+        title_screen = load_json_data(project_root / "areas" / "title_screen.json")
+        enter_command_types = [
+            command["type"] for command in title_screen.get("enter_commands", [])
+        ]
+        self.assertEqual(
+            enter_command_types[:3],
+            ["clear_camera_follow", "clear_camera_bounds", "clear_camera_deadzone"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

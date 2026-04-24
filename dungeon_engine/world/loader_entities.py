@@ -94,6 +94,7 @@ _TEMPLATE_PARAMETER_BUILTINS = frozenset(
         "current_area",
         "area",
         "camera",
+        "instigator_id",
         "from_x",
         "from_y",
         "to_x",

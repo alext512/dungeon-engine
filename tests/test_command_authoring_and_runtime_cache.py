@@ -226,17 +226,15 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
 
         self.assertEqual(issues, [])
 
-    def test_command_audit_allows_declared_set_camera_state_fields(self) -> None:
+    def test_command_audit_allows_declared_set_camera_policy_fields(self) -> None:
         _, project = self._make_project(
             commands={
                 "camera_state.json": {
                     "params": [],
                     "commands": [
                         {
-                            "type": "set_camera_state",
-                            "follow": {
-                                "mode": "none",
-                            },
+                            "type": "set_camera_policy",
+                            "follow": None,
                             "bounds": None,
                             "deadzone": None,
                             "source_entity_id": "camera_anchor",

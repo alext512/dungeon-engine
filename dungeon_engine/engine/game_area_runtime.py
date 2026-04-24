@@ -220,6 +220,7 @@ class GameAreaRuntimeMixin:
         if next_cell is not None:
             runtime_params["to_x"] = int(next_cell[0])
             runtime_params["to_y"] = int(next_cell[1])
+        runtime_params["instigator_id"] = instigator.entity_id
 
         def _spawn_hook(receiver, command_id: str) -> None:
             handle = execute_registered_command(
@@ -229,8 +230,6 @@ class GameAreaRuntimeMixin:
                 {
                     "entity_id": receiver.entity_id,
                     "command_id": command_id,
-                    "entity_refs": {"instigator": instigator.entity_id},
-                    "refs_mode": "merge",
                     **runtime_params,
                 },
             )
@@ -552,7 +551,7 @@ class GameAreaRuntimeMixin:
                 offset_x=float(camera_follow.offset_x),
                 offset_y=float(camera_follow.offset_y),
             )
-        elif camera_follow.mode == "none":
+        elif camera_follow.mode == "clear":
             self.camera.clear_follow()
         self.camera.update(self.world, advance_tick=False)
 

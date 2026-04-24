@@ -52,7 +52,7 @@ class TestAreaStartPanel(unittest.TestCase):
 
         self.assertIn('"type": "play_music"', self.panel._commands_text.toPlainText())
 
-    def test_set_camera_follow_helper_builds_structured_follow_spec(self):
+    def test_set_camera_follow_entity_helper_builds_command(self):
         self.panel.load_area("areas/demo", [])
         self.panel._helper_combo.setCurrentIndex(3)
         self.panel._camera_entity_edit.setText("player_1")
@@ -60,6 +60,5 @@ class TestAreaStartPanel(unittest.TestCase):
         self.panel._on_add_helper_command()
 
         text = self.panel._commands_text.toPlainText()
-        self.assertIn('"type": "set_camera_follow"', text)
-        self.assertIn('"mode": "entity"', text)
+        self.assertIn('"type": "set_camera_follow_entity"', text)
         self.assertIn('"entity_id": "player_1"', text)

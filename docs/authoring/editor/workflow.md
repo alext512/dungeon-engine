@@ -108,7 +108,7 @@ The editor keeps `Layers` focused on map structure and puts area startup behavio
 - `route_inputs_to_entity`
 - `run_entity_command`
 - `open_dialogue_session`
-- `set_camera_follow`
+- `set_camera_follow_entity`
 - `play_music`
 
 ## Project-Level Editing

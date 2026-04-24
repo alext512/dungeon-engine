@@ -4,6 +4,46 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Camera Command Cleanup
+
+- Replaced the focused authored camera follow command with explicit
+  `set_camera_follow_entity`, `set_camera_follow_input_target`, and
+  `clear_camera_follow`
+- Added `clear_camera_bounds` and `clear_camera_deadzone` so the focused camera
+  commands can clear their own state instead of relying on `set_camera_policy`
+- Renamed the umbrella patch command from `set_camera_state` to
+  `set_camera_policy`, keeping the same atomic `follow` / `bounds` /
+  `deadzone` patch semantics with `null` sections clearing those parts of the
+  policy
+- Updated the editor, docs, focused tests, and helper UIs to use the new camera
+  command surface
+
+---
+
+## Grid Step Command Rename
+
+- Renamed the built-in authored command `move_in_direction` to
+  `step_in_direction` so the JSON contract reads more clearly as one
+  discrete grid/tile step
+- Updated the live runtime registration, active docs, sample project command
+  content, and focused movement tests to use `step_in_direction`
+
+---
+
+## Runtime Context Ref Cleanup
+
+- Stopped auto-injecting engine-owned `instigator` / `caller` refs into
+  `entity_refs`; authored `entity_refs` now only represent refs explicitly
+  passed by JSON
+- Added/standardized direct `instigator_id` runtime context across movement,
+  occupancy, interaction, dialogue, inventory item use, and area-transition
+  flows
+- Updated sample content, docs, and focused tests to use direct
+  `$instigator_id` where engine-owned acting-entity context is intended, while
+  keeping explicit `entity_refs` examples for author-passed cross-entity refs
+
+---
+
 ## Inline Dialogue Definitions
 
 - Added `dialogue_definition` as a first-class inline source for

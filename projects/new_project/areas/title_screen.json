@@ -38,6 +38,15 @@
   ],
   "enter_commands": [
     {
+      "type": "clear_camera_follow"
+    },
+    {
+      "type": "clear_camera_bounds"
+    },
+    {
+      "type": "clear_camera_deadzone"
+    },
+    {
       "type": "spawn_flow",
       "commands": [
         {

@@ -37,11 +37,11 @@
         "destination_entity_id": "$destination_entity_id",
         "allowed_instigator_kinds": "$allowed_instigator_kinds",
         "transfer_entity_ids": [
-          "$ref_ids.instigator"
+          "$instigator_id"
         ],
         "camera_follow": {
           "mode": "entity",
-          "entity_id": "$ref_ids.instigator"
+          "entity_id": "$instigator_id"
         }
       }
     ]

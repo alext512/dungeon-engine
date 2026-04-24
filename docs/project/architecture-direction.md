@@ -535,7 +535,7 @@ physics from scratch:
 
 - **Entity fields**: `facing`, `solid`, `pushable`, `weight`, `push_strength`
 - **Cell flags**: `blocked`
-- **Built-in commands**: `move_in_direction`, `push_facing`, `interact_facing`
+- **Built-in commands**: `step_in_direction`, `push_facing`, `interact_facing`
 
 This contract is opt-in. Projects can use these helpers for standard grid physics
 or build entirely custom movement through lower-level commands.

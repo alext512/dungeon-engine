@@ -44,11 +44,7 @@
       {
         "type": "open_entity_dialogue",
         "entity_id": "$self_id",
-        "allow_cancel": true,
-        "entity_refs": {
-          "caller": "$self_id",
-          "instigator": "$ref_ids.instigator"
-        }
+        "allow_cancel": true
       }
     ]
   }

@@ -99,6 +99,59 @@ Use [Verification and Validation](verification-and-validation.md) when you need 
 - Avoid treating old plans as implemented behavior.
 - When behavior changes, think in terms of code plus docs plus project validation, not code alone.
 
+## Shell And Search Rules
+
+This repo is often worked on from Windows PowerShell through coding agents.
+That combination is especially easy to trip up with nested quoting, regex
+escaping, and path handling. Prefer boring commands over clever one-liners.
+
+- Use `rg -F` when you want a literal text search. Do not reach for regex
+  unless you actually need regex behavior.
+- In PowerShell, prefer `Select-String -SimpleMatch` for literal matches and
+  `Select-String -Pattern '...'` with **single-quoted** regex patterns for real
+  regex work.
+- When building a regex from dynamic text, escape only the dynamic portion with
+  `[regex]::Escape(...)` instead of hand-escaping a mixed pattern.
+- Do not interpolate raw Windows paths into regex patterns. Treat paths as
+  plain command arguments, or escape them first with `[regex]::Escape(...)`.
+- Prefer multiple simple shell steps over one dense pipeline when quoting or
+  escaping starts getting tricky.
+- If an `rg` command is doing both search and parsing, consider splitting the
+  job: use `rg` or `Select-String` to find the lines, then let PowerShell
+  handle the structured extraction.
+- Prefer here-strings or temporary variables over deeply nested quoted strings
+  when passing JSON, regexes, or multi-line payloads to shell commands.
+- If a shell command starts failing in a way that looks like quoting trouble,
+  simplify it before assuming the repo is broken.
+
+### Preferred Patterns
+
+Literal search:
+
+```powershell
+rg -F '"type": "set_entity_field"' docs tests projects
+```
+
+Literal search with PowerShell-native tooling:
+
+```powershell
+Select-String -Path 'docs/**/*.md' -Pattern 'set_entity_field' -SimpleMatch
+```
+
+Regex search with a PowerShell-literal pattern:
+
+```powershell
+$pattern = '@registry\.register\("([^"]+)"'
+Select-String -Path $files -Pattern $pattern
+```
+
+Dynamic literal embedded in a regex:
+
+```powershell
+$escaped = [regex]::Escape($userText)
+Select-String -Path $files -Pattern $escaped
+```
+
 ## Debt Prevention Rules
 
 Use these rules to avoid reintroducing the same kinds of architectural debt:

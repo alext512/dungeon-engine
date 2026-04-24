@@ -86,7 +86,12 @@ class _TemplateFieldsEditor(QWidget):
         self._dialogues_editable = True
         self._dialogues_value: dict[str, dict[str, Any]] = {}
         self._reference_picker_callbacks: dict[str, Callable[..., str | None] | None] = {
+            "area": None,
+            "asset": None,
             "entity": None,
+            "entity_command": None,
+            "entity_dialogue": None,
+            "item": None,
             "dialogue": None,
             "command": None,
         }
@@ -470,14 +475,22 @@ class _TemplateFieldsEditor(QWidget):
     def set_reference_picker_callbacks(
         self,
         *,
+        area_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
         entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
         entity_dialogue_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._reference_picker_callbacks = {
+            "area": area_picker,
+            "asset": asset_picker,
             "entity": entity_picker,
+            "entity_command": entity_command_picker,
             "entity_dialogue": entity_dialogue_picker,
+            "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
         }
@@ -793,16 +806,38 @@ class _TemplateFieldsEditor(QWidget):
     ) -> tuple[dict[str, dict[str, Any]], str | None, dict[str, str]] | None:
         dialog = EntityDialoguesDialog(
             self,
+            area_picker=self._reference_picker_callbacks.get("area"),
+            asset_picker=self._reference_picker_callbacks.get("asset"),
             entity_picker=self._reference_picker_callbacks.get("entity"),
+            entity_command_picker=self._reference_picker_callbacks.get("entity_command"),
             entity_dialogue_picker=self._reference_picker_callbacks.get("entity_dialogue"),
+            item_picker=self._reference_picker_callbacks.get("item"),
             dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
             command_picker=self._reference_picker_callbacks.get("command"),
             current_entity_id=None,
+            current_area_id=None,
+            current_entity_command_names=self._current_entity_command_names(),
         )
         dialog.load_dialogues(dialogues, active_dialogue=active_dialogue)
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return None
         return dialog.dialogues(), dialog.active_dialogue(), dialog.rename_map()
+
+    def _current_entity_command_names(self) -> list[str]:
+        raw_text = self._entity_commands_text.toPlainText().strip()
+        if not raw_text:
+            return []
+        try:
+            parsed = loads_json_data(raw_text, source_name="Template entity commands")
+        except JsonDataDecodeError:
+            return []
+        try:
+            entity_commands = parse_entity_commands(parsed)
+        except ValueError:
+            return []
+        return sorted(
+            str(name).strip() for name in entity_commands.keys() if str(name).strip()
+        )
 
     def _on_edit_dialogues_clicked(self) -> None:
         if not self._dialogues_editable:
@@ -1213,14 +1248,22 @@ class EntityTemplateEditorWidget(QWidget):
     def set_reference_picker_callbacks(
         self,
         *,
+        area_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
         entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
         entity_dialogue_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._fields_editor.set_reference_picker_callbacks(
+            area_picker=area_picker,
+            asset_picker=asset_picker,
             entity_picker=entity_picker,
+            entity_command_picker=entity_command_picker,
             entity_dialogue_picker=entity_dialogue_picker,
+            item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
         )

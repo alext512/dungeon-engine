@@ -545,11 +545,7 @@ Example:
         "dialogue_on_start": [],
         "dialogue_on_end": [],
         "segment_hooks": [],
-        "allow_cancel": false,
-        "entity_refs": {
-          "instigator": "$ref_ids.instigator",
-          "caller": "$self_id"
-        }
+        "allow_cancel": false
       }
     ]
   }
@@ -651,7 +647,7 @@ Typical pickup pattern:
 ```json
 {
   "type": "add_inventory_item",
-  "entity_id": "$ref_ids.instigator",
+  "entity_id": "$instigator_id",
   "item_id": "$self.item_id",
   "quantity": "$self.quantity",
   "quantity_mode": "partial",
@@ -707,11 +703,7 @@ those variants on the entity and store the current selection by name:
       {
         "type": "open_entity_dialogue",
         "entity_id": "$self_id",
-        "allow_cancel": true,
-        "entity_refs": {
-          "instigator": "$ref_ids.instigator",
-          "caller": "$self_id"
-        }
+        "allow_cancel": true
       },
       {
         "type": "set_entity_active_dialogue",
@@ -1049,7 +1041,7 @@ Important nuance:
 
 - do not assume every command object accepts arbitrary extra fields
 - startup validation fails on unknown top-level keys for strict primitive commands
-- commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_sequence`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `move_in_direction`, `push_facing`, and `interact_facing`
+- commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_sequence`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `step_in_direction`, `push_facing`, `interact_facing`, `open_dialogue_session`, `open_entity_dialogue`, `change_area`, and `new_game`
 
 So a typo like `"persitent": true` on `set_visible` is a startup validation failure, while a field like `"reward_item": "items/key"` on `run_sequence` is valid when child commands need to read `$reward_item`.
 
@@ -1057,7 +1049,7 @@ So a typo like `"persitent": true` on `set_visible` is a startup validation fail
 
 Commands often need to refer to the current entity or an explicitly passed related entity.
 
-### `self`, `refs`, And `ref_ids`
+### `self`, `refs`, `ref_ids`, And Runtime Params
 
 Current command flows carry:
 
@@ -1065,6 +1057,14 @@ Current command flows carry:
   The entity that owns the current command chain.
 - `entity_refs`
   A named map of explicitly passed related entities.
+- named runtime params
+  Engine-owned or caller-supplied context values such as `instigator_id`,
+  `direction`, `from_x`, or `to_y`.
+
+Important split:
+
+- use `entity_refs` only for refs you intentionally pass in JSON
+- use direct runtime params like `$instigator_id` for engine-owned context
 
 Use these token surfaces:
 
@@ -1106,6 +1106,10 @@ Example:
   "persistent": true
 }
 ```
+
+That only works when some parent flow explicitly passed an `entity_refs.caller`
+entry first. Use `$self_id` or `$instigator_id` when you want engine-owned
+context instead of an authored named ref.
 
 For strict primitive entity-target commands, use explicit ids or resolved id tokens such as `$self_id` and `$ref_ids.some_name` rather than symbolic strings.
 
@@ -1303,7 +1307,7 @@ Example:
       "commands": [
         {
           "type": "set_entity_var",
-          "entity_id": "$ref_ids.caller",
+          "entity_id": "$self_id",
           "name": "warning_seen",
           "value": true
         }
@@ -1358,13 +1362,14 @@ Example caller command:
   "dialogue_on_start": [],
   "dialogue_on_end": [],
   "segment_hooks": [],
-  "allow_cancel": true,
-  "entity_refs": {
-    "instigator": "$ref_ids.instigator",
-    "caller": "$self_id"
-  }
+  "allow_cancel": true
 }
 ```
+
+When the surrounding flow already has engine-owned context like
+`$instigator_id`, that context flows into the dialogue runtime automatically.
+Only add `entity_refs` here when the dialogue needs extra named refs of your
+own, such as `$ref_ids.caller`.
 
 Inline entity-owned dialogue uses the same dialogue schema:
 
@@ -1428,7 +1433,8 @@ Practical rule:
 
 - use `dialogue_on_start` for setup that should happen after the controller borrows input
 - use `dialogue_on_end` for behavior that should happen after the controller restores input
-- do not rely on implicit engine magic for interaction ownership; pass any needed `entity_refs` explicitly
+- engine-owned context such as `$instigator_id` flows through runtime params automatically
+- pass `entity_refs` only when you want your own named related-entity refs such as `$ref_ids.caller` or `$refs.target`
 - modal controllers should use `push_input_routes` / `pop_input_routes`
 
 Controller-path example caller command:
@@ -1517,11 +1523,7 @@ Controller-path example caller command:
       }
     }
   ],
-  "allow_cancel": true,
-  "entity_refs": {
-    "instigator": "$self_id",
-    "caller": "$self_id"
-  }
+  "allow_cancel": true
 }
 ```
 
@@ -1550,7 +1552,7 @@ Practical note:
 - use `dialogue_on_end` when you specifically need one shared post-close path or cleanup that should only run after the dialogue session fully closes
 - use `option_commands_by_id` / `option_commands` when the caller needs to override or augment the option behavior from outside the dialogue JSON
 
-If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. When you need to preserve cross-entity context, pass named `entity_refs` explicitly at the call site.
+If an option should launch another dialogue immediately instead of closing, you can still do that directly in the option commands. Engine-owned context such as `$instigator_id` already flows through the runtime. When you need extra named cross-entity context beyond that, pass `entity_refs` explicitly at the call site.
 
 Generic per-command lifecycle wrapper fields are removed from the active command model:
 
@@ -1713,7 +1715,7 @@ The standard contract uses:
 A typical simple player flow is now:
 
 1. The player entity's `input_map` maps `move_up` to `move_up`.
-2. That entity command calls `move_in_direction`.
+2. That entity command calls `step_in_direction`.
 3. The engine:
    - resolves the actor's facing
    - checks the target cell's `blocked`
@@ -1726,7 +1728,7 @@ Minimal player `move_up` entity command:
 ```json
 "move_up": [
   {
-    "type": "move_in_direction",
+    "type": "step_in_direction",
     "entity_id": "$self_id",
     "direction": "up",
     "frames_needed": "$project.movement.ticks_per_tile",
@@ -1787,7 +1789,7 @@ tile, author `on_occupant_enter` / `on_occupant_leave` on that entity:
 ```
 
 These occupancy hooks run on the stationary entity, receive the moving entity as
-`$ref_ids.instigator`, and expose transition coordinates through runtime params
+`$instigator_id`, and expose transition coordinates through runtime params
 such as `$from_x`, `$from_y`, `$to_x`, and `$to_y`.
 
 Lower-level authored movement flows are still valid. You can still build custom
@@ -2028,9 +2030,11 @@ Rules:
 - use `entry_id` when the target area should place the transfer at a named
   entry point
 - use `transfer_entity_ids` when the live entity itself should travel to the new area
-- `camera_follow.mode` can be `entity`, `input_target`, or `none`
+- `camera_follow.mode` can be `entity` or `input_target`
+- omit `camera_follow` to keep the destination area's authored camera defaults
+- set `camera_follow: null` to clear destination-area follow after load
 - `camera_follow.entity_id` may use `self` in a source-entity context, or
-  runtime ref tokens such as `$self_id` and `$ref_ids.instigator`
+  runtime params/tokens such as `$self_id` and `$instigator_id`
 - use `allowed_instigator_kinds` on occupancy-driven `change_area` commands
   when a trigger should only transition selected entity kinds, such as a
   player-only doorway. Standard grid movement and push commands treat that
@@ -2041,9 +2045,9 @@ Rules:
   - re-entering the origin area does not duplicate it
   - save/load restores the traveler in its current area
 
-A note on travelers: "traveler" is runtime state, not an authored entity type. There is no `"traveler": true` field in JSON. Any live area-scoped entity can become a traveler when it is named in `transfer_entity_ids` during a `change_area`. The engine then tracks that entity's current area for the rest of the session. Only `scope: "area"` entities can be transferred — global entities are already present everywhere and cannot be moved this way.
+A note on travelers: "traveler" is runtime state, not an authored entity type. There is no `"traveler": true` field in JSON. Any live area-scoped entity can become a traveler when it is named in `transfer_entity_ids` during a `change_area`. The engine then tracks that entity's current area for the rest of the session. Only `scope: "area"` entities can be transferred â€” global entities are already present everywhere and cannot be moved this way.
 
-This is different from global entities. Global entities are project-level and always present in the active world — they don't physically move between areas. A traveler is an entity that was in one area and has been relocated to another; it exists in exactly one area at a time. If you don't include an entity in `transfer_entity_ids`, it simply stays behind in the area it was in.
+This is different from global entities. Global entities are project-level and always present in the active world â€” they don't physically move between areas. A traveler is an entity that was in one area and has been relocated to another; it exists in exactly one area at a time. If you don't include an entity in `transfer_entity_ids`, it simply stays behind in the area it was in.
 
 Recommended marker pattern:
 
@@ -2108,11 +2112,11 @@ Transition trigger example:
         "destination_entity_id": "$destination_entity_id",
         "allowed_instigator_kinds": "$allowed_instigator_kinds",
         "transfer_entity_ids": [
-          "$ref_ids.instigator"
+          "$instigator_id"
         ],
         "camera_follow": {
           "mode": "entity",
-          "entity_id": "$ref_ids.instigator"
+          "entity_id": "$instigator_id"
         }
       }
     ]
@@ -2126,16 +2130,20 @@ Camera behavior is explicit runtime state controlled by commands.
 
 Useful commands:
 
-- `set_camera_follow`
-- `set_camera_state`
+- `set_camera_follow_entity`
+- `set_camera_follow_input_target`
+- `clear_camera_follow`
+- `set_camera_policy`
 - `push_camera_state`
 - `pop_camera_state`
 - `set_camera_bounds`
+- `clear_camera_bounds`
 - `set_camera_deadzone`
+- `clear_camera_deadzone`
 - `move_camera`
 - `teleport_camera`
 
-`set_camera_follow` uses one structured follow object, and that object must declare `mode` explicitly. `set_camera_state` updates `follow`, `bounds`, and `deadzone` atomically; omitted sections stay unchanged, and explicit `null` clears that section. `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`. `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`. `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"` plus `mode: "absolute"` or `mode: "relative"`. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow.entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
+`set_camera_follow_entity` and `set_camera_follow_input_target` are the focused follow setters. `clear_camera_follow`, `clear_camera_bounds`, and `clear_camera_deadzone` are the focused clear commands. `set_camera_policy` is the atomic patch command for `follow`, `bounds`, and `deadzone`; omitted sections stay unchanged, and explicit `null` clears that section. Authored `follow.mode` can be `entity` or `input_target`. `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`. `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`. `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"` plus `mode: "absolute"` or `mode: "relative"`. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow.entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
 
 Example:
 
@@ -2143,13 +2151,10 @@ Example:
 {
   "commands": [
     {
-      "type": "set_camera_follow",
-      "follow": {
-        "mode": "entity",
-        "entity_id": "$self_id",
-        "offset_x": 0,
-        "offset_y": -8
-      }
+      "type": "set_camera_follow_entity",
+      "entity_id": "$self_id",
+      "offset_x": 0,
+      "offset_y": -8
     },
     {
       "type": "set_camera_deadzone",
@@ -2244,7 +2249,7 @@ A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var`
 ```json
 {
   "type": "set_entity_fields",
-  "entity_id": "$ref_ids.caller",
+  "entity_id": "$self_id",
   "set": {
     "fields": {
       "visible": true

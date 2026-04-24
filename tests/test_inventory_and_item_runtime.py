@@ -630,7 +630,7 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
                     use_commands=[
                         {
                             "type": "set_entity_var",
-                            "entity_id": "$ref_ids.instigator",
+                            "entity_id": "$instigator_id",
                             "name": "orb_used",
                             "value": True,
                         }
@@ -686,7 +686,7 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
                     use_commands=[
                         {
                             "type": "set_entity_var",
-                            "entity_id": "$ref_ids.instigator",
+                            "entity_id": "$instigator_id",
                             "name": "key_used",
                             "value": True,
                         }
@@ -829,7 +829,7 @@ class InventoryAndItemRuntimeTests(unittest.TestCase):
                     use_commands=[
                         {
                             "type": "set_entity_var",
-                            "entity_id": "$ref_ids.instigator",
+                            "entity_id": "$instigator_id",
                             "name": "ate_apple",
                             "value": True,
                         }

@@ -38,8 +38,7 @@
         "entity_id": "$self_id",
         "allow_cancel": true,
         "entity_refs": {
-          "caller": "$self_id",
-          "instigator": "$ref_ids.instigator"
+          "caller": "$self_id"
         },
         "segment_hooks": [
           {
@@ -47,7 +46,7 @@
               "mark_hook": [
                 {
                   "type": "set_entity_var",
-                  "entity_id": "$ref_ids.caller",
+                  "entity_id": "$self_id",
                   "name": "last_hook_choice",
                   "value": "hook"
                 }

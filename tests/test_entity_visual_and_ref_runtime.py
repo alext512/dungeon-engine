@@ -223,12 +223,9 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 },
             ),
             (
-                "set_camera_follow",
+                "set_camera_follow_entity",
                 {
-                    "follow": {
-                        "mode": "entity",
-                        "entity_id": "self",
-                    },
+                    "entity_id": "self",
                 },
             ),
             (

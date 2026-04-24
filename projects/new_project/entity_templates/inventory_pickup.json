@@ -55,7 +55,7 @@
         "then": [
           {
             "type": "add_inventory_item",
-            "entity_id": "$ref_ids.instigator",
+            "entity_id": "$instigator_id",
             "item_id": "$item_id",
             "quantity": "$quantity",
             "quantity_mode": "partial",

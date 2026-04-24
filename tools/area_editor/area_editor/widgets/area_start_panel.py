@@ -88,7 +88,7 @@ class AreaStartPanel(QWidget):
                 "Route Inputs To Entity",
                 "Run Entity Command",
                 "Open Dialogue",
-                "Set Camera Follow",
+                "Set Camera Follow Entity",
                 "Play Music",
             ]
         )
@@ -114,7 +114,7 @@ class AreaStartPanel(QWidget):
         self._helper_stack.addWidget(self._build_route_inputs_page())
         self._helper_stack.addWidget(self._build_run_entity_command_page())
         self._helper_stack.addWidget(self._build_open_dialogue_page())
-        self._helper_stack.addWidget(self._build_set_camera_follow_page())
+        self._helper_stack.addWidget(self._build_set_camera_follow_entity_page())
         self._helper_stack.addWidget(self._build_play_music_page())
 
         commands_label = QLabel("Enter Commands")
@@ -228,7 +228,7 @@ class AreaStartPanel(QWidget):
         form.addRow("allow_cancel", self._dialogue_allow_cancel_check)
         return page
 
-    def _build_set_camera_follow_page(self) -> QWidget:
+    def _build_set_camera_follow_entity_page(self) -> QWidget:
         page = QWidget()
         form = QFormLayout(page)
         form.setContentsMargins(0, 0, 0, 0)
@@ -356,13 +356,8 @@ class AreaStartPanel(QWidget):
             if not entity_id:
                 raise ValueError("Choose an entity for camera follow.")
             return {
-                "type": "set_camera_follow",
-                "follow": {
-                    "mode": "entity",
-                    "entity_id": entity_id,
-                    "offset_x": 0,
-                    "offset_y": 0,
-                },
+                "type": "set_camera_follow_entity",
+                "entity_id": entity_id,
             }
         if index == 4:
             path = self._music_path_edit.text().strip()

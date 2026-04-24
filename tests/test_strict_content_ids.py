@@ -503,8 +503,7 @@ class StrictContentIdTests(unittest.TestCase):
                     {
                         "entity_id": receiver.entity_id,
                         "command_id": command_id,
-                        "entity_refs": {"instigator": instigator.entity_id},
-                        "refs_mode": "merge",
+                        "instigator_id": instigator.entity_id,
                         **runtime_params,
                     },
                 )
@@ -585,7 +584,7 @@ class StrictContentIdTests(unittest.TestCase):
         interaction = InteractionSystem(world)
         self.assertEqual(interaction.get_facing_target("actor"), high)
 
-    def test_move_in_direction_steps_actor_and_updates_facing(self) -> None:
+    def test_step_in_direction_steps_actor_and_updates_facing(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -606,7 +605,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {
                 "entity_id": "player",
                 "direction": "right",
@@ -622,7 +621,7 @@ class StrictContentIdTests(unittest.TestCase):
             [("player", "right", None, 6, None, "immediate")],
         )
 
-    def test_move_in_direction_runs_on_blocked_hook_with_context(self) -> None:
+    def test_step_in_direction_runs_on_blocked_hook_with_context(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -675,7 +674,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {
                 "entity_id": "player",
                 "direction": "right",
@@ -689,7 +688,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(actor.variables["blocked_entity"], "crate")
         self.assertEqual(movement_system.grid_steps, [])
 
-    def test_move_in_direction_pushes_one_blocker_using_entity_push_strength(self) -> None:
+    def test_step_in_direction_pushes_one_blocker_using_entity_push_strength(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -718,7 +717,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {
                 "entity_id": "player",
                 "direction": "right",
@@ -737,7 +736,7 @@ class StrictContentIdTests(unittest.TestCase):
             ],
         )
 
-    def test_move_in_direction_does_not_push_blocker_into_rejected_transition(self) -> None:
+    def test_step_in_direction_does_not_push_blocker_into_rejected_transition(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -780,7 +779,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {"entity_id": "player", "direction": "right", "wait": False},
         )
         handle.update(0.0)
@@ -788,7 +787,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(actor.grid_x, 0)
         self.assertEqual(blocker.grid_x, 1)
 
-    def test_move_in_direction_allows_matching_entity_into_gated_transition(self) -> None:
+    def test_step_in_direction_allows_matching_entity_into_gated_transition(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -825,7 +824,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {"entity_id": "player", "direction": "right", "wait": False},
         )
         handle.update(0.0)
@@ -899,7 +898,7 @@ class StrictContentIdTests(unittest.TestCase):
                     commands=[
                         {
                             "type": "set_entity_var",
-                            "entity_id": "$ref_ids.instigator",
+                            "entity_id": "$instigator_id",
                             "name": "interacted",
                             "value": True,
                         }
@@ -926,7 +925,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertTrue(actor.variables["interacted"])  # type: ignore[index]
 
-    def test_move_in_direction_runs_occupant_enter_and_leave_hooks(self) -> None:
+    def test_step_in_direction_runs_occupant_enter_and_leave_hooks(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -950,7 +949,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "type": "set_entity_var",
                             "entity_id": "$self_id",
                             "name": "entered_by",
-                            "value": "$ref_ids.instigator",
+                            "value": "$instigator_id",
                         }
                     ]
                 ),
@@ -960,7 +959,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "type": "set_entity_var",
                             "entity_id": "$self_id",
                             "name": "left_by",
-                            "value": "$ref_ids.instigator",
+                            "value": "$instigator_id",
                         }
                     ]
                 ),
@@ -975,7 +974,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {
                 "entity_id": "player",
                 "direction": "right",
@@ -991,7 +990,7 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "move_in_direction",
+            "step_in_direction",
             {
                 "entity_id": "player",
                 "direction": "right",
@@ -1027,7 +1026,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "type": "set_entity_var",
                             "entity_id": "$self_id",
                             "name": "released_by",
-                            "value": "$ref_ids.instigator",
+                            "value": "$instigator_id",
                         }
                     ]
                 )
@@ -1076,7 +1075,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "type": "set_entity_var",
                             "entity_id": "$self_id",
                             "name": "entered_by",
-                            "value": "$ref_ids.instigator",
+                            "value": "$instigator_id",
                         }
                     ]
                 )
@@ -1124,7 +1123,7 @@ class StrictContentIdTests(unittest.TestCase):
                             "type": "set_entity_var",
                             "entity_id": "$self_id",
                             "name": "released_by",
-                            "value": "$ref_ids.instigator",
+                            "value": "$instigator_id",
                         }
                     ]
                 )
@@ -2866,15 +2865,15 @@ class StrictContentIdTests(unittest.TestCase):
                 "area_id": "areas/village_house",
                 "entry_id": "from_square",
                 "destination_entity_id": "village_house_spawn",
-                "transfer_entity_ids": ["$ref_ids.instigator"],
+                "transfer_entity_ids": ["$instigator_id"],
                 "camera_follow": {
                     "mode": "entity",
-                    "entity_id": "$ref_ids.instigator",
+                    "entity_id": "$instigator_id",
                     "offset_x": 12,
                     "offset_y": -8,
                 },
             },
-            base_params={"entity_refs": {"instigator": "player"}},
+            base_params={"instigator_id": "player"},
         )
         handle.update(0.0)
 
@@ -2890,6 +2889,40 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(request.camera_follow.entity_id, "player")
         self.assertEqual(request.camera_follow.offset_x, 12.0)
         self.assertEqual(request.camera_follow.offset_y, -8.0)
+
+    def test_change_area_command_can_request_camera_follow_clear(self) -> None:
+        recorded_requests: list[AreaTransitionRequest] = []
+        registry = CommandRegistry()
+        register_builtin_commands(registry)
+        world = World()
+        context = CommandContext(
+            services=build_command_services(
+                area=_minimal_runtime_area(),
+                world=world,
+                collision_system=None,
+                movement_system=None,
+                interaction_system=None,
+                animation_system=None,
+                request_area_change=recorded_requests.append,
+            ),
+        )
+
+        handle = execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "change_area",
+                "area_id": "areas/village_house",
+                "camera_follow": None,
+            },
+        )
+        handle.update(0.0)
+
+        self.assertEqual(len(recorded_requests), 1)
+        request = recorded_requests[0]
+        self.assertIsNotNone(request.camera_follow)
+        assert request.camera_follow is not None
+        self.assertEqual(request.camera_follow.mode, "clear")
 
     def test_change_area_command_can_filter_hook_instigator_kind(self) -> None:
         recorded_requests: list[AreaTransitionRequest] = []
@@ -2915,14 +2948,14 @@ class StrictContentIdTests(unittest.TestCase):
             "area_id": "areas/cave",
             "destination_entity_id": "spawn",
             "allowed_instigator_kinds": ["player"],
-            "transfer_entity_ids": ["$ref_ids.instigator"],
+            "transfer_entity_ids": ["$instigator_id"],
         }
 
         handle = execute_command_spec(
             registry,
             context,
             command_spec,
-            base_params={"entity_refs": {"instigator": "boulder"}},
+            base_params={"instigator_id": "boulder"},
         )
         handle.update(0.0)
         self.assertEqual(recorded_requests, [])
@@ -2931,7 +2964,7 @@ class StrictContentIdTests(unittest.TestCase):
             registry,
             context,
             command_spec,
-            base_params={"entity_refs": {"instigator": "player"}},
+            base_params={"instigator_id": "player"},
         )
         handle.update(0.0)
 
@@ -3876,7 +3909,7 @@ class StrictContentIdTests(unittest.TestCase):
                 {"type": "pop_input_routes"},
                 {"type": "save_game", "save_path": str(save_path)},
             ],
-            base_params={"entity_refs": {"instigator": "player"}},
+            base_params={"instigator_id": "player"},
         )
 
         self.assertTrue(handle.complete)

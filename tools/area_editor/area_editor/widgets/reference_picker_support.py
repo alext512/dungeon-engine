@@ -16,6 +16,8 @@ class EntityReferencePickerRequest:
     entity_id: str | None
     entity_template_id: str | None
     parameter_values: dict[str, object] | None = None
+    entity_command_names_override: tuple[str, ...] | None = None
+    entity_dialogue_names_override: tuple[str, ...] | None = None
 
 
 def call_reference_picker_callback(

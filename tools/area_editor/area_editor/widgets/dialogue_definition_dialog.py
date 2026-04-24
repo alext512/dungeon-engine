@@ -367,19 +367,41 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         self,
         parent=None,
         *,
+        area_picker=None,
+        asset_picker=None,
         entity_picker=None,
+        entity_command_picker=None,
         entity_dialogue_picker=None,
+        item_picker=None,
         dialogue_picker=None,
         command_picker=None,
         current_entity_id: str | None = None,
+        current_area_id: str | None = None,
+        current_entity_command_names: list[str] | tuple[str, ...] | None = None,
+        current_entity_dialogue_names: list[str] | tuple[str, ...] | None = None,
     ) -> None:
         super().__init__(parent)
 
+        self._area_picker = area_picker
+        self._asset_picker = asset_picker
         self._entity_picker = entity_picker
+        self._entity_command_picker = entity_command_picker
         self._entity_dialogue_picker = entity_dialogue_picker
+        self._item_picker = item_picker
         self._dialogue_picker = dialogue_picker
         self._command_picker = command_picker
         self._current_entity_id = current_entity_id
+        self._current_area_id = current_area_id
+        self._current_entity_command_names = tuple(
+            str(name).strip()
+            for name in (current_entity_command_names or ())
+            if str(name).strip()
+        )
+        self._current_entity_dialogue_names = tuple(
+            str(name).strip()
+            for name in (current_entity_dialogue_names or ())
+            if str(name).strip()
+        )
         self._definition: dict[str, Any] = {"segments": []}
         self._loading = False
         self._last_valid_key: tuple[object, ...] | None = None
@@ -1223,12 +1245,19 @@ class _DialogueDefinitionStructuredEditor(QWidget):
     ) -> list[dict[str, Any]] | None:
         dialog = CommandListDialog(
             self,
+            area_picker=self._area_picker,
+            asset_picker=self._asset_picker,
             entity_picker=self._entity_picker,
+            entity_command_picker=self._entity_command_picker,
             entity_dialogue_picker=self._entity_dialogue_picker,
+            item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
             suggested_command_names=_DIALOGUE_SUGGESTED_COMMAND_NAMES,
             current_entity_id=self._current_entity_id,
+            current_area_id=self._current_area_id,
+            current_entity_command_names=self._current_entity_command_names,
+            current_entity_dialogue_names=self._current_entity_dialogue_names,
         )
         dialog.setWindowTitle(title)
         dialog.load_commands(commands)
@@ -1837,11 +1866,18 @@ class DialogueDefinitionDialog(QDialog):
         self,
         parent=None,
         *,
+        area_picker=None,
+        asset_picker=None,
         entity_picker=None,
+        entity_command_picker=None,
         entity_dialogue_picker=None,
+        item_picker=None,
         dialogue_picker=None,
         command_picker=None,
         current_entity_id: str | None = None,
+        current_area_id: str | None = None,
+        current_entity_command_names: list[str] | tuple[str, ...] | None = None,
+        current_entity_dialogue_names: list[str] | tuple[str, ...] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("DialogueDefinitionDialog")
@@ -1855,11 +1891,18 @@ class DialogueDefinitionDialog(QDialog):
         outer.addWidget(self._tabs, 1)
 
         self._structured_editor = _DialogueDefinitionStructuredEditor(
+            area_picker=area_picker,
+            asset_picker=asset_picker,
             entity_picker=entity_picker,
+            entity_command_picker=entity_command_picker,
             entity_dialogue_picker=entity_dialogue_picker,
+            item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
             current_entity_id=current_entity_id,
+            current_area_id=current_area_id,
+            current_entity_command_names=current_entity_command_names,
+            current_entity_dialogue_names=current_entity_dialogue_names,
         )
         self._tabs.addTab(self._structured_editor, "Dialogue Editor")
 
@@ -1964,22 +2007,38 @@ class EntityDialoguesDialog(QDialog):
         self,
         parent=None,
         *,
+        area_picker=None,
+        asset_picker=None,
         entity_picker=None,
+        entity_command_picker=None,
         entity_dialogue_picker=None,
+        item_picker=None,
         dialogue_picker=None,
         command_picker=None,
         current_entity_id: str | None = None,
+        current_area_id: str | None = None,
+        current_entity_command_names: list[str] | tuple[str, ...] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("EntityDialoguesDialog")
         self.setWindowTitle("Edit Entity Dialogues")
         self.resize(980, 680)
 
+        self._area_picker = area_picker
+        self._asset_picker = asset_picker
         self._entity_picker = entity_picker
+        self._entity_command_picker = entity_command_picker
         self._entity_dialogue_picker = entity_dialogue_picker
+        self._item_picker = item_picker
         self._dialogue_picker = dialogue_picker
         self._command_picker = command_picker
         self._current_entity_id = current_entity_id
+        self._current_area_id = current_area_id
+        self._current_entity_command_names = tuple(
+            str(name).strip()
+            for name in (current_entity_command_names or ())
+            if str(name).strip()
+        )
         self._dialogues: dict[str, dict[str, Any]] = {}
         self._active_dialogue: str | None = None
         self._rename_map: dict[str, str] = {}
@@ -2406,11 +2465,18 @@ class EntityDialoguesDialog(QDialog):
             return
         dialog = DialogueDefinitionDialog(
             self,
+            area_picker=self._area_picker,
+            asset_picker=self._asset_picker,
             entity_picker=self._entity_picker,
+            entity_command_picker=self._entity_command_picker,
             entity_dialogue_picker=self._entity_dialogue_picker,
+            item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
             current_entity_id=self._current_entity_id,
+            current_area_id=self._current_area_id,
+            current_entity_command_names=self._current_entity_command_names,
+            current_entity_dialogue_names=list(self._dialogues.keys()),
         )
         dialog.load_definition(definition)
         if dialog.exec() != int(QDialog.DialogCode.Accepted):

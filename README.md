@@ -304,7 +304,7 @@ Other useful docs:
 ## Important Design Notes
 
 - Movement is still command-driven, but the engine now also exposes standard
-  built-ins such as `move_in_direction` and `push_facing` so projects do not
+  built-ins such as `step_in_direction` and `push_facing` so projects do not
   have to rebuild the common grid-physics contract by default.
 - Occupancy-triggered puzzle reactions can now live on the stationary entity
   through ordinary `entity_commands` such as `on_occupant_enter` and

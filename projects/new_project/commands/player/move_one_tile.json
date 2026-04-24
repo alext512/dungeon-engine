@@ -11,7 +11,7 @@
       "wait": false
     },
     {
-      "type": "move_in_direction",
+      "type": "step_in_direction",
       "entity_id": "$self_id",
       "direction": "$direction",
       "frames_needed": "$project.movement.ticks_per_tile",

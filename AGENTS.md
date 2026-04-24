@@ -47,6 +47,7 @@ Optional reference/planning docs:
 
 - `roadmap.md`
 - `plans/`
+- `docs/development/for-coding-agents.md`
 - `tools/area_editor/`
 
 ## Project Structure

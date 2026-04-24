@@ -368,9 +368,8 @@ def register_inventory_commands(
             {
                 "source_entity_id": source_entity_id,
                 "entity_refs": copy.deepcopy(entity_refs or {}),
+                "instigator_id": entity.entity_id,
             },
-            entity_refs={"instigator": entity.entity_id},
-            refs_mode="merge",
         )
         sequence_handle = SequenceCommandHandle(
             registry,

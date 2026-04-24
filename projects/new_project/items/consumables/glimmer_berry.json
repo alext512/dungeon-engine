@@ -12,7 +12,7 @@
   "use_commands": [
     {
       "type": "set_entity_var",
-      "entity_id": "$ref_ids.instigator",
+      "entity_id": "$instigator_id",
       "name": "last_used_item",
       "value": "items/consumables/glimmer_berry",
       "persistent": true

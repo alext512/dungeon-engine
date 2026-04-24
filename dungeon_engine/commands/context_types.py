@@ -11,7 +11,7 @@ from typing import Any, Protocol
 class CameraFollowRequest:
     """Requested camera follow state to apply after a transition completes."""
 
-    mode: str = "preserve"
+    mode: str = "clear"
     entity_id: str | None = None
     action: str | None = None
     offset_x: float = 0.0
@@ -189,8 +189,14 @@ class CameraLike(Protocol):
     def set_bounds_rect(self, x: float, y: float, width: float, height: float) -> None:
         """Clamp camera movement to one world-space rectangle."""
 
+    def clear_bounds(self) -> None:
+        """Remove any active camera bounds rectangle."""
+
     def set_deadzone_rect(self, x: float, y: float, width: float, height: float) -> None:
         """Set a camera deadzone rectangle."""
+
+    def clear_deadzone(self) -> None:
+        """Remove any active camera deadzone rectangle."""
 
     def start_move_to(
         self,
@@ -224,6 +230,7 @@ class DialogueRuntimeLike(Protocol):
         allow_cancel: bool = False,
         actor_id: str | None = None,
         caller_id: str | None = None,
+        entity_refs: dict[str, str] | None = None,
         ui_preset_name: str | None = None,
     ) -> Any:
         """Open a dialogue session and return the session handle."""

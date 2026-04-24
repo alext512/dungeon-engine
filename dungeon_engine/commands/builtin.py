@@ -280,10 +280,10 @@ def _normalize_camera_follow_spec(
 
     if "mode" not in follow:
         raise ValueError(f"{command_name} follow requires an explicit mode.")
-    mode = str(follow.get("mode", "")).strip() or "none"
-    if mode not in {"none", "entity", "input_target"}:
+    mode = str(follow.get("mode", "")).strip()
+    if mode not in {"entity", "input_target"}:
         raise ValueError(
-            f"{command_name} follow.mode must be 'none', 'entity', or 'input_target'."
+            f"{command_name} follow.mode must be 'entity' or 'input_target'."
         )
 
     offset_x = float(follow.get("offset_x", 0.0))
@@ -293,13 +293,6 @@ def _normalize_camera_follow_spec(
         "offset_x": offset_x,
         "offset_y": offset_y,
     }
-
-    if mode == "none":
-        if "entity_id" in follow or "action" in follow or "offset_x" in follow or "offset_y" in follow:
-            raise ValueError(
-                f"{command_name} follow.mode 'none' must not provide entity_id, action, or offsets."
-            )
-        return normalized
 
     if mode == "entity":
         if "action" in follow:
@@ -1007,6 +1000,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             return ImmediateHandle()
 
         runtime_params = _build_occupancy_runtime_params(previous_cell, next_cell)
+        runtime_params["instigator_id"] = instigator.entity_id
         handles: list[CommandHandle] = []
         world_services = context.services.world
         if world_services is None or world_services.world is None:
@@ -1025,8 +1019,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     entity_id=receiver.entity_id,
                     command_id="on_occupant_leave",
                     runtime_params=runtime_params,
-                    entity_refs={"instigator": instigator.entity_id},
-                    refs_mode="merge",
                 )
                 if not handle.complete:
                     handles.append(handle)
@@ -1043,8 +1035,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
                     entity_id=receiver.entity_id,
                     command_id="on_occupant_enter",
                     runtime_params=runtime_params,
-                    entity_refs={"instigator": instigator.entity_id},
-                    refs_mode="merge",
                 )
                 if not handle.complete:
                     handles.append(handle)
@@ -1066,6 +1056,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         allow_cancel: bool = False,
         actor_id: str | None = None,
         caller_id: str | None = None,
+        instigator_id: str | None = None,
         ui_preset: str | None = None,
         source_entity_id: str | None = None,
         entity_refs: dict[str, str] | None = None,
@@ -1079,16 +1070,9 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             raise ValueError("open_dialogue_session requires an active dialogue runtime.")
 
         resolved_actor_id = None if actor_id in (None, "") else str(actor_id).strip()
+        if resolved_actor_id in (None, "") and instigator_id not in (None, ""):
+            resolved_actor_id = str(instigator_id).strip()
         resolved_caller_id = None if caller_id in (None, "") else str(caller_id).strip()
-        if isinstance(entity_refs, dict):
-            if resolved_actor_id in (None, ""):
-                instigator_id = entity_refs.get("instigator")
-                if instigator_id not in (None, ""):
-                    resolved_actor_id = str(instigator_id).strip()
-            if resolved_caller_id in (None, ""):
-                caller_ref_id = entity_refs.get("caller")
-                if caller_ref_id not in (None, ""):
-                    resolved_caller_id = str(caller_ref_id).strip()
         if resolved_caller_id in (None, "") and source_entity_id not in (None, ""):
             resolved_caller_id = str(source_entity_id).strip()
 
@@ -1101,6 +1085,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             allow_cancel=bool(allow_cancel),
             actor_id=resolved_actor_id,
             caller_id=resolved_caller_id,
+            entity_refs=_normalize_entity_refs(entity_refs) or None,
             ui_preset_name=None if ui_preset in (None, "") else str(ui_preset).strip(),
         )
         return DialogueSessionWaitHandle(dialogue_runtime, session)
@@ -1128,7 +1113,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         ui_preset: str | None = None,
         source_entity_id: str | None = None,
         entity_refs: dict[str, str] | None = None,
-        **_: Any,
+        **runtime_params: Any,
     ) -> CommandHandle:
         """Open one engine-owned dialogue session using the canonical modal runtime."""
         return _open_dialogue_session_handle(
@@ -1141,6 +1126,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             allow_cancel=allow_cancel,
             actor_id=actor_id,
             caller_id=caller_id,
+            instigator_id=runtime_params.get("instigator_id"),
             ui_preset=ui_preset,
             source_entity_id=source_entity_id,
             entity_refs=entity_refs,
@@ -1169,7 +1155,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         ui_preset: str | None = None,
         source_entity_id: str | None = None,
         entity_refs: dict[str, str] | None = None,
-        **_: Any,
+        **runtime_params: Any,
     ) -> CommandHandle:
         """Open one named entity-owned dialogue or the entity's current active dialogue."""
         entity = _require_exact_entity(world, entity_id)
@@ -1218,6 +1204,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             allow_cancel=allow_cancel,
             actor_id=actor_id,
             caller_id=entity.entity_id if caller_id in (None, "") else caller_id,
+            instigator_id=runtime_params.get("instigator_id"),
             ui_preset=ui_preset,
             source_entity_id=source_entity_id,
             entity_refs=entity_refs,
@@ -1291,6 +1278,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     register_camera_commands(
         registry,
+        require_exact_entity=_require_exact_entity,
         normalize_camera_follow_spec=_normalize_camera_follow_spec,
         normalize_camera_rect_spec=_normalize_camera_rect_spec,
     )

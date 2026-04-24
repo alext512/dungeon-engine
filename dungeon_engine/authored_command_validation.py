@@ -24,7 +24,7 @@ STRICT_ENTITY_TARGET_COMMANDS = frozenset(
         "set_entity_field",
         "set_entity_fields",
         "route_inputs_to_entity",
-        "set_camera_follow",
+        "set_camera_follow_entity",
         "set_entity_grid_position",
         "set_entity_world_position",
         "set_entity_screen_position",
@@ -95,7 +95,7 @@ def _validate_strict_camera_follow(
 ) -> None:
     """Reject symbolic follow.entity_id values on strict camera primitives."""
     command_type = value.get("type")
-    if command_type not in {"set_camera_follow", "set_camera_state"}:
+    if command_type != "set_camera_policy":
         return
     raw_follow = value.get("follow")
     if not isinstance(raw_follow, dict):
