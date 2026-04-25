@@ -700,6 +700,299 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
     },
 }
 
+_INLINE_SUMMARY_COMMAND_TYPES = {
+    "open_dialogue_session",
+    "run_project_command",
+    "set_entity_var",
+    "close_dialogue_session",
+}
+
+_COMMAND_HELP_SUMMARIES: dict[str, str] = {
+    "open_dialogue_session": "Start a dialogue session from either an inline definition or a project dialogue file.",
+    "run_project_command": "Run a reusable project command by id.",
+    "run_entity_command": "Run a named entity command on a target entity.",
+    "run_sequence": "Run child commands in order as one child flow.",
+    "spawn_flow": "Start a child flow immediately and return control to the parent flow.",
+    "run_parallel": "Start multiple child branches together. Completion controls when the parent flow continues.",
+    "run_commands_for_collection": "Iterate a list or tuple and run the child commands once per item.",
+    "if": "Compare two resolved values and run either the then or else child commands.",
+    "change_area": "Travel to another area within the current run.",
+    "new_game": "Start a fresh run and load the chosen starting area.",
+    "load_game": "Load a saved run from disk.",
+    "save_game": "Write the current run to a save file.",
+    "quit_game": "Request that the runtime close the game window.",
+    "set_simulation_paused": "Explicitly set whether simulation is paused.",
+    "toggle_simulation_paused": "Flip the current simulation paused state.",
+    "step_simulation_tick": "Advance the simulation by one tick while paused.",
+    "adjust_output_scale": "Change the current output scale by a relative amount.",
+    "open_entity_dialogue": "Open one dialogue owned by a specific entity.",
+    "step_in_direction": "Attempt one tile step in a direction, using the engine's movement rules.",
+    "set_entity_grid_position": "Snap a world-space entity to a grid cell.",
+    "set_entity_world_position": "Set a world-space entity position in world pixels.",
+    "set_entity_screen_position": "Set a screen-space entity position in screen pixels.",
+    "move_entity_world_position": "Move a world-space entity over time.",
+    "move_entity_screen_position": "Move a screen-space entity over time.",
+    "push_facing": "Attempt one push from the entity's facing direction.",
+    "wait_for_move": "Wait until the target entity finishes its active movement.",
+    "set_camera_follow_entity": "Make the camera follow one specific entity.",
+    "set_camera_follow_input_target": "Make the camera follow whichever entity currently owns a routed input action.",
+    "clear_camera_follow": "Remove the current camera follow policy.",
+    "set_camera_policy": "Patch camera follow, bounds, and deadzone together.",
+    "push_camera_state": "Push the current camera state onto the camera stack.",
+    "pop_camera_state": "Restore the last camera state from the camera stack.",
+    "set_camera_bounds": "Set camera movement bounds.",
+    "clear_camera_bounds": "Remove camera movement bounds.",
+    "set_camera_deadzone": "Set the camera deadzone rectangle.",
+    "clear_camera_deadzone": "Remove the camera deadzone.",
+    "move_camera": "Move the camera over time.",
+    "teleport_camera": "Move the camera instantly.",
+    "play_audio": "Play a one-shot sound effect.",
+    "set_sound_volume": "Set the default volume for future sound effects.",
+    "play_music": "Start or replace the current music track.",
+    "stop_music": "Stop the current music track, optionally with a fade.",
+    "pause_music": "Pause the current music track.",
+    "resume_music": "Resume paused music playback.",
+    "set_music_volume": "Set the music channel volume.",
+    "show_screen_image": "Create or replace a lightweight screen image element.",
+    "show_screen_text": "Create or replace a lightweight screen text element.",
+    "set_screen_text": "Change the text content of an existing screen element.",
+    "remove_screen_element": "Remove one lightweight screen element.",
+    "clear_screen_elements": "Remove lightweight screen elements, optionally by layer.",
+    "play_screen_animation": "Play a frame sequence on one lightweight screen element.",
+    "wait_for_screen_animation": "Wait until one screen-element animation finishes.",
+    "play_animation": "Play an entity visual animation.",
+    "wait_for_animation": "Wait until an entity animation finishes.",
+    "stop_animation": "Stop an entity animation, optionally resetting to its default state.",
+    "add_inventory_item": "Add an item to one entity's inventory.",
+    "remove_inventory_item": "Remove an item from one entity's inventory.",
+    "use_inventory_item": "Consume or use one inventory item from an entity.",
+    "set_inventory_max_stacks": "Set the inventory stack limit for one entity.",
+    "open_inventory_session": "Open the inventory UI for one entity.",
+    "close_inventory_session": "Close the active inventory UI session.",
+    "set_current_area_var": "Write one current-area runtime variable.",
+    "add_current_area_var": "Add a numeric amount to one current-area variable.",
+    "add_entity_var": "Add a numeric amount to one entity variable.",
+    "toggle_current_area_var": "Flip one current-area boolean variable.",
+    "toggle_entity_var": "Flip one entity boolean variable.",
+    "set_current_area_var_length": "Resize one current-area collection-like value.",
+    "set_entity_var_length": "Resize one entity collection-like value.",
+    "append_current_area_var": "Append one value to a current-area list variable.",
+    "append_entity_var": "Append one value to an entity list variable.",
+    "pop_current_area_var": "Pop the last value from a current-area list variable.",
+    "pop_entity_var": "Pop the last value from an entity list variable.",
+    "set_entity_field": "Write one engine-owned field on an entity.",
+    "set_entity_fields": "Write multiple engine-owned fields in one command.",
+    "spawn_entity": "Create a new entity from a template or full entity payload.",
+    "set_area_var": "Write one persistent variable in another area.",
+    "set_area_entity_var": "Write one persistent variable on an entity in another area.",
+    "set_area_entity_field": "Write one persistent engine-owned field on an entity in another area.",
+    "reset_transient_state": "Reset transient runtime state now or queue it for later application.",
+    "reset_persistent_state": "Reset persistent saved state now or queue it for later application.",
+    "set_entity_var": "Write one variable on an entity.",
+    "set_visible": "Set whether an entity is visible.",
+    "set_present": "Set whether an entity is present in the world.",
+    "set_color": "Set an entity tint/color override.",
+    "destroy_entity": "Remove an entity from the current world.",
+    "set_visual_frame": "Set one entity visual frame index directly.",
+    "set_visual_flip_x": "Set whether one entity visual is flipped horizontally.",
+    "set_entity_command_enabled": "Enable or disable one named entity command.",
+    "set_entity_commands_enabled": "Enable or disable the entity-wide command switch.",
+    "set_input_target": "Route one logical input action to a specific entity.",
+    "route_inputs_to_entity": "Route multiple logical input actions to one entity.",
+    "push_input_routes": "Push a temporary set of routed input actions.",
+    "pop_input_routes": "Pop the most recent temporary input-route layer.",
+    "wait_frames": "Wait for a number of simulation frames.",
+    "wait_seconds": "Wait for a number of real-time seconds.",
+    "close_dialogue_session": "Close the currently active dialogue session.",
+    "interact_facing": "Try the built-in facing interaction flow.",
+    "set_entity_active_dialogue": "Set one entity's active dialogue id.",
+    "step_entity_active_dialogue": "Move one entity's active dialogue selection by a delta.",
+    "set_entity_active_dialogue_by_order": "Set one entity's active dialogue by authored order number.",
+}
+
+_COMMON_FIELD_HELP: dict[str, str] = {
+    "entity_id": "Target entity id or token.",
+    "entity_ids": "Optional list of entity ids or tokens targeted by this command.",
+    "source_entity_id": "Optional source entity id or token that becomes $self_id inside the child flow.",
+    "refs_mode": "Controls how explicit named refs combine with refs already present in the current flow.",
+    "entity_refs": "Explicit named entity refs passed into the child flow.",
+    "command_id": "Project-relative or entity-owned command id to run.",
+    "dialogue_id": "Dialogue id on the target entity.",
+    "value": "JSON value input. Strings must be wrapped in quotes; token strings must also be quoted.",
+    "value_mode": "Advanced value-handling mode. Leave it at the default unless you specifically need a different interpretation.",
+    "persistent": "Override whether the change should be saved. Leave it unset to follow the command's normal default behavior.",
+    "wait": "When true, the parent flow waits for this command to finish before continuing.",
+    "commands": "Open the nested command list edited by this command.",
+    "then": "Runs when the condition is true.",
+    "else": "Runs when the condition is false.",
+    "left": "Left-hand value for one comparison. Accepts JSON literals, quoted token strings, or structured value sources.",
+    "right": "Right-hand value for one comparison. Accepts JSON literals, quoted token strings, or structured value sources.",
+    "op": "Comparison operator used between left and right.",
+    "item_param": "Optional runtime param name for the current loop item. Defaults to item.",
+    "index_param": "Optional runtime param name for the current loop index. Defaults to index.",
+    "completion.mode": "Controls when run_parallel is considered complete.",
+    "completion.child_id": "Required when completion.mode is child. Names the branch id to watch.",
+    "action": "Logical input action name used by this command.",
+    "actions": "Comma-separated or list-style set of logical input action names.",
+    "path": "Project-relative asset or file path used by this command.",
+    "direction": "Direction token or literal used by the movement/interaction command.",
+    "mode": "Command-specific mode value. See the command summary and inline notes for the meaning here.",
+    "space": "Coordinate space used by this command.",
+    "x": "Horizontal coordinate or delta for this command.",
+    "y": "Vertical coordinate or delta for this command.",
+    "width": "Rectangle width for this command.",
+    "height": "Rectangle height for this command.",
+    "offset_x": "Horizontal camera-follow offset.",
+    "offset_y": "Vertical camera-follow offset.",
+    "text": "Text content used or written by this command.",
+    "name": "Variable or field name used by this command.",
+    "field_name": "Engine-owned entity field name.",
+    "set": "JSON object of fields to apply together.",
+    "default": "Fallback value used when the command has nothing to return or pop.",
+    "store_var": "Variable name that receives the popped value.",
+    "template": "Entity template id used to build a spawned entity.",
+    "parameters": "Template parameter overrides passed into the spawned entity.",
+    "area_id": "Target area id.",
+    "entry_id": "Optional entry point id inside the target area.",
+    "destination_entity_id": "Optional entity id or token used as the arrival target.",
+    "transfer_entity_id": "One entity id or token to move into the destination area.",
+    "transfer_entity_ids": "List of entity ids or tokens to move into the destination area.",
+    "camera_follow": "Camera follow patch applied after the area transition or new game load.",
+    "allowed_instigator_kinds": "Optional list of instigator kinds allowed to use this transition.",
+    "quantity_mode": "How the quantity value should be interpreted by the inventory command.",
+    "result_var_name": "Optional variable on $self_id that receives the result payload from the inventory command.",
+    "follow": "Camera follow patch for the umbrella camera-policy command.",
+    "bounds": "Camera bounds patch for the umbrella camera-policy command.",
+    "deadzone": "Camera deadzone patch for the umbrella camera-policy command.",
+    "dialogue_source": "Choose whether dialogue content lives inline on this command or in a separate project file.",
+    "dialogue_path": "Project-relative dialogue path, used when dialogue_source is Dialogue File.",
+    "dialogue_definition": "Inline dialogue content stored directly on this command.",
+    "allow_cancel": "Controls whether the active dialogue UI can let the player back out of the session.",
+    "ui_preset": "Optional dialogue or inventory UI preset id.",
+    "actor_id": "Optional speaker entity id or token used by the dialogue session.",
+    "caller_id": "Optional caller entity id or token passed into the dialogue session.",
+    "save_path": "Relative save file path.",
+    "delta": "Relative change applied by this command.",
+    "order": "Authored order number used by this command.",
+    "wrap": "Whether stepping past the end should wrap around.",
+    "frame_sequence": "JSON array of frame indices to play in order.",
+    "ticks_per_frame": "How many simulation ticks each frame should last.",
+    "hold_last_frame": "Whether the animation should stay on its last frame when finished.",
+    "element_id": "Runtime id of the lightweight screen element.",
+    "layer": "Optional screen-element layer.",
+    "anchor": "Anchor point used for positioning screen elements.",
+    "frame_width": "Optional frame width for spritesheet slicing.",
+    "frame_height": "Optional frame height for spritesheet slicing.",
+    "frame": "Frame index used by this command.",
+    "flip_x": "Whether the visual should be mirrored horizontally.",
+    "visible": "Whether the target thing should be visible.",
+    "color": "Color value used by this command.",
+    "enabled": "Whether the target behavior should be enabled.",
+    "font_id": "Bitmap font id used for text rendering.",
+    "max_width": "Maximum text width used for wrapping.",
+    "quantity": "Optional quantity value used by the inventory command.",
+    "max_stacks": "Maximum number of item stacks allowed in the inventory.",
+    "animation": "Animation clip name.",
+    "visual_id": "Visual id on the target entity.",
+    "reset_to_default": "Whether stopping the animation should reset it to its default state.",
+    "item_id": "Project item id.",
+    "amount": "Numeric amount applied by this add-style command.",
+    "present": "Whether the target entity should exist in the current world.",
+    "frames": "Number of frames to wait.",
+    "seconds": "Number of seconds to wait.",
+    "paused": "Explicit paused state to set.",
+    "area_follow": "Camera follow patch applied after the transition.",
+    "push_strength": "Push strength used by the movement command.",
+    "duration": "Movement duration in seconds.",
+    "frames_needed": "Movement duration in simulation frames.",
+    "speed_px_per_second": "Movement speed in pixels per second.",
+    "apply": "Controls when the reset takes effect.",
+    "include_tags": "Tags that must match when selecting reset targets.",
+    "exclude_tags": "Tags that must not match when selecting reset targets.",
+    "fade_seconds": "Fade-out time for stopping music.",
+    "loop": "Whether the music track should loop.",
+    "restart_if_same": "Whether play_music should restart an already-playing identical track.",
+    "volume": "Volume multiplier, usually between 0.0 and 1.0.",
+    "tint": "Optional tint/color override applied to the visual.",
+    "frame_count": "How many frames belong to the animation clip.",
+    "kind": "Optional entity kind override for the spawned entity.",
+    "entity": "Full JSON entity payload used when spawn_entity is in full-entity mode.",
+}
+
+_COMMAND_FIELD_HELP_OVERRIDES: dict[str, dict[str, str]] = {
+    "run_project_command": {
+        "command_id": "Project-relative command id, for example commands/player/move_one_tile.",
+    },
+    "run_entity_command": {
+        "command_id": "Entity-owned command id on the target entity.",
+    },
+    "run_parallel": {
+        "commands": "Edit the parallel branch roots. If one branch needs multiple steps, make that branch a nested run_sequence.",
+    },
+    "set_camera_follow_input_target": {
+        "action": "Logical input action whose currently routed target should be followed by the camera.",
+    },
+    "run_commands_for_collection": {
+        "value": "JSON value that resolves to a list, tuple, or null. Token strings must be wrapped in quotes.",
+        "commands": "Child commands run once per item, with the current item and index exposed as runtime params.",
+    },
+    "if": {
+        "then": "Nested command list that runs when the comparison succeeds.",
+        "else": "Nested command list that runs when the comparison fails.",
+    },
+    "change_area": {
+        "transfer_entity_ids": "Comma-separated or JSON-list set of entity ids or tokens to transfer.",
+    },
+    "new_game": {
+        "camera_follow": "Camera follow patch applied after the fresh run starts.",
+    },
+    "play_audio": {
+        "path": "Project-relative sound-effect asset path.",
+    },
+    "play_music": {
+        "path": "Project-relative music asset path.",
+    },
+    "show_screen_image": {
+        "path": "Project-relative image asset path.",
+    },
+    "set_current_area_var": {
+        "name": "Current-area runtime variable name.",
+    },
+    "add_current_area_var": {
+        "name": "Current-area runtime variable name.",
+    },
+    "toggle_current_area_var": {
+        "name": "Current-area runtime variable name.",
+    },
+    "set_current_area_var_length": {
+        "name": "Current-area runtime variable name.",
+    },
+    "append_current_area_var": {
+        "name": "Current-area runtime variable name.",
+    },
+    "pop_current_area_var": {
+        "name": "Current-area runtime variable name.",
+    },
+    "set_entity_var": {
+        "name": "Variable key written under the target entity's variables map.",
+    },
+    "add_entity_var": {
+        "name": "Variable key written under the target entity's variables map.",
+    },
+    "toggle_entity_var": {
+        "name": "Variable key written under the target entity's variables map.",
+    },
+    "set_entity_var_length": {
+        "name": "Variable key written under the target entity's variables map.",
+    },
+    "append_entity_var": {
+        "name": "Variable key written under the target entity's variables map.",
+    },
+    "pop_entity_var": {
+        "name": "Variable key written under the target entity's variables map.",
+    },
+}
+
 _COMMON_ENTITY_REFERENCE_TOKENS: tuple[tuple[str, str], ...] = (
     ("$self_id", "Self"),
     ("$instigator_id", "Instigator"),
@@ -2436,6 +2729,8 @@ class CommandEditorDialog(QDialog):
         self._loaded_command: dict[str, Any] = {"type": ""}
         self._loading = False
         self._syncing_tabs = False
+        self._structured_dirty = False
+        self._json_dirty = False
         self._inline_dialogue_definition: dict[str, Any] | None = None
 
         outer = QVBoxLayout(self)
@@ -2471,6 +2766,20 @@ class CommandEditorDialog(QDialog):
         self._command_type_combo.addItems(list(_known_command_names()))
         type_row.addWidget(self._command_type_combo, 1)
         structured_layout.addLayout(type_row)
+
+        self._command_summary_label = QLabel("")
+        self._command_summary_label.setWordWrap(True)
+        self._command_summary_label.setStyleSheet("color: #666;")
+        self._command_summary_label.hide()
+        structured_layout.addWidget(self._command_summary_label)
+
+        self._command_parameter_help_hint = QLabel(
+            "Hover parameter labels for more detail."
+        )
+        self._command_parameter_help_hint.setWordWrap(True)
+        self._command_parameter_help_hint.setStyleSheet("color: #666;")
+        self._command_parameter_help_hint.hide()
+        structured_layout.addWidget(self._command_parameter_help_hint)
 
         self._command_spec_id_widget = QWidget()
         command_spec_id_form = QFormLayout(self._command_spec_id_widget)
@@ -2547,18 +2856,36 @@ class CommandEditorDialog(QDialog):
                 combo.addItem(label, value)
             return combo
 
+        def make_help_note(text: str) -> QLabel:
+            note_label = QLabel(text.strip())
+            note_label.setWordWrap(True)
+            note_label.setStyleSheet("color: #666;")
+            return note_label
+
         self._open_dialogue_page = QWidget()
         open_dialogue_form = QFormLayout(self._open_dialogue_page)
         open_dialogue_form.setContentsMargins(0, 0, 0, 0)
+        self._open_dialogue_summary_note = make_help_note(
+            "Start a dialogue session from either an inline definition or a project dialogue file."
+        )
+        open_dialogue_form.addRow(self._open_dialogue_summary_note)
         self._dialogue_source_combo = QComboBox()
         self._dialogue_source_combo.addItems(["Inline Dialogue", "Dialogue File"])
         open_dialogue_form.addRow("dialogue_source", self._dialogue_source_combo)
+        self._open_dialogue_source_note = make_help_note(
+            "Inline Dialogue stores the content directly on this command. Dialogue File points at one JSON dialogue under the project."
+        )
+        open_dialogue_form.addRow(self._open_dialogue_source_note)
 
         dialogue_file_row, self._dialogue_path_edit, self._dialogue_path_browse = _make_line_with_button(
             button_text="Browse..."
         )
         self._dialogue_path_browse.clicked.connect(self._on_browse_dialogue_path)
         open_dialogue_form.addRow("dialogue_path", dialogue_file_row)
+        self._open_dialogue_path_note = make_help_note(
+            "Project-relative dialogue path, used only when dialogue_source is Dialogue File."
+        )
+        open_dialogue_form.addRow(self._open_dialogue_path_note)
 
         inline_row = QWidget()
         inline_layout = QHBoxLayout(inline_row)
@@ -2572,10 +2899,18 @@ class CommandEditorDialog(QDialog):
         inline_layout.addWidget(self._inline_dialogue_summary, 1)
         inline_layout.addWidget(self._edit_inline_dialogue_button)
         open_dialogue_form.addRow("dialogue_definition", inline_row)
+        self._open_dialogue_definition_note = make_help_note(
+            "Edit the inline dialogue stored directly on this command, used only when dialogue_source is Inline Dialogue."
+        )
+        open_dialogue_form.addRow(self._open_dialogue_definition_note)
 
         self._allow_cancel_field = QComboBox()
         self._setup_optional_bool_combo(self._allow_cancel_field)
         open_dialogue_form.addRow("allow_cancel", self._allow_cancel_field)
+        self._open_dialogue_allow_cancel_note = make_help_note(
+            "Controls whether the active dialogue UI can let the player back out of this session."
+        )
+        open_dialogue_form.addRow(self._open_dialogue_allow_cancel_note)
 
         self._open_dialogue_advanced_toggle = QToolButton()
         self._open_dialogue_advanced_toggle.setText("Advanced")
@@ -2596,6 +2931,10 @@ class CommandEditorDialog(QDialog):
         self._ui_preset_field = _OptionalTextField()
         self._ui_preset_field.changed.connect(self._sync_open_dialogue_advanced_state)
         open_dialogue_advanced_form.addRow("ui_preset", self._ui_preset_field)
+        self._open_dialogue_ui_preset_note = make_help_note(
+            "Optional dialogue UI preset id, usually from shared variables such as $project.dialogue_ui."
+        )
+        open_dialogue_advanced_form.addRow(self._open_dialogue_ui_preset_note)
         self._actor_id_field = _OptionalTextField(
             button_text="Pick...",
             extra_button_text="Ref...",
@@ -2616,6 +2955,10 @@ class CommandEditorDialog(QDialog):
                 )
             )
         open_dialogue_advanced_form.addRow("actor_id", self._actor_id_field)
+        self._open_dialogue_actor_id_note = make_help_note(
+            "Optional speaker entity id or token used by the dialogue UI and runtime context."
+        )
+        open_dialogue_advanced_form.addRow(self._open_dialogue_actor_id_note)
         self._caller_id_field = _OptionalTextField(
             button_text="Pick...",
             extra_button_text="Ref...",
@@ -2636,6 +2979,10 @@ class CommandEditorDialog(QDialog):
                 )
             )
         open_dialogue_advanced_form.addRow("caller_id", self._caller_id_field)
+        self._open_dialogue_caller_id_note = make_help_note(
+            "Optional caller entity id or token passed into the dialogue session."
+        )
+        open_dialogue_advanced_form.addRow(self._open_dialogue_caller_id_note)
         self._open_dialogue_entity_refs_field = _NamedEntityRefsField(
             pick_entity_callback=self._pick_entity_into_ref_value_edit,
             show_token_menu_callback=self._show_entity_token_menu_for_edit,
@@ -2653,11 +3000,19 @@ class CommandEditorDialog(QDialog):
         self._run_project_command_page = QWidget()
         run_project_form = QFormLayout(self._run_project_command_page)
         run_project_form.setContentsMargins(0, 0, 0, 0)
+        self._run_project_summary_note = make_help_note(
+            "Run a reusable project command by id."
+        )
+        run_project_form.addRow(self._run_project_summary_note)
         command_row, self._project_command_id_edit, self._project_command_browse = _make_line_with_button(
             button_text="Browse..."
         )
         self._project_command_browse.clicked.connect(self._on_browse_project_command_id)
         run_project_form.addRow("command_id", command_row)
+        self._run_project_command_id_note = make_help_note(
+            "Project-relative command id, for example commands/player/move_one_tile."
+        )
+        run_project_form.addRow(self._run_project_command_id_note)
         self._run_project_advanced_toggle = QToolButton()
         self._run_project_advanced_toggle.setText("Advanced")
         self._run_project_advanced_toggle.setCheckable(True)
@@ -2698,6 +3053,10 @@ class CommandEditorDialog(QDialog):
             "source_entity_id",
             self._run_project_source_entity_id_field,
         )
+        self._run_project_source_entity_note = make_help_note(
+            "Optional source entity id or token that becomes $self_id inside the called flow."
+        )
+        run_project_advanced_form.addRow(self._run_project_source_entity_note)
         self._run_project_refs_mode_field = QComboBox()
         self._setup_optional_choice_combo(
             self._run_project_refs_mode_field,
@@ -2711,6 +3070,10 @@ class CommandEditorDialog(QDialog):
             self._sync_run_project_advanced_state
         )
         run_project_advanced_form.addRow("refs_mode", self._run_project_refs_mode_field)
+        self._run_project_refs_mode_note = make_help_note(
+            "Controls how explicit named refs combine with refs already present in the current flow."
+        )
+        run_project_advanced_form.addRow(self._run_project_refs_mode_note)
         self._run_project_entity_refs_field = _NamedEntityRefsField(
             pick_entity_callback=self._pick_entity_into_ref_value_edit,
             show_token_menu_callback=self._show_entity_token_menu_for_edit,
@@ -5408,6 +5771,10 @@ class CommandEditorDialog(QDialog):
         self._set_entity_var_page = QWidget()
         set_var_form = QFormLayout(self._set_entity_var_page)
         set_var_form.setContentsMargins(0, 0, 0, 0)
+        self._set_var_summary_note = make_help_note(
+            "Write one variable on an entity."
+        )
+        set_var_form.addRow(self._set_var_summary_note)
         (
             set_var_entity_row,
             self._set_var_entity_id_edit,
@@ -5430,8 +5797,16 @@ class CommandEditorDialog(QDialog):
             )
         )
         set_var_form.addRow("entity_id", set_var_entity_row)
+        self._set_var_entity_id_note = make_help_note(
+            "Target entity id or token."
+        )
+        set_var_form.addRow(self._set_var_entity_id_note)
         self._set_var_name_edit = QLineEdit()
         set_var_form.addRow("name", self._set_var_name_edit)
+        self._set_var_name_note = make_help_note(
+            "Variable key written under the entity's variables map."
+        )
+        set_var_form.addRow(self._set_var_name_note)
         self._set_var_value_edit = QPlainTextEdit()
         self._set_var_value_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._set_var_value_edit.setFont(generic_font)
@@ -5449,6 +5824,10 @@ class CommandEditorDialog(QDialog):
         self._set_var_persistent_field = QComboBox()
         self._setup_optional_bool_combo(self._set_var_persistent_field)
         set_var_form.addRow("persistent", self._set_var_persistent_field)
+        self._set_var_persistent_note = make_help_note(
+            "Override whether the change should be saved. Leave Not Set to follow the entity's authored persistence defaults."
+        )
+        set_var_form.addRow(self._set_var_persistent_note)
         self._set_var_value_mode_field = QComboBox()
         self._setup_optional_choice_combo(
             self._set_var_value_mode_field,
@@ -5456,6 +5835,10 @@ class CommandEditorDialog(QDialog):
             not_set_label="Default",
         )
         set_var_form.addRow("value_mode", self._set_var_value_mode_field)
+        self._set_var_value_mode_note = make_help_note(
+            "Advanced setting. Leave Default unless you specifically need the raw JSON value shape."
+        )
+        set_var_form.addRow(self._set_var_value_mode_note)
         self._command_stack.addWidget(self._set_entity_var_page)
 
         self._set_visible_page = QWidget()
@@ -5798,8 +6181,12 @@ class CommandEditorDialog(QDialog):
         self._close_dialogue_session_page = QWidget()
         close_dialogue_layout = QVBoxLayout(self._close_dialogue_session_page)
         close_dialogue_layout.setContentsMargins(0, 0, 0, 0)
-        self._close_dialogue_session_note = QLabel(
+        self._close_dialogue_session_summary_note = make_help_note(
             "Close the currently active dialogue session."
+        )
+        close_dialogue_layout.addWidget(self._close_dialogue_session_summary_note)
+        self._close_dialogue_session_note = QLabel(
+            "This command has no parameters. It targets the active session rather than a specific dialogue id."
         )
         self._close_dialogue_session_note.setWordWrap(True)
         self._close_dialogue_session_note.setStyleSheet("color: #666;")
@@ -5936,9 +6323,15 @@ class CommandEditorDialog(QDialog):
         self._tabs.addTab(self._command_json_edit, "Command JSON")
 
         self._buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
+            QDialogButtonBox.StandardButton.Apply
+            | QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel
         )
+        self._apply_button = self._buttons.button(QDialogButtonBox.StandardButton.Apply)
+        if self._apply_button is not None:
+            self._apply_button.setAutoDefault(False)
+            self._apply_button.setDefault(False)
+            self._apply_button.clicked.connect(self._on_apply_clicked)
         self._buttons.accepted.connect(self.accept)
         self._buttons.rejected.connect(self.reject)
         outer.addWidget(self._buttons)
@@ -5948,6 +6341,8 @@ class CommandEditorDialog(QDialog):
             self._sync_open_dialogue_source_visibility
         )
         self._tabs.currentChanged.connect(self._on_tab_changed)
+        self._connect_structured_dirty_tracking(structured)
+        self._command_json_edit.textChanged.connect(self._on_json_draft_changed)
 
         self._sync_area_picker_button_state()
         self._sync_asset_picker_button_state()
@@ -5966,8 +6361,288 @@ class CommandEditorDialog(QDialog):
         self._sync_change_area_advanced_state(expanded=False)
         self._sync_open_entity_advanced_state(expanded=False)
         self._sync_spawn_entity_mode_visibility()
+        self._apply_command_help_metadata()
+        self._update_command_help_header(self._command_type_combo.currentText().strip())
+        self._update_tab_dirty_state()
+        self._update_apply_button_state()
 
-    def load_command(self, command: object) -> None:
+    def _command_pages(self) -> dict[str, QWidget]:
+        return {
+            "open_dialogue_session": self._open_dialogue_page,
+            "run_project_command": self._run_project_command_page,
+            "run_entity_command": self._run_entity_command_page,
+            "run_sequence": self._run_sequence_page,
+            "spawn_flow": self._spawn_flow_page,
+            "run_parallel": self._run_parallel_page,
+            "run_commands_for_collection": self._run_commands_for_collection_page,
+            "if": self._if_page,
+            "change_area": self._change_area_page,
+            "new_game": self._new_game_page,
+            "load_game": self._load_game_page,
+            "save_game": self._save_game_page,
+            "quit_game": self._quit_game_page,
+            "set_simulation_paused": self._set_simulation_paused_page,
+            "toggle_simulation_paused": self._toggle_simulation_paused_page,
+            "step_simulation_tick": self._step_simulation_tick_page,
+            "adjust_output_scale": self._adjust_output_scale_page,
+            "open_entity_dialogue": self._open_entity_dialogue_page,
+            "set_entity_grid_position": self._set_entity_grid_position_page,
+            "set_entity_world_position": self._set_entity_world_position_page,
+            "set_entity_screen_position": self._set_entity_screen_position_page,
+            "move_entity_world_position": self._move_entity_world_position_page,
+            "move_entity_screen_position": self._move_entity_screen_position_page,
+            "push_facing": self._push_facing_page,
+            "wait_for_move": self._wait_for_move_page,
+            "step_in_direction": self._step_in_direction_page,
+            "set_camera_follow_entity": self._set_camera_follow_entity_page,
+            "set_camera_follow_input_target": self._set_camera_follow_input_target_page,
+            "clear_camera_follow": self._clear_camera_follow_page,
+            "set_camera_policy": self._set_camera_policy_page,
+            "push_camera_state": self._push_camera_state_page,
+            "pop_camera_state": self._pop_camera_state_page,
+            "set_camera_bounds": self._set_camera_bounds_page,
+            "clear_camera_bounds": self._clear_camera_bounds_page,
+            "set_camera_deadzone": self._set_camera_deadzone_page,
+            "clear_camera_deadzone": self._clear_camera_deadzone_page,
+            "move_camera": self._move_camera_page,
+            "teleport_camera": self._teleport_camera_page,
+            "play_audio": self._play_audio_page,
+            "set_sound_volume": self._set_sound_volume_page,
+            "play_music": self._play_music_page,
+            "stop_music": self._stop_music_page,
+            "pause_music": self._pause_music_page,
+            "resume_music": self._resume_music_page,
+            "set_music_volume": self._set_music_volume_page,
+            "show_screen_image": self._show_screen_image_page,
+            "show_screen_text": self._show_screen_text_page,
+            "set_screen_text": self._set_screen_text_page,
+            "remove_screen_element": self._remove_screen_element_page,
+            "clear_screen_elements": self._clear_screen_elements_page,
+            "play_screen_animation": self._play_screen_animation_page,
+            "wait_for_screen_animation": self._wait_for_screen_animation_page,
+            "play_animation": self._play_animation_page,
+            "wait_for_animation": self._wait_for_animation_page,
+            "stop_animation": self._stop_animation_page,
+            "add_inventory_item": self._add_inventory_item_page,
+            "remove_inventory_item": self._remove_inventory_item_page,
+            "use_inventory_item": self._use_inventory_item_page,
+            "set_inventory_max_stacks": self._set_inventory_max_stacks_page,
+            "open_inventory_session": self._open_inventory_session_page,
+            "close_inventory_session": self._close_inventory_session_page,
+            "set_current_area_var": self._set_current_area_var_page,
+            "add_current_area_var": self._add_current_area_var_page,
+            "add_entity_var": self._add_entity_var_page,
+            "toggle_current_area_var": self._toggle_current_area_var_page,
+            "toggle_entity_var": self._toggle_entity_var_page,
+            "set_current_area_var_length": self._set_current_area_var_length_page,
+            "set_entity_var_length": self._set_entity_var_length_page,
+            "append_current_area_var": self._append_current_area_var_page,
+            "append_entity_var": self._append_entity_var_page,
+            "pop_current_area_var": self._pop_current_area_var_page,
+            "pop_entity_var": self._pop_entity_var_page,
+            "set_entity_field": self._set_entity_field_page,
+            "set_entity_fields": self._set_entity_fields_page,
+            "spawn_entity": self._spawn_entity_page,
+            "set_area_var": self._set_area_var_page,
+            "set_area_entity_var": self._set_area_entity_var_page,
+            "set_area_entity_field": self._set_area_entity_field_page,
+            "reset_transient_state": self._reset_transient_state_page,
+            "reset_persistent_state": self._reset_persistent_state_page,
+            "set_entity_var": self._set_entity_var_page,
+            "set_visible": self._set_visible_page,
+            "set_present": self._set_present_page,
+            "set_color": self._set_color_page,
+            "destroy_entity": self._destroy_entity_page,
+            "set_visual_frame": self._set_visual_frame_page,
+            "set_visual_flip_x": self._set_visual_flip_x_page,
+            "set_entity_command_enabled": self._set_entity_command_enabled_page,
+            "set_entity_commands_enabled": self._set_entity_commands_enabled_page,
+            "set_input_target": self._set_input_target_page,
+            "route_inputs_to_entity": self._route_inputs_to_entity_page,
+            "push_input_routes": self._push_input_routes_page,
+            "pop_input_routes": self._pop_input_routes_page,
+            "wait_frames": self._wait_frames_page,
+            "wait_seconds": self._wait_seconds_page,
+            "close_dialogue_session": self._close_dialogue_session_page,
+            "interact_facing": self._interact_facing_page,
+            "set_entity_active_dialogue": self._set_active_dialogue_page,
+            "step_entity_active_dialogue": self._step_active_dialogue_page,
+            "set_entity_active_dialogue_by_order": self._set_active_by_order_page,
+        }
+
+    @staticmethod
+    def _command_help_summary(command_type: str) -> str:
+        return _COMMAND_HELP_SUMMARIES.get(command_type, "").strip()
+
+    @staticmethod
+    def _command_field_help(command_type: str, field_name: str) -> str | None:
+        help_text = _COMMAND_FIELD_HELP_OVERRIDES.get(command_type, {}).get(field_name)
+        if help_text is None:
+            help_text = _COMMON_FIELD_HELP.get(field_name)
+        if help_text is None:
+            return None
+        text = str(help_text).strip()
+        return text or None
+
+    @classmethod
+    def _iter_form_label_rows(
+        cls,
+        layout,
+    ) -> list[tuple[str, QLabel, QWidget | None]]:
+        rows: list[tuple[str, QLabel, QWidget | None]] = []
+        if layout is None:
+            return rows
+        if isinstance(layout, QFormLayout):
+            for row_index in range(layout.rowCount()):
+                label_item = layout.itemAt(row_index, QFormLayout.ItemRole.LabelRole)
+                field_item = layout.itemAt(row_index, QFormLayout.ItemRole.FieldRole)
+                label_widget = label_item.widget() if label_item is not None else None
+                field_widget = field_item.widget() if field_item is not None else None
+                if isinstance(label_widget, QLabel):
+                    label_text = label_widget.text().strip()
+                    if label_text:
+                        rows.append((label_text, label_widget, field_widget))
+                if field_item is not None:
+                    rows.extend(cls._iter_form_label_rows(field_item.layout()))
+                    child_widget = field_item.widget()
+                    if child_widget is not None:
+                        rows.extend(cls._iter_form_label_rows(child_widget.layout()))
+                spanning_item = layout.itemAt(row_index, QFormLayout.ItemRole.SpanningRole)
+                if spanning_item is not None:
+                    rows.extend(cls._iter_form_label_rows(spanning_item.layout()))
+                    child_widget = spanning_item.widget()
+                    if child_widget is not None:
+                        rows.extend(cls._iter_form_label_rows(child_widget.layout()))
+            return rows
+        for item_index in range(layout.count()):
+            item = layout.itemAt(item_index)
+            if item is None:
+                continue
+            rows.extend(cls._iter_form_label_rows(item.layout()))
+            child_widget = item.widget()
+            if child_widget is not None:
+                rows.extend(cls._iter_form_label_rows(child_widget.layout()))
+        return rows
+
+    @staticmethod
+    def _apply_help_tooltip(widget: QWidget | None, help_text: str | None) -> None:
+        if widget is None or not help_text:
+            return
+        widget.setToolTip(help_text)
+        widget.setWhatsThis(help_text)
+
+    def _apply_command_help_metadata(self) -> None:
+        for command_type, page in self._command_pages().items():
+            for field_name, label_widget, field_widget in self._iter_form_label_rows(
+                page.layout()
+            ):
+                help_text = self._command_field_help(command_type, field_name)
+                if help_text is None:
+                    continue
+                self._apply_help_tooltip(label_widget, help_text)
+                self._apply_help_tooltip(field_widget, help_text)
+
+    def _update_command_help_header(self, command_type: str) -> None:
+        summary = self._command_help_summary(command_type)
+        show_summary = bool(summary) and command_type not in _INLINE_SUMMARY_COMMAND_TYPES
+        self._command_summary_label.setText(summary)
+        self._command_summary_label.setHidden(not show_summary)
+        self._command_parameter_help_hint.setHidden(command_type not in _SUPPORTED_COMMAND_TYPES)
+
+    def _connect_structured_dirty_tracking(self, root: QWidget) -> None:
+        for field in root.findChildren(_OptionalTextField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_OptionalIntField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_OptionalFloatField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_NamedEntityRefsField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_NestedCommandListField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_CameraFollowEditor):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_CameraRectEditor):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_CameraFollowPatchField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for field in root.findChildren(_CameraRectPatchField):
+            field.changed.connect(self._on_structured_draft_changed)
+        for edit in root.findChildren(QLineEdit):
+            edit.textChanged.connect(self._on_structured_draft_changed)
+        for edit in root.findChildren(QPlainTextEdit):
+            edit.textChanged.connect(self._on_structured_draft_changed)
+        for combo in root.findChildren(QComboBox):
+            combo.currentIndexChanged.connect(self._on_structured_draft_changed)
+        for spin in root.findChildren(QSpinBox):
+            spin.valueChanged.connect(self._on_structured_draft_changed)
+        for spin in root.findChildren(QDoubleSpinBox):
+            spin.valueChanged.connect(self._on_structured_draft_changed)
+        for check in root.findChildren(QCheckBox):
+            check.toggled.connect(self._on_structured_draft_changed)
+
+    def _on_structured_draft_changed(self, *args: Any) -> None:
+        if self._loading or self._syncing_tabs:
+            return
+        if self._structured_dirty:
+            return
+        self._structured_dirty = True
+        self._update_tab_dirty_state()
+        self._update_apply_button_state()
+
+    def _on_json_draft_changed(self) -> None:
+        if self._loading or self._syncing_tabs:
+            return
+        if self._json_dirty:
+            return
+        self._json_dirty = True
+        self._update_tab_dirty_state()
+        self._update_apply_button_state()
+
+    def _update_tab_dirty_state(self) -> None:
+        self._tabs.setTabText(
+            0,
+            "Command Editor *" if self._structured_dirty else "Command Editor",
+        )
+        self._tabs.setTabText(
+            1,
+            "Command JSON *" if self._json_dirty else "Command JSON",
+        )
+
+    def _update_apply_button_state(self) -> None:
+        if self._apply_button is None:
+            return
+        current_dirty = self._json_dirty if self._tabs.currentIndex() == 1 else self._structured_dirty
+        self._apply_button.setEnabled(bool(current_dirty))
+
+    def _other_tab_has_unapplied_changes(self) -> bool:
+        return self._structured_dirty if self._tabs.currentIndex() == 1 else self._json_dirty
+
+    def _confirm_overwrite_other_tab_draft(self) -> bool:
+        other_tab_name = "Command Editor" if self._tabs.currentIndex() == 1 else "Command JSON"
+        result = QMessageBox.question(
+            self,
+            "Overwrite Unapplied Changes",
+            f"Applying this will overwrite unapplied changes in {other_tab_name}. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return result == QMessageBox.StandardButton.Yes
+
+    def _apply_current_tab(self) -> bool:
+        if self._other_tab_has_unapplied_changes() and not self._confirm_overwrite_other_tab_draft():
+            return False
+        try:
+            command = self.command()
+        except ValueError:
+            return False
+        self.load_command(command, selected_tab_index=self._tabs.currentIndex())
+        return True
+
+    def _on_apply_clicked(self) -> None:
+        self._apply_current_tab()
+
+    def load_command(self, command: object, *, selected_tab_index: int = 0) -> None:
         if isinstance(command, dict):
             self._loaded_command = copy.deepcopy(command)
         else:
@@ -6038,7 +6713,11 @@ class CommandEditorDialog(QDialog):
             self._sync_open_entity_advanced_state(
                 expanded=self._open_entity_advanced_field_count() > 0
             )
-        self._tabs.setCurrentIndex(0)
+        self._structured_dirty = False
+        self._json_dirty = False
+        self._update_tab_dirty_state()
+        self._tabs.setCurrentIndex(max(0, min(selected_tab_index, self._tabs.count() - 1)))
+        self._update_apply_button_state()
 
     def command(self) -> dict[str, Any]:
         if self._tabs.currentIndex() == 1:
@@ -6049,9 +6728,7 @@ class CommandEditorDialog(QDialog):
         return command
 
     def accept(self) -> None:  # noqa: D401
-        try:
-            self._loaded_command = self.command()
-        except ValueError:
+        if not self._apply_current_tab():
             return
         super().accept()
 
@@ -7581,111 +8258,10 @@ class CommandEditorDialog(QDialog):
         self._command_type_combo.insertItem(0, command_type)
 
     def _sync_structured_page(self, command_type: str) -> None:
-        page_by_type = {
-            "open_dialogue_session": self._open_dialogue_page,
-            "run_project_command": self._run_project_command_page,
-            "run_entity_command": self._run_entity_command_page,
-            "run_sequence": self._run_sequence_page,
-            "spawn_flow": self._spawn_flow_page,
-            "run_parallel": self._run_parallel_page,
-            "run_commands_for_collection": self._run_commands_for_collection_page,
-            "if": self._if_page,
-            "change_area": self._change_area_page,
-            "new_game": self._new_game_page,
-            "load_game": self._load_game_page,
-            "save_game": self._save_game_page,
-            "quit_game": self._quit_game_page,
-            "set_simulation_paused": self._set_simulation_paused_page,
-            "toggle_simulation_paused": self._toggle_simulation_paused_page,
-            "step_simulation_tick": self._step_simulation_tick_page,
-            "adjust_output_scale": self._adjust_output_scale_page,
-            "open_entity_dialogue": self._open_entity_dialogue_page,
-            "set_entity_grid_position": self._set_entity_grid_position_page,
-            "set_entity_world_position": self._set_entity_world_position_page,
-            "set_entity_screen_position": self._set_entity_screen_position_page,
-            "move_entity_world_position": self._move_entity_world_position_page,
-            "move_entity_screen_position": self._move_entity_screen_position_page,
-            "push_facing": self._push_facing_page,
-            "wait_for_move": self._wait_for_move_page,
-            "step_in_direction": self._step_in_direction_page,
-            "set_camera_follow_entity": self._set_camera_follow_entity_page,
-            "set_camera_follow_input_target": self._set_camera_follow_input_target_page,
-            "clear_camera_follow": self._clear_camera_follow_page,
-            "set_camera_policy": self._set_camera_policy_page,
-            "push_camera_state": self._push_camera_state_page,
-            "pop_camera_state": self._pop_camera_state_page,
-            "set_camera_bounds": self._set_camera_bounds_page,
-            "clear_camera_bounds": self._clear_camera_bounds_page,
-            "set_camera_deadzone": self._set_camera_deadzone_page,
-            "clear_camera_deadzone": self._clear_camera_deadzone_page,
-            "move_camera": self._move_camera_page,
-            "teleport_camera": self._teleport_camera_page,
-            "play_audio": self._play_audio_page,
-            "set_sound_volume": self._set_sound_volume_page,
-            "play_music": self._play_music_page,
-            "stop_music": self._stop_music_page,
-            "pause_music": self._pause_music_page,
-            "resume_music": self._resume_music_page,
-            "set_music_volume": self._set_music_volume_page,
-            "show_screen_image": self._show_screen_image_page,
-            "show_screen_text": self._show_screen_text_page,
-            "set_screen_text": self._set_screen_text_page,
-            "remove_screen_element": self._remove_screen_element_page,
-            "clear_screen_elements": self._clear_screen_elements_page,
-            "play_screen_animation": self._play_screen_animation_page,
-            "wait_for_screen_animation": self._wait_for_screen_animation_page,
-            "play_animation": self._play_animation_page,
-            "wait_for_animation": self._wait_for_animation_page,
-            "stop_animation": self._stop_animation_page,
-            "add_inventory_item": self._add_inventory_item_page,
-            "remove_inventory_item": self._remove_inventory_item_page,
-            "use_inventory_item": self._use_inventory_item_page,
-            "set_inventory_max_stacks": self._set_inventory_max_stacks_page,
-            "open_inventory_session": self._open_inventory_session_page,
-            "close_inventory_session": self._close_inventory_session_page,
-            "set_current_area_var": self._set_current_area_var_page,
-            "add_current_area_var": self._add_current_area_var_page,
-            "add_entity_var": self._add_entity_var_page,
-            "toggle_current_area_var": self._toggle_current_area_var_page,
-            "toggle_entity_var": self._toggle_entity_var_page,
-            "set_current_area_var_length": self._set_current_area_var_length_page,
-            "set_entity_var_length": self._set_entity_var_length_page,
-            "append_current_area_var": self._append_current_area_var_page,
-            "append_entity_var": self._append_entity_var_page,
-            "pop_current_area_var": self._pop_current_area_var_page,
-            "pop_entity_var": self._pop_entity_var_page,
-            "set_entity_field": self._set_entity_field_page,
-            "set_entity_fields": self._set_entity_fields_page,
-            "spawn_entity": self._spawn_entity_page,
-            "set_area_var": self._set_area_var_page,
-            "set_area_entity_var": self._set_area_entity_var_page,
-            "set_area_entity_field": self._set_area_entity_field_page,
-            "reset_transient_state": self._reset_transient_state_page,
-            "reset_persistent_state": self._reset_persistent_state_page,
-            "set_entity_var": self._set_entity_var_page,
-            "set_visible": self._set_visible_page,
-            "set_present": self._set_present_page,
-            "set_color": self._set_color_page,
-            "destroy_entity": self._destroy_entity_page,
-            "set_visual_frame": self._set_visual_frame_page,
-            "set_visual_flip_x": self._set_visual_flip_x_page,
-            "set_entity_command_enabled": self._set_entity_command_enabled_page,
-            "set_entity_commands_enabled": self._set_entity_commands_enabled_page,
-            "set_input_target": self._set_input_target_page,
-            "route_inputs_to_entity": self._route_inputs_to_entity_page,
-            "push_input_routes": self._push_input_routes_page,
-            "pop_input_routes": self._pop_input_routes_page,
-            "wait_frames": self._wait_frames_page,
-            "wait_seconds": self._wait_seconds_page,
-            "close_dialogue_session": self._close_dialogue_session_page,
-            "interact_facing": self._interact_facing_page,
-            "set_entity_active_dialogue": self._set_active_dialogue_page,
-            "step_entity_active_dialogue": self._step_active_dialogue_page,
-            "set_entity_active_dialogue_by_order": self._set_active_by_order_page,
-        }
         self._command_stack.setCurrentWidget(
-            page_by_type.get(command_type, self._generic_page)
+            self._command_pages().get(command_type, self._generic_page)
         )
+        self._update_command_help_header(command_type)
 
     def _sync_open_dialogue_source_visibility(self) -> None:
         source = self._dialogue_source_combo.currentText().strip()
@@ -10516,27 +11092,9 @@ class CommandEditorDialog(QDialog):
         return copy.deepcopy(parsed)
 
     def _on_tab_changed(self, index: int) -> None:
-        if self._syncing_tabs or self._loading:
+        if self._loading:
             return
-        self._syncing_tabs = True
-        try:
-            if index == 1:
-                command = self._build_structured_command(show_message=True)
-                if command is None:
-                    self._tabs.setCurrentIndex(0)
-                    return
-                self._command_json_edit.setPlainText(
-                    json.dumps(command, indent=2, ensure_ascii=False)
-                )
-            else:
-                try:
-                    command = self._command_from_json_tab(show_message=True)
-                except ValueError:
-                    self._tabs.setCurrentIndex(1)
-                    return
-                self.load_command(command)
-        finally:
-            self._syncing_tabs = False
+        self._update_apply_button_state()
 
     def _on_command_type_changed(self, command_type: str) -> None:
         if self._loading:

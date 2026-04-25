@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
 from area_editor.widgets.reference_picker_support import EntityReferencePickerRequest
 from area_editor.widgets.command_list_dialog import (
@@ -166,6 +167,205 @@ class TestCommandListDialog(unittest.TestCase):
             command["dialogue_definition"]["segments"][0]["text"],
             "Nested",
         )
+
+    def test_suggested_command_pages_show_inline_help_notes(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+
+        dialog.load_command({"type": "open_dialogue_session"})
+        self.assertIn(
+            "Start a dialogue session",
+            dialog._open_dialogue_summary_note.text(),
+        )
+        self.assertIn(
+            "Inline Dialogue stores the content directly on this command",
+            dialog._open_dialogue_source_note.text(),
+        )
+
+        dialog.load_command({"type": "run_project_command"})
+        self.assertIn(
+            "Run a reusable project command by id",
+            dialog._run_project_summary_note.text(),
+        )
+        self.assertIn(
+            "Project-relative command id",
+            dialog._run_project_command_id_note.text(),
+        )
+
+        dialog.load_command({"type": "set_entity_var"})
+        self.assertIn(
+            "Write one variable on an entity",
+            dialog._set_var_summary_note.text(),
+        )
+        self.assertIn(
+            "Target entity id or token",
+            dialog._set_var_entity_id_note.text(),
+        )
+
+        dialog.load_command({"type": "close_dialogue_session"})
+        self.assertIn(
+            "Close the currently active dialogue session",
+            dialog._close_dialogue_session_summary_note.text(),
+        )
+        self.assertIn(
+            "This command has no parameters",
+            dialog._close_dialogue_session_note.text(),
+        )
+
+    def test_supported_command_pages_show_global_help_summary_for_non_suggested_commands(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+
+        dialog.load_command({"type": "run_parallel"})
+        self.assertFalse(dialog._command_summary_label.isHidden())
+        self.assertIn(
+            "Start multiple child branches together",
+            dialog._command_summary_label.text(),
+        )
+        self.assertFalse(dialog._command_parameter_help_hint.isHidden())
+        self.assertIn(
+            "Hover parameter labels",
+            dialog._command_parameter_help_hint.text(),
+        )
+
+        dialog.load_command({"type": "open_dialogue_session"})
+        self.assertTrue(dialog._command_summary_label.isHidden())
+        self.assertFalse(dialog._command_parameter_help_hint.isHidden())
+
+    def test_supported_command_pages_apply_parameter_help_tooltips(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+
+        dialog.load_command({"type": "run_parallel"})
+        commands_label = self._find_label(dialog._run_parallel_page, "commands")
+        self.assertIn("parallel branch roots", commands_label.toolTip())
+
+        dialog.load_command({"type": "set_camera_follow_input_target"})
+        action_label = self._find_label(
+            dialog._set_camera_follow_input_target_page,
+            "action",
+        )
+        self.assertIn("currently routed target", action_label.toolTip())
+
+        dialog.load_command({"type": "set_entity_field"})
+        field_name_label = self._find_label(dialog._set_entity_field_page, "field_name")
+        self.assertEqual(
+            field_name_label.toolTip(),
+            "Engine-owned entity field name.",
+        )
+
+    def test_command_editor_tab_switch_is_free_until_apply(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_command({"type": "run_project_command"})
+
+        with patch("area_editor.widgets.command_list_dialog.QMessageBox.warning") as warning:
+            dialog._tabs.setCurrentIndex(1)
+            self.assertEqual(dialog._tabs.currentIndex(), 1)
+            dialog._tabs.setCurrentIndex(0)
+            self.assertEqual(dialog._tabs.currentIndex(), 0)
+
+        warning.assert_not_called()
+        self.assertIn('"type": "run_project_command"', dialog._command_json_edit.toPlainText())
+
+    def test_command_editor_apply_from_structured_syncs_json_tab(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_command({"type": "run_project_command"})
+
+        dialog._project_command_id_edit.setText("commands/system/open_menu")
+        self.assertTrue(dialog._apply_button.isEnabled())
+
+        dialog._tabs.setCurrentIndex(1)
+        self.assertNotIn("commands/system/open_menu", dialog._command_json_edit.toPlainText())
+
+        dialog._tabs.setCurrentIndex(0)
+        dialog._on_apply_clicked()
+
+        dialog._tabs.setCurrentIndex(1)
+        parsed = json.loads(dialog._command_json_edit.toPlainText())
+        self.assertEqual(parsed["command_id"], "commands/system/open_menu")
+        self.assertFalse(dialog._structured_dirty)
+        self.assertFalse(dialog._json_dirty)
+
+    def test_command_editor_apply_from_json_syncs_structured_tab(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_command({"type": "run_project_command"})
+
+        dialog._tabs.setCurrentIndex(1)
+        dialog._command_json_edit.setPlainText(
+            json.dumps(
+                {
+                    "type": "run_project_command",
+                    "command_id": "commands/system/open_menu",
+                    "source_entity_id": "$self_id",
+                },
+                indent=2,
+            )
+        )
+        self.assertTrue(dialog._apply_button.isEnabled())
+
+        dialog._on_apply_clicked()
+
+        dialog._tabs.setCurrentIndex(0)
+        self.assertEqual(dialog._project_command_id_edit.text(), "commands/system/open_menu")
+        self.assertEqual(
+            dialog._run_project_source_entity_id_field.optional_value(),
+            "$self_id",
+        )
+        self.assertFalse(dialog._structured_dirty)
+        self.assertFalse(dialog._json_dirty)
+
+    @staticmethod
+    def _find_label(root, text: str) -> QLabel:
+        for label in root.findChildren(QLabel):
+            if label.text() == text:
+                return label
+        raise AssertionError(f"Could not find label {text!r}")
+
+    def test_command_editor_apply_warns_before_overwriting_other_tab_draft(self):
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_command({"type": "run_project_command"})
+
+        dialog._project_command_id_edit.setText("commands/structured")
+        dialog._tabs.setCurrentIndex(1)
+        dialog._command_json_edit.setPlainText(
+            json.dumps(
+                {
+                    "type": "run_project_command",
+                    "command_id": "commands/json",
+                },
+                indent=2,
+            )
+        )
+
+        with patch(
+            "area_editor.widgets.command_list_dialog.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.No,
+        ) as question:
+            dialog._on_apply_clicked()
+
+        question.assert_called_once()
+        self.assertEqual(dialog._loaded_command, {"type": "run_project_command"})
+        self.assertTrue(dialog._structured_dirty)
+        self.assertTrue(dialog._json_dirty)
+
+        with patch(
+            "area_editor.widgets.command_list_dialog.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            dialog._on_apply_clicked()
+
+        self.assertEqual(
+            dialog._loaded_command["command_id"],
+            "commands/json",
+        )
+        self.assertFalse(dialog._structured_dirty)
+        self.assertFalse(dialog._json_dirty)
+        dialog._tabs.setCurrentIndex(0)
+        self.assertEqual(dialog._project_command_id_edit.text(), "commands/json")
 
     def test_open_dialogue_advanced_section_expands_when_fields_are_set(self):
         dialog = CommandEditorDialog()

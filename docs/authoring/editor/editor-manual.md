@@ -92,6 +92,10 @@ The command-list popup now includes a dedicated structured command editor for a 
 
 When a command is covered here, the editor provides typed fields, pickers, and token helpers for the owned parameters it understands. Unsupported commands, or unsupported fields on an otherwise supported command, still fall back to the command JSON tab and are expected to round-trip without data loss.
 
+The current command help stays in the editor rather than behind a popup. Every structured command page now shows a short summary near the top, and parameter labels expose short help text on hover. Suggested commands such as `open_dialogue_session`, `run_project_command`, `set_entity_var`, and `close_dialogue_session` also keep their extra visible inline notes for the trickier parameters.
+
+The command editor and command-JSON tabs now behave as independent drafts. Switching tabs does not auto-validate or overwrite the other tab. Use `Apply` to validate the current tab, make it the active command definition, and repopulate the other tab from that applied result. If the other tab also has unapplied edits, the editor warns before overwriting them.
+
 Nested flow commands such as `run_sequence`, `spawn_flow`, `run_parallel`, and `if` open their child command lists in separate popup windows. The `run_parallel` branch editor also exposes optional `branch_id` values so child-based completion can stay in the structured UI instead of falling back to raw JSON, while `if` opens separate `then` and `else` command-list popups.
 
 `run_commands_for_collection` keeps its `value` field as free-text JSON/value input on purpose. The editor surfaces `item_param` and `index_param` alongside the nested child-command popup so authors can see which loop tokens (for example `$item` / `$index`) are available inside the child flow.
