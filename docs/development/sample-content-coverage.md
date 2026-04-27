@@ -20,8 +20,8 @@ for what the sample proves today and what it still does not prove.
 - path-derived area, entity-template, command, dialogue, and asset ids
 - title-screen dialogue data through `dialogues/system/title_menu.json`
 - runtime-control commands: `new_game`, `load_game`, and `quit_game`
-- project commands through `commands/player/move_one_tile.json`
-- per-entity input routing through the player `input_map`
+- typed project-command `inputs` through `commands/player/move_one_tile.json`
+- direct input routing through area/project `input_routes`
 - entity command dispatch for movement, interaction, and inventory
 - inventory session opening through `open_inventory_session`
 - item-definition loading, pickup, and item use through

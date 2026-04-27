@@ -75,7 +75,7 @@ class ProjectManifest:
     display_width: int = 320
     display_height: int = 240
     startup_area: str | None = None
-    input_targets: dict[str, str] = field(default_factory=dict)
+    input_routes: dict[str, dict[str, str]] = field(default_factory=dict)
     debug_inspection_enabled: bool = False
     command_runtime: dict[str, Any] | None = None
     _raw: dict[str, Any] = field(default_factory=dict)
@@ -164,18 +164,24 @@ def _optional_manifest_str(value: Any) -> str | None:
     return text or None
 
 
-def _resolve_input_targets(raw_input_targets: Any) -> dict[str, str]:
-    resolved: dict[str, str] = {}
-    if not isinstance(raw_input_targets, dict):
+def _resolve_input_routes(raw_input_routes: Any) -> dict[str, dict[str, str]]:
+    resolved: dict[str, dict[str, str]] = {}
+    if not isinstance(raw_input_routes, dict):
         return resolved
-    for raw_action, raw_entity_id in raw_input_targets.items():
+    for raw_action, raw_route in raw_input_routes.items():
         action = str(raw_action).strip()
         if not action:
             continue
-        if raw_entity_id in (None, ""):
-            resolved[action] = ""
+        if raw_route in (None, ""):
+            resolved[action] = {"entity_id": "", "command_id": ""}
             continue
-        resolved[action] = str(raw_entity_id).strip()
+        if not isinstance(raw_route, dict):
+            continue
+        entity_id = str(raw_route.get("entity_id", "")).strip()
+        command_id = str(raw_route.get("command_id", "")).strip()
+        if bool(entity_id) != bool(command_id):
+            continue
+        resolved[action] = {"entity_id": entity_id, "command_id": command_id}
     return resolved
 
 
@@ -298,7 +304,7 @@ def load_manifest(project_path: Path) -> ProjectManifest:
         display_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
         display_height=_resolve_project_dimension(shared_variables, "internal_height", 240),
         startup_area=_optional_manifest_str(raw.get("startup_area")),
-        input_targets=_resolve_input_targets(raw.get("input_targets")),
+        input_routes=_resolve_input_routes(raw.get("input_routes")),
         debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
         command_runtime=_resolve_command_runtime(raw.get("command_runtime")),
         _raw=raw,

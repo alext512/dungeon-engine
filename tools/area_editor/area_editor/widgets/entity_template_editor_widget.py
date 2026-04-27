@@ -7,15 +7,17 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -23,6 +25,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QSpinBox,
     QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -42,17 +46,26 @@ from area_editor.widgets.entity_structured_fields import (
     ENTITY_INT_DEFAULTS,
     build_entity_commands,
     build_input_map,
-    build_inventory,
     build_persistence_policy,
     default_entity_render_order,
     default_entity_y_sort,
+    entity_command_command_list,
     parse_color,
     parse_entity_commands,
     parse_input_map,
     parse_inventory,
+    parse_inventory_stacks,
     parse_persistence_policy,
     parse_tag_list,
+    replace_entity_command_command_list,
+    suggested_entity_command_copy_name,
+    summarize_entity_commands,
 )
+from area_editor.widgets.entity_visuals_editor import (
+    EntityVisualsEditor,
+    parse_visuals,
+)
+from area_editor.widgets.command_list_dialog import CommandListDialog
 from area_editor.widgets.dialogue_definition_dialog import (
     EntityDialoguesDialog,
     normalize_entity_dialogues,
@@ -83,6 +96,7 @@ class _TemplateFieldsEditor(QWidget):
         self._entity_commands_editable = True
         self._inventory_editable = True
         self._persistence_editable = True
+        self._visuals_editable = True
         self._dialogues_editable = True
         self._dialogues_value: dict[str, dict[str, Any]] = {}
         self._reference_picker_callbacks: dict[str, Callable[..., str | None] | None] = {
@@ -94,6 +108,9 @@ class _TemplateFieldsEditor(QWidget):
             "item": None,
             "dialogue": None,
             "command": None,
+            "project_command_inputs": None,
+            "visual": None,
+            "animation": None,
         }
         self._render_default_space = "world"
         self._render_defaults_explicit: dict[str, bool] = {
@@ -297,30 +314,31 @@ class _TemplateFieldsEditor(QWidget):
         visuals_layout = QVBoxLayout(visuals_tab)
         visuals_layout.setContentsMargins(0, 0, 0, 0)
 
-        note = QLabel("Edit the template's `visuals` array here. Use Raw JSON for the full file.")
+        note = QLabel(
+            "Edit the template's visuals here. Right-click the list to add or duplicate; "
+            "drag to reorder. Use Raw JSON for the full file."
+        )
         note.setWordWrap(True)
         note.setStyleSheet("color: #666; font-style: italic;")
         visuals_layout.addWidget(note)
 
+        self._visuals_warning = QLabel("")
+        self._visuals_warning.setWordWrap(True)
+        self._visuals_warning.setStyleSheet("color: #a25b00;")
+        self._visuals_warning.hide()
+        visuals_layout.addWidget(self._visuals_warning)
+
+        self._visuals_editor = EntityVisualsEditor()
+        self._visuals_editor.changed.connect(self._on_visuals_changed)
+        visuals_layout.addWidget(self._visuals_editor, 1)
+
         self._visuals_text = QPlainTextEdit()
-        self._visuals_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._visuals_text.setPlaceholderText(
-            "[\n"
-            "  {\n"
-            '    "id": "main",\n'
-            '    "path": "assets/project/sprites/example.png",\n'
-            '    "frame_width": 16,\n'
-            '    "frame_height": 16\n'
-            "  }\n"
-            "]"
-        )
-        self._visuals_text.setFont(font)
-        self._visuals_text.textChanged.connect(self._on_text_changed)
-        visuals_layout.addWidget(self._visuals_text, 1)
+        self._visuals_text.hide()
+        self._visuals_text.textChanged.connect(self._on_legacy_visuals_text_changed)
         self._sections_tabs.addTab(visuals_tab, "Visuals")
 
-        input_map_tab = QWidget()
-        input_map_layout = QVBoxLayout(input_map_tab)
+        self._input_map_tab = QWidget()
+        input_map_layout = QVBoxLayout(self._input_map_tab)
         input_map_layout.setContentsMargins(0, 0, 0, 0)
 
         self._input_map_warning = QLabel("")
@@ -330,24 +348,39 @@ class _TemplateFieldsEditor(QWidget):
         input_map_layout.addWidget(self._input_map_warning)
 
         input_map_note = QLabel(
-            "Optional JSON object mapping logical actions to entity-command names."
+            "Optional mapping from logical actions to entity-command names."
         )
         input_map_note.setWordWrap(True)
         input_map_note.setStyleSheet("color: #666; font-style: italic;")
         input_map_layout.addWidget(input_map_note)
 
-        self._input_map_text = QPlainTextEdit()
-        self._input_map_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._input_map_text.setPlaceholderText(
-            '{\n'
-            '  "interact": "interact",\n'
-            '  "menu": "menu"\n'
-            '}'
+        input_map_buttons = QHBoxLayout()
+        self._add_input_map_row_button = QPushButton("Add Route")
+        self._add_input_map_row_button.clicked.connect(self._on_add_input_map_row_clicked)
+        input_map_buttons.addWidget(self._add_input_map_row_button)
+        self._remove_input_map_row_button = QPushButton("Remove Selected")
+        self._remove_input_map_row_button.clicked.connect(
+            self._on_remove_input_map_row_clicked
         )
-        self._input_map_text.setFont(font)
-        self._input_map_text.textChanged.connect(self._on_text_changed)
-        input_map_layout.addWidget(self._input_map_text, 1)
-        self._sections_tabs.addTab(input_map_tab, "Input Map")
+        input_map_buttons.addWidget(self._remove_input_map_row_button)
+        input_map_buttons.addStretch(1)
+        input_map_layout.addLayout(input_map_buttons)
+
+        self._input_map_table = QTableWidget(0, 2)
+        self._input_map_table.setHorizontalHeaderLabels(["Action", "Entity Command"])
+        self._input_map_table.horizontalHeader().setStretchLastSection(True)
+        self._input_map_table.cellChanged.connect(self._on_input_map_table_changed)
+        self._input_map_table.currentCellChanged.connect(
+            lambda *_args: self._set_input_map_controls_enabled(
+                self._editing_enabled and self._input_map_editable
+            )
+        )
+        input_map_layout.addWidget(self._input_map_table, 1)
+
+        self._input_map_text = QPlainTextEdit()
+        self._input_map_text.hide()
+        self._input_map_text.textChanged.connect(self._on_legacy_input_map_text_changed)
+        self._input_map_tab.hide()
 
         entity_commands_tab = QWidget()
         entity_commands_layout = QVBoxLayout(entity_commands_tab)
@@ -360,25 +393,56 @@ class _TemplateFieldsEditor(QWidget):
         entity_commands_layout.addWidget(self._entity_commands_warning)
 
         entity_commands_note = QLabel(
-            "Optional JSON object mapping entity-command names to command arrays "
-            "or {enabled, commands} objects."
+            "Optional named entity commands. Use Raw JSON for unsupported command metadata."
         )
         entity_commands_note.setWordWrap(True)
         entity_commands_note.setStyleSheet("color: #666; font-style: italic;")
         entity_commands_layout.addWidget(entity_commands_note)
 
-        self._entity_commands_text = QPlainTextEdit()
-        self._entity_commands_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._entity_commands_text.setPlaceholderText(
-            '{\n'
-            '  "interact": [\n'
-            '    {"type": "run_project_command", "command_id": "commands/example"}\n'
-            "  ]\n"
-            "}"
+        entity_commands_controls = QHBoxLayout()
+        self._entity_commands_summary = QLabel("No entity commands")
+        entity_commands_controls.addWidget(self._entity_commands_summary, 1)
+        self._add_entity_command_button = QPushButton("Add...")
+        self._add_entity_command_button.clicked.connect(self._on_add_entity_command_clicked)
+        entity_commands_controls.addWidget(self._add_entity_command_button)
+        self._edit_entity_command_button = QPushButton("Edit...")
+        self._edit_entity_command_button.clicked.connect(self._on_edit_entity_command_clicked)
+        entity_commands_controls.addWidget(self._edit_entity_command_button)
+        self._duplicate_entity_command_button = QPushButton("Duplicate...")
+        self._duplicate_entity_command_button.clicked.connect(
+            self._on_duplicate_entity_command_clicked
         )
-        self._entity_commands_text.setFont(font)
-        self._entity_commands_text.textChanged.connect(self._on_text_changed)
-        entity_commands_layout.addWidget(self._entity_commands_text, 1)
+        entity_commands_controls.addWidget(self._duplicate_entity_command_button)
+        self._remove_entity_command_button = QPushButton("Remove")
+        self._remove_entity_command_button.clicked.connect(
+            self._on_remove_entity_command_clicked
+        )
+        entity_commands_controls.addWidget(self._remove_entity_command_button)
+        entity_commands_controls_widget = QWidget()
+        entity_commands_controls_widget.setLayout(entity_commands_controls)
+        entity_commands_layout.addWidget(entity_commands_controls_widget)
+
+        self._entity_commands_table = QTableWidget(0, 3)
+        self._entity_commands_table.setHorizontalHeaderLabels(
+            ["Command", "Enabled", "Commands"]
+        )
+        self._entity_commands_table.horizontalHeader().setStretchLastSection(True)
+        self._entity_commands_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self._entity_commands_table.currentCellChanged.connect(
+            lambda *_args: self._set_entity_commands_controls_enabled(
+                self._editing_enabled and self._entity_commands_editable
+            )
+        )
+        self._entity_commands_table.cellDoubleClicked.connect(
+            lambda *_args: self._on_edit_entity_command_clicked()
+        )
+        entity_commands_layout.addWidget(self._entity_commands_table, 1)
+
+        self._entity_commands_text = QPlainTextEdit()
+        self._entity_commands_text.hide()
+        self._entity_commands_text.textChanged.connect(self._on_entity_commands_text_changed)
         self._sections_tabs.addTab(entity_commands_tab, "Entity Commands")
 
         inventory_tab = QWidget()
@@ -403,25 +467,44 @@ class _TemplateFieldsEditor(QWidget):
         inventory_layout.addLayout(inventory_form)
 
         inventory_note = QLabel(
-            "Optional stack array. Each stack needs item_id and quantity."
+            "Optional starting stacks. Each stack needs item_id and quantity."
         )
         inventory_note.setWordWrap(True)
         inventory_note.setStyleSheet("color: #666; font-style: italic;")
         inventory_layout.addWidget(inventory_note)
 
-        self._inventory_stacks_text = QPlainTextEdit()
-        self._inventory_stacks_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._inventory_stacks_text.setPlaceholderText(
-            "[\n"
-            "  {\n"
-            '    "item_id": "items/light_orb",\n'
-            '    "quantity": 1\n'
-            "  }\n"
-            "]"
+        inventory_buttons = QHBoxLayout()
+        self._add_inventory_stack_button = QPushButton("Add Stack")
+        self._add_inventory_stack_button.clicked.connect(
+            self._on_add_inventory_stack_clicked
         )
-        self._inventory_stacks_text.setFont(font)
-        self._inventory_stacks_text.textChanged.connect(self._on_text_changed)
-        inventory_layout.addWidget(self._inventory_stacks_text, 1)
+        inventory_buttons.addWidget(self._add_inventory_stack_button)
+        self._remove_inventory_stack_button = QPushButton("Remove Selected")
+        self._remove_inventory_stack_button.clicked.connect(
+            self._on_remove_inventory_stack_clicked
+        )
+        inventory_buttons.addWidget(self._remove_inventory_stack_button)
+        inventory_buttons.addStretch(1)
+        inventory_layout.addLayout(inventory_buttons)
+
+        self._inventory_stacks_table = QTableWidget(0, 2)
+        self._inventory_stacks_table.setHorizontalHeaderLabels(["Item", "Quantity"])
+        self._inventory_stacks_table.horizontalHeader().setStretchLastSection(True)
+        self._inventory_stacks_table.cellChanged.connect(
+            self._on_inventory_stacks_table_changed
+        )
+        self._inventory_stacks_table.currentCellChanged.connect(
+            lambda *_args: self._set_inventory_controls_enabled(
+                self._editing_enabled and self._inventory_editable
+            )
+        )
+        inventory_layout.addWidget(self._inventory_stacks_table, 1)
+
+        self._inventory_stacks_text = QPlainTextEdit()
+        self._inventory_stacks_text.hide()
+        self._inventory_stacks_text.textChanged.connect(
+            self._on_legacy_inventory_stacks_text_changed
+        )
         self._sections_tabs.addTab(inventory_tab, "Inventory")
 
         persistence_tab = QWidget()
@@ -441,30 +524,54 @@ class _TemplateFieldsEditor(QWidget):
         persistence_layout.addLayout(persistence_form)
 
         persistence_note = QLabel(
-            "Optional per-variable persistence overrides. Use JSON object syntax."
+            "Template variables are listed automatically. Check Override to "
+            "write a per-variable persistence rule."
         )
         persistence_note.setWordWrap(True)
         persistence_note.setStyleSheet("color: #666; font-style: italic;")
         persistence_layout.addWidget(persistence_note)
 
-        self._persistence_variables_text = QPlainTextEdit()
-        self._persistence_variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._persistence_variables_text.setPlaceholderText(
-            '{\n'
-            '  "shake_timer": false,\n'
-            '  "times_pushed": true\n'
-            '}'
+        persistence_buttons = QHBoxLayout()
+        self._add_persistence_variable_button = QPushButton("Add Extra Variable")
+        self._add_persistence_variable_button.clicked.connect(
+            self._on_add_persistence_variable_clicked
         )
-        self._persistence_variables_text.setFont(font)
-        self._persistence_variables_text.textChanged.connect(self._on_text_changed)
-        persistence_layout.addWidget(self._persistence_variables_text, 1)
+        persistence_buttons.addWidget(self._add_persistence_variable_button)
+        self._remove_persistence_variable_button = QPushButton("Remove Selected")
+        self._remove_persistence_variable_button.clicked.connect(
+            self._on_remove_persistence_variable_clicked
+        )
+        persistence_buttons.addWidget(self._remove_persistence_variable_button)
+        persistence_buttons.addStretch(1)
+        persistence_layout.addLayout(persistence_buttons)
+
+        self._persistence_variables_table = QTableWidget(0, 3)
+        self._persistence_variables_table.setHorizontalHeaderLabels(
+            ["Variable", "Override", "Persistent"]
+        )
+        self._persistence_variables_table.horizontalHeader().setStretchLastSection(True)
+        self._persistence_variables_table.cellChanged.connect(
+            self._on_persistence_variables_table_changed
+        )
+        self._persistence_variables_table.currentCellChanged.connect(
+            lambda *_args: self._set_persistence_variable_controls_enabled(
+                self._editing_enabled and self._persistence_editable
+            )
+        )
+        persistence_layout.addWidget(self._persistence_variables_table, 1)
+
+        self._persistence_variables_text = QPlainTextEdit()
+        self._persistence_variables_text.hide()
+        self._persistence_variables_text.textChanged.connect(
+            self._on_legacy_persistence_variables_text_changed
+        )
         self._sections_tabs.addTab(persistence_tab, "Persistence")
 
         buttons = QHBoxLayout()
-        self._apply_button = QPushButton("Apply Structured Edits")
+        self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self.apply_requested.emit)
         buttons.addWidget(self._apply_button)
-        self._revert_button = QPushButton("Revert Structured Edits")
+        self._revert_button = QPushButton("Revert")
         self._revert_button.clicked.connect(self.revert_requested.emit)
         buttons.addWidget(self._revert_button)
         buttons.addStretch(1)
@@ -483,6 +590,10 @@ class _TemplateFieldsEditor(QWidget):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[..., dict[str, dict[str, Any]] | None]
+        | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._reference_picker_callbacks = {
             "area": area_picker,
@@ -493,7 +604,11 @@ class _TemplateFieldsEditor(QWidget):
             "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
+            "project_command_inputs": project_command_inputs_provider,
+            "visual": visual_picker,
+            "animation": animation_picker,
         }
+        self._visuals_editor.set_asset_picker(asset_picker)
 
     @property
     def is_dirty(self) -> bool:
@@ -501,7 +616,9 @@ class _TemplateFieldsEditor(QWidget):
 
     @property
     def visuals_text(self) -> str:
-        return self._visuals_text.toPlainText()
+        if not self._visuals_editable:
+            return self._visuals_text.toPlainText()
+        return self._visuals_editor.visuals_text()
 
     def add_raw_json_tab(self, widget: QWidget) -> None:
         self._raw_json_tab_index = self._sections_tabs.addTab(widget, "Raw JSON")
@@ -536,14 +653,16 @@ class _TemplateFieldsEditor(QWidget):
         self._stack_order_spin.setEnabled(enabled)
         self._variables_text.setReadOnly(not enabled)
         self._dialogues_edit_button.setEnabled(enabled and self._dialogues_editable)
-        self._visuals_text.setReadOnly(not enabled)
-        self._input_map_text.setReadOnly(not (enabled and self._input_map_editable))
-        self._entity_commands_text.setReadOnly(
-            not (enabled and self._entity_commands_editable)
+        self._visuals_editor.set_editing_enabled(enabled and self._visuals_editable)
+        self._set_input_map_controls_enabled(enabled and self._input_map_editable)
+        self._set_entity_commands_controls_enabled(
+            enabled and self._entity_commands_editable
         )
         self._set_inventory_controls_enabled(enabled and self._inventory_editable)
         self._entity_state_check.setEnabled(enabled and self._persistence_editable)
-        self._persistence_variables_text.setReadOnly(not (enabled and self._persistence_editable))
+        self._set_persistence_variable_controls_enabled(
+            enabled and self._persistence_editable
+        )
         self._apply_button.setEnabled(enabled)
         self._revert_button.setEnabled(enabled)
 
@@ -555,12 +674,13 @@ class _TemplateFieldsEditor(QWidget):
         persistence_warning: str | None = None
         persistence_entity_state = False
         persistence_variables: dict[str, bool] = {}
-        input_map_warning: str | None = None
         input_map: dict[str, str] = {}
         entity_commands_warning: str | None = None
         entity_commands: dict[str, Any] = {}
         inventory_warning: str | None = None
         inventory: dict[str, Any] | None = None
+        visuals_warning: str | None = None
+        visuals: list[dict[str, Any]] = []
         dialogues_warning: str | None = None
         try:
             color = parse_color(data.get("color"))
@@ -572,16 +692,7 @@ class _TemplateFieldsEditor(QWidget):
                 f"{exc}"
             )
             self._color_editable = False
-        try:
-            input_map = parse_input_map(data.get("input_map"))
-            self._input_map_editable = True
-        except ValueError as exc:
-            input_map_warning = (
-                "Input map is not using the supported object-of-strings shape. "
-                "Use the Raw JSON tab to edit it.\n"
-                f"{exc}"
-            )
-            self._input_map_editable = False
+        self._input_map_editable = False
         try:
             entity_commands = parse_entity_commands(data.get("entity_commands"))
             self._entity_commands_editable = True
@@ -602,6 +713,16 @@ class _TemplateFieldsEditor(QWidget):
                 f"{exc}"
             )
             self._inventory_editable = False
+        try:
+            visuals = parse_visuals(data.get("visuals", []))
+            self._visuals_editable = True
+        except ValueError as exc:
+            visuals_warning = (
+                "Visuals are not using the supported array-of-objects shape. "
+                "Use the Raw JSON tab to edit them.\n"
+                f"{exc}"
+            )
+            self._visuals_editable = False
         try:
             self._dialogues_value = normalize_entity_dialogues(data.get("dialogues"))
             self._dialogues_editable = True
@@ -685,13 +806,16 @@ class _TemplateFieldsEditor(QWidget):
                 if raw_variables
                 else ""
             )
-            visuals = data.get("visuals", [])
-            self._visuals_text.setPlainText(json.dumps(visuals, indent=2, ensure_ascii=False))
+            self._visuals_editor.load_visuals(visuals)
+            self._visuals_text.setPlainText(
+                json.dumps(data.get("visuals", []), indent=2, ensure_ascii=False)
+            )
             self._input_map_text.setPlainText(
                 json.dumps(input_map, indent=2, ensure_ascii=False)
                 if input_map
                 else ""
             )
+            self._set_input_map_table(input_map)
             self._entity_commands_text.setPlainText(
                 json.dumps(entity_commands, indent=2, ensure_ascii=False)
                 if entity_commands
@@ -707,12 +831,16 @@ class _TemplateFieldsEditor(QWidget):
                 if inventory
                 else ""
             )
+            self._set_inventory_stacks_table(
+                inventory.get("stacks", []) if inventory else []
+            )
             self._entity_state_check.setChecked(persistence_entity_state)
             self._persistence_variables_text.setPlainText(
                 json.dumps(persistence_variables, indent=2, ensure_ascii=False)
                 if persistence_variables
                 else ""
             )
+            self._set_persistence_variables_table(persistence_variables)
         finally:
             self._loading = False
         if color_warning:
@@ -725,16 +853,18 @@ class _TemplateFieldsEditor(QWidget):
             self._persistence_warning.show()
         else:
             self._persistence_warning.hide()
-        if input_map_warning:
-            self._input_map_warning.setText(input_map_warning)
-            self._input_map_warning.show()
-        else:
-            self._input_map_warning.hide()
+        self._input_map_warning.hide()
         if entity_commands_warning:
             self._entity_commands_warning.setText(entity_commands_warning)
             self._entity_commands_warning.show()
         else:
             self._entity_commands_warning.hide()
+        self._sync_entity_commands_summary()
+        if visuals_warning:
+            self._visuals_warning.setText(visuals_warning)
+            self._visuals_warning.show()
+        else:
+            self._visuals_warning.hide()
         if dialogues_warning:
             self._dialogues_warning.setText(dialogues_warning)
             self._dialogues_warning.show()
@@ -750,18 +880,501 @@ class _TemplateFieldsEditor(QWidget):
         self._set_color_controls_enabled(
             self._editing_enabled and self._color_editable
         )
-        self._input_map_text.setReadOnly(not (self._editing_enabled and self._input_map_editable))
-        self._entity_commands_text.setReadOnly(
-            not (self._editing_enabled and self._entity_commands_editable)
+        self._set_input_map_controls_enabled(
+            self._editing_enabled and self._input_map_editable
+        )
+        self._set_entity_commands_controls_enabled(
+            self._editing_enabled and self._entity_commands_editable
+        )
+        self._visuals_editor.set_editing_enabled(
+            self._editing_enabled and self._visuals_editable
         )
         self._set_inventory_controls_enabled(
             self._editing_enabled and self._inventory_editable
         )
         self._entity_state_check.setEnabled(self._editing_enabled and self._persistence_editable)
-        self._persistence_variables_text.setReadOnly(
-            not (self._editing_enabled and self._persistence_editable)
+        self._set_persistence_variable_controls_enabled(
+            self._editing_enabled and self._persistence_editable
         )
         self._set_dirty(False)
+
+    def _set_input_map_controls_enabled(self, enabled: bool) -> None:
+        self._input_map_text.setReadOnly(not enabled)
+        self._input_map_table.setEnabled(enabled)
+        self._add_input_map_row_button.setEnabled(enabled)
+        self._remove_input_map_row_button.setEnabled(
+            enabled and self._input_map_table.currentRow() >= 0
+        )
+
+    def _set_input_map_table(self, input_map: dict[str, str]) -> None:
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._input_map_table.setRowCount(0)
+            for action, command_name in input_map.items():
+                row = self._input_map_table.rowCount()
+                self._input_map_table.insertRow(row)
+                self._input_map_table.setItem(row, 0, QTableWidgetItem(str(action)))
+                self._input_map_table.setItem(
+                    row,
+                    1,
+                    QTableWidgetItem(str(command_name)),
+                )
+        finally:
+            self._loading = was_loading
+        self._set_input_map_controls_enabled(
+            self._editing_enabled and self._input_map_editable
+        )
+
+    def _build_input_map_from_table(self) -> dict[str, str] | None:
+        input_map: dict[str, str] = {}
+        for row in range(self._input_map_table.rowCount()):
+            action_item = self._input_map_table.item(row, 0)
+            command_item = self._input_map_table.item(row, 1)
+            action = action_item.text().strip() if action_item is not None else ""
+            command_name = command_item.text().strip() if command_item is not None else ""
+            if not action and not command_name:
+                continue
+            if not action:
+                raise ValueError("Input map actions must not be blank.")
+            if action in input_map:
+                raise ValueError(f"Duplicate input map action '{action}'.")
+            input_map[action] = command_name
+        return input_map or None
+
+    def _sync_input_map_text_from_table(self) -> None:
+        input_map = self._build_input_map_from_table() or {}
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._input_map_text.setPlainText(
+                json.dumps(input_map, indent=2, ensure_ascii=False)
+                if input_map
+                else ""
+            )
+        finally:
+            self._loading = was_loading
+
+    def _on_add_input_map_row_clicked(self) -> None:
+        row = self._input_map_table.rowCount()
+        self._input_map_table.insertRow(row)
+        self._input_map_table.setItem(row, 0, QTableWidgetItem(""))
+        self._input_map_table.setItem(row, 1, QTableWidgetItem(""))
+        self._input_map_table.setCurrentCell(row, 0)
+        self._set_input_map_controls_enabled(
+            self._editing_enabled and self._input_map_editable
+        )
+        self._set_dirty(True)
+
+    def _on_remove_input_map_row_clicked(self) -> None:
+        row = self._input_map_table.currentRow()
+        if row < 0:
+            return
+        self._input_map_table.removeRow(row)
+        try:
+            self._sync_input_map_text_from_table()
+        except ValueError:
+            pass
+        self._set_input_map_controls_enabled(
+            self._editing_enabled and self._input_map_editable
+        )
+        self._set_dirty(True)
+
+    def _on_input_map_table_changed(self, *_args: object) -> None:
+        if self._loading:
+            return
+        try:
+            self._sync_input_map_text_from_table()
+            self._input_map_warning.hide()
+        except ValueError as exc:
+            self._input_map_warning.setText(str(exc))
+            self._input_map_warning.show()
+        self._set_dirty(True)
+
+    def _on_legacy_input_map_text_changed(self) -> None:
+        if self._loading:
+            return
+        try:
+            input_map = build_input_map(
+                self._input_map_text.toPlainText(),
+                source_name="Template input map",
+            ) or {}
+        except ValueError as exc:
+            self._input_map_warning.setText(str(exc))
+            self._input_map_warning.show()
+            self._set_dirty(True)
+            return
+        self._input_map_warning.hide()
+        self._set_input_map_table(input_map)
+        self._set_dirty(True)
+
+    def _set_inventory_stacks_table(self, stacks: object) -> None:
+        parsed_stacks = parse_inventory_stacks(stacks)
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._inventory_stacks_table.setRowCount(0)
+            for stack in parsed_stacks:
+                row = self._inventory_stacks_table.rowCount()
+                self._inventory_stacks_table.insertRow(row)
+                self._inventory_stacks_table.setItem(
+                    row,
+                    0,
+                    QTableWidgetItem(str(stack.get("item_id", ""))),
+                )
+                self._inventory_stacks_table.setItem(
+                    row,
+                    1,
+                    QTableWidgetItem(str(stack.get("quantity", ""))),
+                )
+        finally:
+            self._loading = was_loading
+        self._set_inventory_controls_enabled(
+            self._editing_enabled and self._inventory_editable
+        )
+
+    def _build_inventory_stacks_from_table(self) -> list[dict[str, Any]]:
+        raw_stacks: list[dict[str, Any]] = []
+        for row in range(self._inventory_stacks_table.rowCount()):
+            item_id_item = self._inventory_stacks_table.item(row, 0)
+            quantity_item = self._inventory_stacks_table.item(row, 1)
+            item_id = item_id_item.text().strip() if item_id_item is not None else ""
+            quantity_text = (
+                quantity_item.text().strip() if quantity_item is not None else ""
+            )
+            if not item_id and not quantity_text:
+                continue
+            quantity: object = quantity_text
+            if quantity_text:
+                try:
+                    quantity = int(quantity_text)
+                except ValueError:
+                    pass
+            raw_stacks.append({"item_id": item_id, "quantity": quantity})
+        return parse_inventory_stacks(raw_stacks)
+
+    def _build_inventory_from_table(
+        self,
+        *,
+        base_inventory: object | None,
+    ) -> dict[str, Any] | None:
+        if not self._inventory_check.isChecked():
+            return None
+        inventory: dict[str, Any]
+        if isinstance(base_inventory, dict):
+            inventory = copy.deepcopy(base_inventory)
+        else:
+            inventory = {}
+        inventory["max_stacks"] = int(self._inventory_max_stacks_spin.value())
+        inventory["stacks"] = self._build_inventory_stacks_from_table()
+        return parse_inventory(inventory)
+
+    def _sync_inventory_stacks_text_from_table(self) -> None:
+        stacks = self._build_inventory_stacks_from_table()
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._inventory_stacks_text.setPlainText(
+                json.dumps(stacks, indent=2, ensure_ascii=False) if stacks else ""
+            )
+        finally:
+            self._loading = was_loading
+
+    def _on_add_inventory_stack_clicked(self) -> None:
+        row = self._inventory_stacks_table.rowCount()
+        self._inventory_stacks_table.insertRow(row)
+        self._inventory_stacks_table.setItem(row, 0, QTableWidgetItem(""))
+        self._inventory_stacks_table.setItem(row, 1, QTableWidgetItem("1"))
+        self._inventory_stacks_table.setCurrentCell(row, 0)
+        self._set_inventory_controls_enabled(
+            self._editing_enabled and self._inventory_editable
+        )
+        self._set_dirty(True)
+
+    def _on_remove_inventory_stack_clicked(self) -> None:
+        row = self._inventory_stacks_table.currentRow()
+        if row < 0:
+            return
+        self._inventory_stacks_table.removeRow(row)
+        try:
+            self._sync_inventory_stacks_text_from_table()
+        except ValueError:
+            pass
+        self._set_inventory_controls_enabled(
+            self._editing_enabled and self._inventory_editable
+        )
+        self._set_dirty(True)
+
+    def _on_inventory_stacks_table_changed(self, *_args: object) -> None:
+        if self._loading:
+            return
+        try:
+            self._sync_inventory_stacks_text_from_table()
+            self._inventory_warning.hide()
+        except ValueError as exc:
+            self._inventory_warning.setText(str(exc))
+            self._inventory_warning.show()
+        self._set_dirty(True)
+
+    def _on_legacy_inventory_stacks_text_changed(self) -> None:
+        if self._loading:
+            return
+        try:
+            stacks = (
+                loads_json_data(
+                    self._inventory_stacks_text.toPlainText(),
+                    source_name="Template inventory stacks",
+                )
+                if self._inventory_stacks_text.toPlainText().strip()
+                else []
+            )
+            self._set_inventory_stacks_table(stacks)
+        except (JsonDataDecodeError, ValueError) as exc:
+            self._inventory_warning.setText(f"Inventory stacks must be valid JSON.\n{exc}")
+            self._inventory_warning.show()
+            self._set_dirty(True)
+            return
+        self._inventory_warning.hide()
+        self._set_dirty(True)
+
+    def _set_persistence_variable_controls_enabled(self, enabled: bool) -> None:
+        self._persistence_variables_text.setReadOnly(not enabled)
+        self._persistence_variables_table.setEnabled(enabled)
+        self._add_persistence_variable_button.setEnabled(enabled)
+        self._remove_persistence_variable_button.setEnabled(
+            enabled and self._persistence_variables_table.currentRow() >= 0
+        )
+
+    def _current_template_variable_names(self) -> list[str] | None:
+        variables_text = self._variables_text.toPlainText().strip()
+        if not variables_text:
+            return []
+        try:
+            parsed = loads_json_data(
+                variables_text,
+                source_name="Template variables",
+            )
+        except JsonDataDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        names: list[str] = []
+        for raw_name in parsed.keys():
+            name = str(raw_name).strip()
+            if name and name not in names:
+                names.append(name)
+        return names
+
+    def _make_persistence_value_combo(self, persistent: bool) -> QComboBox:
+        combo = QComboBox()
+        combo.addItem("true", True)
+        combo.addItem("false", False)
+        combo.setCurrentIndex(0 if persistent else 1)
+        combo.currentIndexChanged.connect(self._on_persistence_variables_table_changed)
+        return combo
+
+    def _insert_persistence_variable_row(
+        self,
+        *,
+        variable_name: str,
+        included: bool,
+        persistent: bool,
+        custom: bool,
+    ) -> int:
+        row = self._persistence_variables_table.rowCount()
+        self._persistence_variables_table.insertRow(row)
+
+        name_item = QTableWidgetItem(variable_name)
+        name_item.setData(Qt.ItemDataRole.UserRole, custom)
+        if not custom:
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self._persistence_variables_table.setItem(row, 0, name_item)
+
+        include_item = QTableWidgetItem("")
+        include_item.setFlags(
+            include_item.flags()
+            | Qt.ItemFlag.ItemIsUserCheckable
+            | Qt.ItemFlag.ItemIsEnabled
+        )
+        include_item.setCheckState(
+            Qt.CheckState.Checked if included else Qt.CheckState.Unchecked
+        )
+        self._persistence_variables_table.setItem(row, 1, include_item)
+
+        combo = self._make_persistence_value_combo(persistent)
+        combo.setEnabled(included)
+        self._persistence_variables_table.setCellWidget(row, 2, combo)
+        return row
+
+    def _set_persistence_variables_table(
+        self,
+        variables: dict[str, bool],
+        *,
+        variable_names: list[str] | None = None,
+    ) -> None:
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._persistence_variables_table.setRowCount(0)
+            known_names = (
+                variable_names
+                if variable_names is not None
+                else self._current_template_variable_names()
+            )
+            if known_names is None:
+                known_names = []
+            ordered_names = list(known_names)
+            for variable_name in variables:
+                if variable_name not in ordered_names:
+                    ordered_names.append(variable_name)
+            for variable_name in ordered_names:
+                self._insert_persistence_variable_row(
+                    variable_name=str(variable_name),
+                    included=variable_name in variables,
+                    persistent=variables.get(variable_name, True),
+                    custom=variable_name not in known_names,
+                )
+        finally:
+            self._loading = was_loading
+        self._set_persistence_variable_controls_enabled(
+            self._editing_enabled and self._persistence_editable
+        )
+
+    def _persistence_row_is_custom(self, row: int) -> bool:
+        item = self._persistence_variables_table.item(row, 0)
+        return bool(item is not None and item.data(Qt.ItemDataRole.UserRole))
+
+    def _sync_persistence_row_enabled(self, row: int) -> None:
+        include_item = self._persistence_variables_table.item(row, 1)
+        included = (
+            include_item is not None
+            and include_item.checkState() == Qt.CheckState.Checked
+        )
+        combo = self._persistence_variables_table.cellWidget(row, 2)
+        if isinstance(combo, QComboBox):
+            combo.setEnabled(included)
+
+    def _sync_all_persistence_row_enabled(self) -> None:
+        for row in range(self._persistence_variables_table.rowCount()):
+            self._sync_persistence_row_enabled(row)
+
+    def _build_persistence_variables_from_table(self) -> dict[str, bool]:
+        variables: dict[str, bool] = {}
+        for row in range(self._persistence_variables_table.rowCount()):
+            name_item = self._persistence_variables_table.item(row, 0)
+            include_item = self._persistence_variables_table.item(row, 1)
+            name = name_item.text().strip() if name_item is not None else ""
+            included = (
+                include_item is not None
+                and include_item.checkState() == Qt.CheckState.Checked
+            )
+            if not included:
+                continue
+            if not name:
+                raise ValueError("Persistence variable names must not be blank.")
+            if name in variables:
+                raise ValueError(f"Duplicate persistence variable '{name}'.")
+            combo = self._persistence_variables_table.cellWidget(row, 2)
+            if isinstance(combo, QComboBox):
+                variables[name] = bool(combo.currentData())
+                continue
+            value_item = self._persistence_variables_table.item(row, 2)
+            value_text = (
+                value_item.text().strip().lower() if value_item is not None else ""
+            )
+            if value_text not in {"true", "false"}:
+                raise ValueError(f"Persistence variable '{name}' must be true or false.")
+            variables[name] = value_text == "true"
+        return variables
+
+    def _build_persistence_policy_from_table(self) -> dict[str, Any] | None:
+        variables = self._build_persistence_variables_from_table()
+        entity_state = bool(self._entity_state_check.isChecked())
+        if not entity_state and not variables:
+            return None
+        payload: dict[str, Any] = {"entity_state": entity_state}
+        if variables:
+            payload["variables"] = variables
+        return payload
+
+    def _sync_persistence_variables_text_from_table(self) -> None:
+        variables = self._build_persistence_variables_from_table()
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._persistence_variables_text.setPlainText(
+                json.dumps(variables, indent=2, ensure_ascii=False)
+                if variables
+                else ""
+            )
+        finally:
+            self._loading = was_loading
+
+    def _on_add_persistence_variable_clicked(self) -> None:
+        row = self._insert_persistence_variable_row(
+            variable_name="",
+            included=True,
+            persistent=True,
+            custom=True,
+        )
+        self._persistence_variables_table.setCurrentCell(row, 0)
+        self._set_persistence_variable_controls_enabled(
+            self._editing_enabled and self._persistence_editable
+        )
+        self._set_dirty(True)
+
+    def _on_remove_persistence_variable_clicked(self) -> None:
+        row = self._persistence_variables_table.currentRow()
+        if row < 0:
+            return
+        if self._persistence_row_is_custom(row):
+            self._persistence_variables_table.removeRow(row)
+        else:
+            include_item = self._persistence_variables_table.item(row, 1)
+            if include_item is not None:
+                include_item.setCheckState(Qt.CheckState.Unchecked)
+            self._sync_persistence_row_enabled(row)
+        try:
+            self._sync_persistence_variables_text_from_table()
+        except ValueError:
+            pass
+        self._set_persistence_variable_controls_enabled(
+            self._editing_enabled and self._persistence_editable
+        )
+        self._set_dirty(True)
+
+    def _on_persistence_variables_table_changed(self, *_args: object) -> None:
+        if self._loading:
+            return
+        self._sync_all_persistence_row_enabled()
+        try:
+            self._sync_persistence_variables_text_from_table()
+            self._persistence_warning.hide()
+        except ValueError as exc:
+            self._persistence_warning.setText(str(exc))
+            self._persistence_warning.show()
+        self._set_dirty(True)
+
+    def _on_legacy_persistence_variables_text_changed(self) -> None:
+        if self._loading:
+            return
+        try:
+            policy = build_persistence_policy(
+                entity_state=False,
+                variables_text=self._persistence_variables_text.toPlainText(),
+            )
+        except ValueError as exc:
+            self._persistence_warning.setText(str(exc))
+            self._persistence_warning.show()
+            self._set_dirty(True)
+            return
+        variables = {}
+        if isinstance(policy, dict):
+            raw_variables = policy.get("variables", {})
+            variables = raw_variables if isinstance(raw_variables, dict) else {}
+        self._persistence_warning.hide()
+        self._set_persistence_variables_table(variables)
+        self._set_dirty(True)
 
     def _current_variables_value_for_dialogues(self) -> dict[str, Any] | None:
         variables_text = self._variables_text.toPlainText().strip()
@@ -814,6 +1427,11 @@ class _TemplateFieldsEditor(QWidget):
             item_picker=self._reference_picker_callbacks.get("item"),
             dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
             command_picker=self._reference_picker_callbacks.get("command"),
+            project_command_inputs_provider=self._reference_picker_callbacks.get(
+                "project_command_inputs"
+            ),
+            visual_picker=self._reference_picker_callbacks.get("visual"),
+            animation_picker=self._reference_picker_callbacks.get("animation"),
             current_entity_id=None,
             current_area_id=None,
             current_entity_command_names=self._current_entity_command_names(),
@@ -838,6 +1456,269 @@ class _TemplateFieldsEditor(QWidget):
         return sorted(
             str(name).strip() for name in entity_commands.keys() if str(name).strip()
         )
+
+    def _current_entity_commands_value(self) -> dict[str, Any] | None:
+        raw_text = self._entity_commands_text.toPlainText().strip()
+        if not raw_text:
+            return {}
+        try:
+            parsed = loads_json_data(raw_text, source_name="Template entity commands")
+            return parse_entity_commands(parsed)
+        except (JsonDataDecodeError, ValueError):
+            return None
+
+    def _set_entity_commands_value(self, entity_commands: dict[str, Any]) -> None:
+        self._entity_commands_text.setPlainText(
+            json.dumps(entity_commands, indent=2, ensure_ascii=False)
+            if entity_commands
+            else ""
+        )
+        self._sync_entity_commands_table(entity_commands)
+
+    def _sync_entity_commands_summary(self) -> None:
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            self._entity_commands_summary.setText("Invalid entity commands")
+            return
+        self._entity_commands_summary.setText(summarize_entity_commands(entity_commands))
+        self._sync_entity_commands_table(entity_commands)
+
+    def _sync_entity_commands_table(self, entity_commands: dict[str, Any]) -> None:
+        was_loading = self._loading
+        self._loading = True
+        try:
+            selected_name = self._selected_entity_command_name()
+            self._entity_commands_table.setRowCount(0)
+            selected_row = -1
+            for row, (name, definition) in enumerate(entity_commands.items()):
+                self._entity_commands_table.insertRow(row)
+                name_item = QTableWidgetItem(str(name))
+                self._entity_commands_table.setItem(row, 0, name_item)
+                enabled = True
+                if isinstance(definition, dict):
+                    enabled = bool(definition.get("enabled", False))
+                self._entity_commands_table.setItem(
+                    row,
+                    1,
+                    QTableWidgetItem("true" if enabled else "false"),
+                )
+                command_count = len(entity_command_command_list(definition))
+                self._entity_commands_table.setItem(
+                    row,
+                    2,
+                    QTableWidgetItem(str(command_count)),
+                )
+                if str(name) == selected_name:
+                    selected_row = row
+            if selected_row >= 0:
+                self._entity_commands_table.setCurrentCell(selected_row, 0)
+        finally:
+            self._loading = was_loading
+        self._set_entity_commands_controls_enabled(
+            self._editing_enabled and self._entity_commands_editable
+        )
+
+    def _selected_entity_command_name(self) -> str | None:
+        row = self._entity_commands_table.currentRow()
+        if row < 0:
+            return None
+        item = self._entity_commands_table.item(row, 0)
+        if item is None:
+            return None
+        name = item.text().strip()
+        return name or None
+
+    def _set_entity_commands_controls_enabled(self, enabled: bool) -> None:
+        self._entity_commands_text.setReadOnly(not enabled)
+        self._entity_commands_table.setEnabled(enabled)
+        entity_commands = self._current_entity_commands_value()
+        has_commands = bool(entity_commands)
+        can_use_buttons = enabled and entity_commands is not None
+        self._add_entity_command_button.setEnabled(can_use_buttons)
+        self._edit_entity_command_button.setEnabled(can_use_buttons and has_commands)
+        self._duplicate_entity_command_button.setEnabled(can_use_buttons and has_commands)
+        self._remove_entity_command_button.setEnabled(can_use_buttons and has_commands)
+
+    def _prompt_entity_command_name(
+        self,
+        *,
+        title: str,
+        current_name: str = "",
+    ) -> str | None:
+        value, accepted = QInputDialog.getText(
+            self,
+            title,
+            "Command name",
+            text=current_name,
+        )
+        if not accepted:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Entity Command",
+                "Entity command name must not be blank.",
+            )
+            return None
+        return normalized
+
+    def _select_entity_command_name(
+        self,
+        *,
+        title: str,
+        entity_commands: dict[str, Any],
+    ) -> str | None:
+        names = sorted(str(name) for name in entity_commands.keys() if str(name).strip())
+        if not names:
+            QMessageBox.information(
+                self,
+                title,
+                "No entity commands are available yet.",
+            )
+            return None
+        selected_name = self._selected_entity_command_name()
+        if selected_name in entity_commands:
+            return selected_name
+        selected, accepted = QInputDialog.getItem(
+            self,
+            title,
+            "Entity command",
+            names,
+            0,
+            False,
+        )
+        if not accepted:
+            return None
+        return str(selected).strip() or None
+
+    def _open_entity_command_list_dialog(
+        self,
+        command_name: str,
+        commands: list[dict[str, Any]],
+    ) -> list[dict[str, Any]] | None:
+        dialog = CommandListDialog(
+            self,
+            area_picker=self._reference_picker_callbacks.get("area"),
+            asset_picker=self._reference_picker_callbacks.get("asset"),
+            entity_picker=self._reference_picker_callbacks.get("entity"),
+            entity_command_picker=self._reference_picker_callbacks.get("entity_command"),
+            entity_dialogue_picker=self._reference_picker_callbacks.get("entity_dialogue"),
+            item_picker=self._reference_picker_callbacks.get("item"),
+            dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
+            command_picker=self._reference_picker_callbacks.get("command"),
+            project_command_inputs_provider=self._reference_picker_callbacks.get(
+                "project_command_inputs"
+            ),
+            visual_picker=self._reference_picker_callbacks.get("visual"),
+            animation_picker=self._reference_picker_callbacks.get("animation"),
+            current_entity_id=None,
+            current_area_id=None,
+            current_entity_command_names=self._current_entity_command_names(),
+            current_entity_dialogue_names=sorted(self._dialogues_value.keys()),
+        )
+        dialog.setWindowTitle(f"Edit Entity Command - {command_name}")
+        dialog.load_commands(commands)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return None
+        return dialog.commands()
+
+    def _on_add_entity_command_clicked(self) -> None:
+        if not self._editing_enabled or not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        command_name = self._prompt_entity_command_name(title="Add Entity Command")
+        if command_name is None:
+            return
+        if command_name in entity_commands:
+            QMessageBox.warning(
+                self,
+                "Entity Command Exists",
+                f"Entity command '{command_name}' already exists.",
+            )
+            return
+        commands = self._open_entity_command_list_dialog(command_name, [])
+        if commands is None:
+            return
+        entity_commands[command_name] = commands
+        self._set_entity_commands_value(entity_commands)
+        self._on_text_changed()
+
+    def _on_edit_entity_command_clicked(self) -> None:
+        if not self._editing_enabled or not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        command_name = self._select_entity_command_name(
+            title="Edit Entity Command",
+            entity_commands=entity_commands,
+        )
+        if command_name is None:
+            return
+        commands = self._open_entity_command_list_dialog(
+            command_name,
+            entity_command_command_list(entity_commands.get(command_name)),
+        )
+        if commands is None:
+            return
+        entity_commands[command_name] = replace_entity_command_command_list(
+            entity_commands.get(command_name),
+            commands,
+        )
+        self._set_entity_commands_value(entity_commands)
+        self._on_text_changed()
+
+    def _on_duplicate_entity_command_clicked(self) -> None:
+        if not self._editing_enabled or not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        source_name = self._select_entity_command_name(
+            title="Duplicate Entity Command",
+            entity_commands=entity_commands,
+        )
+        if source_name is None:
+            return
+        suggested_name = suggested_entity_command_copy_name(
+            source_name,
+            set(entity_commands.keys()),
+        )
+        new_name = self._prompt_entity_command_name(
+            title="Duplicate Entity Command",
+            current_name=suggested_name,
+        )
+        if new_name is None:
+            return
+        if new_name in entity_commands:
+            QMessageBox.warning(
+                self,
+                "Entity Command Exists",
+                f"Entity command '{new_name}' already exists.",
+            )
+            return
+        entity_commands[new_name] = copy.deepcopy(entity_commands[source_name])
+        self._set_entity_commands_value(entity_commands)
+        self._on_text_changed()
+
+    def _on_remove_entity_command_clicked(self) -> None:
+        if not self._editing_enabled or not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        command_name = self._select_entity_command_name(
+            title="Remove Entity Command",
+            entity_commands=entity_commands,
+        )
+        if command_name is None:
+            return
+        entity_commands.pop(command_name, None)
+        self._set_entity_commands_value(entity_commands)
+        self._on_text_changed()
 
     def _on_edit_dialogues_clicked(self) -> None:
         if not self._dialogues_editable:
@@ -907,21 +1788,11 @@ class _TemplateFieldsEditor(QWidget):
             self._entity_commands_text.setPlainText(
                 json.dumps(rewritten, indent=2, ensure_ascii=False)
             )
+            self._sync_entity_commands_summary()
         finally:
             self._loading = False
 
     def build_updated_template_data(self, base_data: dict[str, Any]) -> dict[str, Any]:
-        visuals_text = self._visuals_text.toPlainText().strip()
-        try:
-            visuals_value = (
-                loads_json_data(visuals_text, source_name="Template visuals")
-                if visuals_text
-                else []
-            )
-        except JsonDataDecodeError as exc:
-            raise ValueError(f"Visuals must be valid JSON.\n{exc}") from exc
-        if not isinstance(visuals_value, list):
-            raise ValueError("Visuals must be a JSON array.")
         updated = dumps_for_clone(base_data)
         kind_value = self._kind_edit.text().strip()
         if kind_value:
@@ -1042,17 +1913,13 @@ class _TemplateFieldsEditor(QWidget):
         else:
             updated.pop("dialogues", None)
 
-        updated["visuals"] = visuals_value
-        if self._input_map_editable:
-            input_map_value = build_input_map(
-                self._input_map_text.toPlainText(),
-                source_name="Template input map",
-            )
-            if input_map_value is None:
-                updated.pop("input_map", None)
-            else:
-                updated["input_map"] = input_map_value
-        elif "input_map" in base_data:
+        if self._visuals_editable:
+            updated["visuals"] = self._visuals_editor.visuals()
+        elif "visuals" in base_data:
+            updated["visuals"] = copy.deepcopy(base_data["visuals"])
+        else:
+            updated.pop("visuals", None)
+        if "input_map" in base_data:
             updated["input_map"] = base_data["input_map"]
         else:
             updated.pop("input_map", None)
@@ -1070,12 +1937,8 @@ class _TemplateFieldsEditor(QWidget):
         else:
             updated.pop("entity_commands", None)
         if self._inventory_editable:
-            inventory_value = build_inventory(
-                enabled=bool(self._inventory_check.isChecked()),
-                max_stacks=int(self._inventory_max_stacks_spin.value()),
-                stacks_text=self._inventory_stacks_text.toPlainText(),
+            inventory_value = self._build_inventory_from_table(
                 base_inventory=base_data.get("inventory"),
-                source_name="Template inventory stacks",
             )
             if inventory_value is None:
                 updated.pop("inventory", None)
@@ -1086,10 +1949,7 @@ class _TemplateFieldsEditor(QWidget):
         else:
             updated.pop("inventory", None)
         if self._persistence_editable:
-            persistence_value = build_persistence_policy(
-                entity_state=bool(self._entity_state_check.isChecked()),
-                variables_text=self._persistence_variables_text.toPlainText(),
-            )
+            persistence_value = self._build_persistence_policy_from_table()
             if persistence_value is None:
                 updated.pop("persistence", None)
             else:
@@ -1154,10 +2014,71 @@ class _TemplateFieldsEditor(QWidget):
             return
         self._set_dirty(True)
 
+    def _on_visuals_changed(self) -> None:
+        if self._loading:
+            return
+        try:
+            visuals_text = self._visuals_editor.visuals_text()
+        except ValueError:
+            visuals_text = ""
+        self._loading = True
+        try:
+            self._visuals_text.setPlainText(visuals_text)
+        finally:
+            self._loading = False
+        self._set_dirty(True)
+
+    def _on_legacy_visuals_text_changed(self) -> None:
+        if self._loading:
+            return
+        raw_text = self._visuals_text.toPlainText().strip()
+        try:
+            raw_visuals = (
+                loads_json_data(raw_text, source_name="Template visuals")
+                if raw_text
+                else []
+            )
+            visuals = parse_visuals(raw_visuals)
+        except (JsonDataDecodeError, ValueError) as exc:
+            self._visuals_warning.setText(f"Visuals must be valid JSON.\n{exc}")
+            self._visuals_warning.show()
+            self._visuals_editable = False
+            self._visuals_editor.set_editing_enabled(False)
+            self._set_dirty(True)
+            return
+        self._loading = True
+        try:
+            self._visuals_editor.load_visuals(visuals)
+        finally:
+            self._loading = False
+        self._visuals_warning.hide()
+        self._visuals_editable = True
+        self._visuals_editor.set_editing_enabled(self._editing_enabled)
+        self._set_dirty(True)
+
+    def _on_entity_commands_text_changed(self) -> None:
+        self._sync_entity_commands_summary()
+        self._set_entity_commands_controls_enabled(
+            self._editing_enabled and self._entity_commands_editable
+        )
+        if self._loading:
+            return
+        self._set_dirty(True)
+
     def _on_variables_text_changed(self) -> None:
         if self._loading:
             return
         self._sync_dialogues_summary()
+        variable_names = self._current_template_variable_names()
+        if variable_names is not None and self._persistence_editable:
+            try:
+                variables = self._build_persistence_variables_from_table()
+            except ValueError:
+                variables = {}
+            self._set_persistence_variables_table(
+                variables,
+                variable_names=variable_names,
+            )
         self._set_dirty(True)
 
     def _on_color_check_toggled(self) -> None:
@@ -1188,6 +2109,11 @@ class _TemplateFieldsEditor(QWidget):
         self._inventory_check.setEnabled(enabled)
         self._inventory_max_stacks_spin.setEnabled(active)
         self._inventory_stacks_text.setReadOnly(not active)
+        self._inventory_stacks_table.setEnabled(active)
+        self._add_inventory_stack_button.setEnabled(active)
+        self._remove_inventory_stack_button.setEnabled(
+            active and self._inventory_stacks_table.currentRow() >= 0
+        )
 
     def _set_dirty(self, dirty: bool) -> None:
         if self._dirty == dirty:
@@ -1256,6 +2182,10 @@ class EntityTemplateEditorWidget(QWidget):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[..., dict[str, dict[str, Any]] | None]
+        | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._fields_editor.set_reference_picker_callbacks(
             area_picker=area_picker,
@@ -1266,6 +2196,9 @@ class EntityTemplateEditorWidget(QWidget):
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
+            project_command_inputs_provider=project_command_inputs_provider,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
         )
 
     def set_editing_enabled(self, enabled: bool) -> None:

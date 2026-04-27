@@ -39,7 +39,7 @@
     },
     "group_fill_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "group_target_entity_id"
+      "of": "group_target_entity_id"
     },
     "filled_target_entity_id": {
       "type": "entity_id",
@@ -48,7 +48,7 @@
     },
     "filled_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "filled_target_entity_id"
+      "of": "filled_target_entity_id"
     }
   },
   "variables": {

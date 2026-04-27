@@ -29,12 +29,12 @@ def _write_json(path: Path, payload: object) -> None:
 def _minimal_area() -> dict[str, object]:
     return {
         "tile_size": 16,
-        "input_targets": {
-            "move_up": "player",
-            "move_down": "player",
-            "move_left": "player",
-            "move_right": "player",
-            "interact": "player",
+        "input_routes": {
+            "move_up": {"entity_id": "player", "command_id": "move_up"},
+            "move_down": {"entity_id": "player", "command_id": "move_down"},
+            "move_left": {"entity_id": "player", "command_id": "move_left"},
+            "move_right": {"entity_id": "player", "command_id": "move_right"},
+            "interact": {"entity_id": "player", "command_id": "interact"},
         },
         "variables": {},
         "tilesets": [

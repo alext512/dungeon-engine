@@ -52,7 +52,7 @@ Current area fields include:
 - `enter_commands`
 - `entry_points`
 - `camera`
-- `input_targets`
+- `input_routes`
 - `entities`
 
 Areas define:
@@ -72,7 +72,7 @@ Common engine-known entity fields include:
 - identity and placement such as `id`, `grid_x`, `grid_y`, `pixel_x`, `pixel_y`
 - physics and interaction fields such as `facing`, `solid`, `pushable`, `interactable`
 - rendering fields such as `render_order`, `y_sort`, `sort_y_offset`, `stack_order`
-- authored state such as `variables`, `inventory`, `visuals`, `entity_commands`, `input_map`
+- authored state such as `variables`, `inventory`, `visuals`, and `entity_commands`
 - persistence policy through `persistence`
 
 Template parameter substitution happens before runtime command execution and is different from runtime tokens.

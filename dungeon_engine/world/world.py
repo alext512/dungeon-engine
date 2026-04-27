@@ -8,6 +8,8 @@ from typing import Any
 
 from dungeon_engine.world.entity import Entity
 
+InputRoute = dict[str, str]
+
 DEFAULT_INPUT_ACTIONS: tuple[str, ...] = (
     "move_up",
     "move_down",
@@ -25,24 +27,24 @@ class World:
 
     area_entities: dict[str, Entity] = field(default_factory=dict)
     global_entities: dict[str, Entity] = field(default_factory=dict)
-    default_input_targets: dict[str, str] = field(default_factory=dict)
-    input_targets: dict[str, str] = field(default_factory=dict)
-    input_route_stack: list[dict[str, str]] = field(default_factory=list, repr=False)
+    default_input_routes: dict[str, InputRoute] = field(default_factory=dict)
+    input_routes: dict[str, InputRoute] = field(default_factory=dict)
+    input_route_stack: list[dict[str, InputRoute]] = field(default_factory=list, repr=False)
     variables: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Normalize authored and runtime input-target maps."""
-        normalized_defaults = self._normalize_input_targets(self.default_input_targets)
-        self.default_input_targets = normalized_defaults
+        """Normalize authored and runtime input-route maps."""
+        normalized_defaults = self._normalize_input_routes(self.default_input_routes)
+        self.default_input_routes = normalized_defaults
 
-        normalized_current = self._normalize_input_targets(self.input_targets)
+        normalized_current = self._normalize_input_routes(self.input_routes)
         if not normalized_current:
-            self.input_targets = copy.deepcopy(self.default_input_targets)
+            self.input_routes = copy.deepcopy(self.default_input_routes)
             return
 
-        merged_targets = copy.deepcopy(self.default_input_targets)
-        merged_targets.update(normalized_current)
-        self.input_targets = merged_targets
+        merged_routes = copy.deepcopy(self.default_input_routes)
+        merged_routes.update(normalized_current)
+        self.input_routes = merged_routes
 
     def add_entity(self, entity: Entity) -> None:
         """Insert a new entity by id and fail on any duplicate identifier."""
@@ -79,11 +81,14 @@ class World:
         """Remove an entity when it exists in the current room."""
         self.area_entities.pop(entity_id, None)
         self.global_entities.pop(entity_id, None)
-        for action, target_id in list(self.input_targets.items()):
-            if target_id != entity_id:
+        for action, route in list(self.input_routes.items()):
+            if route.get("entity_id") != entity_id:
                 continue
-            default_target_id = self.default_input_targets.get(action, "")
-            self.input_targets[action] = "" if default_target_id == entity_id else default_target_id
+            default_route = self.default_input_routes.get(action, {})
+            if default_route.get("entity_id") == entity_id:
+                self.input_routes[action] = self._empty_input_route()
+            else:
+                self.input_routes[action] = copy.deepcopy(default_route)
 
     def get_entity(self, entity_id: str) -> Entity | None:
         """Return an entity when it exists in the current room."""
@@ -96,28 +101,39 @@ class World:
         """Return every logical input action known to the current world."""
         seen: set[str] = set()
         ordered_actions: list[str] = []
-        for action in [*DEFAULT_INPUT_ACTIONS, *self.default_input_targets.keys(), *self.input_targets.keys()]:
+        for action in [*DEFAULT_INPUT_ACTIONS, *self.default_input_routes.keys(), *self.input_routes.keys()]:
             if action in seen:
                 continue
             seen.add(action)
             ordered_actions.append(action)
         return ordered_actions
 
-    def get_input_target_id(self, action: str) -> str | None:
-        """Return the current entity id routed for one logical input action."""
+    def get_input_route(self, action: str) -> InputRoute | None:
+        """Return the current entity-command route for one logical input action."""
         action_name = str(action).strip()
         if not action_name:
             return None
-        if action_name in self.input_targets:
-            current_target_id = str(self.input_targets.get(action_name, "")).strip()
-            if current_target_id and self.get_entity(current_target_id) is not None:
-                return current_target_id
-        default_target_id = str(self.default_input_targets.get(action_name, "")).strip()
-        if not default_target_id:
-            return None
-        if self.get_entity(default_target_id) is not None:
-            return default_target_id
+        current_route = self.input_routes.get(action_name)
+        if self._route_is_available(current_route):
+            return copy.deepcopy(current_route)
+        default_route = self.default_input_routes.get(action_name)
+        if self._route_is_available(default_route):
+            return copy.deepcopy(default_route)
         return None
+
+    def get_input_target_id(self, action: str) -> str | None:
+        """Return the current entity id routed for one logical input action."""
+        route = self.get_input_route(action)
+        if route is None:
+            return None
+        return route["entity_id"]
+
+    def get_input_command_id(self, action: str) -> str | None:
+        """Return the current entity-command id routed for one logical input action."""
+        route = self.get_input_route(action)
+        if route is None:
+            return None
+        return route["command_id"]
 
     def get_input_target(self, action: str) -> Entity | None:
         """Return the entity currently routed for one logical input action."""
@@ -126,73 +142,75 @@ class World:
             return None
         return self.get_entity(target_id)
 
-    def set_input_target(self, action: str, entity_id: str | None) -> None:
-        """Route one logical input action to a specific entity or clear it."""
+    def set_input_route(
+        self,
+        action: str,
+        entity_id: str | None,
+        command_id: str | None,
+    ) -> None:
+        """Route one logical input action to a specific entity command or clear it."""
         action_name = str(action).strip()
         if not action_name:
             raise ValueError("Input action names must be non-empty.")
-        if entity_id in (None, ""):
-            self.input_targets[action_name] = ""
+        if entity_id in (None, "") or command_id in (None, ""):
+            self.input_routes[action_name] = self._empty_input_route()
             return
         entity = self.get_entity(str(entity_id))
         if entity is None:
             raise KeyError(f"Input target entity '{entity_id}' was not found in the world.")
-        self.input_targets[action_name] = entity.entity_id
+        resolved_command_id = str(command_id).strip()
+        if not resolved_command_id:
+            self.input_routes[action_name] = self._empty_input_route()
+            return
+        self.input_routes[action_name] = {
+            "entity_id": entity.entity_id,
+            "command_id": resolved_command_id,
+        }
 
-    def set_input_targets(self, targets: dict[str, str], *, replace: bool = False) -> None:
-        """Update or replace the current logical-input routing table."""
-        normalized_targets = self._normalize_input_targets(targets)
+    def set_input_routes(self, routes: dict[str, Any], *, replace: bool = False) -> None:
+        """Update or replace the current logical-input route table."""
+        normalized_routes = self._normalize_input_routes(routes)
         if replace:
-            next_targets = copy.deepcopy(self.default_input_targets)
-            next_targets.update(normalized_targets)
-            self.input_targets = next_targets
+            next_routes = copy.deepcopy(self.default_input_routes)
+            next_routes.update(normalized_routes)
+            self.input_routes = next_routes
             return
-        self.input_targets.update(normalized_targets)
-
-    def route_inputs_to_entity(
-        self,
-        entity_id: str | None,
-        *,
-        actions: list[str] | tuple[str, ...] | None = None,
-    ) -> None:
-        """Route selected logical inputs, or all inputs, to one entity."""
-        if entity_id in (None, ""):
-            selected_actions = self.list_input_actions() if actions is None else [str(action) for action in actions]
-            for action in selected_actions:
-                self.set_input_target(action, "")
-            return
-        resolved_entity = self.get_entity(str(entity_id))
-        if resolved_entity is None:
-            raise KeyError(f"Input target entity '{entity_id}' was not found in the world.")
-        selected_actions = self.list_input_actions() if actions is None else [str(action) for action in actions]
-        for action in selected_actions:
-            self.input_targets[str(action)] = resolved_entity.entity_id
+        self.input_routes.update(normalized_routes)
 
     def push_input_routes(
         self,
         *,
         actions: list[str] | tuple[str, ...] | None = None,
     ) -> None:
-        """Remember the current routed targets for one set of logical actions."""
+        """Remember the current routed entity commands for one set of logical actions."""
         selected_actions = self.list_input_actions() if actions is None else [str(action) for action in actions]
-        snapshot: dict[str, str] = {}
+        snapshot: dict[str, InputRoute] = {}
         for raw_action in selected_actions:
             action = str(raw_action).strip()
             if not action:
                 raise ValueError("Input action names must be non-empty.")
-            snapshot[action] = self.get_input_target_id(action) or ""
+            snapshot[action] = self.get_input_route(action) or self._empty_input_route()
         self.input_route_stack.append(snapshot)
 
     def pop_input_routes(self) -> None:
-        """Restore the last remembered routed targets for one set of logical actions."""
+        """Restore the last remembered routed entity commands for one set of logical actions."""
         if not self.input_route_stack:
             raise ValueError("Cannot pop input routes because the input route stack is empty.")
         snapshot = self.input_route_stack.pop()
-        for action, target_id in snapshot.items():
-            if target_id and self.get_entity(target_id) is not None:
-                self.input_targets[action] = target_id
+        for action, route in snapshot.items():
+            route_entity_id = str(route.get("entity_id", "")).strip()
+            route_command_id = str(route.get("command_id", "")).strip()
+            if (
+                route_entity_id
+                and route_command_id
+                and self.get_entity(route_entity_id) is not None
+            ):
+                self.input_routes[action] = {
+                    "entity_id": route_entity_id,
+                    "command_id": route_command_id,
+                }
                 continue
-            self.input_targets[action] = ""
+            self.input_routes[action] = self._empty_input_route()
 
     def iter_entities(self, *, include_absent: bool = False) -> list[Entity]:
         """Return all entities, optionally including non-present ones."""
@@ -337,16 +355,35 @@ class World:
             candidate = f"{base_name}_{counter}"
         return candidate
 
-    def _normalize_input_targets(self, targets: dict[str, str]) -> dict[str, str]:
-        """Convert authored/runtime input-target data into stable string mappings."""
-        normalized: dict[str, str] = {}
-        for raw_action, raw_target in dict(targets).items():
+    def _normalize_input_routes(self, routes: dict[str, Any]) -> dict[str, InputRoute]:
+        """Convert authored/runtime input-route data into stable string mappings."""
+        normalized: dict[str, InputRoute] = {}
+        for raw_action, raw_route in dict(routes).items():
             action = str(raw_action).strip()
             if not action:
                 continue
-            if raw_target in (None, ""):
-                normalized[action] = ""
-                continue
-            normalized[action] = str(raw_target).strip()
+            normalized[action] = self._normalize_input_route(raw_route)
         return normalized
+
+    @staticmethod
+    def _empty_input_route() -> InputRoute:
+        return {"entity_id": "", "command_id": ""}
+
+    def _normalize_input_route(self, raw_route: Any) -> InputRoute:
+        if raw_route in (None, ""):
+            return self._empty_input_route()
+        if not isinstance(raw_route, dict):
+            raise TypeError("Input routes must map actions to route objects.")
+        entity_id = str(raw_route.get("entity_id", "")).strip()
+        command_id = str(raw_route.get("command_id", "")).strip()
+        if not entity_id or not command_id:
+            return self._empty_input_route()
+        return {"entity_id": entity_id, "command_id": command_id}
+
+    def _route_is_available(self, route: InputRoute | None) -> bool:
+        if not route:
+            return False
+        entity_id = str(route.get("entity_id", "")).strip()
+        command_id = str(route.get("command_id", "")).strip()
+        return bool(entity_id and command_id and self.get_entity(entity_id) is not None)
 

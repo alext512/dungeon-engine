@@ -103,9 +103,9 @@ to remove.
 
 ## Area Startup Editing
 
-The editor keeps `Layers` focused on map structure and puts area startup behavior in a separate `Area Start` tab. That surface is especially helpful for common `enter_commands` actions such as:
+The editor keeps `Layers` focused on map structure and puts area startup behavior in the area browser context menu. Right-click an area and choose `Edit Area Start Commands...` to edit common `enter_commands` actions such as:
 
-- `route_inputs_to_entity`
+- `set_input_route`
 - `run_entity_command`
 - `open_dialogue_session`
 - `set_camera_follow_entity`

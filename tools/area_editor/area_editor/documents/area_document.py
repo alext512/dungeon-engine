@@ -217,7 +217,7 @@ class AreaDocument:
     entry_points: dict[str, dict[str, Any]]
     entities: list[EntityDocument]
     camera: dict[str, Any]
-    input_targets: dict[str, str]
+    input_routes: dict[str, dict[str, str]]
     variables: dict[str, Any]
     enter_commands: list[Any]
     _extra: dict[str, Any] = field(default_factory=dict)
@@ -258,7 +258,7 @@ class AreaDocument:
             entry_points=d.pop("entry_points", {}),
             entities=entities,
             camera=d.pop("camera", {}),
-            input_targets=d.pop("input_targets", {}),
+            input_routes=d.pop("input_routes", {}),
             variables=d.pop("variables", {}),
             enter_commands=d.pop("enter_commands", []),
             _extra=d,
@@ -277,8 +277,8 @@ class AreaDocument:
         out["entities"] = [e.to_dict() for e in self.entities]
         if self.camera:
             out["camera"] = self.camera
-        if self.input_targets:
-            out["input_targets"] = self.input_targets
+        if self.input_routes:
+            out["input_routes"] = self.input_routes
         if self.variables is not None:
             out["variables"] = self.variables
         if self.enter_commands:

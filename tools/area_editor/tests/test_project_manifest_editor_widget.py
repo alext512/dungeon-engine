@@ -35,9 +35,15 @@ class TestProjectManifestEditorWidget(unittest.TestCase):
                 {
                     "startup_area": "areas/demo",
                     "save_dir": "saves",
-                    "input_targets": {
-                        "interact": "player_1",
-                        "pause": "pause_controller",
+                    "input_routes": {
+                        "interact": {
+                            "entity_id": "player_1",
+                            "command_id": "interact",
+                        },
+                        "pause": {
+                            "entity_id": "pause_controller",
+                            "command_id": "open_pause",
+                        },
                     },
                     "debug_inspection_enabled": False,
                     "global_entities": [
@@ -69,10 +75,16 @@ class TestProjectManifestEditorWidget(unittest.TestCase):
             self.assertEqual(saved["save_dir"], "slot_data")
             self.assertTrue(saved["debug_inspection_enabled"])
             self.assertEqual(
-                saved["input_targets"],
+                saved["input_routes"],
                 {
-                    "interact": "player_1",
-                    "pause": "pause_controller",
+                    "interact": {
+                        "entity_id": "player_1",
+                        "command_id": "interact",
+                    },
+                    "pause": {
+                        "entity_id": "pause_controller",
+                        "command_id": "open_pause",
+                    },
                 },
             )
             self.assertEqual(

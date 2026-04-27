@@ -125,6 +125,7 @@ class TileCanvas(QGraphicsView):
     entity_selection_changed = Signal(str, int, int)  # entity_id, position, total
     entity_edit_requested = Signal(str)
     entity_context_menu_requested = Signal(object, object)  # entity_ids, global_pos
+    cell_context_menu_requested = Signal(int, int, object)  # col, row, global_pos
     entity_stack_picker_requested = Signal(object, object, str)  # entity_ids, global_pos, purpose
     entity_drag_committed = Signal(str, str, int, int)  # entity_id, space, x, y
     tile_selection_changed = Signal(bool)
@@ -1342,7 +1343,19 @@ class TileCanvas(QGraphicsView):
                     return False
                 entity_ids = self._entity_ids_at_scene_pos(scene_pos)
                 if not entity_ids:
-                    return False
+                    tile_cell = self._tile_cell_from_scene_pos(
+                        scene_pos.x(),
+                        scene_pos.y(),
+                        clamp=False,
+                    )
+                    if tile_cell is None:
+                        return False
+                    self.cell_context_menu_requested.emit(
+                        tile_cell[0],
+                        tile_cell[1],
+                        event.globalPosition().toPoint(),
+                    )
+                    return True
                 self.entity_context_menu_requested.emit(
                     tuple(entity_ids),
                     event.globalPosition().toPoint(),

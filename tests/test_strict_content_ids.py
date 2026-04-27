@@ -91,12 +91,12 @@ def _write_json(path: Path, payload: object) -> None:
 def _minimal_area() -> dict[str, object]:
     return {
         "tile_size": 16,
-        "input_targets": {
-            "move_up": "player",
-            "move_down": "player",
-            "move_left": "player",
-            "move_right": "player",
-            "interact": "player",
+        "input_routes": {
+            "move_up": {"entity_id": "player", "command_id": "move_up"},
+            "move_down": {"entity_id": "player", "command_id": "move_down"},
+            "move_left": {"entity_id": "player", "command_id": "move_left"},
+            "move_right": {"entity_id": "player", "command_id": "move_right"},
+            "interact": {"entity_id": "player", "command_id": "interact"},
         },
         "variables": {},
         "tilesets": [
@@ -369,7 +369,7 @@ class StrictContentIdTests(unittest.TestCase):
         self,
         *,
         startup_area: str | None = None,
-        input_targets: dict[str, str] | None = None,
+        input_routes: dict[str, dict[str, str]] | None = None,
         global_entities: list[dict[str, object]] | None = None,
         entity_templates: dict[str, dict[str, object]] | None = None,
         areas: dict[str, dict[str, object]] | None = None,
@@ -391,8 +391,8 @@ class StrictContentIdTests(unittest.TestCase):
         }
         if startup_area is not None:
             project_payload["startup_area"] = startup_area
-        if input_targets is not None:
-            project_payload["input_targets"] = input_targets
+        if input_routes is not None:
+            project_payload["input_routes"] = input_routes
         if global_entities is not None:
             project_payload["global_entities"] = global_entities
 
@@ -3066,7 +3066,7 @@ class StrictContentIdTests(unittest.TestCase):
         assert title_area_path is not None
         game = Game(area_path=title_area_path, project=project)
 
-        game.world.route_inputs_to_entity(None, actions=["menu"])
+        game.world.set_input_route("menu", None, None)
 
         still_running = game._run_play_frame(
             1 / 60,
@@ -3087,7 +3087,7 @@ class StrictContentIdTests(unittest.TestCase):
         )
 
         self.assertEqual(save_data.current_area, "")
-        self.assertIsNone(save_data.current_input_targets)
+        self.assertIsNone(save_data.current_input_routes)
 
     def test_game_new_game_resets_session_state(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -3156,7 +3156,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.area.area_id, "areas/village_square")
         self.assertEqual(game.persistence_runtime.save_data.globals, {})
         self.assertIsNone(game.persistence_runtime.save_path)
-        self.assertIsNone(game.persistence_runtime.save_data.current_input_targets)
+        self.assertIsNone(game.persistence_runtime.save_data.current_input_routes)
 
     def test_title_screen_dialogue_accepts_direction_and_confirm_input(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -3830,7 +3830,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(game.world.get_input_target_id("menu"), "pause_controller")
         self.assertIsNone(game.command_runner.last_error_notice)
 
-    def test_save_game_after_returning_inputs_persists_player_input_targets(self) -> None:
+    def test_save_game_after_returning_inputs_persists_player_input_routes(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         from dungeon_engine.engine.game import Game
@@ -3848,13 +3848,13 @@ class StrictContentIdTests(unittest.TestCase):
             areas={
                 "room_a.json": {
                     "tile_size": 16,
-                    "input_targets": {
-                        "move_up": "player",
-                        "move_down": "player",
-                        "move_left": "player",
-                        "move_right": "player",
-                        "interact": "player",
-                        "menu": "player",
+                    "input_routes": {
+                        "move_up": {"entity_id": "player", "command_id": "move_up"},
+                        "move_down": {"entity_id": "player", "command_id": "move_down"},
+                        "move_left": {"entity_id": "player", "command_id": "move_left"},
+                        "move_right": {"entity_id": "player", "command_id": "move_right"},
+                        "interact": {"entity_id": "player", "command_id": "interact"},
+                        "menu": {"entity_id": "player", "command_id": "menu"},
                     },
                     "variables": {},
                     "tilesets": [],
@@ -3905,7 +3905,42 @@ class StrictContentIdTests(unittest.TestCase):
             context,
             [
                 {"type": "push_input_routes"},
-                {"type": "route_inputs_to_entity", "entity_id": "dialogue_controller"},
+                {
+                    "type": "set_input_route",
+                    "action": "move_up",
+                    "entity_id": "dialogue_controller",
+                    "command_id": "move_up",
+                },
+                {
+                    "type": "set_input_route",
+                    "action": "move_down",
+                    "entity_id": "dialogue_controller",
+                    "command_id": "move_down",
+                },
+                {
+                    "type": "set_input_route",
+                    "action": "move_left",
+                    "entity_id": "dialogue_controller",
+                    "command_id": "move_left",
+                },
+                {
+                    "type": "set_input_route",
+                    "action": "move_right",
+                    "entity_id": "dialogue_controller",
+                    "command_id": "move_right",
+                },
+                {
+                    "type": "set_input_route",
+                    "action": "interact",
+                    "entity_id": "dialogue_controller",
+                    "command_id": "interact",
+                },
+                {
+                    "type": "set_input_route",
+                    "action": "menu",
+                    "entity_id": "dialogue_controller",
+                    "command_id": "menu",
+                },
                 {"type": "pop_input_routes"},
                 {"type": "save_game", "save_path": str(save_path)},
             ],
@@ -3921,16 +3956,16 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertNotIn("active_entity", save_payload)
         self.assertNotIn("input_route_stack", save_payload)
-        self.assertIsNotNone(restored_save_data.current_input_targets)
-        assert restored_save_data.current_input_targets is not None
+        self.assertIsNotNone(restored_save_data.current_input_routes)
+        assert restored_save_data.current_input_routes is not None
         self.assertTrue(
             all(
-                restored_save_data.current_input_targets.get(action) == "player"
+                restored_save_data.current_input_routes.get(action, {}).get("entity_id") == "player"
                 for action in ("interact", "menu", "move_up", "move_down", "move_left", "move_right")
             )
         )
 
-    def test_load_game_restores_saved_input_targets(self) -> None:
+    def test_load_game_restores_saved_input_routes(self) -> None:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         from dungeon_engine.engine.game import Game
@@ -3948,13 +3983,13 @@ class StrictContentIdTests(unittest.TestCase):
             areas={
                 "room_a.json": {
                     "tile_size": 16,
-                    "input_targets": {
-                        "move_up": "player",
-                        "move_down": "player",
-                        "move_left": "player",
-                        "move_right": "player",
-                        "interact": "player",
-                        "menu": "player",
+                    "input_routes": {
+                        "move_up": {"entity_id": "player", "command_id": "move_up"},
+                        "move_down": {"entity_id": "player", "command_id": "move_down"},
+                        "move_left": {"entity_id": "player", "command_id": "move_left"},
+                        "move_right": {"entity_id": "player", "command_id": "move_right"},
+                        "interact": {"entity_id": "player", "command_id": "interact"},
+                        "menu": {"entity_id": "player", "command_id": "menu"},
                     },
                     "variables": {},
                     "tilesets": [],
@@ -3985,7 +4020,8 @@ class StrictContentIdTests(unittest.TestCase):
 
         save_path = project.project_root / "saves" / "slot_1.json"
         game.world.push_input_routes()
-        game.world.route_inputs_to_entity("dialogue_controller")
+        for action in game.world.list_input_actions():
+            game.world.set_input_route(action, "dialogue_controller", action)
         game._write_save_slot(save_path)
         game.world.pop_input_routes()
 

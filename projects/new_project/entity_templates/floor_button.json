@@ -31,11 +31,11 @@
     },
     "target_press_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "target_entity_id"
+      "of": "target_entity_id"
     },
     "target_release_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "target_entity_id"
+      "of": "target_entity_id"
     }
   },
   "variables": {

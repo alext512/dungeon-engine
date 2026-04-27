@@ -29,7 +29,7 @@ Current slices:
   and nudging support
 - structured editors for project manifest, shared variables, items, templates,
   global entities, and entity instances, including structured scope, `color`,
-  and `input_map`/`inventory` editing for template and instance surfaces plus
+  visuals, and `inventory` editing for template and instance surfaces plus
   common template defaults through the template `Basics` section
 - reference-aware file/folder reorganization for file-backed content,
   including drag-to-folder moves that reuse the same preview/refactor path as
@@ -133,7 +133,7 @@ shared variable basics must not strip raw-only engine-used subtrees such as
 `entity_commands`, `dialogue_ui`, `inventory_ui`, or item `use_commands`.
 The same rule applies to area-focused surfaces such as editing `enter_commands`:
 those saves must not disturb `camera`,
-`input_targets`, or unrelated area root data. It also applies to the shared
+`input_routes`, or unrelated area root data. It also applies to the shared
 render-properties surface: layer render edits must preserve unrelated layer
 metadata, and entity render edits must preserve authored entity fields outside
 the render subset.
@@ -152,7 +152,7 @@ Current entity-instance ownership:
 
 - structured Fields tab: identity/position fields, template parameters, common
   physics/interaction/visibility fields, tags, `color`, variables, visuals,
-  `scope`, `input_map`, `entity_commands`, `inventory`, and `persistence`
+  `scope`, `entity_commands`, `inventory`, and `persistence`
 - shared Render Properties dock: `render_order`, `y_sort`, `sort_y_offset`,
   and `stack_order`
 - raw JSON only today: none of the runtime-known authored entity fields
@@ -161,7 +161,7 @@ Current entity-template ownership:
 
 - structured template editor: `kind`, `space`, `scope`, tags, common
   physics/interaction/visibility defaults, `color`, render defaults,
-  `variables`, `visuals`, `input_map`, `entity_commands`, `inventory`, and
+  `variables`, `visuals`, `entity_commands`, `inventory`, and
   `persistence`
 - raw JSON only today: none of the runtime-known authored entity fields
 

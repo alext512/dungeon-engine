@@ -1,0 +1,13 @@
+/*
+  NOTES
+
+  Add file-level notes here.
+*/
+
+{
+  "name": "Example",
+  "description": "",
+  "max_stack": 1,
+  "consume_quantity_on_use": 0,
+  "use_commands": []
+}

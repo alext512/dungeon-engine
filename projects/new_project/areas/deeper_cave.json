@@ -1,0 +1,114 @@
+/*
+  NOTES
+
+  Small second cave room reached from the north gate in areas/cave.
+  The visible top gate is tile art so this area stays entity-light.
+*/
+{
+  "tile_size": 16,
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "path": "assets/used_tilesets_sprites/underworld.png",
+      "tile_width": 16,
+      "tile_height": 16
+    },
+    {
+      "firstgid": 170,
+      "path": "assets/used_tilesets_sprites/overworld_expanded.png",
+      "tile_width": 16,
+      "tile_height": 16
+    },
+    {
+      "firstgid": 1000,
+      "path": "assets/Iron_Gate.png",
+      "tile_width": 16,
+      "tile_height": 16
+    }
+  ],
+  "tile_layers": [
+    {
+      "name": "ground",
+      "render_order": 0,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206],
+        [206, 206, 206, 206, 206, 206, 206, 206, 206, 206]
+      ]
+    },
+    {
+      "name": "ground10",
+      "render_order": 10,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [30, 54, 54, 55, 0, 53, 54, 54, 54, 31],
+        [42, 0, 0, 0, 0, 0, 0, 0, 0, 40],
+        [42, 0, 3, 0, 0, 0, 0, 4, 0, 40],
+        [42, 0, 0, 0, 0, 0, 0, 0, 0, 40],
+        [42, 0, 0, 0, 0, 0, 0, 0, 0, 40],
+        [42, 0, 0, 2, 0, 0, 0, 2, 0, 40],
+        [42, 0, 0, 0, 0, 0, 0, 0, 0, 40],
+        [42, 0, 16, 0, 0, 0, 3, 0, 0, 40],
+        [42, 0, 0, 0, 1, 0, 0, 0, 0, 40],
+        [43, 28, 28, 29, 0, 27, 28, 28, 28, 44]
+      ]
+    },
+    {
+      "name": "gate",
+      "render_order": 20,
+      "y_sort": false,
+      "stack_order": 0,
+      "grid": [
+        [0, 0, 0, 0, 1000, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "deeper_cave_entrance_in",
+      "grid_x": 4,
+      "grid_y": 8,
+      "template": "entity_templates/actively_used/area_transition_target"
+    },
+    {
+      "id": "deeper_cave_exit_in",
+      "grid_x": 4,
+      "grid_y": 9,
+      "template": "entity_templates/actively_used/area_transition",
+      "parameters": {
+        "destination_entity_id": "area_transition_target_1",
+        "target_area": "areas/cave"
+      }
+    },
+    {
+      "id": "deeper_cave_gated_exit",
+      "grid_x": 4,
+      "grid_y": 0,
+      "template": "entity_templates/actively_used/area_transition",
+      "parameters": {
+        "destination_entity_id": "area_transition_target_1",
+        "target_area": "areas/cave"
+      }
+    }
+  ],
+  "variables": {}
+}

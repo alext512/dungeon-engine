@@ -182,7 +182,11 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         return registry, context
 
     def test_strict_entity_primitives_reject_raw_symbolic_entity_refs(self) -> None:
-        world = World(default_input_targets={"interact": "player"})
+        world = World(
+            default_input_routes={
+                "interact": {"entity_id": "player", "command_id": "interact"}
+            }
+        )
         world.add_entity(_make_runtime_entity("player", kind="player", with_visual=True))
         registry, context = self._make_command_context(world=world)
         context.services.ui.camera = _RecordingCamera()
@@ -208,10 +212,11 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 },
             ),
             (
-                "set_input_target",
+                "set_input_route",
                 {
                     "action": "interact",
                     "entity_id": "self",
+                    "command_id": "interact",
                 },
             ),
             (

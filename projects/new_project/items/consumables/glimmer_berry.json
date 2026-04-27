@@ -7,6 +7,12 @@
 {
   "name": "Glimmer Berry",
   "description": "A tiny cave fruit that leaves a warm glow when used.",
+  "icon": {
+    "path": "assets/project/items/glimmer_berry_icon.png",
+    "frame_width": 16,
+    "frame_height": 16,
+    "frame": 0
+  },
   "max_stack": 4,
   "consume_quantity_on_use": 1,
   "use_commands": [

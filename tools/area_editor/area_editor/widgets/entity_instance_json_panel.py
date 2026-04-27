@@ -17,8 +17,10 @@ from PySide6.QtWidgets import (
     QDockWidget,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -54,13 +56,18 @@ from area_editor.widgets.entity_structured_fields import (
     build_entity_commands,
     build_inventory,
     build_persistence_policy,
+    entity_command_command_list,
     parse_color,
     parse_entity_commands,
     parse_tag_list,
     parse_input_map,
     parse_inventory,
     parse_persistence_policy,
+    replace_entity_command_command_list,
+    suggested_entity_command_copy_name,
+    summarize_entity_commands,
 )
+from area_editor.widgets.command_list_dialog import CommandListDialog
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
 _JSON_NUMBER_RE = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
@@ -203,6 +210,10 @@ def _parameter_spec_reference_kind(spec: object) -> str | None:
         return "entity_command"
     if spec_type == "entity_dialogue_id":
         return "entity_dialogue"
+    if spec_type == "visual_id":
+        return "visual"
+    if spec_type == "animation_id":
+        return "animation"
     if spec_type == "item_id":
         return "item"
     if spec_type == "dialogue_path":
@@ -228,6 +239,9 @@ def _parse_parameter_text_for_spec(name: str, text: str, spec: object):
         "text",
         "entity_id",
         "entity_command_id",
+        "entity_dialogue_id",
+        "visual_id",
+        "animation_id",
         "area_id",
         "item_id",
         "dialogue_path",
@@ -475,7 +489,10 @@ class _EntityInstanceParametersEditor(QWidget):
             "item": None,
             "dialogue": None,
             "command": None,
+            "project_command_inputs": None,
             "asset": None,
+            "visual": None,
+            "animation": None,
         }
         self._named_dialogues_edit_callback: (
             Callable[[], tuple[dict[str, dict[str, Any]], str | None] | None] | None
@@ -513,7 +530,11 @@ class _EntityInstanceParametersEditor(QWidget):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[..., dict[str, dict[str, Any]] | None]
+        | None = None,
         asset_picker: Callable[..., str | None] | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._reference_picker_callbacks = {
             "area": area_picker,
@@ -523,7 +544,10 @@ class _EntityInstanceParametersEditor(QWidget):
             "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
+            "project_command_inputs": project_command_inputs_provider,
             "asset": asset_picker,
+            "visual": visual_picker,
+            "animation": animation_picker,
         }
         self._sync_entity_command_picker_buttons()
 
@@ -939,6 +963,62 @@ class _EntityInstanceParametersEditor(QWidget):
             return _parameter_spec_reference_kind(spec)
         return _parameter_reference_kind(name)
 
+    @staticmethod
+    def _parameter_spec_parent_name(spec: object) -> str:
+        if not isinstance(spec, dict):
+            return ""
+        return str(spec.get("of", "")).strip()
+
+    def _parameter_parent_name_for_type(self, name: str, parent_type: str) -> str:
+        field = self._parameter_fields.get(name)
+        parent_name = self._parameter_spec_parent_name(field.spec if field else None)
+        if not parent_name:
+            return ""
+        parent_field = self._parameter_fields.get(parent_name)
+        parent_spec = parent_field.spec if parent_field is not None else None
+        if not isinstance(parent_spec, dict):
+            return ""
+        if str(parent_spec.get("type", "")).strip() != parent_type:
+            return ""
+        return parent_name
+
+    def _parameter_effective_text_value(self, name: str) -> str:
+        field = self._parameter_fields.get(name)
+        if field is None:
+            return ""
+        if field.edit is not None:
+            text = field.edit.text().strip()
+            if text:
+                return text
+        if field.default_value is not None:
+            return _parameter_placeholder_text(field.default_value).strip()
+        return ""
+
+    def _entity_parent_value_for_parameter(self, name: str) -> str:
+        direct_parent = self._parameter_parent_name_for_type(name, "entity_id")
+        if direct_parent:
+            return self._parameter_effective_text_value(direct_parent)
+        visual_parent = self._parameter_parent_name_for_type(name, "visual_id")
+        if visual_parent:
+            entity_parent = self._parameter_parent_name_for_type(visual_parent, "entity_id")
+            if entity_parent:
+                return self._parameter_effective_text_value(entity_parent)
+        field = self._parameter_fields.get(name)
+        spec_type = (
+            str(field.spec.get("type", "")).strip()
+            if field is not None and isinstance(field.spec, dict)
+            else ""
+        )
+        if spec_type in {"visual_id", "animation_id"} and self._entity is not None:
+            return self._entity.id
+        return ""
+
+    def _visual_parent_value_for_parameter(self, name: str) -> str:
+        visual_parent = self._parameter_parent_name_for_type(name, "visual_id")
+        if visual_parent:
+            return self._parameter_effective_text_value(visual_parent)
+        return ""
+
     def _clear_parameter_rows(self) -> None:
         self._parameter_fields.clear()
         self._parameter_browse_buttons.clear()
@@ -1040,6 +1120,11 @@ class _EntityInstanceParametersEditor(QWidget):
             item_picker=self._reference_picker_callbacks.get("item"),
             dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
             command_picker=self._reference_picker_callbacks.get("command"),
+            project_command_inputs_provider=self._reference_picker_callbacks.get(
+                "project_command_inputs"
+            ),
+            visual_picker=self._reference_picker_callbacks.get("visual"),
+            animation_picker=self._reference_picker_callbacks.get("animation"),
             current_entity_id=self._entity.id if self._entity is not None else None,
             current_area_id=self._current_area_id,
             current_entity_command_names=self._current_entity_command_names(),
@@ -1144,12 +1229,13 @@ class _EntityInstanceParametersEditor(QWidget):
                 if isinstance(field.spec, dict)
                 else ""
             )
-            if spec_type not in {"entity_command_id", "entity_dialogue_id"}:
-                area_parameter = (
-                    str(field.spec.get("area_parameter", "")).strip()
-                    if isinstance(field.spec, dict)
-                    else ""
-                )
+            if spec_type not in {
+                "entity_command_id",
+                "entity_dialogue_id",
+                "visual_id",
+                "animation_id",
+            }:
+                area_parameter = self._parameter_spec_parent_name(field.spec)
                 if spec_type == "entity_id" and area_parameter:
                     area_value = str(current_values.get(area_parameter, "")).strip()
                     enabled = bool(area_value)
@@ -1161,8 +1247,17 @@ class _EntityInstanceParametersEditor(QWidget):
                     field.picker_button.setEnabled(True)
                     field.picker_button.setToolTip("")
                 continue
-            entity_parameter = str(field.spec.get("entity_parameter", "")).strip()
-            entity_value = str(current_values.get(entity_parameter, "")).strip()
+            if spec_type == "animation_id":
+                visual_value = self._visual_parent_value_for_parameter(name)
+                entity_value = self._entity_parent_value_for_parameter(name)
+                enabled = bool(entity_value and visual_value)
+                missing = "target visual" if entity_value else "target entity"
+                field.picker_button.setEnabled(enabled)
+                field.picker_button.setToolTip(
+                    "" if enabled else f"Pick the {missing} first."
+                )
+                continue
+            entity_value = self._entity_parent_value_for_parameter(name)
             enabled = bool(entity_value)
             field.picker_button.setEnabled(enabled)
             field.picker_button.setToolTip(
@@ -1179,6 +1274,15 @@ class _EntityInstanceParametersEditor(QWidget):
         callback = self._reference_picker_callbacks.get(picker_kind)
         if callback is None:
             return
+        parameter_values = self._current_parameter_values_for_picker()
+        if picker_kind in {"entity_command", "entity_dialogue", "visual", "animation"}:
+            entity_value = self._entity_parent_value_for_parameter(name)
+            if entity_value:
+                parameter_values.setdefault("entity_id", entity_value)
+        if picker_kind == "animation":
+            visual_value = self._visual_parent_value_for_parameter(name)
+            if visual_value:
+                parameter_values.setdefault("visual_id", visual_value)
         request = EntityReferencePickerRequest(
             parameter_name=name,
             current_value=field.edit.text().strip(),
@@ -1186,7 +1290,7 @@ class _EntityInstanceParametersEditor(QWidget):
             current_area_id=self._current_area_id,
             entity_id=self._entity.id if self._entity is not None else None,
             entity_template_id=self._entity.template if self._entity is not None else None,
-            parameter_values=self._current_parameter_values_for_picker(),
+            parameter_values=parameter_values,
         )
         selected = call_reference_picker_callback(
             callback,
@@ -1392,7 +1496,9 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._render_note.setWordWrap(True)
         self._form.addRow(self._render_note)
 
-        self._form.addRow(_section_label("Input Routing"))
+        self._input_routing_label = _section_label("Input Routing")
+        self._input_routing_label.hide()
+        self._form.addRow(self._input_routing_label)
         self._input_map_warning = QLabel("")
         self._input_map_warning.setWordWrap(True)
         self._input_map_warning.setStyleSheet("color: #a25b00;")
@@ -1404,6 +1510,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         )
         self._input_map_note.setWordWrap(True)
         self._input_map_note.setStyleSheet("color: #666; font-style: italic;")
+        self._input_map_note.hide()
         self._form.addRow(self._input_map_note)
 
         self._input_map_text = QPlainTextEdit()
@@ -1418,6 +1525,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         input_map_font = QFont("Consolas", 10)
         input_map_font.setStyleHint(QFont.StyleHint.Monospace)
         self._input_map_text.setFont(input_map_font)
+        self._input_map_text.hide()
         self._form.addRow(self._input_map_text)
 
         self._form.addRow(_section_label("Entity Commands"))
@@ -1434,6 +1542,29 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._entity_commands_note.setWordWrap(True)
         self._entity_commands_note.setStyleSheet("color: #666; font-style: italic;")
         self._form.addRow(self._entity_commands_note)
+
+        entity_commands_controls = QHBoxLayout()
+        self._entity_commands_summary = QLabel("No entity commands")
+        entity_commands_controls.addWidget(self._entity_commands_summary, 1)
+        self._add_entity_command_button = QPushButton("Add...")
+        self._add_entity_command_button.clicked.connect(self._on_add_entity_command_clicked)
+        entity_commands_controls.addWidget(self._add_entity_command_button)
+        self._edit_entity_command_button = QPushButton("Edit...")
+        self._edit_entity_command_button.clicked.connect(self._on_edit_entity_command_clicked)
+        entity_commands_controls.addWidget(self._edit_entity_command_button)
+        self._duplicate_entity_command_button = QPushButton("Duplicate...")
+        self._duplicate_entity_command_button.clicked.connect(
+            self._on_duplicate_entity_command_clicked
+        )
+        entity_commands_controls.addWidget(self._duplicate_entity_command_button)
+        self._remove_entity_command_button = QPushButton("Remove")
+        self._remove_entity_command_button.clicked.connect(
+            self._on_remove_entity_command_clicked
+        )
+        entity_commands_controls.addWidget(self._remove_entity_command_button)
+        entity_commands_controls_widget = QWidget()
+        entity_commands_controls_widget.setLayout(entity_commands_controls)
+        self._form.addRow(entity_commands_controls_widget)
 
         self._entity_commands_text = QPlainTextEdit()
         self._entity_commands_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -1689,7 +1820,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._color_green_spin.valueChanged.connect(self._on_field_changed)
         self._color_blue_spin.valueChanged.connect(self._on_field_changed)
         self._input_map_text.textChanged.connect(self._on_field_changed)
-        self._entity_commands_text.textChanged.connect(self._on_field_changed)
+        self._entity_commands_text.textChanged.connect(self._on_entity_commands_text_changed)
         self._variables_text.textChanged.connect(self._on_variables_text_changed)
         self._inventory_check.toggled.connect(self._on_inventory_check_toggled)
         self._inventory_max_stacks_spin.valueChanged.connect(self._on_field_changed)
@@ -1726,7 +1857,11 @@ class _EntityInstanceFieldsEditor(QWidget):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[..., dict[str, dict[str, Any]] | None]
+        | None = None,
         asset_picker: Callable[..., str | None] | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._reference_picker_callbacks = {
             "area": area_picker,
@@ -1736,7 +1871,10 @@ class _EntityInstanceFieldsEditor(QWidget):
             "item": item_picker,
             "dialogue": dialogue_picker,
             "command": command_picker,
+            "project_command_inputs": project_command_inputs_provider,
             "asset": asset_picker,
+            "visual": visual_picker,
+            "animation": animation_picker,
         }
 
     def set_area_context(self, area_id: str | None) -> None:
@@ -2200,6 +2338,11 @@ class _EntityInstanceFieldsEditor(QWidget):
             item_picker=self._reference_picker_callbacks.get("item"),
             dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
             command_picker=self._reference_picker_callbacks.get("command"),
+            project_command_inputs_provider=self._reference_picker_callbacks.get(
+                "project_command_inputs"
+            ),
+            visual_picker=self._reference_picker_callbacks.get("visual"),
+            animation_picker=self._reference_picker_callbacks.get("animation"),
             current_entity_id=self._entity.id if self._entity is not None else None,
             current_area_id=self._current_area_id,
             current_entity_command_names=self._current_entity_command_names(),
@@ -2233,6 +2376,207 @@ class _EntityInstanceFieldsEditor(QWidget):
                 except ValueError:
                     pass
         return sorted(str(name).strip() for name in names if str(name).strip())
+
+    def _current_entity_commands_value(self) -> dict[str, Any] | None:
+        raw_text = self._entity_commands_text.toPlainText().strip()
+        if not raw_text:
+            return {}
+        try:
+            parsed = loads_json_data(raw_text, source_name="Entity commands")
+            return parse_entity_commands(parsed)
+        except (JsonDataDecodeError, ValueError):
+            return None
+
+    def _set_entity_commands_value(self, entity_commands: dict[str, Any]) -> None:
+        self._entity_commands_text.setPlainText(
+            json.dumps(entity_commands, indent=2, ensure_ascii=False)
+            if entity_commands
+            else ""
+        )
+
+    def _sync_entity_commands_summary(self) -> None:
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            self._entity_commands_summary.setText("Invalid entity commands")
+            return
+        self._entity_commands_summary.setText(summarize_entity_commands(entity_commands))
+
+    def _prompt_entity_command_name(
+        self,
+        *,
+        title: str,
+        current_name: str = "",
+    ) -> str | None:
+        value, accepted = QInputDialog.getText(
+            self,
+            title,
+            "Command name",
+            text=current_name,
+        )
+        if not accepted:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Entity Command",
+                "Entity command name must not be blank.",
+            )
+            return None
+        return normalized
+
+    def _select_entity_command_name(
+        self,
+        *,
+        title: str,
+        entity_commands: dict[str, Any],
+    ) -> str | None:
+        names = sorted(str(name) for name in entity_commands.keys() if str(name).strip())
+        if not names:
+            QMessageBox.information(
+                self,
+                title,
+                "No entity commands are available yet.",
+            )
+            return None
+        selected, accepted = QInputDialog.getItem(
+            self,
+            title,
+            "Entity command",
+            names,
+            0,
+            False,
+        )
+        if not accepted:
+            return None
+        return str(selected).strip() or None
+
+    def _open_entity_command_list_dialog(
+        self,
+        command_name: str,
+        commands: list[dict[str, Any]],
+    ) -> list[dict[str, Any]] | None:
+        dialog = CommandListDialog(
+            self,
+            area_picker=self._reference_picker_callbacks.get("area"),
+            asset_picker=self._reference_picker_callbacks.get("asset"),
+            entity_picker=self._reference_picker_callbacks.get("entity"),
+            entity_command_picker=self._reference_picker_callbacks.get("entity_command"),
+            entity_dialogue_picker=self._reference_picker_callbacks.get("entity_dialogue"),
+            item_picker=self._reference_picker_callbacks.get("item"),
+            dialogue_picker=self._reference_picker_callbacks.get("dialogue"),
+            command_picker=self._reference_picker_callbacks.get("command"),
+            project_command_inputs_provider=self._reference_picker_callbacks.get(
+                "project_command_inputs"
+            ),
+            visual_picker=self._reference_picker_callbacks.get("visual"),
+            animation_picker=self._reference_picker_callbacks.get("animation"),
+            current_entity_id=self._entity.id if self._entity is not None else None,
+            current_area_id=self._current_area_id,
+            current_entity_command_names=self._current_entity_command_names(),
+            current_entity_dialogue_names=sorted(self._dialogues_value.keys()),
+        )
+        dialog.setWindowTitle(f"Edit Entity Command - {command_name}")
+        dialog.load_commands(commands)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return None
+        return dialog.commands()
+
+    def _on_add_entity_command_clicked(self) -> None:
+        if not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        command_name = self._prompt_entity_command_name(title="Add Entity Command")
+        if command_name is None:
+            return
+        if command_name in entity_commands:
+            QMessageBox.warning(
+                self,
+                "Entity Command Exists",
+                f"Entity command '{command_name}' already exists.",
+            )
+            return
+        commands = self._open_entity_command_list_dialog(command_name, [])
+        if commands is None:
+            return
+        entity_commands[command_name] = commands
+        self._set_entity_commands_value(entity_commands)
+        self._on_field_changed()
+
+    def _on_edit_entity_command_clicked(self) -> None:
+        if not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        command_name = self._select_entity_command_name(
+            title="Edit Entity Command",
+            entity_commands=entity_commands,
+        )
+        if command_name is None:
+            return
+        commands = self._open_entity_command_list_dialog(
+            command_name,
+            entity_command_command_list(entity_commands.get(command_name)),
+        )
+        if commands is None:
+            return
+        entity_commands[command_name] = replace_entity_command_command_list(
+            entity_commands.get(command_name),
+            commands,
+        )
+        self._set_entity_commands_value(entity_commands)
+        self._on_field_changed()
+
+    def _on_duplicate_entity_command_clicked(self) -> None:
+        if not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        source_name = self._select_entity_command_name(
+            title="Duplicate Entity Command",
+            entity_commands=entity_commands,
+        )
+        if source_name is None:
+            return
+        new_name = self._prompt_entity_command_name(
+            title="Duplicate Entity Command",
+            current_name=suggested_entity_command_copy_name(
+                source_name,
+                set(entity_commands.keys()),
+            ),
+        )
+        if new_name is None:
+            return
+        if new_name in entity_commands:
+            QMessageBox.warning(
+                self,
+                "Entity Command Exists",
+                f"Entity command '{new_name}' already exists.",
+            )
+            return
+        entity_commands[new_name] = copy.deepcopy(entity_commands[source_name])
+        self._set_entity_commands_value(entity_commands)
+        self._on_field_changed()
+
+    def _on_remove_entity_command_clicked(self) -> None:
+        if not self._entity_commands_editable:
+            return
+        entity_commands = self._current_entity_commands_value()
+        if entity_commands is None:
+            return
+        command_name = self._select_entity_command_name(
+            title="Remove Entity Command",
+            entity_commands=entity_commands,
+        )
+        if command_name is None:
+            return
+        entity_commands.pop(command_name, None)
+        self._set_entity_commands_value(entity_commands)
+        self._on_field_changed()
 
     def edit_named_dialogues(
         self,
@@ -2310,6 +2654,7 @@ class _EntityInstanceFieldsEditor(QWidget):
             json.dumps(rewritten, indent=2, ensure_ascii=False)
         )
         del blockers
+        self._sync_entity_commands_summary()
 
     def _apply_toggle_extra_values(self, extra: dict[str, object]) -> None:
         for key, widget in (
@@ -2362,10 +2707,11 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._color_editable = True
         self._set_color_controls_enabled(True)
         self._input_map_warning.hide()
-        self._input_map_editable = True
-        self._set_input_map_controls_enabled(True)
+        self._input_map_editable = False
+        self._set_input_map_controls_enabled(False)
         self._entity_commands_warning.hide()
         self._entity_commands_editable = True
+        self._sync_entity_commands_summary()
         self._set_entity_commands_controls_enabled(True)
         self._dialogues_warning.hide()
         self._dialogues_editable = True
@@ -2399,14 +2745,15 @@ class _EntityInstanceFieldsEditor(QWidget):
         raw_tags = entity._extra.get("tags", [])
         tag_text = ", ".join(str(tag) for tag in raw_tags) if isinstance(raw_tags, list) else ""
         color, color_warning = self._load_color_ui_state(entity._extra.get("color"))
-        raw_input_map = entity._extra.get("input_map")
         raw_entity_commands = entity._extra.get("entity_commands")
         raw_variables = entity._extra.get("variables", {})
         raw_dialogues = entity._extra.get("dialogues")
         raw_inventory = entity._extra.get("inventory")
         has_visuals_override = "visuals" in entity._extra
         raw_visuals = entity._extra.get("visuals", [])
-        input_map, input_map_warning = self._load_input_map_ui_state(raw_input_map)
+        input_map: dict[str, str] = {}
+        input_map_warning: str | None = None
+        self._input_map_editable = False
         entity_commands, entity_commands_warning = self._load_entity_commands_ui_state(
             raw_entity_commands
         )
@@ -2455,6 +2802,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._apply_input_map_warning(input_map_warning)
         self._set_input_map_controls_enabled(self._input_map_editable)
         self._apply_entity_commands_warning(entity_commands_warning)
+        self._sync_entity_commands_summary()
         self._set_entity_commands_controls_enabled(self._entity_commands_editable)
         self._dialogues_value = copy.deepcopy(dialogues)
         if dialogues_warning:
@@ -2517,11 +2865,7 @@ class _EntityInstanceFieldsEditor(QWidget):
         elif "color" in self._entity._extra:
             extra["color"] = self._entity._extra["color"]
 
-        if self._input_map_editable:
-            input_map_value = build_input_map(self._input_map_text.toPlainText())
-            if input_map_value is not None:
-                extra["input_map"] = input_map_value
-        elif "input_map" in self._entity._extra:
+        if "input_map" in self._entity._extra:
             extra["input_map"] = self._entity._extra["input_map"]
 
         if self._entity_commands_editable:
@@ -2798,6 +3142,13 @@ class _EntityInstanceFieldsEditor(QWidget):
 
     def _set_entity_commands_controls_enabled(self, enabled: bool) -> None:
         self._entity_commands_text.setReadOnly(not enabled)
+        entity_commands = self._current_entity_commands_value()
+        has_commands = bool(entity_commands)
+        can_use_buttons = enabled and entity_commands is not None
+        self._add_entity_command_button.setEnabled(can_use_buttons)
+        self._edit_entity_command_button.setEnabled(can_use_buttons and has_commands)
+        self._duplicate_entity_command_button.setEnabled(can_use_buttons and has_commands)
+        self._remove_entity_command_button.setEnabled(can_use_buttons and has_commands)
 
     def _set_inventory_controls_enabled(self, enabled: bool) -> None:
         active = enabled and self._inventory_check.isChecked()
@@ -2867,6 +3218,13 @@ class _EntityInstanceFieldsEditor(QWidget):
         self._pixel_y_spin.setEnabled(screen_space or self._pixel_y_check.isChecked())
 
     def _on_field_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        self._set_dirty(True)
+
+    def _on_entity_commands_text_changed(self) -> None:
+        self._sync_entity_commands_summary()
+        self._set_entity_commands_controls_enabled(self._entity_commands_editable)
         if self._loading:
             return
         self._set_dirty(True)
@@ -3005,7 +3363,11 @@ class EntityInstanceEditorWidget(QWidget):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[..., dict[str, dict[str, Any]] | None]
+        | None = None,
         asset_picker: Callable[..., str | None] | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._parameters_editor.set_reference_picker_callbacks(
             area_picker=area_picker,
@@ -3015,7 +3377,10 @@ class EntityInstanceEditorWidget(QWidget):
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
+            project_command_inputs_provider=project_command_inputs_provider,
             asset_picker=asset_picker,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
         )
         self._fields_editor.set_reference_picker_callbacks(
             area_picker=area_picker,
@@ -3025,7 +3390,10 @@ class EntityInstanceEditorWidget(QWidget):
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
+            project_command_inputs_provider=project_command_inputs_provider,
             asset_picker=asset_picker,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
         )
 
     def set_area_context(self, area_id: str | None) -> None:
@@ -3174,7 +3542,11 @@ class EntityInstanceJsonPanel(QDockWidget):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[..., str | None] | None = None,
         command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[..., dict[str, dict[str, Any]] | None]
+        | None = None,
         asset_picker: Callable[..., str | None] | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
     ) -> None:
         self._editor_widget.set_reference_picker_callbacks(
             area_picker=area_picker,
@@ -3184,7 +3556,10 @@ class EntityInstanceJsonPanel(QDockWidget):
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
+            project_command_inputs_provider=project_command_inputs_provider,
             asset_picker=asset_picker,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
         )
 
     def set_area_context(self, area_id: str | None) -> None:

@@ -66,7 +66,7 @@ The repo-local example project starts like this:
   "shared_variables_path": "shared_variables.json",
   "global_entities": [],
   "startup_area": "areas/title_screen",
-  "input_targets": {},
+  "input_routes": {},
   "debug_inspection_enabled": true
 }
 ```

@@ -71,7 +71,7 @@
       "id": "title_backdrop",
       "pixel_x": 0,
       "pixel_y": 0,
-      "template": "entity_templates/screen_sprite",
+      "template": "entity_templates/actively_used/screen_sprite",
       "parameters": {
         "sprite_path": "assets/project/ui/title/backdrop.png",
         "frame_width": 256,
@@ -90,7 +90,7 @@
       "persistence": {
         "entity_state": false
       },
-      "template": "entity_templates/screen_sprite",
+      "template": "entity_templates/actively_used/screen_sprite",
       "parameters": {
         "sprite_path": "assets/project/ui/title/dungeon_engine_logo.png",
         "frame_width": 256,

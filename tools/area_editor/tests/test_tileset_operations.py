@@ -31,7 +31,7 @@ def _area_with_tilesets(*tilesets: TilesetRef) -> AreaDocument:
         entry_points={},
         entities=[],
         camera={},
-        input_targets={},
+        input_routes={},
         variables={},
         enter_commands=[],
     )

@@ -33,11 +33,40 @@ _PROJECT_COMMAND_DEFERRED_PAYLOAD_SHAPES = frozenset(
 )
 _PROJECT_COMMAND_DEFINITION_KEYS = frozenset(
     {
+        "inputs",
         "params",
         "deferred_param_shapes",
         "commands",
     }
 )
+_PROJECT_COMMAND_INPUT_TYPES = frozenset(
+    {
+        "string",
+        "int",
+        "float",
+        "bool",
+        "enum",
+        "json",
+        "area_id",
+        "entity_id",
+        "item_id",
+        "dialogue_id",
+        "project_command_id",
+        "asset_path",
+        "image_path",
+        "sound_path",
+        "visual_id",
+        "animation_id",
+        "entity_command_id",
+        "entity_dialogue_id",
+    }
+)
+_PROJECT_COMMAND_INPUT_PARENT_TYPES = {
+    "visual_id": frozenset({"entity_id"}),
+    "animation_id": frozenset({"visual_id"}),
+    "entity_command_id": frozenset({"entity_id"}),
+    "entity_dialogue_id": frozenset({"entity_id"}),
+}
 
 
 @dataclass(slots=True)
@@ -46,6 +75,7 @@ class ProjectCommandDefinition:
 
     command_id: str
     params: list[str]
+    inputs: dict[str, dict[str, Any]]
     deferred_param_shapes: dict[str, ProjectCommandDeferredPayloadShape]
     commands: list[dict[str, Any]]
     source_path: Path
@@ -203,18 +233,39 @@ def _load_project_command_definition_from_path(
         )
     resolved_id = expected_id
 
-    raw_params = raw.get("params", [])
+    raw_inputs = raw.get("inputs")
+    inputs: dict[str, dict[str, Any]] = {}
+    input_param_names: list[str] | None = None
+    if raw_inputs is not None:
+        if not isinstance(raw_inputs, dict):
+            raise ValueError(f"Command definition '{resolved_id}' must use an object for 'inputs'.")
+        inputs = _validate_project_command_inputs(resolved_id, raw_inputs)
+        input_param_names = list(inputs.keys())
+
+    raw_params = raw.get("params")
     if raw_params is None:
-        raw_params = []
+        raw_params = [] if input_param_names is None else input_param_names
     if not isinstance(raw_params, list):
         raise ValueError(f"Command definition '{resolved_id}' must use a list for 'params'.")
+    params: list[str] = []
     for param in raw_params:
         if not isinstance(param, str) or not param.strip():
             raise ValueError(
                 f"Command definition '{resolved_id}' must use non-empty strings inside 'params'."
             )
+        param_name = param.strip()
+        if param_name in params:
+            raise ValueError(
+                f"Command definition '{resolved_id}' declares duplicate parameter '{param_name}'."
+            )
+        params.append(param_name)
+    if input_param_names is not None and params != input_param_names:
+        raise ValueError(
+            f"Command definition '{resolved_id}' must keep 'params' in the same order as 'inputs' "
+            "when both are declared."
+        )
 
-    param_names = {str(param) for param in raw_params}
+    param_names = set(params)
     raw_deferred_param_shapes = raw.get("deferred_param_shapes", {})
     if raw_deferred_param_shapes is None:
         raw_deferred_param_shapes = {}
@@ -264,25 +315,126 @@ def _load_project_command_definition_from_path(
 
     return ProjectCommandDefinition(
         command_id=resolved_id,
-        params=[str(param) for param in raw_params],
+        params=params,
+        inputs=copy.deepcopy(inputs),
         deferred_param_shapes=dict(deferred_param_shapes),
         commands=[dict(command) for command in raw_commands],
         source_path=command_path,
     )
+
+
+def _validate_project_command_inputs(
+    command_id: str,
+    raw_inputs: dict[Any, Any],
+) -> dict[str, dict[str, Any]]:
+    inputs: dict[str, dict[str, Any]] = {}
+    input_types: dict[str, str] = {}
+    for raw_name, raw_spec in raw_inputs.items():
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ValueError(
+                f"Command definition '{command_id}' must use non-empty strings as 'inputs' keys."
+            )
+        name = raw_name.strip()
+        if name in inputs:
+            raise ValueError(f"Command definition '{command_id}' declares duplicate input '{name}'.")
+        if not isinstance(raw_spec, dict):
+            raise ValueError(
+                f"Command definition '{command_id}' input '{name}' must be a JSON object."
+            )
+        spec = copy.deepcopy(raw_spec)
+        raw_type = spec.get("type")
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            raise ValueError(
+                f"Command definition '{command_id}' input '{name}' must declare a non-empty type."
+            )
+        input_type = raw_type.strip()
+        if input_type not in _PROJECT_COMMAND_INPUT_TYPES:
+            raise ValueError(
+                f"Command definition '{command_id}' input '{name}' uses unknown type '{input_type}'."
+            )
+        spec["type"] = input_type
+
+        raw_of = spec.get("of")
+        if raw_of not in (None, ""):
+            if not isinstance(raw_of, str) or not raw_of.strip():
+                raise ValueError(
+                    f"Command definition '{command_id}' input '{name}' must use a non-empty string for 'of'."
+                )
+            parent_name = raw_of.strip()
+            parent_type = input_types.get(parent_name)
+            if parent_type is None:
+                raise ValueError(
+                    f"Command definition '{command_id}' input '{name}' uses unknown or later input "
+                    f"'{parent_name}' for 'of'."
+                )
+            allowed_parent_types = _PROJECT_COMMAND_INPUT_PARENT_TYPES.get(input_type, frozenset())
+            if parent_type not in allowed_parent_types:
+                raise ValueError(
+                    f"Command definition '{command_id}' input '{name}' of type '{input_type}' "
+                    f"cannot be scoped by '{parent_name}' of type '{parent_type}'."
+                )
+            spec["of"] = parent_name
+        else:
+            spec.pop("of", None)
+
+        if input_type == "enum":
+            raw_values = spec.get("values")
+            if not isinstance(raw_values, list) or not raw_values:
+                raise ValueError(
+                    f"Command definition '{command_id}' enum input '{name}' must declare a non-empty "
+                    "'values' list."
+                )
+            values: list[str] = []
+            for raw_value in raw_values:
+                if not isinstance(raw_value, str) or not raw_value.strip():
+                    raise ValueError(
+                        f"Command definition '{command_id}' enum input '{name}' values must be "
+                        "non-empty strings."
+                    )
+                value = raw_value.strip()
+                if value not in values:
+                    values.append(value)
+            spec["values"] = values
+            default = spec.get("default")
+            if default is not None and default not in values:
+                raise ValueError(
+                    f"Command definition '{command_id}' enum input '{name}' default must be one of "
+                    "its values."
+                )
+        else:
+            spec.pop("values", None)
+
+        inputs[name] = spec
+        input_types[name] = input_type
+    return inputs
+
+
 def instantiate_project_command_commands(
     definition: ProjectCommandDefinition,
     parameters: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Return a fully substituted command list for one project command invocation."""
-    missing = [param for param in definition.params if param not in parameters]
+    resolved_parameters = resolve_project_command_parameters(definition, parameters)
+    instantiated = _substitute_parameters(definition.commands, resolved_parameters)
+    return [dict(command) for command in instantiated]
+
+
+def resolve_project_command_parameters(
+    definition: ProjectCommandDefinition,
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """Return invocation parameters with input defaults applied and required params checked."""
+    resolved_parameters = dict(parameters)
+    for param_name, spec in definition.inputs.items():
+        if param_name not in resolved_parameters and "default" in spec:
+            resolved_parameters[param_name] = copy.deepcopy(spec["default"])
+    missing = [param for param in definition.params if param not in resolved_parameters]
     if missing:
         missing_list = ", ".join(missing)
         raise ValueError(
             f"Project command '{definition.command_id}' is missing required parameters: {missing_list}."
         )
-
-    instantiated = _substitute_parameters(definition.commands, parameters)
-    return [dict(command) for command in instantiated]
+    return resolved_parameters
 
 
 def _substitute_parameters(value: Any, parameters: dict[str, Any]) -> Any:

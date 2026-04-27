@@ -241,7 +241,7 @@ class TestTemplateCatalog(unittest.TestCase):
                 },
                 "destination_entity_id": {
                     "type": "entity_id",
-                    "area_parameter": "target_area",
+                    "of": "target_area",
                     "scope": "area",
                     "space": "world",
                 },
@@ -259,7 +259,7 @@ class TestTemplateCatalog(unittest.TestCase):
                 },
                 "destination_entity_id": {
                     "type": "entity_id",
-                    "area_parameter": "target_area",
+                    "of": "target_area",
                     "scope": "area",
                     "space": "world",
                 },

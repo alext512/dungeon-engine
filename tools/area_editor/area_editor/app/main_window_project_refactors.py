@@ -543,7 +543,7 @@ class MainWindowProjectRefactorMixin:
                     "transfer_entity_id",
                     "entity_ids",
                     "transfer_entity_ids",
-                    "input_targets",
+                    "input_routes",
                 }
             ),
             suffix_keys=frozenset({"_entity_id", "_entity_ids"}),

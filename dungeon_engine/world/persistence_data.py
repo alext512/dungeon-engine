@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-SAVE_DATA_VERSION = 8
+SAVE_DATA_VERSION = 9
 
 
 @dataclass(slots=True)
@@ -46,7 +46,7 @@ class SaveData:
     globals: dict[str, Any] = field(default_factory=dict)
     global_entities: dict[str, PersistentEntityState] = field(default_factory=dict)
     current_area: str = ""
-    current_input_targets: dict[str, str] | None = None
+    current_input_routes: dict[str, dict[str, str]] | None = None
     current_camera: dict[str, Any] | None = None
     travelers: dict[str, TravelerState] = field(default_factory=dict)
     areas: dict[str, PersistentAreaState] = field(default_factory=dict)
@@ -85,7 +85,7 @@ def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
     version = int(raw_data.get("version", SAVE_DATA_VERSION))
     globals_data = copy.deepcopy(raw_data.get("globals", {}))
     current_area = str(raw_data.get("current_area", "")).strip()
-    raw_current_input_targets = raw_data.get("current_input_targets")
+    raw_current_input_routes = raw_data.get("current_input_routes")
     raw_current_camera = raw_data.get("current_camera")
     areas = _load_area_state_mapping(raw_data.get("areas", {}))
     travelers = _load_traveler_state_mapping(raw_data.get("travelers", {}))
@@ -95,12 +95,7 @@ def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
     current_global_entities = _load_entity_state_mapping(raw_data.get("current_global_entities", {}))
     if isinstance(globals_data, dict):
         globals_data.pop("entities", None)
-    current_input_targets = None
-    if isinstance(raw_current_input_targets, dict):
-        current_input_targets = {
-            str(action): str(entity_id)
-            for action, entity_id in raw_current_input_targets.items()
-        }
+    current_input_routes = _load_input_routes(raw_current_input_routes)
     current_camera = copy.deepcopy(raw_current_camera) if isinstance(raw_current_camera, dict) else None
 
     return SaveData(
@@ -108,7 +103,7 @@ def save_data_from_dict(raw_data: dict[str, Any]) -> SaveData:
         globals=globals_data if isinstance(globals_data, dict) else {},
         global_entities=global_entities,
         current_area=current_area,
-        current_input_targets=current_input_targets,
+        current_input_routes=current_input_routes,
         current_camera=current_camera,
         travelers=travelers,
         areas=areas,
@@ -128,11 +123,8 @@ def save_data_to_dict(save_data: SaveData) -> dict[str, Any]:
         "current_area": str(save_data.current_area),
         "areas": _area_state_mapping_to_dict(save_data.areas),
     }
-    if save_data.current_input_targets:
-        data["current_input_targets"] = {
-            str(action): str(entity_id)
-            for action, entity_id in save_data.current_input_targets.items()
-        }
+    if save_data.current_input_routes:
+        data["current_input_routes"] = _input_routes_to_dict(save_data.current_input_routes)
     if save_data.current_camera:
         data["current_camera"] = copy.deepcopy(save_data.current_camera)
     if save_data.travelers:
@@ -149,6 +141,35 @@ def save_data_to_dict(save_data: SaveData) -> dict[str, Any]:
 def get_persistent_area_state(save_data: SaveData, area_id: str) -> PersistentAreaState | None:
     """Return the stored persistent state for an area, if any."""
     return save_data.areas.get(area_id)
+
+
+def _load_input_routes(raw_routes: Any) -> dict[str, dict[str, str]] | None:
+    if not isinstance(raw_routes, dict):
+        return None
+    routes: dict[str, dict[str, str]] = {}
+    for raw_action, raw_route in raw_routes.items():
+        action = str(raw_action).strip()
+        if not action or not isinstance(raw_route, dict):
+            continue
+        entity_id = str(raw_route.get("entity_id", "")).strip()
+        command_id = str(raw_route.get("command_id", "")).strip()
+        if bool(entity_id) != bool(command_id):
+            continue
+        routes[action] = {
+            "entity_id": entity_id,
+            "command_id": command_id,
+        }
+    return routes or None
+
+
+def _input_routes_to_dict(routes: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    return {
+        str(action): {
+            "entity_id": str(route.get("entity_id", "")),
+            "command_id": str(route.get("command_id", "")),
+        }
+        for action, route in routes.items()
+    }
 
 
 def _persistent_entity_state_to_dict(entity_state: PersistentEntityState) -> dict[str, Any]:

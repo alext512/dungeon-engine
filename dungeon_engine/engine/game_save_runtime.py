@@ -134,8 +134,8 @@ class GameSaveRuntimeMixin:
         )
         _, persistent_reference_world = self._build_current_play_reference()
         self.persistence_runtime.save_data.current_area = self._capture_current_area_reference()
-        self.persistence_runtime.save_data.current_input_targets = copy.deepcopy(
-            self.world.input_targets
+        self.persistence_runtime.save_data.current_input_routes = copy.deepcopy(
+            self.world.input_routes
         )
         self.persistence_runtime.save_data.current_camera = (
             None
@@ -174,15 +174,15 @@ class GameSaveRuntimeMixin:
         current_global_entities = copy.deepcopy(
             self.persistence_runtime.save_data.current_global_entities
         )
-        current_input_targets = copy.deepcopy(
-            self.persistence_runtime.save_data.current_input_targets
+        current_input_routes = copy.deepcopy(
+            self.persistence_runtime.save_data.current_input_routes
         )
         current_camera = copy.deepcopy(
             self.persistence_runtime.save_data.current_camera
         )
         self.persistence_runtime.save_data.current_area_state = None
         self.persistence_runtime.save_data.current_global_entities = None
-        self.persistence_runtime.save_data.current_input_targets = None
+        self.persistence_runtime.save_data.current_input_routes = None
         self.persistence_runtime.save_data.current_camera = None
         target_area_path = self._resolve_saved_area_path()
         self._load_area_runtime(target_area_path)
@@ -199,7 +199,7 @@ class GameSaveRuntimeMixin:
             current_global_entities,
             project=self.project,
         )
-        self._apply_saved_input_targets(current_input_targets)
+        self._apply_saved_input_routes(current_input_routes)
         self._apply_saved_camera_state(current_camera)
         self.persistence_runtime.refresh_live_travelers(
             self.area,
@@ -218,10 +218,10 @@ class GameSaveRuntimeMixin:
             return self._resolve_area_path(startup_area)
         return self.area_path.resolve()
 
-    def _apply_saved_input_targets(self, saved_input_targets: dict[str, str] | None) -> None:
+    def _apply_saved_input_routes(self, saved_input_routes: dict[str, dict[str, str]] | None) -> None:
         """Restore the saved logical-input routing after the current room is rebuilt."""
-        if saved_input_targets:
-            self.world.set_input_targets(saved_input_targets, replace=True)
+        if saved_input_routes:
+            self.world.set_input_routes(saved_input_routes, replace=True)
 
     def _apply_saved_camera_state(self, saved_camera_state: dict[str, object] | None) -> None:
         """Restore the saved camera state after the current room is rebuilt."""

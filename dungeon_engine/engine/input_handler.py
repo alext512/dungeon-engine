@@ -163,7 +163,10 @@ class InputHandler:
         """Dispatch one held directional action using the normal routed flow model."""
         if self._dispatch_modal_action(action_name):
             return True
-        target_entity = self.world.get_input_target(action_name)
+        route = self.world.get_input_route(action_name)
+        if route is None:
+            return False
+        target_entity = self.world.get_entity(route["entity_id"])
         if target_entity is None:
             return False
         if (
@@ -172,12 +175,12 @@ class InputHandler:
             and target_entity.movement_state.active
         ):
             return False
-        command_name = self._resolve_input_target_command_name(action_name, target_entity)
-        if not command_name:
+        command_id = str(route.get("command_id", "")).strip()
+        if not command_id:
             return False
         return self.command_runner.dispatch_input_entity_command(
             entity_id=target_entity.entity_id,
-            command_id=command_name,
+            command_id=command_id,
         )
 
     def _reset_direction_repeat(self, direction: str) -> None:
@@ -210,7 +213,10 @@ class InputHandler:
         """Run the mapped entity command for the routed entity when one exists."""
         if self._dispatch_modal_action(action_name):
             return True
-        target_entity = self.world.get_input_target(action_name)
+        route = self.world.get_input_route(action_name)
+        if route is None:
+            return False
+        target_entity = self.world.get_entity(route["entity_id"])
         if target_entity is None:
             return False
         if (
@@ -219,20 +225,13 @@ class InputHandler:
             and target_entity.movement_state.active
         ):
             return False
-        command_name = self._resolve_input_target_command_name(action_name, target_entity)
-        if not command_name:
+        command_id = str(route.get("command_id", "")).strip()
+        if not command_id:
             return False
         return self.command_runner.dispatch_input_entity_command(
             entity_id=target_entity.entity_id,
-            command_id=command_name,
+            command_id=command_id,
         )
-
-    def _resolve_input_target_command_name(self, action_name: str, target_entity) -> str:
-        """Resolve an input action to a named entity command on the routed entity."""
-        command_name = target_entity.input_map.get(action_name)
-        if command_name is not None:
-            return str(command_name).strip()
-        return ""
 
     def _dispatch_modal_action(self, action_name: str) -> bool:
         """Let active modal runtimes consume or block logical input before world routing."""

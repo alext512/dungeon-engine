@@ -119,14 +119,14 @@ def load_area_from_data(
     )
     area.build_gid_lookup()
 
-    resolved_input_targets = copy.deepcopy(project.input_targets)
-    resolved_input_targets.update(
-        _parse_input_targets(
-            raw_data.get("input_targets"),
+    resolved_input_routes = copy.deepcopy(project.input_routes)
+    resolved_input_routes.update(
+        _parse_input_routes(
+            raw_data.get("input_routes"),
             source_name=source_name,
         )
     )
-    world = World(default_input_targets=resolved_input_targets)
+    world = World(default_input_routes=resolved_input_routes)
     world.variables = copy.deepcopy(variables)
     for index, entity_instance in enumerate(raw_entities):
         entity = _instantiate_entity(
@@ -373,23 +373,34 @@ def _parse_camera_defaults(raw_camera_defaults: Any, *, source_name: str) -> dic
     return copy.deepcopy(raw_camera_defaults)
 
 
-def _parse_input_targets(raw_input_targets: Any, *, source_name: str) -> dict[str, str]:
-    """Parse an optional area-owned logical-input target mapping."""
-    if raw_input_targets is None:
+def _parse_input_routes(raw_input_routes: Any, *, source_name: str) -> dict[str, dict[str, str]]:
+    """Parse an optional area-owned logical-input route mapping."""
+    if raw_input_routes is None:
         return {}
-    if not isinstance(raw_input_targets, dict):
-        raise ValueError(f"Area '{source_name}' field 'input_targets' must be a JSON object.")
-    parsed: dict[str, str] = {}
-    for raw_action, raw_entity_id in raw_input_targets.items():
+    if not isinstance(raw_input_routes, dict):
+        raise ValueError(f"Area '{source_name}' field 'input_routes' must be a JSON object.")
+    parsed: dict[str, dict[str, str]] = {}
+    for raw_action, raw_route in raw_input_routes.items():
         action = str(raw_action).strip()
         if not action:
             raise ValueError(
-                f"Area '{source_name}' field 'input_targets' cannot use a blank action key."
+                f"Area '{source_name}' field 'input_routes' cannot use a blank action key."
             )
-        if raw_entity_id in (None, ""):
-            parsed[action] = ""
+        if raw_route in (None, ""):
+            parsed[action] = {"entity_id": "", "command_id": ""}
             continue
-        parsed[action] = str(raw_entity_id).strip()
+        if not isinstance(raw_route, dict):
+            raise ValueError(
+                f"Area '{source_name}' field 'input_routes.{action}' must be a JSON object."
+            )
+        entity_id = str(raw_route.get("entity_id", "")).strip()
+        command_id = str(raw_route.get("command_id", "")).strip()
+        if bool(entity_id) != bool(command_id):
+            raise ValueError(
+                f"Area '{source_name}' field 'input_routes.{action}' must set both "
+                "'entity_id' and 'command_id', or leave both blank."
+            )
+        parsed[action] = {"entity_id": entity_id, "command_id": command_id}
     return parsed
 
 

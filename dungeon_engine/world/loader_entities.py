@@ -50,6 +50,7 @@ _PARAMETER_SPEC_TYPES = frozenset(
         "json",
         "entity_id",
         "entity_command_id",
+        "entity_dialogue_id",
         "area_id",
         "item_id",
         "dialogue_path",
@@ -57,6 +58,8 @@ _PARAMETER_SPEC_TYPES = frozenset(
         "project_command_id",
         "entity_template_id",
         "asset_path",
+        "visual_id",
+        "animation_id",
         "color_rgb",
     }
 )
@@ -70,11 +73,17 @@ _PARAMETER_SPEC_KEYS = frozenset(
         "items",
         "scope",
         "space",
-        "area_parameter",
-        "entity_parameter",
+        "of",
         "asset_kind",
     }
 )
+_PARAMETER_SPEC_OF_PARENT_TYPES = {
+    "entity_id": frozenset({"area_id"}),
+    "entity_command_id": frozenset({"entity_id"}),
+    "entity_dialogue_id": frozenset({"entity_id"}),
+    "visual_id": frozenset({"entity_id"}),
+    "animation_id": frozenset({"visual_id"}),
+}
 _ENTITY_PARAMETER_SCOPES = frozenset({"area", "global"})
 _ENTITY_PARAMETER_SPACES = frozenset({"world", "screen"})
 _ASSET_PARAMETER_KINDS = frozenset({"image", "audio", "json", "font"})
@@ -227,7 +236,6 @@ def instantiate_entity(
         entity_commands=entity_commands,
         dialogues=dialogues,
         variables=variables,
-        input_map=_parse_input_map(entity_data.get("input_map")),
         persistence=persistence,
     )
     entity.apply_default_visual_state()
@@ -915,34 +923,41 @@ def _parse_parameter_specs(
             source_name=source_name,
             parameter_name=name,
         )
+    parameter_positions = {name: index for index, name in enumerate(parsed)}
     for name, spec in parsed.items():
-        entity_parameter = spec.get("entity_parameter")
-        if isinstance(entity_parameter, str):
-            target_spec = parsed.get(entity_parameter)
-            if target_spec is None:
-                raise ValueError(
-                    f"{source_name} parameter_specs.{name}.entity_parameter references unknown parameter "
-                    f"'{entity_parameter}'."
-                )
-            if target_spec.get("type") != "entity_id":
-                raise ValueError(
-                    f"{source_name} parameter_specs.{name}.entity_parameter must reference an entity_id parameter."
-                )
-
-        area_parameter = spec.get("area_parameter")
-        if not isinstance(area_parameter, str):
+        parent_name = _parameter_spec_parent_name(spec)
+        if parent_name is None:
             continue
-        target_spec = parsed.get(area_parameter)
+        target_spec = parsed.get(parent_name)
         if target_spec is None:
             raise ValueError(
-                f"{source_name} parameter_specs.{name}.area_parameter references unknown parameter "
-                f"'{area_parameter}'."
+                f"{source_name} parameter_specs.{name}.of references unknown or later parameter "
+                f"'{parent_name}'."
             )
-        if target_spec.get("type") != "area_id":
+        if parameter_positions[parent_name] >= parameter_positions[name]:
             raise ValueError(
-                f"{source_name} parameter_specs.{name}.area_parameter must reference an area_id parameter."
+                f"{source_name} parameter_specs.{name}.of references unknown or later parameter "
+                f"'{parent_name}'."
             )
+        allowed_parent_types = _PARAMETER_SPEC_OF_PARENT_TYPES.get(str(spec.get("type")), frozenset())
+        parent_type = str(target_spec.get("type", ""))
+        if parent_type not in allowed_parent_types:
+            allowed = ", ".join(sorted(allowed_parent_types))
+            raise ValueError(
+                f"{source_name} parameter_specs.{name}.of must reference a parameter of type: {allowed}."
+            )
+        if spec.get("type") == "animation_id" and parent_type == "visual_id":
+            visual_entity_parent = _parameter_spec_parent_name(target_spec)
+            if visual_entity_parent is not None:
+                spec["_entity_of"] = visual_entity_parent
     return parsed
+
+
+def _parameter_spec_parent_name(spec: dict[str, Any]) -> str | None:
+    raw_parent = spec.get("of")
+    if isinstance(raw_parent, str) and raw_parent.strip():
+        return raw_parent.strip()
+    return None
 
 
 def _parse_one_parameter_spec(
@@ -1028,23 +1043,13 @@ def _parse_one_parameter_spec(
             raise ValueError(f"{location}.space must be one of: {allowed}.")
         spec["space"] = space
 
-    if "area_parameter" in raw_spec:
-        if spec_type != "entity_id":
-            raise ValueError(f"{location}.area_parameter is only supported for entity_id parameters.")
-        area_parameter = str(raw_spec["area_parameter"]).strip()
-        if not area_parameter:
-            raise ValueError(f"{location}.area_parameter must be a non-empty string.")
-        spec["area_parameter"] = area_parameter
-
-    if "entity_parameter" in raw_spec:
-        if spec_type != "entity_command_id":
-            raise ValueError(
-                f"{location}.entity_parameter is only supported for entity_command_id parameters."
-            )
-        entity_parameter = str(raw_spec["entity_parameter"]).strip()
-        if not entity_parameter:
-            raise ValueError(f"{location}.entity_parameter must be a non-empty string.")
-        spec["entity_parameter"] = entity_parameter
+    if "of" in raw_spec:
+        if spec_type not in _PARAMETER_SPEC_OF_PARENT_TYPES:
+            raise ValueError(f"{location}.of is not supported for {spec_type} parameters.")
+        parent_name = str(raw_spec["of"]).strip()
+        if not parent_name:
+            raise ValueError(f"{location}.of must be a non-empty string.")
+        spec["of"] = parent_name
 
     if "asset_kind" in raw_spec:
         if spec_type != "asset_path":
@@ -1201,7 +1206,14 @@ def _validate_one_parameter_value(
                 raise ValueError(f"{location} must reference a {asset_kind} asset.")
         return
 
-    if spec_type in {"dialogue_path", "entity_id", "entity_command_id"}:
+    if spec_type in {
+        "dialogue_path",
+        "entity_id",
+        "entity_command_id",
+        "entity_dialogue_id",
+        "visual_id",
+        "animation_id",
+    }:
         _validate_string_reference(value, location=location)
         if spec_type == "entity_id":
             _validate_entity_parameter_reference(
@@ -1214,6 +1226,33 @@ def _validate_one_parameter_value(
             )
         elif spec_type == "entity_command_id":
             _validate_entity_command_parameter_reference(
+                str(value),
+                spec,
+                parameter_name=parameter_name,
+                source_name=source_name,
+                project=project,
+                all_parameters=all_parameters,
+            )
+        elif spec_type == "entity_dialogue_id":
+            _validate_entity_dialogue_parameter_reference(
+                str(value),
+                spec,
+                parameter_name=parameter_name,
+                source_name=source_name,
+                project=project,
+                all_parameters=all_parameters,
+            )
+        elif spec_type == "visual_id":
+            _validate_visual_parameter_reference(
+                str(value),
+                spec,
+                parameter_name=parameter_name,
+                source_name=source_name,
+                project=project,
+                all_parameters=all_parameters,
+            )
+        elif spec_type == "animation_id":
+            _validate_animation_parameter_reference(
                 str(value),
                 spec,
                 parameter_name=parameter_name,
@@ -1245,7 +1284,7 @@ def _validate_entity_parameter_reference(
     project: ProjectContext,
     all_parameters: dict[str, Any],
 ) -> None:
-    area_parameter = spec.get("area_parameter")
+    area_parameter = _parameter_spec_parent_name(spec)
     target_area_id = None
     if isinstance(area_parameter, str):
         raw_area_id = all_parameters.get(area_parameter)
@@ -1253,7 +1292,7 @@ def _validate_entity_parameter_reference(
             raw_area_id = None
         elif not isinstance(raw_area_id, str):
             raise ValueError(
-                f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
+                f"{source_name} parameter '{parameter_name}' uses of '{area_parameter}', "
                 "but that parameter is not a string area id."
             )
         else:
@@ -1280,7 +1319,7 @@ def _validate_entity_parameter_reference(
         return
     if record.get("scope") != "area":
         raise ValueError(
-            f"{source_name} parameter '{parameter_name}' uses area_parameter '{area_parameter}', "
+            f"{source_name} parameter '{parameter_name}' uses of '{area_parameter}', "
             f"but entity '{entity_id}' is not an area entity."
         )
     if record.get("area_id") != target_area_id:
@@ -1298,7 +1337,7 @@ def _validate_entity_command_parameter_reference(
     project: ProjectContext,
     all_parameters: dict[str, Any],
 ) -> None:
-    entity_parameter = spec.get("entity_parameter")
+    entity_parameter = _parameter_spec_parent_name(spec)
     if not isinstance(entity_parameter, str):
         return
     raw_entity_id = all_parameters.get(entity_parameter)
@@ -1306,7 +1345,7 @@ def _validate_entity_command_parameter_reference(
         return
     if not isinstance(raw_entity_id, str):
         raise ValueError(
-            f"{source_name} parameter '{parameter_name}' uses entity_parameter '{entity_parameter}', "
+            f"{source_name} parameter '{parameter_name}' uses of '{entity_parameter}', "
             "but that parameter is not a string entity id."
         )
     record = _find_authored_entity_record(project, raw_entity_id)
@@ -1319,6 +1358,147 @@ def _validate_entity_command_parameter_reference(
         raise ValueError(
             f"{source_name} parameter '{parameter_name}' references unknown entity command '{command_id}' on entity '{raw_entity_id}'."
         )
+
+
+def _validate_entity_dialogue_parameter_reference(
+    dialogue_id: str,
+    spec: dict[str, Any],
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+) -> None:
+    entity_parameter = _parameter_spec_parent_name(spec)
+    if not isinstance(entity_parameter, str):
+        return
+    raw_entity_id = all_parameters.get(entity_parameter)
+    if _parameter_value_is_blank(raw_entity_id):
+        return
+    if not isinstance(raw_entity_id, str):
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' uses of '{entity_parameter}', "
+            "but that parameter is not a string entity id."
+        )
+    record = _find_authored_entity_record(project, raw_entity_id)
+    if record is None:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references dialogue '{dialogue_id}' on unknown entity '{raw_entity_id}'."
+        )
+    dialogue_ids = _authored_entity_dialogue_ids(project, record)
+    if dialogue_id not in dialogue_ids:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references unknown entity dialogue '{dialogue_id}' on entity '{raw_entity_id}'."
+        )
+
+
+def _validate_visual_parameter_reference(
+    visual_id: str,
+    spec: dict[str, Any],
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+) -> None:
+    entity_parameter = _parameter_spec_parent_name(spec)
+    if not isinstance(entity_parameter, str):
+        return
+    record = _target_entity_record_for_scoped_parameter(
+        entity_parameter,
+        parameter_name=parameter_name,
+        source_name=source_name,
+        project=project,
+        all_parameters=all_parameters,
+        target_label=f"visual '{visual_id}'",
+    )
+    if record is None:
+        return
+    visual_defs = _authored_entity_visual_definitions(project, record)
+    if visual_id not in visual_defs:
+        raw_entity_id = str(all_parameters.get(entity_parameter, "")).strip()
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references unknown visual '{visual_id}' on entity '{raw_entity_id}'."
+        )
+
+
+def _validate_animation_parameter_reference(
+    animation_id: str,
+    spec: dict[str, Any],
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+) -> None:
+    visual_parameter = _parameter_spec_parent_name(spec)
+    if not isinstance(visual_parameter, str):
+        return
+    raw_visual_id = all_parameters.get(visual_parameter)
+    if _parameter_value_is_blank(raw_visual_id):
+        return
+    if not isinstance(raw_visual_id, str):
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' uses of '{visual_parameter}', "
+            "but that parameter is not a string visual id."
+        )
+
+    entity_parameter = spec.get("_entity_of")
+    if not isinstance(entity_parameter, str):
+        return
+    record = _target_entity_record_for_scoped_parameter(
+        entity_parameter,
+        parameter_name=parameter_name,
+        source_name=source_name,
+        project=project,
+        all_parameters=all_parameters,
+        target_label=f"animation '{animation_id}'",
+    )
+    if record is None:
+        return
+    visual_defs = _authored_entity_visual_definitions(project, record)
+    visual = visual_defs.get(str(raw_visual_id).strip())
+    raw_entity_id = str(all_parameters.get(entity_parameter, "")).strip()
+    if not isinstance(visual, dict):
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references unknown visual '{raw_visual_id}' on entity '{raw_entity_id}'."
+        )
+    raw_animations = visual.get("animations")
+    animation_ids = (
+        {str(name).strip() for name in raw_animations.keys() if str(name).strip()}
+        if isinstance(raw_animations, dict)
+        else set()
+    )
+    if animation_id not in animation_ids:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references unknown animation '{animation_id}' "
+            f"on visual '{raw_visual_id}' of entity '{raw_entity_id}'."
+        )
+
+
+def _target_entity_record_for_scoped_parameter(
+    entity_parameter: str,
+    *,
+    parameter_name: str,
+    source_name: str,
+    project: ProjectContext,
+    all_parameters: dict[str, Any],
+    target_label: str,
+) -> dict[str, Any] | None:
+    raw_entity_id = all_parameters.get(entity_parameter)
+    if _parameter_value_is_blank(raw_entity_id):
+        return None
+    if not isinstance(raw_entity_id, str):
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' uses of '{entity_parameter}', "
+            "but that parameter is not a string entity id."
+        )
+    record = _find_authored_entity_record(project, raw_entity_id)
+    if record is None:
+        raise ValueError(
+            f"{source_name} parameter '{parameter_name}' references {target_label} on unknown entity '{raw_entity_id}'."
+        )
+    return record
 
 
 def _find_authored_entity_record(
@@ -1446,6 +1626,60 @@ def _authored_entity_command_ids(project: ProjectContext, record: dict[str, Any]
     if isinstance(raw_commands, dict):
         command_ids.update(str(command_id) for command_id in raw_commands.keys())
     return command_ids
+
+
+def _authored_entity_dialogue_ids(project: ProjectContext, record: dict[str, Any]) -> set[str]:
+    raw = record.get("raw")
+    if not isinstance(raw, dict):
+        return set()
+    dialogue_ids: set[str] = set()
+    template_id = _normalize_optional_id(raw.get("template"))
+    if template_id is not None:
+        try:
+            template_data = _load_entity_template(template_id, project=project)
+        except Exception:
+            template_data = {}
+        raw_template_dialogues = template_data.get("dialogues")
+        if isinstance(raw_template_dialogues, dict):
+            dialogue_ids.update(str(dialogue_id) for dialogue_id in raw_template_dialogues.keys())
+    raw_dialogues = raw.get("dialogues")
+    if isinstance(raw_dialogues, dict):
+        dialogue_ids.update(str(dialogue_id) for dialogue_id in raw_dialogues.keys())
+    return dialogue_ids
+
+
+def _authored_entity_visual_definitions(
+    project: ProjectContext,
+    record: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    raw = record.get("raw")
+    if not isinstance(raw, dict):
+        return {}
+    visuals: dict[str, dict[str, Any]] = {}
+    template_id = _normalize_optional_id(raw.get("template"))
+    if template_id is not None:
+        try:
+            template_data = _load_entity_template(template_id, project=project)
+        except Exception:
+            template_data = {}
+        _add_authored_visual_definitions(visuals, template_data.get("visuals"))
+    _add_authored_visual_definitions(visuals, raw.get("visuals"))
+    return visuals
+
+
+def _add_authored_visual_definitions(
+    target: dict[str, dict[str, Any]],
+    raw_visuals: Any,
+) -> None:
+    if not isinstance(raw_visuals, list):
+        return
+    for raw_visual in raw_visuals:
+        if not isinstance(raw_visual, dict):
+            continue
+        visual_id = str(raw_visual.get("id", "")).strip()
+        if not visual_id:
+            continue
+        target[visual_id] = raw_visual
 
 
 def _parameter_value_is_blank(value: Any) -> bool:
@@ -1588,14 +1822,6 @@ def _parse_entity_commands(entity_data: dict[str, Any]) -> dict[str, EntityComma
     return parsed_commands
 
 
-def _parse_input_map(raw_input_map: Any) -> dict[str, str]:
-    """Parse an optional entity-owned logical-input to entity-command map."""
-    if not isinstance(raw_input_map, dict):
-        return {}
-    return {
-        str(action): str(command_name)
-        for action, command_name in raw_input_map.items()
-    }
 def validate_project_entity_templates(project: ProjectContext) -> None:
     """Validate entity template files for a project at startup.
 

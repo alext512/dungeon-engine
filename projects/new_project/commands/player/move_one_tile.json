@@ -1,5 +1,16 @@
 {
-  "params": ["direction", "walk_animation", "idle_animation"],
+  "inputs": {
+    "direction": {
+      "type": "enum",
+      "values": ["up", "down", "left", "right"]
+    },
+    "walk_animation": {
+      "type": "animation_id"
+    },
+    "idle_animation": {
+      "type": "animation_id"
+    }
+  },
   "commands": [
     {
       "type": "play_animation",

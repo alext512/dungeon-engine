@@ -11,6 +11,7 @@ from dungeon_engine.commands.context_services import CommandServices
 from dungeon_engine.commands.library import (
     instantiate_project_command_commands,
     load_project_command_definition,
+    resolve_project_command_parameters,
 )
 from dungeon_engine.commands.registry import CommandRegistry
 from dungeon_engine.commands.runner import (
@@ -557,12 +558,13 @@ def register_flow_commands(
             raise ValueError(f"Detected recursive project command cycle: {stack_preview}")
 
         definition = load_project_command_definition(context.project, resolved_command_id)
-        instantiated_commands = instantiate_project_command_commands(definition, command_parameters)
+        resolved_parameters = resolve_project_command_parameters(definition, command_parameters)
+        instantiated_commands = instantiate_project_command_commands(definition, resolved_parameters)
         if not instantiated_commands:
             return ImmediateHandle()
 
         base_params = build_child_runtime_params(
-            command_parameters,
+            resolved_parameters,
             source_entity_id=source_entity_id,
             entity_refs=entity_refs,
             refs_mode=refs_mode,

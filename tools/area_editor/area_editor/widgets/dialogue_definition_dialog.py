@@ -375,6 +375,9 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         item_picker=None,
         dialogue_picker=None,
         command_picker=None,
+        project_command_inputs_provider=None,
+        visual_picker=None,
+        animation_picker=None,
         current_entity_id: str | None = None,
         current_area_id: str | None = None,
         current_entity_command_names: list[str] | tuple[str, ...] | None = None,
@@ -390,6 +393,9 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         self._item_picker = item_picker
         self._dialogue_picker = dialogue_picker
         self._command_picker = command_picker
+        self._project_command_inputs_provider = project_command_inputs_provider
+        self._visual_picker = visual_picker
+        self._animation_picker = animation_picker
         self._current_entity_id = current_entity_id
         self._current_area_id = current_area_id
         self._current_entity_command_names = tuple(
@@ -1253,6 +1259,9 @@ class _DialogueDefinitionStructuredEditor(QWidget):
             item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
+            project_command_inputs_provider=self._project_command_inputs_provider,
+            visual_picker=self._visual_picker,
+            animation_picker=self._animation_picker,
             suggested_command_names=_DIALOGUE_SUGGESTED_COMMAND_NAMES,
             current_entity_id=self._current_entity_id,
             current_area_id=self._current_area_id,
@@ -1874,6 +1883,9 @@ class DialogueDefinitionDialog(QDialog):
         item_picker=None,
         dialogue_picker=None,
         command_picker=None,
+        project_command_inputs_provider=None,
+        visual_picker=None,
+        animation_picker=None,
         current_entity_id: str | None = None,
         current_area_id: str | None = None,
         current_entity_command_names: list[str] | tuple[str, ...] | None = None,
@@ -1899,6 +1911,9 @@ class DialogueDefinitionDialog(QDialog):
             item_picker=item_picker,
             dialogue_picker=dialogue_picker,
             command_picker=command_picker,
+            project_command_inputs_provider=project_command_inputs_provider,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
             current_entity_id=current_entity_id,
             current_area_id=current_area_id,
             current_entity_command_names=current_entity_command_names,
@@ -2015,6 +2030,9 @@ class EntityDialoguesDialog(QDialog):
         item_picker=None,
         dialogue_picker=None,
         command_picker=None,
+        project_command_inputs_provider=None,
+        visual_picker=None,
+        animation_picker=None,
         current_entity_id: str | None = None,
         current_area_id: str | None = None,
         current_entity_command_names: list[str] | tuple[str, ...] | None = None,
@@ -2032,6 +2050,9 @@ class EntityDialoguesDialog(QDialog):
         self._item_picker = item_picker
         self._dialogue_picker = dialogue_picker
         self._command_picker = command_picker
+        self._project_command_inputs_provider = project_command_inputs_provider
+        self._visual_picker = visual_picker
+        self._animation_picker = animation_picker
         self._current_entity_id = current_entity_id
         self._current_area_id = current_area_id
         self._current_entity_command_names = tuple(
@@ -2473,6 +2494,9 @@ class EntityDialoguesDialog(QDialog):
             item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
+            project_command_inputs_provider=self._project_command_inputs_provider,
+            visual_picker=self._visual_picker,
+            animation_picker=self._animation_picker,
             current_entity_id=self._current_entity_id,
             current_area_id=self._current_area_id,
             current_entity_command_names=self._current_entity_command_names,

@@ -440,16 +440,6 @@ def _build_child_runtime_params(
 
     return inherited_params
 
-def _normalize_input_map(value: Any) -> dict[str, str]:
-    """Convert JSON-like input-map data into a stable string-to-string mapping."""
-    if not isinstance(value, dict):
-        raise ValueError("input_map must be an object.")
-    return {
-        str(action): str(event_name)
-        for action, event_name in value.items()
-    }
-
-
 def _serialize_entity_visuals(entity: Any) -> list[dict[str, Any]]:
     """Serialize runtime visuals for persistent field mutations."""
     serialized: list[dict[str, Any]] = []
@@ -631,15 +621,6 @@ def _normalize_entity_field_mutation(
             raise ValueError(f"Unsupported visuals field '{visual_field}'.")
         return _EntityFieldMutation(path=path, normalized_value=normalized_value)
 
-    if root == "input_map":
-        if len(path) == 1:
-            normalized_value = _normalize_input_map(value)
-        elif len(path) == 2:
-            normalized_value = str(value)
-        else:
-            raise ValueError("input_map only supports one nested key level.")
-        return _EntityFieldMutation(path=path, normalized_value=normalized_value)
-
     raise ValueError(
         f"Unsupported entity field '{field_name}'. "
         "Use set_current_area_var/set_entity_var for variables and dedicated commands for entity commands/template rebuilds."
@@ -739,13 +720,6 @@ def _apply_normalized_entity_field_mutation(
         else:
             raise ValueError(f"Unsupported visuals field '{visual_field}'.")
         return "visuals", _serialize_entity_visuals(entity)
-
-    if root == "input_map":
-        if len(path) == 1:
-            entity.input_map = copy.deepcopy(value)
-        else:
-            entity.input_map[str(path[1])] = str(value)
-        return "input_map", copy.deepcopy(entity.input_map)
 
     raise ValueError(
         f"Unsupported entity field path '{'.'.join(path)}'. "

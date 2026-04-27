@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from area_editor.documents.area_document import EntityDocument
 from area_editor.json_io import iter_json_data_files, strip_json_data_suffix
@@ -33,6 +34,13 @@ class _TileClipboard:
     width: int
     height: int
     grid: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
+class _EntityClipboard:
+    source_entity_id: str
+    effective_space: str
+    entity_data: dict[str, Any]
 
 
 @dataclass(frozen=True)

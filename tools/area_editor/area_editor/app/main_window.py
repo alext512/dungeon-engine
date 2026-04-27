@@ -8,6 +8,7 @@ menus, status bar, and cross-widget signals.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from area_editor.app.main_window_project_refactors import (
     MainWindowProjectRefactorMixin,
 )
 from area_editor.app.main_window_helpers import (
+    _EntityClipboard,
     _EntityIdUsage,
     _JsonReferenceFileUpdate,
     _TileClipboard,
@@ -69,7 +71,9 @@ from area_editor.project_io.asset_resolver import AssetResolver
 from area_editor.project_io.project_manifest import (
     AREA_ID_PREFIX,
     ProjectManifest,
+    TEMPLATE_ID_PREFIX,
     discover_areas,
+    discover_commands,
     discover_global_entities,
     discover_items,
     load_manifest,
@@ -108,10 +112,10 @@ from area_editor.operations.entities import (
 )
 from area_editor.widgets.area_list_panel import AreaListPanel
 from area_editor.widgets.area_entity_list_panel import AreaEntityListPanel
-from area_editor.widgets.area_start_panel import AreaStartPanel
 from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
 from area_editor.widgets.canvas_tool_strip import CanvasToolStrip
 from area_editor.widgets.cell_flag_brush_panel import CellFlagBrushPanel
+from area_editor.widgets.command_list_dialog import CommandListDialog
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
 from area_editor.widgets.entity_instance_dialog import EntityInstanceDialog
 from area_editor.widgets.entity_instance_json_panel import (
@@ -135,6 +139,7 @@ from area_editor.widgets.global_entities_panel import GlobalEntitiesPanel
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.layer_list_panel import LayerListPanel
+from area_editor.widgets.project_command_editor_widget import ProjectCommandEditorWidget
 from area_editor.widgets.project_manifest_editor_widget import ProjectManifestEditorWidget
 from area_editor.widgets.render_properties_panel import RenderPropertiesPanel
 from area_editor.widgets.shared_variables_editor_widget import SharedVariablesEditorWidget
@@ -150,6 +155,13 @@ _DIALOGUE_ID_PREFIX = "dialogues"
 _AREA_DUPLICATE_FULL = "Full Copy"
 _AREA_DUPLICATE_LAYOUT = "Layout Copy"
 _AREA_JSON_TAB_SUFFIX = " [Raw JSON]"
+_AREA_START_SUGGESTED_COMMAND_NAMES = (
+    "set_input_route",
+    "set_camera_follow_entity",
+    "run_entity_command",
+    "open_dialogue_session",
+    "play_music",
+)
 
 log = logging.getLogger(__name__)
 
@@ -197,6 +209,7 @@ class MainWindow(
         self._display_height: int = 240
         self._entities_visible: bool = True
         self._tile_clipboard: _TileClipboard | None = None
+        self._entity_clipboard: _EntityClipboard | None = None
 
         # Central tabbed document area
         self._tab_widget = DocumentTabWidget()
@@ -286,13 +299,6 @@ class MainWindow(
         self._layer_panel = LayerListPanel()
         self._area_entity_list_panel = AreaEntityListPanel()
         self._cell_flag_brush_panel = CellFlagBrushPanel()
-        self._area_start_panel = AreaStartPanel()
-        self._area_start_panel.set_picker_callbacks(
-            entity_picker=self._browse_project_entity_id,
-            dialogue_picker=self._browse_project_dialogue_id,
-            command_picker=self._browse_project_command_id,
-            asset_picker=self._browse_project_asset,
-        )
         self._area_workspace = BrowserWorkspaceDock(
             title="Area Tools",
             object_name="AreaWorkspaceDock",
@@ -302,12 +308,6 @@ class MainWindow(
             key="layers",
             title="Layers",
             widget=self._extract_dock_content(self._layer_panel),
-        )
-        self._area_workspace.add_page(
-            row=1,
-            key="area_start",
-            title="Area Start",
-            widget=self._area_start_panel,
         )
         self._area_workspace.add_page(
             row=1,
@@ -335,6 +335,9 @@ class MainWindow(
             item_picker=self._browse_project_item_id,
             dialogue_picker=self._browse_project_dialogue_id,
             command_picker=self._browse_project_command_id,
+            project_command_inputs_provider=self._project_command_inputs_for_id,
+            visual_picker=self._browse_project_visual_id,
+            animation_picker=self._browse_project_animation_id,
             asset_picker=lambda _current: self._browse_project_asset(),
         )
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._entity_instance_panel)
@@ -464,7 +467,7 @@ class MainWindow(
             lambda _cid, _fp: "Open Raw JSON"
         )
         self._command_panel.set_open_action_label_provider(
-            lambda _cid, _fp: "Open Raw JSON"
+            lambda _cid, _fp: "Edit Command..."
         )
         self._asset_panel.set_open_action_label_provider(
             lambda _cid, fp: "Open Raw JSON" if is_json_data_file(fp) else "Open"
@@ -510,6 +513,9 @@ class MainWindow(
             )
         )
         self._item_panel.set_context_menu_builder(self._populate_item_context_menu)
+        self._item_panel.set_open_action_label_provider(
+            lambda _content_id, _file_path: "Edit Item..."
+        )
         self._item_panel.set_folder_context_menu_builder(
             lambda menu, rel, path, root: self._populate_folder_context_menu(
                 menu,
@@ -615,7 +621,6 @@ class MainWindow(
         self._layer_panel.move_layer_down_requested.connect(
             lambda index: self._on_move_tile_layer_requested(index, 1)
         )
-        self._area_start_panel.commands_applied.connect(self._on_area_start_commands_applied)
         self._area_entity_list_panel.entity_selected.connect(
             self._on_area_entity_list_selected
         )
@@ -696,6 +701,7 @@ class MainWindow(
         self._active_instance_entity_id = None
         self._json_dirty_bound.clear()
         self._tile_clipboard = None
+        self._entity_clipboard = None
         self._layer_panel.clear_layers()
         self._render_panel.clear_target()
         self._entity_instance_panel.clear_entity()
@@ -861,7 +867,7 @@ class MainWindow(
         self._copy_tiles_action = QAction("Copy Tiles", self)
         self._copy_tiles_action.setShortcut(QKeySequence.StandardKey.Copy)
         self._copy_tiles_action.setEnabled(False)
-        self._copy_tiles_action.triggered.connect(self._on_copy_tiles)
+        self._copy_tiles_action.triggered.connect(self._on_copy_active_selection)
         self.addAction(self._copy_tiles_action)
         edit_menu.addAction(self._copy_tiles_action)
 
@@ -875,7 +881,7 @@ class MainWindow(
         self._paste_tiles_action = QAction("Paste Tiles", self)
         self._paste_tiles_action.setShortcut(QKeySequence.StandardKey.Paste)
         self._paste_tiles_action.setEnabled(False)
-        self._paste_tiles_action.triggered.connect(self._on_paste_tiles)
+        self._paste_tiles_action.triggered.connect(self._on_paste_active_selection)
         self.addAction(self._paste_tiles_action)
         edit_menu.addAction(self._paste_tiles_action)
 
@@ -1164,6 +1170,321 @@ class MainWindow(
             return self._manifest.area_paths[0]
         return (self._manifest.project_root / AREA_ID_PREFIX).resolve()
 
+    def _on_new_item(
+        self,
+        *,
+        root_dir: Path,
+        parent_relative_path: str | None,
+    ) -> None:
+        initial_value = f"{parent_relative_path}/" if parent_relative_path else ""
+        relative_name = self._prompt_content_relative_name(
+            title="New Item",
+            current_relative_name=initial_value,
+        )
+        if relative_name is None:
+            return
+        self._apply_new_item_file(root_dir=root_dir, relative_name=relative_name)
+
+    def _apply_new_item_file(
+        self,
+        *,
+        root_dir: Path,
+        relative_name: str,
+    ) -> tuple[str, Path] | None:
+        if self._manifest is None:
+            QMessageBox.warning(self, "New Item", "Open a project before creating an item.")
+            return None
+
+        normalized_name = relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized_name:
+            QMessageBox.warning(self, "New Item", "Item path must not be blank.")
+            return None
+        raw_path = Path(normalized_name)
+        if raw_path.suffix and not is_json_data_file(raw_path):
+            QMessageBox.warning(
+                self,
+                "Invalid Item Path",
+                "Item files must use .json or .json5 when a suffix is provided.",
+            )
+            return None
+        explicit_suffix = raw_path.suffix if is_json_data_file(raw_path) else ".json5"
+        normalized_path = strip_json_data_suffix(raw_path)
+        normalized_id = str(normalized_path).replace("\\", "/").strip("/")
+        if not normalized_id:
+            QMessageBox.warning(self, "New Item", "Item path must not be blank.")
+            return None
+
+        resolved_root = root_dir.resolve()
+        base_path = (resolved_root / normalized_path).resolve()
+        try:
+            base_path.relative_to(resolved_root)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Item Path",
+                "Items must stay inside their configured item root.",
+            )
+            return None
+
+        if any(candidate.exists() for candidate in json_data_path_candidates(base_path)):
+            QMessageBox.warning(
+                self,
+                "Item Exists",
+                f"An item already exists at items/{normalized_id}.",
+            )
+            return None
+
+        file_path = with_json_data_suffix(base_path, default_suffix=explicit_suffix)
+        item_data = {
+            "name": self._default_item_name_for_id(normalized_id),
+            "description": "",
+            "max_stack": 1,
+            "consume_quantity_on_use": 0,
+            "use_commands": [],
+        }
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(
+            compose_json_file_text(
+                json.dumps(item_data, indent=2, ensure_ascii=False),
+                add_default_header=True,
+            ),
+            encoding="utf-8",
+        )
+
+        if resolved_root not in [path.resolve() for path in self._manifest.item_paths]:
+            self._manifest.item_paths.append(resolved_root)
+
+        content_id = f"items/{normalized_id}"
+        self._refresh_project_metadata_surfaces()
+        self._open_content(content_id, file_path, ContentType.ITEM)
+        self._item_panel.select_by_id(content_id)
+        self.statusBar().showMessage(f"Created item {content_id}.", 2500)
+        return content_id, file_path
+
+    def _on_new_entity_template(
+        self,
+        *,
+        root_dir: Path,
+        parent_relative_path: str | None,
+    ) -> None:
+        initial_value = f"{parent_relative_path}/" if parent_relative_path else ""
+        relative_name = self._prompt_content_relative_name(
+            title="New Entity Template",
+            current_relative_name=initial_value,
+        )
+        if relative_name is None:
+            return
+        self._apply_new_entity_template_file(
+            root_dir=root_dir,
+            relative_name=relative_name,
+        )
+
+    def _apply_new_entity_template_file(
+        self,
+        *,
+        root_dir: Path,
+        relative_name: str,
+    ) -> tuple[str, Path] | None:
+        if self._manifest is None:
+            QMessageBox.warning(
+                self,
+                "New Entity Template",
+                "Open a project before creating an entity template.",
+            )
+            return None
+
+        normalized_name = relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized_name:
+            QMessageBox.warning(
+                self,
+                "New Entity Template",
+                "Template path must not be blank.",
+            )
+            return None
+        raw_path = Path(normalized_name)
+        if raw_path.suffix and not is_json_data_file(raw_path):
+            QMessageBox.warning(
+                self,
+                "Invalid Template Path",
+                "Template files must use .json or .json5 when a suffix is provided.",
+            )
+            return None
+        explicit_suffix = raw_path.suffix if is_json_data_file(raw_path) else ".json5"
+        normalized_path = strip_json_data_suffix(raw_path)
+        normalized_id = str(normalized_path).replace("\\", "/").strip("/")
+        if not normalized_id:
+            QMessageBox.warning(
+                self,
+                "New Entity Template",
+                "Template path must not be blank.",
+            )
+            return None
+
+        resolved_root = root_dir.resolve()
+        base_path = (resolved_root / normalized_path).resolve()
+        try:
+            base_path.relative_to(resolved_root)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Template Path",
+                "Templates must stay inside their configured template root.",
+            )
+            return None
+
+        if any(candidate.exists() for candidate in json_data_path_candidates(base_path)):
+            QMessageBox.warning(
+                self,
+                "Template Exists",
+                f"A template already exists at {TEMPLATE_ID_PREFIX}/{normalized_id}.",
+            )
+            return None
+
+        file_path = with_json_data_suffix(base_path, default_suffix=explicit_suffix)
+        template_data = {
+            "kind": self._default_entity_template_kind_for_id(normalized_id),
+            "space": "world",
+            "scope": "area",
+            "solid": False,
+            "interactable": False,
+            "render_order": 10,
+            "y_sort": True,
+            "variables": {},
+            "visuals": [],
+            "entity_commands": {},
+        }
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(
+            compose_json_file_text(
+                json.dumps(template_data, indent=2, ensure_ascii=False),
+                add_default_header=True,
+            ),
+            encoding="utf-8",
+        )
+
+        if resolved_root not in [
+            path.resolve() for path in self._manifest.entity_template_paths
+        ]:
+            self._manifest.entity_template_paths.append(resolved_root)
+
+        content_id = f"{TEMPLATE_ID_PREFIX}/{normalized_id}"
+        self._refresh_project_metadata_surfaces()
+        self._open_content(content_id, file_path, ContentType.ENTITY_TEMPLATE)
+        self._template_panel.select_by_id(content_id)
+        self.statusBar().showMessage(f"Created template {content_id}.", 2500)
+        return content_id, file_path
+
+    def _on_new_project_command(
+        self,
+        *,
+        root_dir: Path,
+        parent_relative_path: str | None,
+    ) -> None:
+        initial_value = f"{parent_relative_path}/" if parent_relative_path else ""
+        relative_name = self._prompt_content_relative_name(
+            title="New Project Command",
+            current_relative_name=initial_value,
+        )
+        if relative_name is None:
+            return
+        self._apply_new_project_command_file(root_dir=root_dir, relative_name=relative_name)
+
+    def _apply_new_project_command_file(
+        self,
+        *,
+        root_dir: Path,
+        relative_name: str,
+    ) -> tuple[str, Path] | None:
+        if self._manifest is None:
+            QMessageBox.warning(
+                self,
+                "New Project Command",
+                "Open a project before creating a command.",
+            )
+            return None
+
+        normalized_name = relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized_name:
+            QMessageBox.warning(
+                self,
+                "New Project Command",
+                "Command path must not be blank.",
+            )
+            return None
+        raw_path = Path(normalized_name)
+        if raw_path.suffix and not is_json_data_file(raw_path):
+            QMessageBox.warning(
+                self,
+                "Invalid Command Path",
+                "Command files must use .json or .json5 when a suffix is provided.",
+            )
+            return None
+        explicit_suffix = raw_path.suffix if is_json_data_file(raw_path) else ".json5"
+        normalized_path = strip_json_data_suffix(raw_path)
+        normalized_id = str(normalized_path).replace("\\", "/").strip("/")
+        if not normalized_id:
+            QMessageBox.warning(
+                self,
+                "New Project Command",
+                "Command path must not be blank.",
+            )
+            return None
+
+        resolved_root = root_dir.resolve()
+        base_path = (resolved_root / normalized_path).resolve()
+        try:
+            base_path.relative_to(resolved_root)
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Command Path",
+                "Commands must stay inside their configured command root.",
+            )
+            return None
+
+        if any(candidate.exists() for candidate in json_data_path_candidates(base_path)):
+            QMessageBox.warning(
+                self,
+                "Command Exists",
+                f"A command already exists at commands/{normalized_id}.",
+            )
+            return None
+
+        file_path = with_json_data_suffix(base_path, default_suffix=explicit_suffix)
+        command_data = {
+            "inputs": {},
+            "commands": [],
+        }
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(
+            compose_json_file_text(
+                json.dumps(command_data, indent=2, ensure_ascii=False),
+                add_default_header=True,
+            ),
+            encoding="utf-8",
+        )
+
+        if resolved_root not in [path.resolve() for path in self._manifest.command_paths]:
+            self._manifest.command_paths.append(resolved_root)
+
+        content_id = f"{_COMMAND_ID_PREFIX}/{normalized_id}"
+        self._refresh_project_metadata_surfaces()
+        self._open_content(content_id, file_path, ContentType.NAMED_COMMAND)
+        self._command_panel.select_by_id(content_id)
+        self.statusBar().showMessage(f"Created command {content_id}.", 2500)
+        return content_id, file_path
+
+    @staticmethod
+    def _default_item_name_for_id(item_relative_id: str) -> str:
+        stem = Path(item_relative_id).name.replace("_", " ").replace("-", " ").strip()
+        return stem.title() if stem else "New Item"
+
+    @staticmethod
+    def _default_entity_template_kind_for_id(template_relative_id: str) -> str:
+        stem = Path(template_relative_id).name.strip()
+        normalized = stem.replace("-", "_").replace(" ", "_").lower()
+        return normalized or "entity"
+
     def _refresh_area_panel(self) -> None:
         if self._manifest is None:
             return
@@ -1334,12 +1655,42 @@ class MainWindow(
                 item_picker=self._browse_project_item_id,
                 dialogue_picker=self._browse_project_dialogue_id,
                 command_picker=self._browse_project_command_id,
+                project_command_inputs_provider=self._project_command_inputs_for_id,
+                visual_picker=self._browse_project_visual_id,
+                animation_picker=self._browse_project_animation_id,
             )
         if widget is None and content_type == ContentType.ITEM:
             widget = ItemEditorWidget(
                 content_id,
                 file_path,
                 browse_asset_callback=self._browse_project_asset,
+                area_picker=self._browse_project_area_id,
+                asset_picker=lambda _current: self._browse_project_asset(),
+                entity_picker=self._browse_project_entity_id,
+                entity_command_picker=self._browse_project_entity_command_id,
+                entity_dialogue_picker=self._browse_project_entity_dialogue_id,
+                item_picker=self._browse_project_item_id,
+                dialogue_picker=self._browse_project_dialogue_id,
+                command_picker=self._browse_project_command_id,
+                project_command_inputs_provider=self._project_command_inputs_for_id,
+                visual_picker=self._browse_project_visual_id,
+                animation_picker=self._browse_project_animation_id,
+            )
+        if widget is None and content_type == ContentType.NAMED_COMMAND:
+            widget = ProjectCommandEditorWidget(
+                content_id,
+                file_path,
+                area_picker=self._browse_project_area_id,
+                asset_picker=lambda _current: self._browse_project_asset(),
+                entity_picker=self._browse_project_entity_id,
+                entity_command_picker=self._browse_project_entity_command_id,
+                entity_dialogue_picker=self._browse_project_entity_dialogue_id,
+                item_picker=self._browse_project_item_id,
+                dialogue_picker=self._browse_project_dialogue_id,
+                command_picker=self._browse_project_command_id,
+                project_command_inputs_provider=self._project_command_inputs_for_id,
+                visual_picker=self._browse_project_visual_id,
+                animation_picker=self._browse_project_animation_id,
             )
         if widget is None and content_type == ContentType.PROJECT_MANIFEST:
             area_ids: list[str] = []
@@ -1362,6 +1713,7 @@ class MainWindow(
                     GlobalEntitiesEditorWidget,
                     EntityTemplateEditorWidget,
                     ItemEditorWidget,
+                    ProjectCommandEditorWidget,
                     ProjectManifestEditorWidget,
                     SharedVariablesEditorWidget,
                 ),
@@ -1426,7 +1778,6 @@ class MainWindow(
         if content_type == ContentType.AREA and content_id in self._area_docs:
             doc = self._area_docs[content_id]
             self._layer_panel.set_layers(doc.tile_layers)
-            self._area_start_panel.load_area(content_id, doc.enter_commands)
             self._status_area.setText(content_id)
             self._save_action.setEnabled(True)
             self._cell_flags_action.setEnabled(True)
@@ -1477,7 +1828,6 @@ class MainWindow(
                     self._status_gid.setText("")
         elif content_id:
             self._layer_panel.clear_layers()
-            self._area_start_panel.clear()
             self._tileset_panel.clear_tilesets()
             self._status_area.setText(self._status_label_for_content(content_id, content_type))
             self._status_cell.setText("")
@@ -1508,7 +1858,6 @@ class MainWindow(
         else:
             # No tabs open
             self._layer_panel.clear_layers()
-            self._area_start_panel.clear()
             self._tileset_panel.clear_tilesets()
             project_name = (
                 self._manifest.project_root.name if self._manifest else ""
@@ -1636,6 +1985,7 @@ class MainWindow(
 
     def _populate_area_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_open_area_raw_json_action(menu, content_id, file_path)
+        self._add_edit_area_start_commands_action(menu, content_id, file_path)
         self._add_duplicate_area_action(menu, content_id, file_path)
         self._add_rename_content_action(menu, ContentType.AREA, content_id, file_path)
         self._add_delete_content_action(menu, ContentType.AREA, content_id, file_path)
@@ -1647,6 +1997,18 @@ class MainWindow(
         )
         menu.addAction(open_json_action)
 
+    def _add_edit_area_start_commands_action(
+        self,
+        menu,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        edit_action = QAction("Edit Area Start Commands...", self)
+        edit_action.triggered.connect(
+            lambda: self._edit_area_start_commands(content_id, file_path)
+        )
+        menu.addAction(edit_action)
+
     def _add_duplicate_area_action(self, menu, content_id: str, file_path: Path) -> None:
         menu.addSeparator()
         duplicate_action = QAction("Duplicate Area...", self)
@@ -1656,6 +2018,12 @@ class MainWindow(
         menu.addAction(duplicate_action)
 
     def _populate_template_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_duplicate_content_action(
+            menu,
+            ContentType.ENTITY_TEMPLATE,
+            content_id,
+            file_path,
+        )
         self._add_rename_content_action(
             menu,
             ContentType.ENTITY_TEMPLATE,
@@ -1670,11 +2038,17 @@ class MainWindow(
         )
 
     def _populate_item_context_menu(self, menu, content_id: str, file_path: Path) -> None:
+        self._add_duplicate_content_action(menu, ContentType.ITEM, content_id, file_path)
         self._add_rename_content_action(menu, ContentType.ITEM, content_id, file_path)
         self._add_delete_content_action(menu, ContentType.ITEM, content_id, file_path)
 
     def _populate_global_entity_context_menu(self, menu, entity_id: str) -> None:
         menu.addSeparator()
+        duplicate_action = QAction("Duplicate...", self)
+        duplicate_action.triggered.connect(
+            lambda: self._on_duplicate_global_entity(entity_id)
+        )
+        menu.addAction(duplicate_action)
         rename_action = QAction("Rename ID...", self)
         rename_action.triggered.connect(
             lambda: self._on_rename_global_entity_id(entity_id)
@@ -1695,6 +2069,34 @@ class MainWindow(
         root_dir: Path,
     ) -> None:
         menu.addSeparator()
+        if content_type == ContentType.ITEM:
+            new_item_action = QAction("New Item...", self)
+            new_item_action.triggered.connect(
+                lambda: self._on_new_item(
+                    root_dir=root_dir,
+                    parent_relative_path=relative_path,
+                )
+            )
+            menu.addAction(new_item_action)
+        if content_type == ContentType.ENTITY_TEMPLATE:
+            new_template_action = QAction("New Entity Template...", self)
+            new_template_action.triggered.connect(
+                lambda: self._on_new_entity_template(
+                    root_dir=root_dir,
+                    parent_relative_path=relative_path,
+                )
+            )
+            menu.addAction(new_template_action)
+        if content_type == ContentType.NAMED_COMMAND:
+            new_command_action = QAction("New Project Command...", self)
+            new_command_action.triggered.connect(
+                lambda: self._on_new_project_command(
+                    root_dir=root_dir,
+                    parent_relative_path=relative_path,
+                )
+            )
+            menu.addAction(new_command_action)
+
         new_folder_action = QAction("New Folder...", self)
         new_folder_action.triggered.connect(
             lambda: self._on_new_content_folder(
@@ -1728,16 +2130,41 @@ class MainWindow(
     def _populate_empty_space_context_menu(
         self,
         menu,
-        _content_type: ContentType,
+        content_type: ContentType,
         root_dirs: list[Path],
         current_relative_path: str | None,
         _current_folder_path: Path | None,
         current_root_dir: Path | None,
     ) -> None:
         root_dir = current_root_dir or (root_dirs[0] if root_dirs else None)
+        if (
+            root_dir is None
+            and content_type == ContentType.ENTITY_TEMPLATE
+            and self._manifest is not None
+        ):
+            root_dir = (self._manifest.project_root / TEMPLATE_ID_PREFIX).resolve()
         if root_dir is None:
             return
         menu.addSeparator()
+        if content_type == ContentType.ITEM:
+            new_item_action = QAction("New Item...", self)
+            new_item_action.triggered.connect(
+                lambda: self._on_new_item(
+                    root_dir=root_dir,
+                    parent_relative_path=current_relative_path,
+                )
+            )
+            menu.addAction(new_item_action)
+        if content_type == ContentType.ENTITY_TEMPLATE:
+            new_template_action = QAction("New Entity Template...", self)
+            new_template_action.triggered.connect(
+                lambda: self._on_new_entity_template(
+                    root_dir=root_dir,
+                    parent_relative_path=current_relative_path,
+                )
+            )
+            menu.addAction(new_template_action)
+
         new_folder_action = QAction("New Folder...", self)
         new_folder_action.triggered.connect(
             lambda: self._on_new_content_folder(
@@ -1753,6 +2180,7 @@ class MainWindow(
         content_id: str,
         file_path: Path,
     ) -> None:
+        self._add_duplicate_content_action(menu, ContentType.DIALOGUE, content_id, file_path)
         self._add_rename_content_action(menu, ContentType.DIALOGUE, content_id, file_path)
         self._add_delete_content_action(menu, ContentType.DIALOGUE, content_id, file_path)
 
@@ -1762,6 +2190,12 @@ class MainWindow(
         content_id: str,
         file_path: Path,
     ) -> None:
+        self._add_duplicate_content_action(
+            menu,
+            ContentType.NAMED_COMMAND,
+            content_id,
+            file_path,
+        )
         self._add_rename_content_action(
             menu,
             ContentType.NAMED_COMMAND,
@@ -1774,6 +2208,24 @@ class MainWindow(
             content_id,
             file_path,
         )
+
+    def _add_duplicate_content_action(
+        self,
+        menu,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        menu.addSeparator()
+        duplicate_action = QAction("Duplicate...", self)
+        duplicate_action.triggered.connect(
+            lambda: self._on_duplicate_project_content(
+                content_type,
+                content_id,
+                file_path,
+            )
+        )
+        menu.addAction(duplicate_action)
 
     def _add_rename_content_action(
         self,
@@ -2170,6 +2622,134 @@ class MainWindow(
             return "copy"
         return f"{normalized}_copy"
 
+    def _on_duplicate_project_content(
+        self,
+        content_type: ContentType,
+        content_id: str,
+        file_path: Path,
+    ) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        duplicate_config = self._rename_config_for_content(content_type)
+        if duplicate_config is None:
+            return
+        prefix, _roots, _matcher, title = duplicate_config
+        relative_name = _relative_content_name(content_id, prefix)
+        if relative_name is None:
+            QMessageBox.warning(
+                self,
+                "Duplicate Unsupported",
+                f"Cannot duplicate '{content_id}' through this workflow.",
+            )
+            return
+
+        new_relative_name = self._prompt_content_relative_name(
+            title=title.replace("Rename/Move", "Duplicate"),
+            current_relative_name=self._suggest_duplicate_content_relative_name(
+                relative_name,
+            ),
+        )
+        if new_relative_name is None:
+            return
+        try:
+            new_content_id, new_file_path = self._duplicate_project_content_file(
+                content_type=content_type,
+                source_content_id=content_id,
+                source_file_path=file_path,
+                new_relative_name=new_relative_name,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Duplicate Failed", str(exc))
+            return
+        except OSError as exc:
+            QMessageBox.critical(
+                self,
+                "Duplicate Failed",
+                f"Could not duplicate '{content_id}':\n{exc}",
+            )
+            return
+
+        self._refresh_project_metadata_surfaces()
+        target_panel = self._panel_for_content_type(content_type)
+        if target_panel is not None:
+            target_panel.select_by_id(new_content_id)
+        self._open_content(new_content_id, new_file_path, content_type)
+        self.statusBar().showMessage(
+            f"Duplicated {content_id} to {new_content_id}.",
+            3000,
+        )
+
+    def _duplicate_project_content_file(
+        self,
+        *,
+        content_type: ContentType,
+        source_content_id: str,
+        source_file_path: Path,
+        new_relative_name: str,
+    ) -> tuple[str, Path]:
+        if self._manifest is None:
+            raise ValueError("Open a project before duplicating content.")
+        duplicate_config = self._rename_config_for_content(content_type)
+        if duplicate_config is None:
+            raise ValueError("This content type does not support duplication.")
+        prefix, roots, _matcher, _title = duplicate_config
+        source_root = _root_dir_for_content_file(source_file_path, roots)
+        if source_root is None:
+            raise ValueError(f"Could not determine the content root for '{source_file_path.name}'.")
+
+        normalized_relative_name = new_relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized_relative_name:
+            raise ValueError("Duplicated content id must not be empty.")
+        raw_relative_path = Path(normalized_relative_name)
+        if raw_relative_path.suffix and not is_json_data_file(raw_relative_path):
+            raise ValueError("Duplicated content must use .json or .json5 when a suffix is provided.")
+
+        explicit_suffix = (
+            raw_relative_path.suffix
+            if is_json_data_file(raw_relative_path)
+            else source_file_path.suffix
+        )
+        normalized_relative_name = str(strip_json_data_suffix(raw_relative_path)).replace("\\", "/")
+        if not normalized_relative_name:
+            raise ValueError("Duplicated content id must not be empty.")
+
+        resolved_root = source_root.resolve()
+        base_path = (resolved_root / Path(normalized_relative_name)).resolve()
+        try:
+            base_path.relative_to(resolved_root)
+        except ValueError as exc:
+            raise ValueError("Duplicated content must stay inside its configured project root.") from exc
+
+        if any(candidate.exists() for candidate in json_data_path_candidates(base_path)):
+            new_content_id = (
+                f"{prefix}/{normalized_relative_name}" if prefix else normalized_relative_name
+            )
+            raise ValueError(f"Content already exists at {new_content_id}.")
+
+        new_file_path = with_json_data_suffix(
+            base_path,
+            default_suffix=explicit_suffix or ".json5",
+        )
+        source_text = source_file_path.read_text(encoding="utf-8")
+        new_file_path.parent.mkdir(parents=True, exist_ok=True)
+        new_file_path.write_text(source_text, encoding="utf-8")
+        new_content_id = (
+            f"{prefix}/{normalized_relative_name}" if prefix else normalized_relative_name
+        )
+        return new_content_id, new_file_path
+
+    @staticmethod
+    def _suggest_duplicate_content_relative_name(relative_name: str) -> str:
+        normalized = relative_name.strip().replace("\\", "/").strip("/")
+        if not normalized:
+            return "copy"
+        path = Path(normalized)
+        if path.suffix and is_json_data_file(path):
+            return str(path.with_name(f"{path.stem}_copy{path.suffix}")).replace("\\", "/")
+        return f"{normalized}_copy"
+
     def _prompt_area_duplicate_mode(self) -> str | None:
         selected, accepted = QInputDialog.getItem(
             self,
@@ -2291,6 +2871,131 @@ class MainWindow(
         if normalized == entity_id:
             return
         self._apply_global_entity_id_rename(entity_id, normalized)
+
+    def _on_duplicate_global_entity(self, entity_id: str) -> None:
+        if self._manifest is None:
+            return
+        if not self._maybe_save_dirty_tabs():
+            return
+        suggested_id = self._generate_duplicate_entity_id(
+            entity_id,
+            used_ids=self._project_used_entity_ids(),
+        )
+        new_entity_id, accepted = QInputDialog.getText(
+            self,
+            "Duplicate Global Entity",
+            "New entity id",
+            text=suggested_id,
+        )
+        if not accepted:
+            return
+        normalized = new_entity_id.strip()
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Entity ID",
+                "The new entity id must not be blank.",
+            )
+            return
+        self._duplicate_global_entity(entity_id, normalized)
+
+    def _duplicate_global_entity(self, entity_id: str, new_entity_id: str) -> bool:
+        if self._manifest is None:
+            return False
+        normalized = new_entity_id.strip()
+        if not normalized:
+            QMessageBox.warning(
+                self,
+                "Invalid Entity ID",
+                "The new entity id must not be blank.",
+            )
+            return False
+        for usage in self._project_entity_id_usages():
+            if usage.entity_id != normalized:
+                continue
+            QMessageBox.warning(
+                self,
+                "Duplicate Entity ID",
+                f"Entity id '{normalized}' is already used by "
+                f"{self._describe_entity_id_usage(usage)}.",
+            )
+            return False
+
+        project_file = self._manifest.project_file.resolve()
+        try:
+            original_text = project_file.read_text(encoding="utf-8")
+            project_data = load_json_data(project_file)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Duplicate Failed",
+                f"Could not read project.json:\n{exc}",
+            )
+            return False
+        raw_entities = project_data.get("global_entities", [])
+        if not isinstance(raw_entities, list):
+            QMessageBox.warning(
+                self,
+                "Duplicate Failed",
+                "project.json global_entities must be a JSON array.",
+            )
+            return False
+
+        source_entity: dict[str, object] | None = None
+        source_index: int | None = None
+        for index, raw_entity in enumerate(raw_entities):
+            if not isinstance(raw_entity, dict):
+                continue
+            if str(raw_entity.get("id", "")).strip() != entity_id:
+                continue
+            source_entity = copy.deepcopy(raw_entity)
+            source_index = index
+            break
+        if source_entity is None or source_index is None:
+            QMessageBox.warning(
+                self,
+                "Duplicate Failed",
+                f"Could not find global entity '{entity_id}' in project.json.",
+            )
+            return False
+
+        source_entity["id"] = normalized
+        source_entity, _changed_paths = self._replace_reference_keys_in_json_value(
+            source_entity,
+            old_value=entity_id,
+            new_value=normalized,
+            matcher=self._area_entity_reference_matcher(),
+        )
+        raw_entities.insert(source_index + 1, source_entity)
+        project_data["global_entities"] = raw_entities
+
+        try:
+            project_file.write_text(
+                compose_json_file_text(
+                    format_json_for_editor(project_data),
+                    original_text=original_text,
+                ),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Duplicate Failed",
+                f"Could not duplicate global entity '{entity_id}':\n{exc}",
+            )
+            return False
+
+        self._invalidate_project_entity_id_cache()
+        self._refresh_project_metadata_surfaces()
+        if self._tab_widget.content_info("project/global_entities") is not None:
+            self._open_global_entities_tab(normalized)
+        else:
+            self._global_entities_panel.select_entity(normalized)
+        self.statusBar().showMessage(
+            f"Duplicated global entity {entity_id} to {normalized}.",
+            3500,
+        )
+        return True
 
     def _apply_global_entity_id_rename(
         self,
@@ -3148,6 +3853,7 @@ class MainWindow(
         self._refresh_entity_instance_panel()
         self._area_entity_list_panel.select_entity(entity_id or None)
         self._sync_json_edit_actions()
+        self._refresh_tile_selection_actions()
         self._update_paint_status()
         if not entity_id:
             self.statusBar().showMessage("Selection cleared.", 2000)
@@ -3342,6 +4048,13 @@ class MainWindow(
         self._update_paint_status()
         self.statusBar().showMessage("Cleared selected tiles.", 2500)
 
+    def _on_copy_active_selection(self) -> None:
+        if self._tile_select_action.isChecked():
+            self._on_copy_tiles()
+            return
+        if self._select_action.isChecked():
+            self._on_copy_selected_entity()
+
     def _on_copy_tiles(self) -> None:
         canvas = self._active_canvas()
         if canvas is None or not self._tile_select_action.isChecked():
@@ -3359,6 +4072,76 @@ class MainWindow(
             f"Copied {self._tile_clipboard.width}x{self._tile_clipboard.height} tile selection.",
             2500,
         )
+
+    def _on_copy_selected_entity(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, canvas = context
+        selected_id = canvas.selected_entity_id
+        if not selected_id:
+            return
+        self._copy_area_entity(content_id, selected_id)
+
+    def _copy_area_entity(self, content_id: str, entity_id: str) -> bool:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return False
+        _content_id, doc, _canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            return False
+        self._entity_clipboard = _EntityClipboard(
+            source_entity_id=entity.id,
+            effective_space=self._entity_effective_space(entity),
+            entity_data=copy.deepcopy(entity.to_dict()),
+        )
+        self._refresh_tile_selection_actions()
+        self.statusBar().showMessage(f"Copied entity {entity.id}.", 2500)
+        return True
+
+    def _duplicate_area_entity(
+        self,
+        content_id: str,
+        entity_id: str,
+    ) -> EntityDocument | None:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return None
+        _content_id, doc, canvas = context
+        entity = entity_by_id(doc, entity_id)
+        if entity is None:
+            return None
+
+        new_entity_id = self._generate_pasted_entity_id(
+            entity.id,
+            used_ids=self._project_used_entity_ids(),
+        )
+        entity_data = copy.deepcopy(entity.to_dict())
+        entity_data["id"] = new_entity_id
+        entity_data, _changed_paths = self._replace_reference_keys_in_json_value(
+            entity_data,
+            old_value=entity.id,
+            new_value=new_entity_id,
+            matcher=self._area_entity_reference_matcher(),
+        )
+        created = EntityDocument.from_dict(entity_data)
+        doc.entities.append(created)
+        self._register_project_entity_id(created.id)
+        canvas.refresh_entity_items()
+        canvas.set_selected_entity(created.id, cycle_position=1, cycle_total=1, emit=False)
+        self._active_instance_entity_id = created.id
+        self._set_render_target_entity(created.id)
+        self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(
+            f"Duplicated entity {entity.id} to {created.id}.",
+            2500,
+        )
+        return created
 
     def _on_cut_tiles(self) -> None:
         context = self._active_area_context()
@@ -3383,6 +4166,13 @@ class MainWindow(
             2500,
         )
 
+    def _on_paste_active_selection(self) -> None:
+        if self._tile_select_action.isChecked():
+            self._on_paste_tiles()
+            return
+        if self._select_action.isChecked():
+            self._on_paste_entity_at_preferred_cell()
+
     def _on_paste_tiles(self) -> None:
         context = self._active_area_context()
         if context is None or not self._tile_select_action.isChecked() or self._tile_clipboard is None:
@@ -3406,6 +4196,108 @@ class MainWindow(
             f"Pasted {self._tile_clipboard.width}x{self._tile_clipboard.height} tiles.",
             2500,
         )
+
+    def _on_paste_entity_at_preferred_cell(self) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, doc, canvas = context
+        anchor = canvas.preferred_paste_anchor()
+        if anchor is None and canvas.selected_entity_id:
+            selected = entity_by_id(doc, canvas.selected_entity_id)
+            if selected is not None and self._entity_effective_space(selected) != "screen":
+                anchor = (selected.x, selected.y)
+        if anchor is None:
+            self.statusBar().showMessage("Paste needs a hovered tile.", 2500)
+            return
+        self._paste_entity_from_clipboard(content_id, anchor[0], anchor[1])
+
+    def _paste_entity_from_clipboard(
+        self,
+        content_id: str,
+        col: int,
+        row: int,
+    ) -> EntityDocument | None:
+        if self._entity_clipboard is None:
+            self.statusBar().showMessage("Copy an entity before pasting.", 2500)
+            return None
+        if self._entity_clipboard.effective_space == "screen":
+            self.statusBar().showMessage(
+                "Screen-space entities cannot be pasted onto map tiles yet.",
+                2500,
+            )
+            return None
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return None
+        _content_id, doc, canvas = context
+        if not (0 <= int(col) < doc.width and 0 <= int(row) < doc.height):
+            self.statusBar().showMessage("Paste target is outside the area.", 2500)
+            return None
+
+        old_entity_id = self._entity_clipboard.source_entity_id
+        used_ids = self._project_used_entity_ids()
+        new_entity_id = self._generate_pasted_entity_id(
+            old_entity_id,
+            used_ids=used_ids,
+        )
+        entity_data = copy.deepcopy(self._entity_clipboard.entity_data)
+        entity_data["id"] = new_entity_id
+        entity_data["grid_x"] = int(col)
+        entity_data["grid_y"] = int(row)
+        entity_data.pop("pixel_x", None)
+        entity_data.pop("pixel_y", None)
+        if entity_data.get("space") == "world":
+            entity_data.pop("space", None)
+
+        entity_data, _changed_paths = self._replace_reference_keys_in_json_value(
+            entity_data,
+            old_value=old_entity_id,
+            new_value=new_entity_id,
+            matcher=self._area_entity_reference_matcher(),
+        )
+        created = EntityDocument.from_dict(entity_data)
+        doc.entities.append(created)
+        self._register_project_entity_id(created.id)
+        canvas.refresh_entity_items()
+        canvas.set_selected_entity(created.id, cycle_position=1, cycle_total=1, emit=False)
+        self._active_instance_entity_id = created.id
+        self._set_render_target_entity(created.id)
+        self._refresh_entity_instance_panel()
+        self._refresh_area_entity_list_panel()
+        self._tab_widget.set_dirty(content_id, True)
+        self._refresh_tile_selection_actions()
+        self._update_paint_status()
+        self.statusBar().showMessage(
+            f"Pasted entity {created.id} at ({created.x}, {created.y}).",
+            2500,
+        )
+        return created
+
+    @staticmethod
+    def _generate_pasted_entity_id(source_entity_id: str, *, used_ids: set[str]) -> str:
+        normalized = str(source_entity_id).strip().replace(" ", "_")
+        if not normalized:
+            normalized = "entity"
+        base = normalized
+        prefix, separator, suffix = normalized.rpartition("_")
+        if separator and prefix and suffix.isdigit():
+            base = prefix
+        highest = 0
+        base_taken = False
+        numbered_prefix = f"{base}_"
+        for used_id in used_ids:
+            if used_id == base:
+                base_taken = True
+                continue
+            if not used_id.startswith(numbered_prefix):
+                continue
+            maybe_number = used_id[len(numbered_prefix) :]
+            if maybe_number.isdigit():
+                highest = max(highest, int(maybe_number))
+        if not base_taken and highest == 0:
+            return base
+        return f"{base}_{highest + 1}"
 
     def _on_nudge_selected_entity(self, dx: int, dy: int) -> None:
         self._nudge_selected_entity_impl(dx, dy, screen_only=False)
@@ -3686,6 +4578,37 @@ class MainWindow(
             ContentType.AREA_JSON,
         )
 
+    def _edit_area_start_commands(self, area_id: str, file_path: Path) -> None:
+        self._open_area(area_id, file_path)
+        document = self._area_docs.get(area_id)
+        if document is None:
+            return
+
+        dialog = CommandListDialog(
+            self,
+            area_picker=self._browse_project_area_id,
+            asset_picker=lambda _current: self._browse_project_asset(),
+            entity_picker=self._browse_project_entity_id,
+            entity_command_picker=self._browse_project_entity_command_id,
+            entity_dialogue_picker=self._browse_project_entity_dialogue_id,
+            item_picker=self._browse_project_item_id,
+            dialogue_picker=self._browse_project_dialogue_id,
+            command_picker=self._browse_project_command_id,
+            project_command_inputs_provider=self._project_command_inputs_for_id,
+            visual_picker=self._browse_project_visual_id,
+            animation_picker=self._browse_project_animation_id,
+            suggested_command_names=_AREA_START_SUGGESTED_COMMAND_NAMES,
+            current_area_id=area_id,
+        )
+        dialog.setWindowTitle(f"Edit Area Start Commands - {area_id}")
+        dialog.load_commands(document.enter_commands)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        document.enter_commands = copy.deepcopy(dialog.commands())
+        self._tab_widget.set_dirty(area_id, True)
+        self.statusBar().showMessage(f"Updated area start commands for {area_id}.", 2500)
+
     def _area_json_content_id(self, area_id: str) -> str:
         return f"{area_id}{_AREA_JSON_TAB_SUFFIX}"
 
@@ -3816,6 +4739,12 @@ class MainWindow(
                 except (RuntimeError, TypeError):
                     pass
                 try:
+                    self._connected_canvas.cell_context_menu_requested.disconnect(
+                        self._on_canvas_cell_context_menu_requested
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+                try:
                     self._connected_canvas.entity_stack_picker_requested.disconnect(
                         self._on_canvas_entity_stack_picker_requested
                     )
@@ -3857,6 +4786,9 @@ class MainWindow(
         canvas.entity_edit_requested.connect(self._on_entity_edit_requested)
         canvas.entity_context_menu_requested.connect(
             self._on_canvas_entity_context_menu_requested
+        )
+        canvas.cell_context_menu_requested.connect(
+            self._on_canvas_cell_context_menu_requested
         )
         canvas.entity_stack_picker_requested.connect(
             self._on_canvas_entity_stack_picker_requested
@@ -4341,10 +5273,14 @@ class MainWindow(
     ) -> str | None:
         if request is None or not isinstance(request.parameter_spec, dict):
             return None
-        area_parameter = str(request.parameter_spec.get("area_parameter", "")).strip()
+        area_parameter = self._picker_spec_parent_name(request.parameter_spec)
         if not area_parameter or not isinstance(request.parameter_values, dict):
             return None
         return str(request.parameter_values.get(area_parameter, "")).strip() or None
+
+    @staticmethod
+    def _picker_spec_parent_name(spec: dict[str, object]) -> str:
+        return str(spec.get("of", "")).strip()
 
     def _entity_reference_picker_preferred_area_key(
         self,
@@ -4379,7 +5315,7 @@ class MainWindow(
             locked_area_key is None
             and request is not None
             and isinstance(request.parameter_spec, dict)
-            and str(request.parameter_spec.get("area_parameter", "")).strip()
+            and self._picker_spec_parent_name(request.parameter_spec)
         ):
             QMessageBox.information(
                 self,
@@ -4450,6 +5386,188 @@ class MainWindow(
             if entity is not None:
                 return entity
         return None
+
+    def _visual_definitions_for_entity(
+        self,
+        entity: EntityDocument,
+    ) -> list[tuple[str, dict]]:
+        visuals_by_id: dict[str, dict] = {}
+        visual_order: list[str] = []
+
+        def add_visuals(raw_visuals: object, parameters: dict[str, object] | None = None) -> None:
+            if not isinstance(raw_visuals, list):
+                return
+            for raw_visual in raw_visuals:
+                if not isinstance(raw_visual, dict):
+                    continue
+                visual = copy.deepcopy(raw_visual)
+                if parameters and self._templates is not None:
+                    visual = self._templates.substitute_template_parameters(
+                        visual,
+                        parameters,
+                    )
+                if not isinstance(visual, dict):
+                    continue
+                visual_id = str(visual.get("id", "")).strip()
+                if not visual_id:
+                    continue
+                if visual_id not in visuals_by_id:
+                    visual_order.append(visual_id)
+                visuals_by_id[visual_id] = visual
+
+        if entity.template and self._templates is not None:
+            template_data = self._templates.get_template_data(entity.template)
+            parameters = entity.parameters if isinstance(entity.parameters, dict) else {}
+            add_visuals(template_data.get("visuals"), parameters)
+        add_visuals(entity._extra.get("visuals"))
+
+        return [
+            (visual_id, visuals_by_id[visual_id])
+            for visual_id in visual_order
+            if visual_id in visuals_by_id
+        ]
+
+    def _visual_picker_target_entity(
+        self,
+        request: EntityReferencePickerRequest | None,
+    ) -> tuple[str, EntityDocument | None]:
+        parameter_values = request.parameter_values if request is not None else None
+        spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
+        spec_type = str(spec.get("type", "")).strip()
+        entity_parameter = (
+            self._picker_spec_parent_name(spec)
+            if spec_type == "visual_id"
+            else ""
+        )
+        raw_entity_id = (
+            str(parameter_values.get(entity_parameter, "")).strip()
+            if entity_parameter and isinstance(parameter_values, dict)
+            else str(parameter_values.get("entity_id", "")).strip()
+            if isinstance(parameter_values, dict)
+            else ""
+        )
+        if not raw_entity_id and request is not None and spec.get("type") in {"visual_id", "animation_id"}:
+            raw_entity_id = str(request.entity_id or "").strip()
+        entity_id = self._resolve_entity_target_id_for_picker(raw_entity_id, request)
+        if not entity_id:
+            return "", None
+        return entity_id, self._resolve_project_entity_by_id(entity_id)
+
+    def _browse_project_visual_id(
+        self,
+        current_value: str = "",
+        request: EntityReferencePickerRequest | None = None,
+    ) -> str | None:
+        entity_id, entity = self._visual_picker_target_entity(request)
+        if not entity_id:
+            QMessageBox.information(
+                self,
+                "Choose Visual",
+                "Pick the target entity first.",
+            )
+            return None
+        if entity is None:
+            QMessageBox.information(
+                self,
+                "Choose Visual",
+                f"Could not find entity '{entity_id}' in this project.",
+            )
+            return None
+
+        visual_ids = [visual_id for visual_id, _visual in self._visual_definitions_for_entity(entity)]
+        if not visual_ids:
+            QMessageBox.information(
+                self,
+                "Choose Visual",
+                f"Entity '{entity_id}' has no known visuals.",
+            )
+            return None
+        return self._browse_known_reference(
+            title=f"Choose Visual for {entity_id}",
+            label="Visual",
+            values=visual_ids,
+            current_value=current_value,
+        )
+
+    def _browse_project_animation_id(
+        self,
+        current_value: str = "",
+        request: EntityReferencePickerRequest | None = None,
+    ) -> str | None:
+        entity_id, entity = self._visual_picker_target_entity(request)
+        if not entity_id:
+            QMessageBox.information(
+                self,
+                "Choose Animation",
+                "Pick the target entity first.",
+            )
+            return None
+        if entity is None:
+            QMessageBox.information(
+                self,
+                "Choose Animation",
+                f"Could not find entity '{entity_id}' in this project.",
+            )
+            return None
+
+        visual_defs = self._visual_definitions_for_entity(entity)
+        if not visual_defs:
+            QMessageBox.information(
+                self,
+                "Choose Animation",
+                f"Entity '{entity_id}' has no known visuals.",
+            )
+            return None
+
+        parameter_values = request.parameter_values if request is not None else None
+        spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
+        spec_type = str(spec.get("type", "")).strip()
+        visual_parameter = (
+            str(spec.get("of", "")).strip()
+            if spec_type == "animation_id" and str(spec.get("of", "")).strip()
+            else ""
+        )
+        requested_visual_id = (
+            str(parameter_values.get(visual_parameter, "")).strip()
+            if visual_parameter and isinstance(parameter_values, dict)
+            else str(parameter_values.get("visual_id", "")).strip()
+            if isinstance(parameter_values, dict)
+            else ""
+        )
+        if requested_visual_id:
+            visual = next(
+                (candidate for visual_id, candidate in visual_defs if visual_id == requested_visual_id),
+                None,
+            )
+        else:
+            requested_visual_id, visual = visual_defs[0]
+        if not isinstance(visual, dict):
+            QMessageBox.information(
+                self,
+                "Choose Animation",
+                f"Could not find visual '{requested_visual_id}' on entity '{entity_id}'.",
+            )
+            return None
+
+        raw_animations = visual.get("animations")
+        animation_ids = (
+            sorted(str(name).strip() for name in raw_animations.keys() if str(name).strip())
+            if isinstance(raw_animations, dict)
+            else []
+        )
+        if not animation_ids:
+            QMessageBox.information(
+                self,
+                "Choose Animation",
+                f"Visual '{requested_visual_id}' on entity '{entity_id}' has no named animations.",
+            )
+            return None
+        return self._browse_known_reference(
+            title=f"Choose Animation for {entity_id}.{requested_visual_id}",
+            label="Animation",
+            values=animation_ids,
+            current_value=current_value,
+        )
 
     def _entity_command_names_for_entity(self, entity: EntityDocument) -> list[str]:
         names: set[str] = set()
@@ -4528,7 +5646,7 @@ class MainWindow(
         request: EntityReferencePickerRequest | None = None,
     ) -> str | None:
         spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
-        entity_parameter = str(spec.get("entity_parameter", "")).strip()
+        entity_parameter = self._picker_spec_parent_name(spec)
         parameter_values = request.parameter_values if request is not None else None
         raw_target_entity_id = (
             str(parameter_values.get(entity_parameter, "")).strip()
@@ -4593,7 +5711,7 @@ class MainWindow(
         request: EntityReferencePickerRequest | None = None,
     ) -> str | None:
         spec = request.parameter_spec if request and isinstance(request.parameter_spec, dict) else {}
-        entity_parameter = str(spec.get("entity_parameter", "")).strip()
+        entity_parameter = self._picker_spec_parent_name(spec)
         parameter_values = request.parameter_values if request is not None else None
         raw_target_entity_id = (
             str(parameter_values.get(entity_parameter, "")).strip()
@@ -4687,6 +5805,49 @@ class MainWindow(
             ),
             current_value=current_value,
         )
+
+    def _project_command_inputs_for_id(
+        self,
+        command_id: str,
+    ) -> dict[str, dict[str, object]] | None:
+        if self._manifest is None:
+            return None
+        normalized = command_id.strip().replace("\\", "/")
+        if not normalized:
+            return None
+        command_path: Path | None = None
+        for entry in discover_commands(self._manifest):
+            if entry.command_id == normalized:
+                command_path = entry.file_path
+                break
+        if command_path is None:
+            return None
+        try:
+            raw = load_json_data(command_path)
+        except Exception:
+            return None
+        if not isinstance(raw, dict):
+            return None
+        raw_inputs = raw.get("inputs")
+        if isinstance(raw_inputs, dict):
+            inputs: dict[str, dict[str, object]] = {}
+            for raw_name, raw_spec in raw_inputs.items():
+                name = str(raw_name).strip()
+                if not name:
+                    continue
+                if isinstance(raw_spec, dict):
+                    inputs[name] = copy.deepcopy(raw_spec)
+                else:
+                    inputs[name] = {"type": "string"}
+            return inputs
+        raw_params = raw.get("params")
+        if isinstance(raw_params, list):
+            return {
+                str(param).strip(): {"type": "string"}
+                for param in raw_params
+                if isinstance(param, str) and str(param).strip()
+            }
+        return {}
 
     def _browse_known_reference(
         self,
@@ -4834,6 +5995,7 @@ class MainWindow(
                 GlobalEntitiesEditorWidget,
                 EntityTemplateEditorWidget,
                 ItemEditorWidget,
+                ProjectCommandEditorWidget,
                 ProjectManifestEditorWidget,
                 SharedVariablesEditorWidget,
             ),
@@ -4861,6 +6023,8 @@ class MainWindow(
             self._refresh_project_metadata_surfaces()
         elif info.content_type == ContentType.ENTITY_TEMPLATE:
             self._refresh_template_surfaces()
+        elif info.content_type == ContentType.NAMED_COMMAND:
+            self._refresh_project_metadata_surfaces()
         return True
 
     def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
@@ -5000,11 +6164,30 @@ class MainWindow(
             and self._canvas_target == "tiles"
             and self._canvas_tool == "select"
         )
+        entity_select_active = (
+            canvas is not None
+            and self._canvas_target == "entities"
+            and self._canvas_tool == "select"
+        )
         has_selection = canvas is not None and canvas.has_tile_selection
         has_clipboard = self._tile_clipboard is not None
-        self._copy_tiles_action.setEnabled(tile_select_active and has_selection)
+        has_entity_selection = bool(canvas is not None and canvas.selected_entity_id)
+        has_entity_clipboard = self._entity_clipboard is not None
+        self._copy_tiles_action.setText(
+            "Copy Entity" if entity_select_active else "Copy Tiles"
+        )
+        self._paste_tiles_action.setText(
+            "Paste Entity" if entity_select_active else "Paste Tiles"
+        )
+        self._copy_tiles_action.setEnabled(
+            (tile_select_active and has_selection)
+            or (entity_select_active and has_entity_selection)
+        )
         self._cut_tiles_action.setEnabled(tile_select_active and has_selection)
-        self._paste_tiles_action.setEnabled(tile_select_active and has_clipboard)
+        self._paste_tiles_action.setEnabled(
+            (tile_select_active and has_clipboard)
+            or (entity_select_active and has_entity_clipboard)
+        )
 
     def _apply_active_brush_to_canvas(self, canvas: TileCanvas) -> None:
         self._apply_entity_brush_to_canvas(canvas)
@@ -5190,6 +6373,21 @@ class MainWindow(
             return
         self._show_area_entity_context_menu(content_id, normalized_ids, global_pos)
 
+    def _on_canvas_cell_context_menu_requested(
+        self,
+        col: int,
+        row: int,
+        global_pos,
+    ) -> None:
+        context = self._active_area_context()
+        if context is None:
+            return
+        content_id, _doc, _canvas = context
+        menu = self._build_area_cell_context_menu(content_id, int(col), int(row))
+        if menu is None or not menu.actions():
+            return
+        menu.exec(global_pos)
+
     def _on_canvas_entity_stack_picker_requested(
         self,
         entity_ids: object,
@@ -5321,6 +6519,31 @@ class MainWindow(
             self._populate_area_entity_context_menu(submenu, content_id, entity_id)
         return menu if menu.actions() else None
 
+    def _build_area_cell_context_menu(
+        self,
+        content_id: str,
+        col: int,
+        row: int,
+    ) -> QMenu | None:
+        context = self._area_context_for_content(content_id)
+        if context is None:
+            return None
+        _content_id, doc, _canvas = context
+        if not (0 <= col < doc.width and 0 <= row < doc.height):
+            return None
+        menu = QMenu(self)
+        paste_action = QAction("Paste Entity Here", self)
+        paste_action.setEnabled(self._entity_clipboard is not None)
+        paste_action.triggered.connect(
+            lambda _checked=False, cid=content_id, x=col, y=row: self._paste_entity_from_clipboard(
+                cid,
+                x,
+                y,
+            )
+        )
+        menu.addAction(paste_action)
+        return menu
+
     def _populate_area_entity_context_menu(
         self,
         menu: QMenu,
@@ -5367,6 +6590,24 @@ class MainWindow(
         menu.addAction(edit_json_action)
 
         menu.addSeparator()
+
+        duplicate_action = QAction("Duplicate", self)
+        duplicate_action.triggered.connect(
+            lambda _checked=False, cid=content_id, eid=entity_id: self._duplicate_area_entity(
+                cid,
+                eid,
+            )
+        )
+        menu.addAction(duplicate_action)
+
+        copy_entity_action = QAction("Copy Entity", self)
+        copy_entity_action.triggered.connect(
+            lambda _checked=False, cid=content_id, eid=entity_id: self._copy_area_entity(
+                cid,
+                eid,
+            )
+        )
+        menu.addAction(copy_entity_action)
 
         copy_id_action = QAction("Copy ID", self)
         copy_id_action.triggered.connect(
@@ -5462,6 +6703,9 @@ class MainWindow(
             item_picker=self._browse_project_item_id,
             dialogue_picker=self._browse_project_dialogue_id,
             command_picker=self._browse_project_command_id,
+            project_command_inputs_provider=self._project_command_inputs_for_id,
+            visual_picker=self._browse_project_visual_id,
+            animation_picker=self._browse_project_animation_id,
             asset_picker=lambda _current: self._browse_project_asset(),
         )
         editor.set_template_catalog(self._templates)
@@ -5619,15 +6863,6 @@ class MainWindow(
             2500,
         )
 
-    def _on_area_start_commands_applied(self, commands: object) -> None:
-        context = self._active_area_context()
-        if context is None or not isinstance(commands, list):
-            return
-        content_id, doc, _canvas = context
-        doc.enter_commands = copy.deepcopy(commands)
-        self._tab_widget.set_dirty(content_id, True)
-        self._area_start_panel.load_area(content_id, doc.enter_commands)
-
     def _prepare_for_entity_instance_target_change(self, new_entity_id: str | None) -> bool:
         if not self._entity_instance_panel.is_dirty and not self._entity_instance_panel.fields_dirty:
             return True
@@ -5750,6 +6985,7 @@ class MainWindow(
         | GlobalEntitiesEditorWidget
         | EntityTemplateEditorWidget
         | ItemEditorWidget
+        | ProjectCommandEditorWidget
         | ProjectManifestEditorWidget
         | SharedVariablesEditorWidget
         | None
@@ -5762,6 +6998,7 @@ class MainWindow(
                 GlobalEntitiesEditorWidget,
                 EntityTemplateEditorWidget,
                 ItemEditorWidget,
+                ProjectCommandEditorWidget,
                 ProjectManifestEditorWidget,
                 SharedVariablesEditorWidget,
             ),

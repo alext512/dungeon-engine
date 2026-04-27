@@ -76,10 +76,16 @@ class TestManifestLoading(unittest.TestCase):
                     "{\n"
                     '  "startup_area": "  areas/demo  ",\n'
                     '  "save_dir": "session_saves",\n'
-                    '  "input_targets": {\n'
-                    '    "interact": "player_1",\n'
-                    '    "pause": "  pause_controller  ",\n'
-                    '    "menu": ""\n'
+                    '  "input_routes": {\n'
+                    '    "interact": {\n'
+                    '      "entity_id": "player_1",\n'
+                    '      "command_id": "interact"\n'
+                    '    },\n'
+                    '    "pause": {\n'
+                    '      "entity_id": "  pause_controller  ",\n'
+                    '      "command_id": "open_pause"\n'
+                    '    },\n'
+                    '    "menu": null\n'
                     "  },\n"
                     '  "debug_inspection_enabled": true,\n'
                     '  "global_entities": [\n'
@@ -104,11 +110,20 @@ class TestManifestLoading(unittest.TestCase):
             self.assertEqual(manifest.startup_area, "areas/demo")
             self.assertEqual(manifest.save_dir, (project_root / "session_saves").resolve())
             self.assertEqual(
-                manifest.input_targets,
+                manifest.input_routes,
                 {
-                    "interact": "player_1",
-                    "pause": "pause_controller",
-                    "menu": "",
+                    "interact": {
+                        "entity_id": "player_1",
+                        "command_id": "interact",
+                    },
+                    "pause": {
+                        "entity_id": "pause_controller",
+                        "command_id": "open_pause",
+                    },
+                    "menu": {
+                        "entity_id": "",
+                        "command_id": "",
+                    },
                 },
             )
             self.assertTrue(manifest.debug_inspection_enabled)

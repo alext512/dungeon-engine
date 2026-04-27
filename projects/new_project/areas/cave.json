@@ -176,12 +176,41 @@
             "segments": [
               {
                 "type": "text",
-                "text": "You already read this sign!"
+                "text": "You already read this sign!",
+                "on_end": [
+                  {
+                    "type": "step_in_direction",
+                    "entity_id": "sign_cycle_demo",
+                    "direction": "left",
+                    "frames_needed": 36
+                  },
+                  {
+                    "type": "step_in_direction",
+                    "entity_id": "sign_cycle_demo",
+                    "direction": "up"
+                  }
+                ]
               }
             ]
           }
         }
       }
+    },
+    {
+      "id": "area_transition_1",
+      "grid_x": 4,
+      "grid_y": 0,
+      "template": "entity_templates/actively_used/area_transition",
+      "parameters": {
+        "destination_entity_id": "deeper_cave_entrance_in",
+        "target_area": "areas/deeper_cave"
+      }
+    },
+    {
+      "id": "area_transition_target_1",
+      "grid_x": 4,
+      "grid_y": 1,
+      "template": "entity_templates/actively_used/area_transition_target"
     }
   ],
   "variables": {}

@@ -1,0 +1,18 @@
+/*
+  NOTES
+
+  Add file-level notes here.
+*/
+
+{
+  "kind": "test",
+  "space": "world",
+  "scope": "area",
+  "solid": false,
+  "interactable": false,
+  "render_order": 10,
+  "y_sort": true,
+  "variables": {},
+  "visuals": [],
+  "entity_commands": {}
+}

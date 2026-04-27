@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMessageBox, QTabBar
+from PySide6.QtWidgets import QApplication, QDialog, QMenu, QMessageBox, QTabBar
 
 from area_editor.app.main_window import MainWindow
 from area_editor.catalogs.template_catalog import TemplateCatalog
@@ -27,6 +27,7 @@ from area_editor.widgets.entity_template_editor_widget import EntityTemplateEdit
 from area_editor.widgets.global_entities_editor_widget import GlobalEntitiesEditorWidget
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
+from area_editor.widgets.project_command_editor_widget import ProjectCommandEditorWidget
 from area_editor.widgets.project_manifest_editor_widget import ProjectManifestEditorWidget
 from area_editor.widgets.shared_variables_editor_widget import SharedVariablesEditorWidget
 from area_editor.widgets.entity_instance_json_panel import EntityReferencePickerRequest
@@ -104,7 +105,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     current_value="",
                     parameter_spec={
                         "type": "entity_dialogue_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",
@@ -149,7 +150,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     current_value="dialogue_1",
                     parameter_spec={
                         "type": "entity_dialogue_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",
@@ -195,7 +196,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     current_value="",
                     parameter_spec={
                         "type": "entity_command_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="gate_1",
@@ -240,7 +241,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     current_value="toggle",
                     parameter_spec={
                         "type": "entity_command_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="gate_1",
@@ -256,6 +257,93 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             label="Command",
             values=["lock", "toggle"],
             current_value="toggle",
+        )
+
+    def test_visual_and_animation_pickers_use_target_entity_visuals(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+        window._templates = TemplateCatalog()
+        window._templates._templates["entity_templates/npc"] = {
+            "visuals": [
+                {
+                    "id": "body",
+                    "animations": {
+                        "idle": {"frames": [0]},
+                        "wave": {"frames": [1, 2]},
+                    },
+                },
+                {
+                    "id": "shadow",
+                    "animations": {
+                        "pulse": {"frames": [0, 1]},
+                    },
+                },
+            ],
+        }
+        entity = EntityDocument(
+            id="npc_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/npc",
+        )
+
+        with (
+            patch.object(window, "_resolve_project_entity_by_id", return_value=entity),
+            patch.object(window, "_browse_known_reference", return_value="body") as browse,
+        ):
+            selected_visual = window._browse_project_visual_id(
+                "",
+                EntityReferencePickerRequest(
+                    parameter_name="visual_id",
+                    current_value="",
+                    parameter_spec={
+                        "type": "visual_id",
+                        "of": "entity_id",
+                    },
+                    current_area_id=None,
+                    entity_id="npc_1",
+                    entity_template_id=None,
+                    parameter_values={"entity_id": "$self_id"},
+                ),
+            )
+
+        self.assertEqual(selected_visual, "body")
+        browse.assert_called_once_with(
+            title="Choose Visual for npc_1",
+            label="Visual",
+            values=["body", "shadow"],
+            current_value="",
+        )
+
+        with (
+            patch.object(window, "_resolve_project_entity_by_id", return_value=entity),
+            patch.object(window, "_browse_known_reference", return_value="wave") as browse,
+        ):
+            selected_animation = window._browse_project_animation_id(
+                "",
+                EntityReferencePickerRequest(
+                    parameter_name="animation",
+                    current_value="",
+                    parameter_spec={
+                        "type": "animation_id",
+                        "of": "visual_id",
+                    },
+                    current_area_id=None,
+                    entity_id="npc_1",
+                    entity_template_id=None,
+                    parameter_values={
+                        "entity_id": "$self_id",
+                        "visual_id": "body",
+                    },
+                ),
+            )
+
+        self.assertEqual(selected_animation, "wave")
+        browse.assert_called_once_with(
+            title="Choose Animation for npc_1.body",
+            label="Animation",
+            values=["idle", "wave"],
+            current_value="",
         )
 
     def test_add_tileset_appends_safe_firstgid(self):
@@ -279,16 +367,15 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             window._tab_widget.set_dirty("areas/demo", False)
 
-    def test_area_workspace_exposes_layers_and_area_start_tabs(self):
+    def test_area_workspace_exposes_layers_entities_and_cell_flags_tabs(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project(Path(tmp))
             window = MainWindow()
             self.addCleanup(window.close)
             window.open_project(project_file)
 
-            self.assertEqual(window._area_workspace.row_titles(1), ["Layers", "Area Start", "Entities"])
+            self.assertEqual(window._area_workspace.row_titles(1), ["Layers", "Entities"])
             self.assertEqual(window._area_workspace.row_titles(2), ["Cell Flags"])
-            self.assertEqual(window._area_start_panel._target_label.text(), "Area Start: areas/demo")
 
     def test_canvas_tool_strip_exposes_main_edit_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -488,7 +575,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                         "type": "entity_id",
                         "scope": "area",
                         "space": "world",
-                        "area_parameter": "target_area",
+                        "of": "target_area",
                     },
                     current_area_id="areas/demo",
                     entity_id="caller",
@@ -498,40 +585,91 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             )
             self.assertEqual([entry.entity_id for entry in filtered], ["arrival_marker"])
 
-    def test_area_start_panel_apply_updates_area_enter_commands(self):
+    def test_area_context_menu_includes_start_command_editor(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project(Path(tmp))
+            area_path = project_file.parent / "areas" / "demo.json"
             window = MainWindow()
             self.addCleanup(window.close)
             window.open_project(project_file)
 
-            panel = window._area_start_panel
-            panel._helper_combo.setCurrentIndex(0)
-            panel._route_entity_edit.setText("player_1")
-            panel._on_add_helper_command()
-            panel._on_apply()
+            menu = QMenu()
+            self.addCleanup(menu.close)
+            window._populate_area_context_menu(menu, "areas/demo", area_path)
 
+            action_texts = [
+                action.text()
+                for action in menu.actions()
+                if not action.isSeparator()
+            ]
+            self.assertIn("Edit Area Start Commands...", action_texts)
+
+    def test_area_context_start_command_editor_updates_area_document(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project(Path(tmp))
+            area_path = project_file.parent / "areas" / "demo.json"
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            replacement_commands = [
+                {
+                    "type": "set_input_route",
+                    "action": "interact",
+                    "entity_id": "player_1",
+                    "command_id": "interact",
+                }
+            ]
+
+            class FakeCommandListDialog:
+                loaded_commands: object = None
+                kwargs: dict[str, object] = {}
+
+                def __init__(self, *args, **kwargs) -> None:
+                    FakeCommandListDialog.kwargs = dict(kwargs)
+                    self.window_title = ""
+
+                def setWindowTitle(self, title: str) -> None:
+                    self.window_title = title
+
+                def load_commands(self, commands: object) -> None:
+                    FakeCommandListDialog.loaded_commands = commands
+
+                def exec(self) -> QDialog.DialogCode:
+                    return QDialog.DialogCode.Accepted
+
+                def commands(self) -> list[dict[str, object]]:
+                    return replacement_commands
+
+            with patch(
+                "area_editor.app.main_window.CommandListDialog",
+                FakeCommandListDialog,
+            ):
+                window._edit_area_start_commands("areas/demo", area_path)
+
+            self.assertEqual(FakeCommandListDialog.loaded_commands, [])
+            self.assertEqual(
+                FakeCommandListDialog.kwargs["current_area_id"],
+                "areas/demo",
+            )
             self.assertEqual(
                 window._area_docs["areas/demo"].enter_commands,
-                [
-                    {
-                        "type": "route_inputs_to_entity",
-                        "entity_id": "player_1",
-                    }
-                ],
+                replacement_commands,
             )
             self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
             window._tab_widget.set_dirty("areas/demo", False)
 
-    def test_area_start_panel_save_preserves_other_area_json_surfaces(self):
+    def test_area_context_start_command_editor_save_preserves_other_area_json_surfaces(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_reference_project(Path(tmp))
             area_path = project_file.parent / "areas" / "demo.json"
             area_data = load_json_data(area_path)
             area_data["enter_commands"] = [
                 {
-                    "type": "route_inputs_to_entity",
+                    "type": "set_input_route",
+                    "action": "interact",
                     "entity_id": "switch_a",
+                    "command_id": "interact",
                 }
             ]
             area_data["custom_root"] = {"keep": True}
@@ -541,28 +679,51 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.addCleanup(window.close)
             window.open_project(project_file)
 
-            panel = window._area_start_panel
-            panel._helper_combo.setCurrentIndex(0)
-            panel._route_entity_edit.setText("relay")
-            panel._on_add_helper_command()
-            panel._on_apply()
+            replacement_commands = [
+                {
+                    "type": "set_input_route",
+                    "action": "interact",
+                    "entity_id": "switch_a",
+                    "command_id": "interact",
+                },
+                {
+                    "type": "set_input_route",
+                    "action": "menu",
+                    "entity_id": "relay",
+                    "command_id": "open_menu",
+                },
+            ]
+
+            class FakeCommandListDialog:
+                loaded_commands: object = None
+
+                def __init__(self, *args, **kwargs) -> None:
+                    pass
+
+                def setWindowTitle(self, title: str) -> None:
+                    pass
+
+                def load_commands(self, commands: object) -> None:
+                    FakeCommandListDialog.loaded_commands = commands
+
+                def exec(self) -> QDialog.DialogCode:
+                    return QDialog.DialogCode.Accepted
+
+                def commands(self) -> list[dict[str, object]]:
+                    return replacement_commands
+
+            with patch(
+                "area_editor.app.main_window.CommandListDialog",
+                FakeCommandListDialog,
+            ):
+                window._edit_area_start_commands("areas/demo", area_path)
+
             window._on_save_active()
 
             saved = load_json_data(area_path)
 
-            self.assertEqual(
-                saved["enter_commands"],
-                [
-                    {
-                        "type": "route_inputs_to_entity",
-                        "entity_id": "switch_a",
-                    },
-                    {
-                        "type": "route_inputs_to_entity",
-                        "entity_id": "relay",
-                    },
-                ],
-            )
+            self.assertEqual(FakeCommandListDialog.loaded_commands, area_data["enter_commands"])
+            self.assertEqual(saved["enter_commands"], replacement_commands)
             self.assertEqual(
                 saved["camera"],
                 {
@@ -572,7 +733,15 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     }
                 },
             )
-            self.assertEqual(saved["input_targets"], {"interact": "switch_a"})
+            self.assertEqual(
+                saved["input_routes"],
+                {
+                    "interact": {
+                        "entity_id": "switch_a",
+                        "command_id": "interact",
+                    }
+                },
+            )
             self.assertEqual(saved["custom_root"], {"keep": True})
 
     def test_edit_tileset_updates_dimensions(self):
@@ -1067,7 +1236,15 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             assert menu is not None
             self.assertEqual(
                 [action.text() for action in menu.actions() if not action.isSeparator()],
-                ["Parameters...", "Edit Instance...", "Edit JSON...", "Copy ID", "Delete"],
+                [
+                    "Parameters...",
+                    "Edit Instance...",
+                    "Edit JSON...",
+                    "Duplicate",
+                    "Copy Entity",
+                    "Copy ID",
+                    "Delete",
+                ],
             )
             self.assertFalse(_find_menu_action(menu, "Parameters...").isEnabled())
 
@@ -1096,7 +1273,15 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     for action in first_submenu.actions()
                     if not action.isSeparator()
                 ],
-                ["Parameters...", "Edit Instance...", "Edit JSON...", "Copy ID", "Delete"],
+                [
+                    "Parameters...",
+                    "Edit Instance...",
+                    "Edit JSON...",
+                    "Duplicate",
+                    "Copy Entity",
+                    "Copy ID",
+                    "Delete",
+                ],
             )
             self.assertFalse(_find_menu_action(first_submenu, "Parameters...").isEnabled())
 
@@ -1159,6 +1344,129 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             QApplication.processEvents()
 
             self.assertEqual(QApplication.clipboard().text(), "npc_1")
+
+    def test_entity_context_menu_copy_and_tile_paste_duplicate_configured_entity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+            source = next(entity for entity in doc.entities if entity.id == "npc_1")
+            source.template = "entity_templates/inventory_pickup"
+            source.parameters = {
+                "item_id": "items/consumables/glimmer_berry",
+                "quantity": 2,
+            }
+            source._extra["entity_commands"] = {
+                "interact": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "npc_1",
+                        "name": "picked_up",
+                        "value": True,
+                    }
+                ]
+            }
+
+            empty_menu = window._build_area_cell_context_menu("areas/demo", 1, 1)
+            self.assertIsNotNone(empty_menu)
+            assert empty_menu is not None
+            self.assertFalse(_find_menu_action(empty_menu, "Paste Entity Here").isEnabled())
+
+            entity_menu = window._build_area_entity_context_menu("areas/demo", ("npc_1",))
+            assert entity_menu is not None
+            _find_menu_action(entity_menu, "Copy Entity").trigger()
+            QApplication.processEvents()
+
+            paste_menu = window._build_area_cell_context_menu("areas/demo", 1, 1)
+            self.assertIsNotNone(paste_menu)
+            assert paste_menu is not None
+            paste_action = _find_menu_action(paste_menu, "Paste Entity Here")
+            self.assertTrue(paste_action.isEnabled())
+            paste_action.trigger()
+            QApplication.processEvents()
+
+            pasted = next(entity for entity in doc.entities if entity.id == "npc_3")
+            self.assertEqual((pasted.x, pasted.y), (1, 1))
+            self.assertEqual(pasted.template, "entity_templates/inventory_pickup")
+            self.assertEqual(
+                pasted.parameters,
+                {
+                    "item_id": "items/consumables/glimmer_berry",
+                    "quantity": 2,
+                },
+            )
+            self.assertEqual(
+                pasted._extra["entity_commands"]["interact"][0]["entity_id"],
+                "npc_3",
+            )
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            self.assertEqual(canvas.selected_entity_id, "npc_3")
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_entity_context_menu_duplicate_copies_entity_on_same_cell(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            doc = window._area_docs["areas/demo"]
+            source = next(entity for entity in doc.entities if entity.id == "npc_1")
+            source.parameters = {"target_entity_id": "npc_1"}
+            source._extra["entity_commands"] = {
+                "inspect": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "npc_1",
+                        "name": "seen",
+                        "value": True,
+                    }
+                ]
+            }
+
+            menu = window._build_area_entity_context_menu("areas/demo", ("npc_1",))
+            assert menu is not None
+            _find_menu_action(menu, "Duplicate").trigger()
+            QApplication.processEvents()
+
+            duplicated = next(entity for entity in doc.entities if entity.id == "npc_3")
+            self.assertEqual((duplicated.x, duplicated.y), (source.x, source.y))
+            self.assertEqual(duplicated.parameters, {"target_entity_id": "npc_3"})
+            self.assertEqual(
+                duplicated._extra["entity_commands"]["inspect"][0]["entity_id"],
+                "npc_3",
+            )
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            self.assertEqual(canvas.selected_entity_id, "npc_3")
+            self.assertTrue(window._tab_widget.is_dirty("areas/demo"))
+            window._tab_widget.set_dirty("areas/demo", False)
+
+    def test_ctrl_copy_uses_currently_selected_entity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_select_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            canvas = window._active_canvas()
+            self.assertIsNotNone(canvas)
+            assert canvas is not None
+            canvas.set_selected_entity("npc_2", cycle_position=1, cycle_total=2, emit=False)
+            window._select_action.setChecked(True)
+
+            window._on_copy_active_selection()
+
+            self.assertIsNotNone(window._entity_clipboard)
+            assert window._entity_clipboard is not None
+            self.assertEqual(window._entity_clipboard.source_entity_id, "npc_2")
 
     def test_entity_context_menu_delete_action_removes_entity_and_closes_dialog(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1383,7 +1691,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             fields._color_red_spin.setValue(160)
             fields._color_green_spin.setValue(120)
             fields._color_blue_spin.setValue(80)
-            fields._input_map_text.setPlainText('{\n  "interact": "interact"\n}')
             fields._variables_text.setPlainText('{\n  "opened": false,\n  "key": "copper"\n}')
             fields._inventory_check.setChecked(True)
             fields._inventory_max_stacks_spin.setValue(1)
@@ -1432,7 +1739,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertTrue(entity._extra["interactable"])
             self.assertEqual(entity._extra["interaction_priority"], 4)
             self.assertEqual(entity._extra["color"], [160, 120, 80])
-            self.assertEqual(entity._extra["input_map"], {"interact": "interact"})
             self.assertEqual(entity._extra["variables"], {"opened": False, "key": "copper"})
             self.assertEqual(
                 entity._extra["inventory"],
@@ -1570,7 +1876,6 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                     "Basics",
                     "Dialogues",
                     "Visuals",
-                    "Input Map",
                     "Entity Commands",
                     "Inventory",
                     "Persistence",
@@ -1688,15 +1993,18 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"met": false', saved)
             self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
 
-    def test_template_fields_editor_updates_input_map_and_saves(self):
+    def test_template_fields_editor_preserves_legacy_input_map_and_saves(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_paint_project(Path(tmp))
+            template_path = project_file.parent / "entity_templates" / "npc.json"
+            template_data = load_json_data(template_path)
+            template_data["input_map"] = {"interact": "interact"}
+            template_path.write_text(json.dumps(template_data, indent=2), encoding="utf-8")
             window = MainWindow()
             self.addCleanup(window.close)
             window._enable_json_editing_action.setChecked(False)
             window.open_project(project_file)
 
-            template_path = project_file.parent / "entity_templates" / "npc.json"
             window._open_content("entity_templates/npc", template_path, ContentType.ENTITY_TEMPLATE)
 
             widget = window._tab_widget.active_widget()
@@ -1704,9 +2012,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             assert isinstance(widget, EntityTemplateEditorWidget)
 
             window._enable_json_editing_action.setChecked(True)
-            widget.fields_editor._input_map_text.setPlainText(
-                '{\n  "interact": "interact",\n  "menu": "menu"\n}'
-            )
+            widget.fields_editor._kind_edit.setText("npc_guard")
             QApplication.processEvents()
 
             self.assertTrue(window._tab_widget.is_dirty("entity_templates/npc"))
@@ -1715,7 +2021,7 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             saved = template_path.read_text(encoding="utf-8")
             self.assertIn('"input_map"', saved)
             self.assertIn('"interact": "interact"', saved)
-            self.assertIn('"menu": "menu"', saved)
+            self.assertIn('"kind": "npc_guard"', saved)
             self.assertFalse(window._tab_widget.is_dirty("entity_templates/npc"))
 
     def test_template_fields_editor_updates_entity_commands_and_saves(self):
@@ -2163,6 +2469,226 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertEqual(window._tab_widget.active_info().content_type, ContentType.ITEM)
             self.assertEqual(window._tab_widget.active_info().content_id, item_content_id)
             self.assertTrue(widget.raw_json_widget.isReadOnly())
+
+    def test_new_item_file_opens_item_builder_and_refreshes_items_panel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            created = window._apply_new_item_file(
+                root_dir=project / "items",
+                relative_name="consumables/glimmer_berry",
+            )
+
+            self.assertIsNotNone(created)
+            assert created is not None
+            content_id, file_path = created
+            self.assertEqual(content_id, "items/consumables/glimmer_berry")
+            self.assertEqual(file_path, project / "items" / "consumables" / "glimmer_berry.json5")
+            self.assertTrue(file_path.is_file())
+            self.assertIn(DEFAULT_JSON5_FILE_HEADER, file_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                load_json_data(file_path),
+                {
+                    "name": "Glimmer Berry",
+                    "description": "",
+                    "max_stack": 1,
+                    "consume_quantity_on_use": 0,
+                    "use_commands": [],
+                },
+            )
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, ItemEditorWidget)
+            self.assertEqual(window._tab_widget.active_info().content_type, ContentType.ITEM)
+            self.assertEqual(window._tab_widget.active_info().content_id, content_id)
+            self.assertIn((content_id, file_path), self._panel_file_entries(window._item_panel))
+
+    def test_new_entity_template_opens_template_builder_and_refreshes_panel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            created = window._apply_new_entity_template_file(
+                root_dir=project / "entity_templates",
+                relative_name="props/stone-door",
+            )
+
+            self.assertIsNotNone(created)
+            assert created is not None
+            content_id, file_path = created
+            self.assertEqual(content_id, "entity_templates/props/stone-door")
+            self.assertEqual(
+                file_path,
+                project / "entity_templates" / "props" / "stone-door.json5",
+            )
+            self.assertTrue(file_path.is_file())
+            self.assertIn(DEFAULT_JSON5_FILE_HEADER, file_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                load_json_data(file_path),
+                {
+                    "kind": "stone_door",
+                    "space": "world",
+                    "scope": "area",
+                    "solid": False,
+                    "interactable": False,
+                    "render_order": 10,
+                    "y_sort": True,
+                    "variables": {},
+                    "visuals": [],
+                    "entity_commands": {},
+                },
+            )
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, EntityTemplateEditorWidget)
+            self.assertEqual(
+                window._tab_widget.active_info().content_type,
+                ContentType.ENTITY_TEMPLATE,
+            )
+            self.assertEqual(window._tab_widget.active_info().content_id, content_id)
+            self.assertIn(
+                (content_id, file_path),
+                self._panel_file_entries(window._template_panel),
+            )
+
+    def test_template_panel_context_menus_include_new_template_action(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            empty_menu = QMenu()
+            self.addCleanup(empty_menu.close)
+            window._populate_empty_space_context_menu(
+                empty_menu,
+                ContentType.ENTITY_TEMPLATE,
+                [],
+                None,
+                None,
+                None,
+            )
+            _find_menu_action(empty_menu, "New Entity Template...")
+
+            folder_menu = QMenu()
+            self.addCleanup(folder_menu.close)
+            window._populate_folder_context_menu(
+                folder_menu,
+                ContentType.ENTITY_TEMPLATE,
+                "props",
+                project / "entity_templates" / "props",
+                project / "entity_templates",
+            )
+            _find_menu_action(folder_menu, "New Entity Template...")
+
+    def test_new_project_command_opens_command_builder_and_refreshes_panel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            created = window._apply_new_project_command_file(
+                root_dir=project / "commands",
+                relative_name="system/open_gate",
+            )
+
+            self.assertIsNotNone(created)
+            assert created is not None
+            content_id, file_path = created
+            self.assertEqual(content_id, "commands/system/open_gate")
+            self.assertEqual(file_path, project / "commands" / "system" / "open_gate.json5")
+            self.assertTrue(file_path.is_file())
+            self.assertIn(DEFAULT_JSON5_FILE_HEADER, file_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                load_json_data(file_path),
+                {
+                    "inputs": {},
+                    "commands": [],
+                },
+            )
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, ProjectCommandEditorWidget)
+            self.assertEqual(
+                window._tab_widget.active_info().content_type,
+                ContentType.NAMED_COMMAND,
+            )
+            self.assertEqual(window._tab_widget.active_info().content_id, content_id)
+            self.assertIn(
+                (content_id, file_path),
+                self._panel_file_entries(window._command_panel),
+            )
+
+    def test_command_panel_signal_opens_command_builder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window._enable_json_editing_action.setChecked(False)
+            window.open_project(project_file)
+
+            entries = self._panel_file_entries(window._command_panel)
+            command_content_id, command_path = entries[0]
+            window._command_panel.file_open_requested.emit(command_content_id, command_path)
+
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, ProjectCommandEditorWidget)
+            assert isinstance(widget, ProjectCommandEditorWidget)
+            self.assertEqual(
+                window._tab_widget.active_info().content_type,
+                ContentType.NAMED_COMMAND,
+            )
+            self.assertEqual(window._tab_widget.active_info().content_id, command_content_id)
+            self.assertTrue(widget.raw_json_widget.isReadOnly())
+
+    def test_project_command_inputs_provider_reads_inputs_and_legacy_params(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            command_path = project / "commands" / "system" / "do_thing.json"
+            command_path.write_text(
+                json.dumps(
+                    {
+                        "inputs": {
+                            "target_entity": {"type": "entity_id"},
+                            "visual": {"type": "visual_id", "of": "target_entity"},
+                        },
+                        "commands": [],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            legacy_path = project / "commands" / "system" / "legacy.json"
+            legacy_path.write_text(
+                json.dumps({"params": ["direction"], "commands": []}, indent=2),
+                encoding="utf-8",
+            )
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            self.assertEqual(
+                window._project_command_inputs_for_id("commands/system/do_thing"),
+                {
+                    "target_entity": {"type": "entity_id"},
+                    "visual": {"type": "visual_id", "of": "target_entity"},
+                },
+            )
+            self.assertEqual(
+                window._project_command_inputs_for_id("commands/system/legacy"),
+                {"direction": {"type": "string"}},
+            )
 
     def test_item_fields_editor_updates_basic_fields_and_art_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3213,6 +3739,60 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             assert isinstance(widget, GlobalEntitiesEditorWidget)
             self.assertIn("dialogue_controller_v2", widget._target_label.text())
 
+    def test_global_entity_duplicate_copies_project_entry_with_new_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_reference_project(Path(tmp))
+            project_data = load_json_data(project_file)
+            project_data["global_entities"][0]["entity_commands"] = {
+                "pause": [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "dialogue_controller",
+                        "name": "paused",
+                        "value": True,
+                    }
+                ]
+            }
+            project_file.write_text(json.dumps(project_data, indent=2), encoding="utf-8")
+
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+            window._open_global_entities_tab("dialogue_controller")
+
+            menu = QMenu()
+            window._populate_global_entity_context_menu(menu, "dialogue_controller")
+            self.assertIn(
+                "Duplicate...",
+                [action.text() for action in menu.actions() if not action.isSeparator()],
+            )
+
+            self.assertTrue(
+                window._duplicate_global_entity(
+                    "dialogue_controller",
+                    "dialogue_controller_copy",
+                )
+            )
+
+            saved = load_json_data(project_file)
+            self.assertEqual(
+                [entity["id"] for entity in saved["global_entities"]],
+                ["dialogue_controller", "dialogue_controller_copy"],
+            )
+            duplicated = saved["global_entities"][1]
+            self.assertEqual(
+                duplicated["entity_commands"]["pause"][0]["entity_id"],
+                "dialogue_controller_copy",
+            )
+            self.assertEqual(
+                window._global_entities_panel._tree.topLevelItem(1).text(0),
+                "dialogue_controller_copy",
+            )
+            widget = window._tab_widget.active_widget()
+            self.assertIsInstance(widget, GlobalEntitiesEditorWidget)
+            assert isinstance(widget, GlobalEntitiesEditorWidget)
+            self.assertIn("dialogue_controller_copy", widget._target_label.text())
+
     def test_global_entity_delete_removes_project_entry_and_leaves_known_references_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_entity_reference_project(Path(tmp))
@@ -3305,11 +3885,12 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 window._on_apply_entity_instance_fields()
 
             saved_project = project_file.read_text(encoding="utf-8")
-            self.assertIn('"confirm": "switch_b"', saved_project)
+            self.assertIn('"entity_id": "switch_b"', saved_project)
+            self.assertIn('"command_id": "confirm"', saved_project)
             saved_area = area_path.read_text(encoding="utf-8")
             self.assertIn('"id": "switch_b"', saved_area)
             self.assertIn('"entity_id": "switch_b"', saved_area)
-            self.assertIn('"interact": "switch_b"', saved_area)
+            self.assertIn('"command_id": "interact"', saved_area)
             self.assertIn('"target_id": "switch_b"', saved_area)
             self.assertIn('"source_entity_id": "switch_b"', saved_area)
             self.assertIn('"entity_ids": [\n        "switch_b",', saved_area)

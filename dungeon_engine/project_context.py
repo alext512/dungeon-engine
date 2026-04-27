@@ -14,8 +14,11 @@ Example ``project.json``::
         "item_paths": ["items/"],
         "shared_variables_path": "shared_variables.json",
         "startup_area": "areas/title_screen",
-        "input_targets": {
-            "menu": "pause_controller"
+        "input_routes": {
+            "menu": {
+                "entity_id": "pause_controller",
+                "command_id": "open_menu"
+            }
         },
         "debug_inspection_enabled": true,
         "command_runtime": {
@@ -115,7 +118,7 @@ class ProjectContext:
     shared_variables_path: Path | None = None
     global_entities: list[dict[str, Any]] = field(default_factory=list)
     startup_area: str | None = None
-    input_targets: dict[str, str] = field(default_factory=dict)
+    input_routes: dict[str, dict[str, str]] = field(default_factory=dict)
     debug_inspection_enabled: bool = False
     shared_variables: dict[str, Any] = field(default_factory=dict)
     internal_width: int = 320
@@ -617,7 +620,7 @@ def load_project(project_path: Path) -> ProjectContext:
         shared_variables_path=shared_variables_path,
         global_entities=_resolve_global_entities(raw.get("global_entities")),
         startup_area=_optional_manifest_str(raw.get("startup_area")),
-        input_targets=_resolve_input_targets(raw.get("input_targets")),
+        input_routes=_resolve_input_routes(raw.get("input_routes")),
         debug_inspection_enabled=bool(raw.get("debug_inspection_enabled", False)),
         shared_variables=shared_variables,
         internal_width=_resolve_project_dimension(shared_variables, "internal_width", 320),
@@ -718,19 +721,25 @@ def _resolve_command_runtime_config(raw_value: Any) -> CommandRuntimeConfig:
     )
 
 
-def _resolve_input_targets(raw_input_targets: Any) -> dict[str, str]:
-    """Normalize authored project-level input-target overrides."""
-    resolved: dict[str, str] = {}
-    if not isinstance(raw_input_targets, dict):
+def _resolve_input_routes(raw_input_routes: Any) -> dict[str, dict[str, str]]:
+    """Normalize authored project-level input-route overrides."""
+    resolved: dict[str, dict[str, str]] = {}
+    if not isinstance(raw_input_routes, dict):
         return resolved
-    for raw_action, raw_entity_id in raw_input_targets.items():
+    for raw_action, raw_route in raw_input_routes.items():
         action = str(raw_action).strip()
         if not action:
             continue
-        if raw_entity_id in (None, ""):
-            resolved[action] = ""
+        if raw_route in (None, ""):
+            resolved[action] = {"entity_id": "", "command_id": ""}
             continue
-        resolved[action] = str(raw_entity_id).strip()
+        if not isinstance(raw_route, dict):
+            continue
+        entity_id = str(raw_route.get("entity_id", "")).strip()
+        command_id = str(raw_route.get("command_id", "")).strip()
+        if bool(entity_id) != bool(command_id):
+            continue
+        resolved[action] = {"entity_id": entity_id, "command_id": command_id}
     return resolved
 
 

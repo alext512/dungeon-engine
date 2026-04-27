@@ -7,10 +7,11 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from area_editor.widgets.item_editor_widget import ItemEditorWidget
 
@@ -104,3 +105,78 @@ class TestItemEditorWidget(unittest.TestCase):
                 ],
             )
             self.assertEqual(saved["custom_root_field"], {"rarity": "common"})
+
+    def test_use_commands_edit_through_command_list_dialog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            item_path = Path(tmp) / "orb.json"
+            _write_json(
+                item_path,
+                {
+                    "name": "Orb",
+                    "max_stack": 1,
+                    "use_commands": [
+                        {
+                            "type": "set_entity_var",
+                            "entity_id": "$instigator_id",
+                            "name": "old_value",
+                            "value": True,
+                        }
+                    ],
+                    "custom_root_field": "keep-me",
+                },
+            )
+
+            replacement_commands = [
+                {
+                    "type": "show_screen_text",
+                    "element_id": "orb_message",
+                    "text": "The orb glows.",
+                    "x": 128,
+                    "y": 96,
+                    "anchor": "center",
+                }
+            ]
+
+            class FakeCommandListDialog:
+                loaded_commands: object = None
+
+                def __init__(self, *args, **kwargs) -> None:
+                    self.window_title = ""
+
+                def setWindowTitle(self, title: str) -> None:
+                    self.window_title = title
+
+                def load_commands(self, commands: object) -> None:
+                    FakeCommandListDialog.loaded_commands = commands
+
+                def exec(self) -> QDialog.DialogCode:
+                    return QDialog.DialogCode.Accepted
+
+                def commands(self) -> list[dict[str, object]]:
+                    return replacement_commands
+
+            widget = ItemEditorWidget("items/orb", item_path)
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            with patch(
+                "area_editor.widgets.item_editor_widget.CommandListDialog",
+                FakeCommandListDialog,
+            ):
+                widget.fields_editor._on_edit_use_commands()
+            widget.save_to_file()
+
+            saved = json.loads(item_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                FakeCommandListDialog.loaded_commands,
+                [
+                    {
+                        "type": "set_entity_var",
+                        "entity_id": "$instigator_id",
+                        "name": "old_value",
+                        "value": True,
+                    }
+                ],
+            )
+            self.assertEqual(saved["use_commands"], replacement_commands)
+            self.assertEqual(saved["custom_root_field"], "keep-me")

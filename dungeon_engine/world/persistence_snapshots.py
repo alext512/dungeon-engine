@@ -399,11 +399,6 @@ def _apply_entity_overrides(area: Area, entity: Entity, overrides: dict[str, Any
             entity.stack_order = int(value)
         elif key == "color":
             entity.color = (int(value[0]), int(value[1]), int(value[2]))
-        elif key == "input_map":
-            entity.input_map = {
-                str(action): str(command_name)
-                for action, command_name in dict(value).items()
-            }
         elif key == "variables":
             entity.variables.update(copy.deepcopy(value))
         elif key == "entity_command_states":
@@ -629,8 +624,6 @@ def _capture_entity_overrides(authored_entity: Entity, current_entity: Entity) -
         overrides["stack_order"] = current_entity.stack_order
     if current_entity.color != authored_entity.color:
         overrides["color"] = list(current_entity.color)
-    if current_entity.input_map != authored_entity.input_map:
-        overrides["input_map"] = copy.deepcopy(current_entity.input_map)
     if _serialize_persistent_visuals(current_entity) != _serialize_persistent_visuals(authored_entity):
         overrides["visuals"] = _serialize_persistent_visuals(current_entity)
 

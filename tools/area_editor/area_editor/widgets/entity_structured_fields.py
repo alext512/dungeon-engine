@@ -185,6 +185,49 @@ def parse_entity_commands(raw_entity_commands: object) -> dict[str, Any]:
     return entity_commands
 
 
+def summarize_entity_commands(entity_commands: dict[str, Any]) -> str:
+    count = len(entity_commands)
+    if count == 0:
+        return "No entity commands"
+    if count == 1:
+        return "1 entity command"
+    return f"{count} entity commands"
+
+
+def entity_command_command_list(entity_command_definition: object) -> list[dict[str, Any]]:
+    if isinstance(entity_command_definition, list):
+        return copy.deepcopy(entity_command_definition)
+    if isinstance(entity_command_definition, dict):
+        raw_commands = entity_command_definition.get("commands", [])
+        return copy.deepcopy(raw_commands) if isinstance(raw_commands, list) else []
+    return []
+
+
+def replace_entity_command_command_list(
+    entity_command_definition: object,
+    commands: list[dict[str, Any]],
+) -> object:
+    if isinstance(entity_command_definition, dict):
+        updated = copy.deepcopy(entity_command_definition)
+        updated["commands"] = copy.deepcopy(commands)
+        return updated
+    return copy.deepcopy(commands)
+
+
+def suggested_entity_command_copy_name(
+    command_name: str,
+    existing_names: set[str],
+) -> str:
+    base = str(command_name).strip() or "command"
+    prefix = f"{base}_copy"
+    if prefix not in existing_names:
+        return prefix
+    index = 2
+    while f"{prefix}_{index}" in existing_names:
+        index += 1
+    return f"{prefix}_{index}"
+
+
 def build_entity_commands(
     entity_commands_text: str,
     *,

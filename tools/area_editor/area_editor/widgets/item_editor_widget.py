@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -28,6 +29,7 @@ from area_editor.json_io import (
     load_json_data,
     loads_json_data,
 )
+from area_editor.widgets.command_list_dialog import CommandListDialog
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from area_editor.widgets.tab_overflow import configure_tab_widget_overflow
 
@@ -71,6 +73,9 @@ class _ItemArtObjectEditor(QWidget):
         self._browse_button = QPushButton("Browse...")
         self._browse_button.clicked.connect(self._on_browse_clicked)
         path_row.addWidget(self._browse_button)
+        self._clear_button = QPushButton("Clear")
+        self._clear_button.clicked.connect(self._on_clear_clicked)
+        path_row.addWidget(self._clear_button)
         path_widget = QWidget()
         path_widget.setLayout(path_row)
         form.addRow("path", path_widget)
@@ -97,6 +102,7 @@ class _ItemArtObjectEditor(QWidget):
         active = enabled and self._editable
         self._path_edit.setReadOnly(not active)
         self._browse_button.setEnabled(active and self._browse_asset_callback is not None)
+        self._clear_button.setEnabled(active)
         self._frame_width_spin.setEnabled(active)
         self._frame_height_spin.setEnabled(active)
         self._frame_spin.setEnabled(active)
@@ -174,6 +180,14 @@ class _ItemArtObjectEditor(QWidget):
         if selected:
             self._path_edit.setText(selected)
 
+    def _on_clear_clicked(self) -> None:
+        if not self._editing_enabled or not self._editable:
+            return
+        self._path_edit.clear()
+        self._frame_width_spin.setValue(16)
+        self._frame_height_spin.setValue(16)
+        self._frame_spin.setValue(0)
+
     def _on_changed(self, *_args) -> None:
         if self._loading:
             return
@@ -192,6 +206,20 @@ class _ItemFieldsEditor(QWidget):
         item_id: str,
         *,
         browse_asset_callback: Callable[[], str | None] | None = None,
+        area_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[
+            [str], dict[str, dict[str, Any]] | None
+        ]
+        | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -199,6 +227,20 @@ class _ItemFieldsEditor(QWidget):
         self._dirty = False
         self._loading = False
         self._editing_enabled = False
+        self._area_picker = area_picker
+        self._asset_picker = asset_picker
+        self._entity_picker = entity_picker
+        self._entity_command_picker = entity_command_picker
+        self._entity_dialogue_picker = entity_dialogue_picker
+        self._item_picker = item_picker
+        self._dialogue_picker = dialogue_picker
+        self._command_picker = command_picker
+        self._project_command_inputs_provider = project_command_inputs_provider
+        self._visual_picker = visual_picker
+        self._animation_picker = animation_picker
+        self._use_commands: list[dict[str, Any]] = []
+        self._use_commands_base: Any = None
+        self._use_commands_editable = True
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -250,6 +292,22 @@ class _ItemFieldsEditor(QWidget):
         self._portrait_editor.changed.connect(self._on_changed)
         form.addRow(self._portrait_editor)
 
+        self._use_commands_warning = QLabel("")
+        self._use_commands_warning.setWordWrap(True)
+        self._use_commands_warning.setStyleSheet("color: #a25b00;")
+        self._use_commands_warning.hide()
+        layout.addWidget(self._use_commands_warning)
+
+        commands_row = QHBoxLayout()
+        self._use_commands_summary = QLabel("No use commands")
+        commands_row.addWidget(self._use_commands_summary, 1)
+        self._edit_use_commands_button = QPushButton("Edit Use Commands...")
+        self._edit_use_commands_button.clicked.connect(self._on_edit_use_commands)
+        commands_row.addWidget(self._edit_use_commands_button)
+        commands_widget = QWidget()
+        commands_widget.setLayout(commands_row)
+        form.addRow("use_commands", commands_widget)
+
         buttons = QHBoxLayout()
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self.apply_requested.emit)
@@ -274,6 +332,7 @@ class _ItemFieldsEditor(QWidget):
         self._consume_spin.setEnabled(enabled)
         self._icon_editor.set_editing_enabled(enabled)
         self._portrait_editor.set_editing_enabled(enabled)
+        self._edit_use_commands_button.setEnabled(enabled and self._use_commands_editable)
         self._apply_button.setEnabled(enabled)
         self._revert_button.setEnabled(enabled)
 
@@ -286,6 +345,7 @@ class _ItemFieldsEditor(QWidget):
             self._consume_spin.setValue(int(data.get("consume_quantity_on_use", 0)))
             self._icon_editor.load_object(data.get("icon"))
             self._portrait_editor.load_object(data.get("portrait"))
+            self._load_use_commands(data.get("use_commands"))
         finally:
             self._loading = False
         self._set_dirty(False)
@@ -302,6 +362,7 @@ class _ItemFieldsEditor(QWidget):
         updated["consume_quantity_on_use"] = self._consume_spin.value()
         self._apply_optional_object(updated, "icon", self._icon_editor.build_object())
         self._apply_optional_object(updated, "portrait", self._portrait_editor.build_object())
+        self._apply_use_commands(updated, base_data)
         return updated
 
     def _apply_optional_object(
@@ -311,6 +372,74 @@ class _ItemFieldsEditor(QWidget):
             target.pop(key, None)
             return
         target[key] = value
+
+    def _load_use_commands(self, raw_commands: Any) -> None:
+        self._use_commands_base = dumps_for_clone(raw_commands)
+        self._use_commands_editable = True
+        if raw_commands is None:
+            self._use_commands = []
+            self._use_commands_warning.hide()
+        elif isinstance(raw_commands, list):
+            self._use_commands = dumps_for_clone(raw_commands)
+            self._use_commands_warning.hide()
+        else:
+            self._use_commands = []
+            self._use_commands_editable = False
+            self._use_commands_warning.setText(
+                "use_commands is not using a supported array shape. Use the Raw JSON tab to edit it."
+            )
+            self._use_commands_warning.show()
+        self._sync_use_commands_summary()
+        self.set_editing_enabled(self._editing_enabled)
+
+    def _apply_use_commands(self, target: dict[str, Any], base_data: dict[str, Any]) -> None:
+        if not self._use_commands_editable:
+            if self._use_commands_base is None:
+                target.pop("use_commands", None)
+            else:
+                target["use_commands"] = dumps_for_clone(self._use_commands_base)
+            return
+        if self._use_commands or "use_commands" in base_data:
+            target["use_commands"] = dumps_for_clone(self._use_commands)
+        else:
+            target.pop("use_commands", None)
+
+    def _sync_use_commands_summary(self) -> None:
+        if not self._use_commands_editable:
+            self._use_commands_summary.setText("Raw JSON only")
+            return
+        count = len(self._use_commands)
+        if count == 0:
+            self._use_commands_summary.setText("No use commands")
+        elif count == 1:
+            self._use_commands_summary.setText("1 use command")
+        else:
+            self._use_commands_summary.setText(f"{count} use commands")
+
+    def _on_edit_use_commands(self) -> None:
+        if not self._editing_enabled or not self._use_commands_editable:
+            return
+        dialog = CommandListDialog(
+            self,
+            area_picker=self._area_picker,
+            asset_picker=self._asset_picker,
+            entity_picker=self._entity_picker,
+            entity_command_picker=self._entity_command_picker,
+            entity_dialogue_picker=self._entity_dialogue_picker,
+            item_picker=self._item_picker,
+            dialogue_picker=self._dialogue_picker,
+            command_picker=self._command_picker,
+            project_command_inputs_provider=self._project_command_inputs_provider,
+            visual_picker=self._visual_picker,
+            animation_picker=self._animation_picker,
+        )
+        dialog.setWindowTitle(f"Edit Use Commands - {self._item_id}")
+        dialog.load_commands(self._use_commands)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._use_commands = dialog.commands()
+        self._sync_use_commands_summary()
+        self._on_changed()
 
     def _on_changed(self) -> None:
         if self._loading:
@@ -336,6 +465,20 @@ class ItemEditorWidget(QWidget):
         file_path: Path,
         *,
         browse_asset_callback: Callable[[], str | None] | None = None,
+        area_picker: Callable[..., str | None] | None = None,
+        asset_picker: Callable[..., str | None] | None = None,
+        entity_picker: Callable[..., str | None] | None = None,
+        entity_command_picker: Callable[..., str | None] | None = None,
+        entity_dialogue_picker: Callable[..., str | None] | None = None,
+        item_picker: Callable[..., str | None] | None = None,
+        dialogue_picker: Callable[..., str | None] | None = None,
+        command_picker: Callable[..., str | None] | None = None,
+        project_command_inputs_provider: Callable[
+            [str], dict[str, dict[str, Any]] | None
+        ]
+        | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -354,6 +497,17 @@ class ItemEditorWidget(QWidget):
         self._fields_editor = _ItemFieldsEditor(
             content_id,
             browse_asset_callback=browse_asset_callback,
+            area_picker=area_picker,
+            asset_picker=asset_picker,
+            entity_picker=entity_picker,
+            entity_command_picker=entity_command_picker,
+            entity_dialogue_picker=entity_dialogue_picker,
+            item_picker=item_picker,
+            dialogue_picker=dialogue_picker,
+            command_picker=command_picker,
+            project_command_inputs_provider=project_command_inputs_provider,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
         )
         self._raw_json = JsonViewerWidget(file_path)
         self._tabs.addTab(self._fields_editor, "Item Editor")

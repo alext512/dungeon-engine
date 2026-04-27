@@ -51,16 +51,15 @@ The current editor can:
   screen pane, or select any active-area instance from the `Entities` list
 - nudge selected world entities by tiles and selected screen-space entities by pixels
 - open an on-demand entity-instance editor dialog from entity selection
-- use a tabbed right-side area workspace so `Layers` stays focused and area
-  startup behavior, entity selection, and cell-flag brush selection live in
-  dedicated `Area Start`, `Entities`, and `Cell Flags` tabs
-- edit area `enter_commands` through helper insertions plus direct JSON, including
-  common actions like `route_inputs_to_entity`, `run_entity_command`,
+- use a tabbed right-side area workspace where `Layers`, `Entities`, and
+  `Cell Flags` stay in their own focused tabs
+- edit area `enter_commands` from the area right-click menu, including
+  common actions like `set_input_route`, `run_entity_command`,
   `open_dialogue_session`, `set_camera_follow_entity`, and `play_music`
 - edit entity instances through a structured dialog with a focused
   `Parameters` tab for common template tuning, an advanced instance editor for
-  identity, scope, common engine fields, `color`, `input_map`,
-  `entity_commands`, variables, `inventory`, visuals, and persistence, plus a
+  identity, scope, common engine fields, `color`, `entity_commands`, variables,
+  `inventory`, visuals, and persistence, plus a
   guarded raw JSON tab for the rest
 - pick `entity_id` parameters through a dedicated chooser with an area/global
   selector, search filter, and position-aware entity list instead of relying on
@@ -68,7 +67,7 @@ The current editor can:
 - pick `entity_command_id` parameters from the command names available on the
   entity selected by another typed `entity_id` parameter
 - edit entity templates through one focused surface with `Basics`, `Visuals`,
-  `Input Map`, `Entity Commands`, `Inventory`, `Persistence`, and `Raw JSON`
+  `Entity Commands`, `Inventory`, `Persistence`, and `Raw JSON`
   sections
 - edit items, project manifest fields, shared variables, and global entities
   through structured tabs plus guarded raw JSON fallbacks
@@ -213,8 +212,7 @@ Current structured command coverage:
   - `stop_animation`
 
 - input routing and waiting
-  - `set_input_target`
-  - `route_inputs_to_entity`
+  - `set_input_route`
   - `push_input_routes`
   - `pop_input_routes`
   - `wait_frames`
@@ -244,7 +242,7 @@ commands are grouped under **Advanced / Rare Commands**:
 
 For correctness, focused editors are expected to preserve engine-used data they
 do not fully model as custom UI. For entity instances and templates, `color`,
-`input_map`, `inventory`, `persistence`, and `entity_commands` now live in the
+`inventory`, `persistence`, visuals, and `entity_commands` now live in the
 structured editor surfaces. Entity commands are edited as a guarded JSON object
 inside the focused editor, not through whole-file raw JSON. Template basics such
 as `kind`, `space`, tags, physics/interaction/visibility defaults, and
@@ -254,7 +252,7 @@ Shared-variable sections such as `dialogue_ui` or `inventory_ui`, raw-only item
 fields such as `use_commands`, and non-global-entity parts of `project.json`
 may also still live in raw JSON today.
 Likewise, editing area `enter_commands` should not disturb other area-owned
-surfaces such as `camera`, `input_targets`, or unrelated root data. The shared
+surfaces such as `camera`, `input_routes`, or unrelated root data. The shared
 render-properties dock follows the same rule: changing layer render controls
 should not drop unrelated layer metadata, and changing entity render controls
 should not strip authored fields such as `kind`, `variables`, or
@@ -326,11 +324,9 @@ The area canvas now includes a separate screen pane to the right of the world gr
   identity, position, variables, inventory, visuals, persistence, and raw
   `entity_commands` objects.
 - Typed `entity_id` parameters get a picker filtered by `scope` and `space`.
-  Typed `entity_command_id` parameters are picked from the command names on the
-  already selected target entity.
-- If an `entity_id` parameter declares `area_parameter`, the picker locks to
-  the area already chosen in that area parameter instead of offering a separate
-  area selector.
+  Typed `entity_command_id`, `entity_dialogue_id`, `visual_id`, and
+  `animation_id` parameters use `of` to pick from the selected parent
+  entity, visual, or area.
 - Right-clicking an entity opens a context menu with direct actions for
   `Parameters`, advanced instance editing, raw JSON editing, copying the id, and
   deleting that exact entity. For stacked entities, each entity gets the same

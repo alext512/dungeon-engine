@@ -13,7 +13,7 @@ The runtime starts from `project.json`. This file tells the engine where to find
 - `save_dir: string`
 - `global_entities: object[]`
 - `startup_area: string`
-- `input_targets: object`
+- `input_routes: object`
 - `debug_inspection_enabled: boolean`
 - `command_runtime: object`
 
@@ -38,8 +38,11 @@ The runtime starts from `project.json`. This file tells the engine where to find
     { "id": "dialogue_controller", "template": "entity_templates/dialogue_panel" }
   ],
   "startup_area": "areas/title_screen",
-  "input_targets": {
-    "menu": "pause_controller"
+  "input_routes": {
+    "menu": {
+      "entity_id": "pause_controller",
+      "command_id": "open_menu"
+    }
   },
   "debug_inspection_enabled": true,
   "command_runtime": {
@@ -82,9 +85,9 @@ Global entities use the same instance shape as area entities, but they are proje
 
 This is the default area loaded when you run the project unless you explicitly pass another area id on the CLI.
 
-### `input_targets`
+### `input_routes`
 
-This is the project-level logical-action routing table. Area `input_targets` can layer on top of it.
+This is the project-level logical-action routing table. Each action maps directly to the entity command that should run. Area `input_routes` can layer on top of it.
 
 ### `debug_inspection_enabled`
 

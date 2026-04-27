@@ -19,7 +19,7 @@ For the philosophy behind this interface, see [Project Spirit](../../project/pro
 - Gameplay is driven by JSON command specs. A command spec is a JSON object with a `"type"` field.
 - Runtime token strings start with `$...` or `${...}`.
 - Structured value sources are single-key objects like `{ "$entity_at": { ... } }`.
-- Entity-owned `entity_commands` and `input_map` are part of the live engine/JSON contract.
+- Entity-owned `entity_commands` are part of the live engine/JSON contract.
 
 ## Command Chain Rules
 
@@ -70,7 +70,7 @@ Current manifest fields the engine reads:
 - `save_dir: string`
 - `global_entities: object[]`
 - `startup_area: string`
-- `input_targets: object`
+- `input_routes: object`
 - `debug_inspection_enabled: boolean`
 - `command_runtime: object`
 
@@ -84,7 +84,7 @@ Notes:
 - `shared_variables_path` falls back to `shared_variables.json` if that file exists.
 - `save_dir` defaults to `saves`.
 - `global_entities` uses the same instance shape as area `entities`. Global entities are project-level runtime entities â€” the runtime injects them into the active play world whenever an area is built. Their persistent state is stored separately from per-area state and is not affected by area resets. Unlike travelers (entities transferred between areas via `change_area`), globals don't physically move â€” the runtime always includes them.
-- `input_targets` is a project-level logical-action routing table.
+- `input_routes` is a project-level logical-action routing table. Each action routes directly to one entity command.
 - `command_runtime` is optional; omitted fields use engine defaults.
 
 Minimal example:
@@ -101,8 +101,11 @@ Minimal example:
     { "id": "dialogue_controller", "template": "entity_templates/dialogue_panel" }
   ],
   "startup_area": "areas/title_screen",
-  "input_targets": {
-    "menu": "pause_controller"
+  "input_routes": {
+    "menu": {
+      "entity_id": "pause_controller",
+      "command_id": "open_menu"
+    }
   },
   "debug_inspection_enabled": true,
   "command_runtime": {
@@ -256,13 +259,13 @@ Current area file fields:
 - `enter_commands: command[]`
 - `entry_points: object`
 - `camera: object`
-- `input_targets: object`
+- `input_routes: object`
 - `entities: object[]`
 
 Current engine behavior:
 - `tile_layers` is required.
 - `cell_flags` falls back to all-unblocked cells if omitted.
-- `input_targets` is merged on top of project-level `input_targets`.
+- `input_routes` is merged on top of project-level `input_routes`.
 - `enter_commands` runs when the area is entered.
 - area files must not declare a top-level `name`.
 - `camera` is stored as area camera defaults.
@@ -358,18 +361,24 @@ Example:
 }
 ```
 
-### `input_targets`
+### `input_routes`
 
-This is an action -> entity id mapping, for example:
+This is an action -> entity command route mapping, for example:
 
 ```json
 {
-  "menu": "pause_controller",
-  "interact": "dialogue_controller"
+  "menu": {
+    "entity_id": "pause_controller",
+    "command_id": "open_menu"
+  },
+  "interact": {
+    "entity_id": "player",
+    "command_id": "interact"
+  }
 }
 ```
 
-Target ids in `input_targets` must refer to authored entity ids that are unique across the whole project, not just within one area.
+Route `entity_id` values must refer to authored entity ids that are unique across the whole project, not just within one area. If a route is present, both `entity_id` and `command_id` must be set.
 
 ### `entities`
 
@@ -449,13 +458,13 @@ Example:
     },
     "destination_entity_id": {
       "type": "entity_id",
-      "area_parameter": "target_area",
+      "of": "target_area",
       "scope": "area",
       "space": "world"
     },
     "target_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "target_entity_id"
+      "of": "target_entity_id"
     },
     "required_count": {
       "type": "int",
@@ -481,6 +490,9 @@ Supported `type` values:
 - `json`
 - `entity_id`
 - `entity_command_id`
+- `entity_dialogue_id`
+- `visual_id`
+- `animation_id`
 - `area_id`
 - `item_id`
 - `dialogue_path`
@@ -498,15 +510,21 @@ Supported constraints:
 - `items`: item spec for `array`
 - `scope`: `area` or `global`, only for `entity_id`
 - `space`: `world` or `screen`, only for `entity_id`
-- `area_parameter`: names the `area_id` parameter whose selected area should
-  constrain an `entity_id` picker
-- `entity_parameter`: names the `entity_id` parameter whose command list is
-  used for an `entity_command_id`
+- `of`: names one earlier parameter that scopes a dependent picker or
+  validation
 - `asset_kind`: `image`, `audio`, `json`, or `font`, only for `asset_path`
 
-Entity ids are still authored as plain ids. `area_parameter` only tells tools
-and validation which area the id must come from, for cases such as
-`target_area` plus `destination_entity_id` on an area transition.
+`of` points to one earlier compatible parameter. Current compatible scopes are:
+
+- `entity_id` of `area_id`
+- `entity_command_id` of `entity_id`
+- `entity_dialogue_id` of `entity_id`
+- `visual_id` of `entity_id`
+- `animation_id` of `visual_id`
+
+Entity ids are still authored as plain ids. `of` only tells tools and
+validation where a dependent id must come from, for cases such as `target_area`
+plus `destination_entity_id` on an area transition.
 `dialogue_definition` parameters must be JSON objects with a `segments` array,
 using the same dialogue schema as file-backed dialogue JSON.
 
@@ -545,7 +563,6 @@ Current engine-known entity fields:
 - `variables`
 - `persistence`
 - `inventory`
-- `input_map`
 
 Render-field defaults may be omitted from authored entity JSON when they match
 the entity's space:
@@ -780,25 +797,15 @@ Current rules:
 - dialogue selection is stable by name; order-based helpers still store the
   chosen dialogue id back into `variables.active_dialogue`
 
-### Input Map
+### Input Routes
 
-`input_map` is an entity-owned mapping from logical input actions to entity-command names:
-
-```json
-"input_map": {
-  "move_up": "move_up",
-  "move_down": "move_down",
-  "interact": "interact",
-  "menu": "menu"
-}
-```
-
-The engine routes a logical action to an entity through `input_targets`, then uses that entity's `input_map` to find the event name to run.
+Logical input routing is owned by project and area `input_routes`, not by individual entity templates. A route names the logical action, the destination entity, and the entity command that should run on that entity.
 
 ## Project Command Files
 
 Project command files are JSON objects with:
 
+- `inputs: object`
 - `params: string[]`
 - `deferred_param_shapes: object`
 - `commands: command[]`
@@ -807,7 +814,11 @@ Example:
 
 ```json
 {
-  "params": ["target_id"],
+  "inputs": {
+    "target_id": {
+      "type": "entity_id"
+    }
+  },
   "commands": [
     {
       "type": "run_entity_command",
@@ -822,9 +833,74 @@ Current rules:
 - command id is a path-derived typed id from the file path, for example `commands/dialogue/open`
 - file must not declare `id`
 - unknown top-level fields fail project-command validation
+- `inputs` is optional and declares typed project-command parameters for editors and defaults
 - `params` is optional and defaults to `[]`
+- when both `inputs` and `params` are present, `params` must exactly match the `inputs` keys in order
 - `deferred_param_shapes` is optional and defaults to `{}`
 - `commands` is required
+
+Current input types:
+
+- `string`
+- `int`
+- `float`
+- `bool`
+- `enum`
+- `json`
+- `area_id`
+- `entity_id`
+- `item_id`
+- `dialogue_id`
+- `project_command_id`
+- `asset_path`
+- `image_path`
+- `sound_path`
+- `visual_id`
+- `animation_id`
+- `entity_command_id`
+- `entity_dialogue_id`
+
+Input specs may include:
+
+- `type: string`
+- `default: any`
+- `values: string[]` for `enum`
+- `of: string` for scoped ids
+
+`of` points to one earlier compatible input. Current compatible scopes are:
+
+- `visual_id` of `entity_id`
+- `animation_id` of `visual_id`
+- `entity_command_id` of `entity_id`
+- `entity_dialogue_id` of `entity_id`
+
+Example typed animation input chain:
+
+```json
+{
+  "inputs": {
+    "target_entity": {
+      "type": "entity_id"
+    },
+    "visual": {
+      "type": "visual_id",
+      "of": "target_entity"
+    },
+    "animation": {
+      "type": "animation_id",
+      "of": "visual"
+    }
+  },
+  "commands": [
+    {
+      "type": "play_animation",
+      "entity_id": "$target_entity",
+      "visual_id": "$visual",
+      "animation": "$animation"
+    }
+  ]
+}
+```
 
 `deferred_param_shapes` maps a project-command param name to one of these shapes:
 
@@ -1706,8 +1782,7 @@ Debug-only raw key mappings:
 - `]` -> `debug_zoom_in`
 
 These debug actions only matter if:
-- the project maps them through `input_targets`
-- the target entity maps them through `input_map`
+- the project or area maps them through `input_routes`
 - debug inspection is enabled for the project
 
 The world currently knows these default logical actions:
@@ -1718,7 +1793,7 @@ The world currently knows these default logical actions:
 - `interact`
 - `menu`
 
-But entity `input_map` and project/area `input_targets` can also use additional arbitrary action strings.
+Project/area `input_routes` can also use additional arbitrary action strings.
 
 ## Builtin Command Inventory
 
@@ -1883,7 +1958,18 @@ Example movement-oriented command chain:
 
 ```json
 {
-  "params": ["direction", "walk_animation", "idle_animation"],
+  "inputs": {
+    "direction": {
+      "type": "enum",
+      "values": ["up", "down", "left", "right"]
+    },
+    "walk_animation": {
+      "type": "animation_id"
+    },
+    "idle_animation": {
+      "type": "animation_id"
+    }
+  },
   "commands": [
     {
       "type": "play_animation",
@@ -2009,15 +2095,15 @@ Both commands forward any additional fields on the command object into the calle
 
 - `set_entity_command_enabled(entity_id, command_id, enabled, persistent?)`
 - `set_entity_commands_enabled(entity_id, enabled, persistent?)`
-- `set_input_target(action, entity_id?)`
-- `route_inputs_to_entity(entity_id?, actions?)`
+- `set_input_route(action, entity_id?, command_id?)`
 - `push_input_routes(actions?)`
 - `pop_input_routes()`
 
 Notes:
 - `set_entity_command_enabled` targets one named entity command on one entity
 - `set_entity_commands_enabled` gates the entity's command system as a whole
-- `push_input_routes` stores the current routed target ids for the selected actions on a runtime stack
+- `set_input_route` sets one action to run one entity command; leave both `entity_id` and `command_id` unset to restore that action's authored default route
+- `push_input_routes` stores the current routed entity commands for the selected actions on a runtime stack
 - `pop_input_routes` restores the most recently pushed routing snapshot for those actions
 
 ### Area / Save / Game Flow
@@ -2087,7 +2173,7 @@ Notes:
 
 ### Entity State
 
-- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `facing`, `solid`, `pushable`, `weight`, `push_strength`, `collision_push_strength`, `interactable`, `interaction_priority`, `entity_commands_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, `input_map`, `input_map.<action>`, and `visuals.<visual_id>.<field>`
+- `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `facing`, `solid`, `pushable`, `weight`, `push_strength`, `collision_push_strength`, `interactable`, `interaction_priority`, `entity_commands_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, and `visuals.<visual_id>.<field>`
 - `set_visible(entity_id, visible, persistent?)`
 - `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
 - `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes
@@ -2245,7 +2331,6 @@ These fields are currently engine-known and actively interpreted, not just store
 - entity `sort_y_offset`
 - entity `stack_order`
 - entity `color`
-- entity `input_map`
 - entity `visuals`
 
 ### Grid Notes

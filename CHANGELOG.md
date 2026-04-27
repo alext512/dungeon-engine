@@ -4,6 +4,17 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Direct Input Routes
+
+- Replaced authored input routing with `input_routes`, where each logical
+  action maps directly to an `entity_id` and `command_id`
+- Removed the authored `set_input_target` and `route_inputs_to_entity`
+  command surface in favor of `set_input_route`
+- Updated runtime persistence, sample content, editor command helpers, docs,
+  and focused tests for direct entity-command routing
+
+---
+
 ## Camera Command Cleanup
 
 - Replaced the focused authored camera follow command with explicit

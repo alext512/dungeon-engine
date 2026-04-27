@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
 from area_editor.widgets.reference_picker_support import EntityReferencePickerRequest
@@ -24,6 +25,16 @@ class TestCommandListDialog(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._app = QApplication.instance() or QApplication([])
+
+    def doCleanups(self):
+        result = super().doCleanups()
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, (CommandEditorDialog, CommandListDialog, _CommandTypePickerDialog)):
+                widget.close()
+                widget.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QApplication.processEvents()
+        return result
 
     def test_summary_reports_count_and_first_type(self):
         self.assertEqual(
@@ -470,6 +481,130 @@ class TestCommandListDialog(unittest.TestCase):
                 "caller": "$self_id",
             },
         )
+
+    def test_run_project_command_renders_typed_project_inputs(self):
+        def inputs_provider(command_id: str):
+            if command_id != "commands/animate":
+                return None
+            return {
+                "target_entity": {"type": "entity_id", "label": "Target"},
+                "visual": {"type": "visual_id", "of": "target_entity"},
+                "animation": {"type": "animation_id", "of": "visual"},
+                "frame_count": {"type": "int", "default": 4},
+                "wait": {"type": "bool", "default": True},
+                "direction": {
+                    "type": "enum",
+                    "values": ["down", "up"],
+                    "default": "up",
+                },
+            }
+
+        dialog = CommandEditorDialog(project_command_inputs_provider=inputs_provider)
+        self.addCleanup(dialog.close)
+        dialog.load_command(
+            {
+                "type": "run_project_command",
+                "command_id": "commands/animate",
+                "target_entity": "npc_1",
+                "visual": "body",
+                "animation": "talk",
+            }
+        )
+
+        self.assertFalse(dialog._run_project_inputs_note.isHidden())
+        self.assertEqual(
+            set(dialog._run_project_input_fields),
+            {
+                "target_entity",
+                "visual",
+                "animation",
+                "frame_count",
+                "wait",
+                "direction",
+            },
+        )
+
+        command = dialog.command()
+
+        self.assertEqual(command["target_entity"], "npc_1")
+        self.assertEqual(command["visual"], "body")
+        self.assertEqual(command["animation"], "talk")
+        self.assertEqual(command["frame_count"], 4)
+        self.assertIs(command["wait"], True)
+        self.assertEqual(command["direction"], "up")
+
+    def test_run_project_command_scoped_input_pickers_use_parent_inputs(self):
+        def inputs_provider(command_id: str):
+            if command_id != "commands/animate":
+                return None
+            return {
+                "target_entity": {"type": "entity_id"},
+                "visual": {"type": "visual_id", "of": "target_entity"},
+                "animation": {"type": "animation_id", "of": "visual"},
+            }
+
+        seen: list[tuple[str, EntityReferencePickerRequest]] = []
+
+        def visual_picker(current_value: str, request: EntityReferencePickerRequest):
+            seen.append(("visual", request))
+            self.assertEqual(current_value, "")
+            self.assertEqual(request.parameter_values["entity_id"], "npc_1")
+            return "body"
+
+        def animation_picker(current_value: str, request: EntityReferencePickerRequest):
+            seen.append(("animation", request))
+            self.assertEqual(current_value, "")
+            self.assertEqual(request.parameter_values["entity_id"], "npc_1")
+            self.assertEqual(request.parameter_values["visual_id"], "body")
+            return "talk"
+
+        dialog = CommandEditorDialog(
+            project_command_inputs_provider=inputs_provider,
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
+        )
+        self.addCleanup(dialog.close)
+        dialog.load_command(
+            {
+                "type": "run_project_command",
+                "command_id": "commands/animate",
+                "target_entity": "npc_1",
+            }
+        )
+
+        dialog._pick_run_project_visual_input("visual")
+        dialog._pick_run_project_animation_input("animation")
+        command = dialog.command()
+
+        self.assertEqual([kind for kind, _request in seen], ["visual", "animation"])
+        self.assertEqual(command["visual"], "body")
+        self.assertEqual(command["animation"], "talk")
+
+    def test_run_project_command_clears_old_known_inputs_when_command_id_changes(self):
+        def inputs_provider(command_id: str):
+            if command_id == "commands/old":
+                return {"target_entity": {"type": "entity_id"}}
+            if command_id == "commands/new":
+                return {"direction": {"type": "string"}}
+            return None
+
+        dialog = CommandEditorDialog(project_command_inputs_provider=inputs_provider)
+        self.addCleanup(dialog.close)
+        dialog.load_command(
+            {
+                "type": "run_project_command",
+                "command_id": "commands/old",
+                "target_entity": "npc_1",
+            }
+        )
+
+        dialog._project_command_id_edit.setText("commands/new")
+        dialog._run_project_input_fields["direction"]["edit"].setText("left")
+        command = dialog.command()
+
+        self.assertEqual(command["command_id"], "commands/new")
+        self.assertEqual(command["direction"], "left")
+        self.assertNotIn("target_entity", command)
 
     def test_command_editor_builds_run_entity_command_with_advanced_fields(self):
         dialog = CommandEditorDialog()
@@ -1701,6 +1836,48 @@ class TestCommandListDialog(unittest.TestCase):
             },
         )
 
+    def test_command_editor_picks_visual_and_animation_ids(self):
+        requests: dict[str, EntityReferencePickerRequest] = {}
+
+        def visual_picker(_current, request=None):
+            requests["visual"] = request
+            return "body"
+
+        def animation_picker(_current, request=None):
+            requests["animation"] = request
+            return "wave"
+
+        dialog = CommandEditorDialog(
+            visual_picker=visual_picker,
+            animation_picker=animation_picker,
+        )
+        self.addCleanup(dialog.close)
+        dialog.load_command({"type": "play_animation"})
+        dialog._play_animation_entity_id_edit.setText("npc_1")
+
+        dialog._play_animation_visual_id_field.extra_button.click()
+        self.assertEqual(dialog._play_animation_visual_id_field.optional_value(), "body")
+        self.assertEqual(requests["visual"].parameter_spec["type"], "visual_id")
+        self.assertEqual(
+            requests["visual"].parameter_values,
+            {
+                "entity_id": "npc_1",
+                "visual_id": "",
+            },
+        )
+
+        dialog._play_animation_name_pick.click()
+        self.assertEqual(dialog._play_animation_name_edit.text(), "wave")
+        self.assertEqual(requests["animation"].parameter_spec["type"], "animation_id")
+        self.assertEqual(
+            requests["animation"].parameter_values,
+            {
+                "entity_id": "npc_1",
+                "visual_id": "body",
+                "animation": "",
+            },
+        )
+
     def test_command_editor_builds_set_entity_var_command(self):
         dialog = CommandEditorDialog()
         self.addCleanup(dialog.close)
@@ -2260,7 +2437,7 @@ class TestCommandListDialog(unittest.TestCase):
                     current_value="",
                     parameter_spec={
                         "type": "entity_command_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",
@@ -2290,41 +2467,24 @@ class TestCommandListDialog(unittest.TestCase):
             },
         )
 
-    def test_command_editor_builds_set_input_target_command(self):
+    def test_command_editor_builds_set_input_route_command(self):
         dialog = CommandEditorDialog()
         self.addCleanup(dialog.close)
-        dialog.load_command({"type": "set_input_target"})
+        dialog.load_command({"type": "set_input_route"})
 
-        dialog._set_input_target_action_edit.setText("menu")
-        dialog._set_input_target_entity_id_field.set_optional_value("$self_id")
+        dialog._set_input_route_action_edit.setText("menu")
+        dialog._set_input_route_entity_id_edit.setText("$self_id")
+        dialog._set_input_route_command_id_edit.setText("open_menu")
 
         command = dialog.command()
 
         self.assertEqual(
             command,
             {
-                "type": "set_input_target",
+                "type": "set_input_route",
                 "action": "menu",
                 "entity_id": "$self_id",
-            },
-        )
-
-    def test_command_editor_builds_route_inputs_to_entity_command(self):
-        dialog = CommandEditorDialog()
-        self.addCleanup(dialog.close)
-        dialog.load_command({"type": "route_inputs_to_entity"})
-
-        dialog._route_inputs_entity_id_field.set_optional_value("$self_id")
-        dialog._route_inputs_actions_field.set_optional_value("interact, menu")
-
-        command = dialog.command()
-
-        self.assertEqual(
-            command,
-            {
-                "type": "route_inputs_to_entity",
-                "entity_id": "$self_id",
-                "actions": ["interact", "menu"],
+                "command_id": "open_menu",
             },
         )
 
@@ -2620,7 +2780,7 @@ class TestCommandListDialog(unittest.TestCase):
                     current_value="intro",
                     parameter_spec={
                         "type": "entity_dialogue_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",
@@ -2668,7 +2828,7 @@ class TestCommandListDialog(unittest.TestCase):
                     current_value="dialogue_1",
                     parameter_spec={
                         "type": "entity_dialogue_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",
@@ -2717,7 +2877,7 @@ class TestCommandListDialog(unittest.TestCase):
                     current_value="interact",
                     parameter_spec={
                         "type": "entity_command_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",
@@ -2765,7 +2925,7 @@ class TestCommandListDialog(unittest.TestCase):
                     current_value="interact",
                     parameter_spec={
                         "type": "entity_command_id",
-                        "entity_parameter": "entity_id",
+                        "of": "entity_id",
                     },
                     current_area_id=None,
                     entity_id="sign_1",

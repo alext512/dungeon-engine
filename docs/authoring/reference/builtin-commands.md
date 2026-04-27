@@ -85,8 +85,7 @@ When a called flow needs referenced entities, author `entity_refs` on the caller
 
 - `set_entity_command_enabled` enables or disables one named entity command.
 - `set_entity_commands_enabled` gates the entity command system as a whole.
-- `set_input_target` routes one logical action to one entity.
-- `route_inputs_to_entity` routes many actions to one entity at once.
+- `set_input_route` routes one logical action to one specific entity command.
 - `push_input_routes` stores the current routing for later restore.
 - `pop_input_routes` restores the most recently pushed routing snapshot.
 

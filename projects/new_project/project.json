@@ -42,6 +42,6 @@
     }
   ],
   "startup_area": "areas/title_screen",
-  "input_targets": {},
+  "input_routes": {},
   "debug_inspection_enabled": true
 }

@@ -56,16 +56,16 @@ Input should request top-level commands.
 Example:
 
 - pressing Up does not directly move an entity
-- it queues a `run_entity_command` request for the currently routed `move_up` target's configured entity command
+- it queues a `run_entity_command` request for the entity command routed to `move_up`
 - that entity command can call sub-commands or services to set facing, check collision, push a block, animate movement, and fire enter/leave triggers
 
 Control routing is layered:
 
-- the project can also define default `input_targets`
-- an area may override `input_targets`
+- the project can define default `input_routes`
+- an area may override `input_routes`
 - actions omitted by both stay unrouted until runtime commands assign them
-- the routed entity for each logical action may define its own `input_map`
-- runtime commands may reroute one action or many through `set_input_target` / `route_inputs_to_entity`
+- each route names both the destination entity and the entity command to run
+- runtime commands may reroute one action through `set_input_route`
 - modal controllers may snapshot and restore borrowed routes through `push_input_routes` / `pop_input_routes`
 - the project may enable or disable debug inspection controls such as zoom/pause/step through `project.json`
 

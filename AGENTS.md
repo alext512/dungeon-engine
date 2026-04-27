@@ -111,7 +111,7 @@ dungeon_engine/
 
 - **GID-based tilemaps**: Tile grids store integers, not strings. GID `0` = empty. Each tileset has a `firstgid`; a tile's local frame = `gid - firstgid`. See `area.py` for `resolve_gid()`.
 - **Command pattern**: All gameplay goes through the command runner. Input queues commands; it never mutates gameplay state directly.
-- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `command_paths`, `item_paths`, `shared_variables_path`, and project-level settings such as `global_entities` and `input_targets`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
+- **Project manifests**: `project.json` defines `entity_template_paths`, `asset_paths`, `area_paths`, `command_paths`, `item_paths`, `shared_variables_path`, and project-level settings such as `global_entities` and `input_routes`, so the engine stays independent from project content even when a project is versioned inside this repo under `projects/`.
 - **Separate project-layout interpreters**: Runtime code prefers `dungeon_engine/project_context.py`, while the external editor prefers `tools/area_editor/area_editor/project_io/project_manifest.py`. They intentionally stay separate and are kept aligned with parity tests rather than by importing each other.
 - **Path-derived reusable IDs**: Areas, entity templates, and commands derive identity from their path under the configured search roots instead of authored `id` fields.
 - **Project JSON data**: Reusable dialogue/menu data is now just ordinary project-relative JSON. The sample project keeps it under `dialogues/`, but that folder is conventional rather than a manifest-indexed content category.

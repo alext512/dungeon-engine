@@ -124,12 +124,27 @@ Example:
     }
   ],
   "startup_area": "areas/title_screen",
-  "input_targets": {
-    "menu": "pause_controller",
-    "debug_toggle_pause": "debug_controller",
-    "debug_step_tick": "debug_controller",
-    "debug_zoom_in": "debug_controller",
-    "debug_zoom_out": "debug_controller"
+  "input_routes": {
+    "menu": {
+      "entity_id": "pause_controller",
+      "command_id": "open_menu"
+    },
+    "debug_toggle_pause": {
+      "entity_id": "debug_controller",
+      "command_id": "toggle_pause"
+    },
+    "debug_step_tick": {
+      "entity_id": "debug_controller",
+      "command_id": "step_tick"
+    },
+    "debug_zoom_in": {
+      "entity_id": "debug_controller",
+      "command_id": "zoom_in"
+    },
+    "debug_zoom_out": {
+      "entity_id": "debug_controller",
+      "command_id": "zoom_out"
+    }
   },
   "debug_inspection_enabled": true,
   "command_runtime": {
@@ -159,8 +174,8 @@ Example:
   Entity instances that should exist in every runtime world.
 - `startup_area`
   Default typed area id to open when only the project is selected, for example `areas/title_screen`.
-- `input_targets`
-  Default routed entity per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
+- `input_routes`
+  Default entity command per logical input action. Areas can override specific actions, and any action omitted by both the project and the area stays unrouted until runtime commands change it.
 - `save_dir`
   Directory for save files. Defaults to `saves`.
 - `command_runtime`
@@ -280,12 +295,27 @@ Example structure:
       "entity_id": "player"
     }
   },
-  "input_targets": {
-    "interact": "player",
-    "move_up": "player",
-    "move_down": "player",
-    "move_left": "player",
-    "move_right": "player"
+  "input_routes": {
+    "interact": {
+      "entity_id": "player",
+      "command_id": "interact"
+    },
+    "move_up": {
+      "entity_id": "player",
+      "command_id": "move_up"
+    },
+    "move_down": {
+      "entity_id": "player",
+      "command_id": "move_down"
+    },
+    "move_left": {
+      "entity_id": "player",
+      "command_id": "move_left"
+    },
+    "move_right": {
+      "entity_id": "player",
+      "command_id": "move_right"
+    }
   },
   "variables": {},
   "tilesets": [],
@@ -304,8 +334,8 @@ Example structure:
   Optional named destinations for area-transfer flows.
 - `camera`
   Optional authored camera defaults for this area.
-- `input_targets`
-  Optional per-area overrides for which entity receives each logical input action.
+- `input_routes`
+  Optional per-area overrides for which entity command receives each logical input action.
 - `variables`
   Mutable area-level variables.
 - `tilesets`
@@ -466,7 +496,7 @@ browsed by type in the editor:
     },
     "destination_entity_id": {
       "type": "entity_id",
-      "area_parameter": "target_area",
+      "of": "target_area",
       "scope": "area",
       "space": "world"
     },
@@ -477,7 +507,7 @@ browsed by type in the editor:
     },
     "target_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "target_entity_id"
+      "of": "target_entity_id"
     },
     "dialogue_definition": {
       "type": "dialogue_definition"
@@ -490,10 +520,9 @@ browsed by type in the editor:
 ```
 
 Use `scope` and `space` on `entity_id` to avoid picking the wrong kind of
-entity. Use `entity_parameter` on `entity_command_id` to say which selected
-entity owns that command. Use `area_parameter` on `entity_id` only when another
-parameter, such as `target_area`, decides which area the entity id must come
-from.
+entity. Use `of` when one parameter depends on another, such as
+`entity_command_id` of a selected `entity_id`, or an `entity_id` that must come
+from a selected `area_id`.
 
 You usually omit render-layering fields on placed entities unless that specific
 instance needs a non-default override. Default authored entity render values are:
@@ -574,7 +603,6 @@ For named entity commands:
 - `variables`
 - `dialogues`
 - `inventory`
-- `input_map`
 - `entity_commands`
 - `facing`
 - `solid`
@@ -864,29 +892,15 @@ Global entity state is stored separately from area state and is not reset by are
 
 In practice, author global service/controller entities in `project.json`.
 
-### `input_map`
-
-`input_map` lets an entity decide which entity command handles a logical action.
-
-Example:
-
-```json
-{
-  "input_map": {
-    "interact": "interact"
-  }
-}
-```
-
 ### How Input Routing Works
 
-Each logical action is routed independently through three layers:
+Each logical action is routed independently:
 
 1. the input handler resolves a logical action such as `move_up`, `interact`, or `menu`
-2. the world chooses the routed entity for that action from the current `input_targets`, using project defaults plus any area overrides
-3. that routed entity's `input_map` decides which entity command to run for that action
-4. if there is no mapping for that action, nothing is dispatched
-5. the runner enqueues `run_entity_command` on the routed entity
+2. the world looks up the current route for that action from `input_routes`, using project defaults plus any area overrides
+3. the route names both the target `entity_id` and `command_id`
+4. if there is no route for that action, nothing is dispatched
+5. the runner enqueues `run_entity_command` on the routed entity command
 
 This is what allows dialogue controllers, menus, and other service entities to temporarily own only the inputs they need without a single active-entity focus model.
 
@@ -895,7 +909,7 @@ If an action is absent from both the project and the area routing maps, it is si
 For modal flows, the intended pattern is:
 
 1. `push_input_routes` to save the current routing
-2. reroute the borrowed actions to the modal controller
+2. call `set_input_route` for each borrowed action so it points to the modal controller's matching command
 3. later `pop_input_routes` to restore the exact previous routes
 
 The route stack is runtime-only control state. It is not saved.
@@ -908,7 +922,18 @@ Example:
 
 ```json
 {
-  "params": ["offset_x", "offset_y", "frames_needed"],
+  "inputs": {
+    "offset_x": {
+      "type": "int"
+    },
+    "offset_y": {
+      "type": "int"
+    },
+    "frames_needed": {
+      "type": "int",
+      "default": 8
+    }
+  },
   "commands": [
     {
       "type": "set_entity_grid_position",
@@ -945,7 +970,38 @@ Notes:
 - project command ids are path-derived typed ids from file location, for example `commands/walk_one_tile`
 - do not author a top-level `id`
 - use `run_project_command` to call them
+- prefer `inputs` for typed parameters that editor builders can show as friendly fields
+- legacy `params` lists are still supported for simple string-only parameters
+- an input can use one `of` parent when its values belong to an earlier input, such as `animation` of `visual`
 - declare `deferred_param_shapes` when a specific parameter should remain raw data until a later explicit execution step, such as dialogue hook command arrays
+
+Example with picker-friendly scoped inputs:
+
+```json
+{
+  "inputs": {
+    "target_entity": {
+      "type": "entity_id"
+    },
+    "visual": {
+      "type": "visual_id",
+      "of": "target_entity"
+    },
+    "animation": {
+      "type": "animation_id",
+      "of": "visual"
+    }
+  },
+  "commands": [
+    {
+      "type": "play_animation",
+      "entity_id": "$target_entity",
+      "visual_id": "$visual",
+      "animation": "$animation"
+    }
+  ]
+}
+```
 
 Example with deferred hook params:
 
@@ -1420,7 +1476,7 @@ Controller-authored pattern:
 
 Detailed lifecycle for the controller-authored pattern:
 
-1. when opening an outermost session, the controller borrows the needed logical inputs through `push_input_routes` and `route_inputs_to_entity`
+1. when opening an outermost session, the controller borrows the needed logical inputs through `push_input_routes` and `set_input_route`
 2. the controller loads ordinary JSON dialogue data into entity variables and resets its current segment/page/choice state
 3. caller-supplied `dialogue_on_start` commands run with those borrowed routes already in place
 4. controller-owned commands derive visible text/options and render them through the screen manager
@@ -1714,7 +1770,7 @@ The standard contract uses:
 
 A typical simple player flow is now:
 
-1. The player entity's `input_map` maps `move_up` to `move_up`.
+1. The current `input_routes.move_up` route points to the player entity's `move_up` command.
 2. That entity command calls `step_in_direction`.
 3. The engine:
    - resolves the actor's facing
@@ -2093,7 +2149,7 @@ Transition trigger example:
     "destination_entity_id": {
       "type": "entity_id",
       "required": true,
-      "area_parameter": "target_area",
+      "of": "target_area",
       "scope": "area",
       "space": "world"
     },

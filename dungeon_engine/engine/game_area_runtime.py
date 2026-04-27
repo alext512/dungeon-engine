@@ -56,7 +56,7 @@ class GameAreaRuntimeMixin:
         area_path: Path | str,
         *,
         transferred_entities: list | None = None,
-        restored_input_targets: dict[str, str] | None = None,
+        restored_input_routes: dict[str, dict[str, str]] | None = None,
         transition_request: AreaTransitionRequest | None = None,
     ) -> None:
         """Load one authored area plus any persistent overrides and rebuild runtime systems."""
@@ -127,8 +127,8 @@ class GameAreaRuntimeMixin:
             include_transient=False,
             force_entity_ids=transferred_entity_ids,
         )
-        if restored_input_targets:
-            self.world.set_input_targets(restored_input_targets, replace=False)
+        if restored_input_routes:
+            self.world.set_input_routes(restored_input_routes, replace=False)
         self._apply_transition_camera_follow(
             None if transition_request is None else transition_request.camera_follow
         )
@@ -406,11 +406,11 @@ class GameAreaRuntimeMixin:
                 destination_area_id=request.area_id,
                 tile_size=self.area.tile_size,
             )
-        restored_input_targets = self._capture_transition_input_targets(transferred_entities)
+        restored_input_routes = self._capture_transition_input_routes(transferred_entities)
         self._load_area_runtime(
             resolved_area_path,
             transferred_entities=transferred_entities,
-            restored_input_targets=restored_input_targets,
+            restored_input_routes=restored_input_routes,
             transition_request=request,
         )
 
@@ -434,7 +434,7 @@ class GameAreaRuntimeMixin:
             transferred_entities.append(transferred_entity)
         return transferred_entities
 
-    def _capture_transition_input_targets(self, transferred_entities: list) -> dict[str, str]:
+    def _capture_transition_input_routes(self, transferred_entities: list) -> dict[str, dict[str, str]]:
         """Carry routed actions that currently target transferred entities into the next area."""
         transferred_ids = {
             entity.entity_id
@@ -442,11 +442,16 @@ class GameAreaRuntimeMixin:
         }
         if not transferred_ids:
             return {}
-        preserved_targets: dict[str, str] = {}
-        for action, target_id in self.world.input_targets.items():
-            if target_id in transferred_ids:
-                preserved_targets[action] = str(target_id)
-        return preserved_targets
+        preserved_routes: dict[str, dict[str, str]] = {}
+        for action, route in self.world.input_routes.items():
+            target_id = str(route.get("entity_id", "")).strip()
+            command_id = str(route.get("command_id", "")).strip()
+            if target_id in transferred_ids and command_id:
+                preserved_routes[action] = {
+                    "entity_id": target_id,
+                    "command_id": command_id,
+                }
+        return preserved_routes
 
     def _install_transferred_entities(
         self,

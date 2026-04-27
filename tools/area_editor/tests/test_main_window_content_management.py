@@ -11,15 +11,17 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMenu
 
 from area_editor.app.main_window import MainWindow
 from area_editor.json_io import DEFAULT_JSON5_FILE_HEADER, load_json_data
 from area_editor.widgets.document_tab_widget import ContentType
 from area_editor.widgets.json_viewer_widget import JsonViewerWidget
 from main_window_test_support import (
+    create_entity_paint_project,
     create_entity_reference_project,
     create_project_content_project,
+    create_reference_rich_project,
     find_tree_item_by_folder_path,
     panel_file_entries,
     panel_folder_entries,
@@ -33,6 +35,8 @@ class TestMainWindowContentManagement(unittest.TestCase):
 
     _create_project_content_project = staticmethod(create_project_content_project)
     _create_entity_reference_project = staticmethod(create_entity_reference_project)
+    _create_entity_paint_project = staticmethod(create_entity_paint_project)
+    _create_reference_rich_project = staticmethod(create_reference_rich_project)
     _panel_file_entries = staticmethod(panel_file_entries)
     _panel_folder_entries = staticmethod(panel_folder_entries)
     _find_tree_item_by_folder_path = staticmethod(find_tree_item_by_folder_path)
@@ -103,6 +107,132 @@ class TestMainWindowContentManagement(unittest.TestCase):
                 self._panel_file_entries(window._area_panel),
             )
 
+    def test_duplicate_item_action_creates_sibling_copy_and_opens_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            source_path = project_file.parent / "items" / "apple.json"
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="apple_copy",
+            ):
+                window._on_duplicate_project_content(
+                    ContentType.ITEM,
+                    "items/apple",
+                    source_path,
+                )
+
+            new_path = project_file.parent / "items" / "apple_copy.json"
+            self.assertTrue(new_path.is_file())
+            self.assertEqual(
+                new_path.read_text(encoding="utf-8"),
+                source_path.read_text(encoding="utf-8"),
+            )
+            self.assertEqual(window._tab_widget.active_info().content_id, "items/apple_copy")
+            self.assertIn(
+                ("items/apple_copy", new_path),
+                self._panel_file_entries(window._item_panel),
+            )
+
+    def test_duplicate_template_action_creates_sibling_copy_and_selects_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_entity_paint_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            source_path = project_file.parent / "entity_templates" / "npc.json"
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="npc_copy",
+            ):
+                window._on_duplicate_project_content(
+                    ContentType.ENTITY_TEMPLATE,
+                    "entity_templates/npc",
+                    source_path,
+                )
+
+            new_path = project_file.parent / "entity_templates" / "npc_copy.json"
+            self.assertTrue(new_path.is_file())
+            self.assertEqual(window._tab_widget.active_info().content_id, "entity_templates/npc_copy")
+            self.assertIn(
+                ("entity_templates/npc_copy", new_path),
+                self._panel_file_entries(window._template_panel),
+            )
+
+    def test_duplicate_project_command_action_creates_sibling_copy_and_opens_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            source_path = project / "commands" / "system" / "do_thing.json"
+            with patch.object(
+                window,
+                "_prompt_content_relative_name",
+                return_value="system/do_thing_copy",
+            ):
+                window._on_duplicate_project_content(
+                    ContentType.NAMED_COMMAND,
+                    "commands/system/do_thing",
+                    source_path,
+                )
+
+            new_path = project / "commands" / "system" / "do_thing_copy.json"
+            self.assertTrue(new_path.is_file())
+            self.assertEqual(
+                new_path.read_text(encoding="utf-8"),
+                source_path.read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                window._tab_widget.active_info().content_id,
+                "commands/system/do_thing_copy",
+            )
+            self.assertIn(
+                ("commands/system/do_thing_copy", new_path),
+                self._panel_file_entries(window._command_panel),
+            )
+
+    def test_file_backed_context_menus_include_duplicate_action(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_reference_rich_project(Path(tmp))
+            project = project_file.parent
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            menu_cases = [
+                (
+                    window._populate_item_context_menu,
+                    "items/apple",
+                    project / "items" / "apple.json",
+                ),
+                (
+                    window._populate_dialogue_context_menu,
+                    "dialogues/system/prompt",
+                    project / "dialogues" / "system" / "prompt.json",
+                ),
+                (
+                    window._populate_command_context_menu,
+                    "commands/system/do_thing",
+                    project / "commands" / "system" / "do_thing.json",
+                ),
+            ]
+            for populate, content_id, file_path in menu_cases:
+                menu = QMenu()
+                populate(menu, content_id, file_path)
+                self.assertIn(
+                    "Duplicate...",
+                    [action.text() for action in menu.actions() if not action.isSeparator()],
+                )
+
     def test_area_context_menu_can_open_raw_json_tab(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project_content_project(Path(tmp))
@@ -151,7 +281,7 @@ class TestMainWindowContentManagement(unittest.TestCase):
 
             self.assertEqual(window._area_panel._open_action_label_provider("areas/demo", area_path), "Open Area")
             self.assertEqual(window._dialogue_panel._open_action_label_provider("dialogues/system/prompt", dialogue_path), "Open Raw JSON")
-            self.assertEqual(window._command_panel._open_action_label_provider("commands/system/do_thing", command_path), "Open Raw JSON")
+            self.assertEqual(window._command_panel._open_action_label_provider("commands/system/do_thing", command_path), "Edit Command...")
             self.assertEqual(window._asset_panel._open_action_label_provider("base.png", asset_png), "Open")
             self.assertEqual(window._asset_panel._open_action_label_provider("base.json", asset_json), "Open Raw JSON")
 
@@ -203,7 +333,8 @@ class TestMainWindowContentManagement(unittest.TestCase):
             self.assertNotEqual(switch["id"], "switch_a")
             self.assertNotEqual(relay["id"], "relay")
             self.assertEqual(saved["camera"]["follow"]["entity_id"], switch["id"])
-            self.assertEqual(saved["input_targets"]["interact"], switch["id"])
+            self.assertEqual(saved["input_routes"]["interact"]["entity_id"], switch["id"])
+            self.assertEqual(saved["input_routes"]["interact"]["command_id"], "interact")
             self.assertEqual(relay["target_id"], switch["id"])
             self.assertEqual(relay["source_entity_id"], switch["id"])
             self.assertEqual(relay["entity_ids"], [switch["id"], "dialogue_controller"])
@@ -231,7 +362,7 @@ class TestMainWindowContentManagement(unittest.TestCase):
             self.assertEqual(saved["entities"], [])
             self.assertEqual(saved.get("variables"), {})
             self.assertNotIn("camera", saved)
-            self.assertNotIn("input_targets", saved)
+            self.assertNotIn("input_routes", saved)
             self.assertNotIn("entry_points", saved)
             self.assertNotIn("enter_commands", saved)
 

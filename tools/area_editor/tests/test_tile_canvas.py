@@ -60,7 +60,7 @@ def _make_area() -> AreaDocument:
         entry_points={},
         entities=[],
         camera={},
-        input_targets={},
+        input_routes={},
         variables={},
         enter_commands=[],
     )
@@ -181,7 +181,7 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
                 )
             ],
             camera={},
-            input_targets={},
+            input_routes={},
             variables={},
             enter_commands=[],
         )
@@ -800,6 +800,29 @@ class TestTileCanvasCellFlagEditing(unittest.TestCase):
 
         self.assertTrue(handled)
         self.assertEqual(requested, [(("npc_2", "npc_1"), (8, 8))])
+
+    def test_select_mode_right_click_empty_cell_requests_cell_context_menu(self):
+        area = _make_area()
+        canvas = TileCanvas()
+        catalog = TilesetCatalog(AssetResolver([]))
+        canvas.set_area(area, catalog, None)
+        canvas.set_select_mode(True)
+
+        requested: list[tuple[int, int, tuple[int, int]]] = []
+        canvas.cell_context_menu_requested.connect(
+            lambda col, row, pos: requested.append((col, row, (pos.x(), pos.y())))
+        )
+        event = _make_mouse_event(
+            QMouseEvent.Type.MouseButtonPress,
+            QPointF(24, 8),
+            button=Qt.MouseButton.RightButton,
+        )
+
+        with patch.object(canvas, "mapToScene", return_value=QPointF(24, 8)):
+            handled = canvas._handle_edit_pointer_event(event, Qt.MouseButton.RightButton)
+
+        self.assertTrue(handled)
+        self.assertEqual(requested, [(1, 0, (24, 8))])
 
     def test_entity_brush_erase_requests_delete_picker_for_stacked_entities(self):
         area = _make_area()

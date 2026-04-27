@@ -11,9 +11,11 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QTableWidgetItem
+from PySide6.QtCore import Qt
 
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
+from area_editor.widgets.entity_visuals_editor import VisualDefinitionDialog
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -26,7 +28,7 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
     def setUpClass(cls):
         cls._app = QApplication.instance() or QApplication([])
 
-    def test_invalid_input_map_uses_warning_and_preserves_original_value(self) -> None:
+    def test_legacy_input_map_is_hidden_and_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             template_path = Path(tmp) / "console.json"
             _write_json(
@@ -44,7 +46,7 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
             self.addCleanup(widget.close)
             widget.set_editing_enabled(True)
 
-            self.assertFalse(widget.fields_editor._input_map_warning.isHidden())
+            self.assertTrue(widget.fields_editor._input_map_warning.isHidden())
             self.assertTrue(widget.fields_editor._input_map_text.isReadOnly())
 
             widget.save_to_file()
@@ -187,6 +189,209 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                         "dialogue_definition": {"segments": []},
                     }
                 },
+            )
+
+    def test_invalid_visuals_uses_warning_and_preserves_original_value(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(
+                template_path,
+                {
+                    "visuals": ["not an object"],
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            self.assertFalse(widget.fields_editor._visuals_warning.isHidden())
+            self.assertFalse(widget.fields_editor._visuals_editor._editing_enabled)
+
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["visuals"], ["not an object"])
+
+    def test_structured_fields_can_update_visuals_without_raw_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(template_path, {"visuals": []})
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            visuals = widget.fields_editor._visuals_editor
+            with patch.object(
+                visuals,
+                "_open_visual_dialog",
+                return_value={
+                    "id": "body",
+                    "path": "assets/project/sprites/player.png",
+                    "frame_width": "$frame_width",
+                    "frame_height": 16,
+                    "frames": [0, 1, 2],
+                    "default_animation": "idle_down",
+                    "default_animation_by_facing": {
+                        "up": "idle_up",
+                        "down": "idle_down",
+                    },
+                    "animation_fps": 8,
+                    "animate_when_moving": True,
+                    "flip_x": False,
+                    "visible": True,
+                    "tint": [255, 240, 200],
+                    "offset_x": -1,
+                    "offset_y": 2,
+                    "draw_order": 3,
+                    "animations": {
+                        "idle_down": {"frames": [0]},
+                        "walk_down": {
+                            "frames": [0, 1, 2],
+                            "preserve_phase": True,
+                        },
+                    },
+                },
+            ):
+                visuals._add_visual_after(None)
+
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["visuals"],
+                [
+                    {
+                        "id": "body",
+                        "path": "assets/project/sprites/player.png",
+                        "frame_width": "$frame_width",
+                        "frame_height": 16,
+                        "frames": [0, 1, 2],
+                        "default_animation": "idle_down",
+                        "default_animation_by_facing": {
+                            "up": "idle_up",
+                            "down": "idle_down",
+                        },
+                        "animation_fps": 8,
+                        "animate_when_moving": True,
+                        "flip_x": False,
+                        "visible": True,
+                        "tint": [255, 240, 200],
+                        "offset_x": -1,
+                        "offset_y": 2,
+                        "draw_order": 3,
+                        "animations": {
+                            "idle_down": {"frames": [0]},
+                            "walk_down": {
+                                "frames": [0, 1, 2],
+                                "preserve_phase": True,
+                            },
+                        },
+                    }
+                ],
+            )
+
+    def test_visual_definition_dialog_builds_common_visual_fields(self) -> None:
+        dialog = VisualDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_visual({})
+
+        dialog._id_edit.setText("body")
+        dialog._path_edit.setText("assets/project/sprites/player.png")
+        dialog._frame_width_edit.setText("$frame_width")
+        dialog._frame_height_edit.setText("16")
+        dialog._frames_edit.setText("0, 1, 2")
+        dialog._default_animation_edit.setText("idle_down")
+        dialog._facing_edits["down"].setText("idle_down")
+        dialog._facing_edits["up"].setText("idle_up")
+        dialog._animation_fps_edit.setText("8")
+        dialog._animate_when_moving_check.setCheckState(Qt.CheckState.Checked)
+        dialog._flip_x_check.setCheckState(Qt.CheckState.Unchecked)
+        dialog._visible_check.setCheckState(Qt.CheckState.Checked)
+        dialog._tint_edit.setText("255, 240, 200")
+        dialog._offset_x_edit.setText("-1")
+        dialog._offset_y_edit.setText("2")
+        dialog._draw_order_edit.setText("3")
+        dialog._visual["animations"] = {
+            "idle_down": {"frames": [0]},
+            "walk_down": {"frames": [0, 1, 2], "preserve_phase": True},
+        }
+
+        self.assertEqual(
+            dialog.visual(),
+            {
+                "id": "body",
+                "path": "assets/project/sprites/player.png",
+                "frame_width": "$frame_width",
+                "frame_height": 16,
+                "frames": [0, 1, 2],
+                "default_animation": "idle_down",
+                "default_animation_by_facing": {
+                    "up": "idle_up",
+                    "down": "idle_down",
+                },
+                "animation_fps": 8,
+                "animate_when_moving": True,
+                "flip_x": False,
+                "visible": True,
+                "tint": [255, 240, 200],
+                "offset_x": -1,
+                "offset_y": 2,
+                "draw_order": 3,
+                "animations": {
+                    "idle_down": {"frames": [0]},
+                    "walk_down": {
+                        "frames": [0, 1, 2],
+                        "preserve_phase": True,
+                    },
+                },
+            },
+        )
+
+    def test_visuals_list_uses_context_menu_and_drag_reorder_pattern(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(
+                template_path,
+                {
+                    "visuals": [
+                        {"id": "main", "path": "main.png"},
+                        {"id": "shadow", "path": "shadow.png"},
+                        {"id": "spark", "path": "spark.png"},
+                    ],
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            visuals = widget.fields_editor._visuals_editor
+            self.assertEqual(
+                visuals._list.contextMenuPolicy(),
+                Qt.ContextMenuPolicy.CustomContextMenu,
+            )
+            self.assertTrue(visuals._list.dragEnabled())
+
+            visuals._duplicate_visual_at(1)
+            visuals._remove_visual_at(0)
+            visuals._on_visual_order_changed([2, 0, 1])
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [visual["id"] for visual in saved["visuals"]],
+                ["spark", "shadow", "shadow_copy"],
             )
 
     def test_structured_fields_can_update_named_dialogues_and_active_dialogue(self) -> None:
@@ -478,13 +683,16 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
             self.assertNotIn("render_order", saved)
             self.assertNotIn("y_sort", saved)
 
-    def test_structured_fields_can_update_input_map(self) -> None:
+    def test_structured_fields_preserve_existing_input_map(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             template_path = Path(tmp) / "console.json"
             _write_json(
                 template_path,
                 {
                     "visuals": [],
+                    "input_map": {
+                        "interact": "interact",
+                    },
                     "entity_commands": {
                         "interact": {
                             "enabled": True,
@@ -506,9 +714,7 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
             self.addCleanup(widget.close)
             widget.set_editing_enabled(True)
 
-            widget.fields_editor._input_map_text.setPlainText(
-                '{\n  "interact": "interact",\n  "menu": "open_menu"\n}'
-            )
+            widget.fields_editor._kind_edit.setText("console_terminal")
             widget.save_to_file()
 
             saved = json.loads(template_path.read_text(encoding="utf-8"))
@@ -517,9 +723,9 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                 saved["input_map"],
                 {
                     "interact": "interact",
-                    "menu": "open_menu",
                 },
             )
+            self.assertEqual(saved["kind"], "console_terminal")
             self.assertEqual(
                 saved["entity_commands"],
                 {
@@ -534,6 +740,25 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                     }
                 },
             )
+
+    def test_input_map_table_is_not_written_by_structured_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(template_path, {"visuals": []})
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            widget.fields_editor._kind_edit.setText("console")
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertNotIn("input_map", saved)
+            self.assertEqual(saved["kind"], "console")
 
     def test_structured_fields_can_update_entity_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -588,6 +813,50 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                         "enabled": False,
                         "commands": [],
                     },
+                },
+            )
+
+    def test_entity_command_controls_can_add_named_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(template_path, {"visuals": []})
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+            fields = widget.fields_editor
+
+            with patch.object(
+                fields,
+                "_prompt_entity_command_name",
+                return_value="interact",
+            ), patch.object(
+                fields,
+                "_open_entity_command_list_dialog",
+                return_value=[
+                    {
+                        "type": "run_project_command",
+                        "command_id": "commands/system/open_gate",
+                    }
+                ],
+            ):
+                fields._on_add_entity_command_clicked()
+
+            widget.save_to_file()
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(
+                saved["entity_commands"],
+                {
+                    "interact": [
+                        {
+                            "type": "run_project_command",
+                            "command_id": "commands/system/open_gate",
+                        }
+                    ],
                 },
             )
 
@@ -654,6 +923,152 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                         ],
                     }
                 },
+            )
+
+    def test_inventory_stack_table_can_update_stacks_without_raw_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(template_path, {"visuals": []})
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            fields = widget.fields_editor
+            fields._inventory_check.setChecked(True)
+            fields._inventory_max_stacks_spin.setValue(2)
+            fields._on_add_inventory_stack_clicked()
+            fields._inventory_stacks_table.setItem(
+                0,
+                0,
+                QTableWidgetItem("items/copper_key"),
+            )
+            fields._inventory_stacks_table.setItem(0, 1, QTableWidgetItem("1"))
+            fields._on_add_inventory_stack_clicked()
+            fields._inventory_stacks_table.setItem(
+                1,
+                0,
+                QTableWidgetItem("items/light_orb"),
+            )
+            fields._inventory_stacks_table.setItem(1, 1, QTableWidgetItem("2"))
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["inventory"],
+                {
+                    "max_stacks": 2,
+                    "stacks": [
+                        {"item_id": "items/copper_key", "quantity": 1},
+                        {"item_id": "items/light_orb", "quantity": 2},
+                    ],
+                },
+            )
+
+    def test_persistence_table_can_update_variable_overrides_without_raw_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(
+                template_path,
+                {
+                    "variables": {
+                        "shake_timer": 0,
+                        "times_pushed": 0,
+                    },
+                    "visuals": [],
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            fields = widget.fields_editor
+            fields._entity_state_check.setChecked(True)
+
+            self.assertEqual(fields._persistence_variables_table.rowCount(), 2)
+            self.assertEqual(
+                [
+                    fields._persistence_variables_table.item(row, 0).text()
+                    for row in range(fields._persistence_variables_table.rowCount())
+                ],
+                ["shake_timer", "times_pushed"],
+            )
+
+            shake_override = fields._persistence_variables_table.item(0, 1)
+            self.assertIsNotNone(shake_override)
+            shake_override.setCheckState(Qt.CheckState.Checked)
+            shake_combo = fields._persistence_variables_table.cellWidget(0, 2)
+            shake_combo.setCurrentIndex(shake_combo.findData(False))
+
+            pushed_override = fields._persistence_variables_table.item(1, 1)
+            self.assertIsNotNone(pushed_override)
+            pushed_override.setCheckState(Qt.CheckState.Checked)
+            pushed_combo = fields._persistence_variables_table.cellWidget(1, 2)
+            pushed_combo.setCurrentIndex(pushed_combo.findData(True))
+
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["persistence"],
+                {
+                    "entity_state": True,
+                    "variables": {
+                        "shake_timer": False,
+                        "times_pushed": True,
+                    },
+                },
+            )
+
+    def test_persistence_table_tracks_variables_from_basics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(template_path, {"visuals": []})
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            fields = widget.fields_editor
+            fields._variables_text.setPlainText(
+                '{\n  "opened": false,\n  "flash_timer": 0\n}'
+            )
+
+            self.assertEqual(fields._persistence_variables_table.rowCount(), 2)
+            self.assertEqual(
+                [
+                    fields._persistence_variables_table.item(row, 0).text()
+                    for row in range(fields._persistence_variables_table.rowCount())
+                ],
+                ["opened", "flash_timer"],
+            )
+            for row in range(fields._persistence_variables_table.rowCount()):
+                self.assertEqual(
+                    fields._persistence_variables_table.item(row, 1).checkState(),
+                    Qt.CheckState.Unchecked,
+                )
+
+            opened_override = fields._persistence_variables_table.item(0, 1)
+            self.assertIsNotNone(opened_override)
+            opened_override.setCheckState(Qt.CheckState.Checked)
+            opened_combo = fields._persistence_variables_table.cellWidget(0, 2)
+            opened_combo.setCurrentIndex(opened_combo.findData(True))
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["persistence"],
+                {"entity_state": False, "variables": {"opened": True}},
             )
 
     def test_structured_fields_preserve_unmanaged_engine_owned_fields(self) -> None:

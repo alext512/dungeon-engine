@@ -9,6 +9,8 @@ from types import SimpleNamespace
 import run_game
 from dungeon_engine.commands.library import (
     ProjectCommandValidationError,
+    instantiate_project_command_commands,
+    load_project_command_definition,
     validate_project_commands,
 )
 from dungeon_engine.project_context import load_project
@@ -33,12 +35,12 @@ def _write_json(path: Path, payload: object) -> None:
 def _minimal_area() -> dict[str, object]:
     return {
         "tile_size": 16,
-        "input_targets": {
-            "move_up": "player",
-            "move_down": "player",
-            "move_left": "player",
-            "move_right": "player",
-            "interact": "player",
+        "input_routes": {
+            "move_up": {"entity_id": "player", "command_id": "move_up"},
+            "move_down": {"entity_id": "player", "command_id": "move_down"},
+            "move_left": {"entity_id": "player", "command_id": "move_left"},
+            "move_right": {"entity_id": "player", "command_id": "move_right"},
+            "interact": {"entity_id": "player", "command_id": "interact"},
         },
         "variables": {},
         "tilesets": [
@@ -84,7 +86,7 @@ class ProjectContentContractTests(unittest.TestCase):
         self,
         *,
         startup_area: str | None = None,
-        input_targets: dict[str, str] | None = None,
+        input_routes: dict[str, dict[str, str]] | None = None,
         command_runtime: dict[str, object] | None = None,
         global_entities: list[dict[str, object]] | None = None,
         entity_templates: dict[str, dict[str, object]] | None = None,
@@ -105,8 +107,8 @@ class ProjectContentContractTests(unittest.TestCase):
         }
         if startup_area is not None:
             project_payload["startup_area"] = startup_area
-        if input_targets is not None:
-            project_payload["input_targets"] = input_targets
+        if input_routes is not None:
+            project_payload["input_routes"] = input_routes
         if command_runtime is not None:
             project_payload["command_runtime"] = command_runtime
         if global_entities is not None:
@@ -647,12 +649,14 @@ class ProjectContentContractTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             load_project(Path(temp_dir.name) / "project.json")
 
-    def test_area_loader_leaves_unassigned_project_input_targets_unrouted(self) -> None:
+    def test_area_loader_leaves_unassigned_project_input_routes_unrouted(self) -> None:
         _, project = self._make_project(
-            input_targets={"menu": "pause_controller"},
+            input_routes={
+                "menu": {"entity_id": "pause_controller", "command_id": "open_pause"}
+            },
         )
         raw_area = _minimal_area()
-        raw_area.pop("input_targets", None)
+        raw_area.pop("input_routes", None)
         raw_area["entities"] = [
             {
                 "id": "hero",
@@ -738,7 +742,7 @@ class ProjectContentContractTests(unittest.TestCase):
                         "target_command_id": {
                             "type": "entity_command_id",
                             "required": True,
-                            "entity_parameter": "target_entity_id",
+                            "of": "target_entity_id",
                         },
                         "count": {
                             "type": "int",
@@ -935,7 +939,7 @@ class ProjectContentContractTests(unittest.TestCase):
                         },
                         "destination_entity_id": {
                             "type": "entity_id",
-                            "area_parameter": "target_area",
+                            "of": "target_area",
                             "scope": "area",
                             "space": "world",
                         },
@@ -1060,6 +1064,90 @@ class ProjectContentContractTests(unittest.TestCase):
 
         validate_project_commands(project)
 
+    def test_project_command_validation_accepts_typed_inputs_and_defaults(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "play_npc_animation.json": {
+                    "inputs": {
+                        "target_entity": {
+                            "type": "entity_id",
+                        },
+                        "visual": {
+                            "type": "visual_id",
+                            "of": "target_entity",
+                            "default": "body",
+                        },
+                        "animation": {
+                            "type": "animation_id",
+                            "of": "visual",
+                            "default": "idle",
+                        },
+                    },
+                    "commands": [
+                        {
+                            "type": "play_animation",
+                            "entity_id": "$target_entity",
+                            "visual_id": "$visual",
+                            "animation": "$animation",
+                        }
+                    ],
+                }
+            }
+        )
+
+        validate_project_commands(project)
+        definition = load_project_command_definition(
+            project,
+            "commands/play_npc_animation",
+        )
+        self.assertEqual(definition.params, ["target_entity", "visual", "animation"])
+
+        commands = instantiate_project_command_commands(
+            definition,
+            {"target_entity": "npc_1"},
+        )
+
+        self.assertEqual(
+            commands,
+            [
+                {
+                    "type": "play_animation",
+                    "entity_id": "npc_1",
+                    "visual_id": "body",
+                    "animation": "idle",
+                }
+            ],
+        )
+
+    def test_project_command_validation_rejects_forward_of_references(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "bad_animation.json": {
+                    "inputs": {
+                        "animation": {
+                            "type": "animation_id",
+                            "of": "visual",
+                        },
+                        "visual": {
+                            "type": "visual_id",
+                            "of": "target_entity",
+                        },
+                        "target_entity": {
+                            "type": "entity_id",
+                        },
+                    },
+                    "commands": [],
+                }
+            }
+        )
+
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
+
+        self.assertTrue(
+            any("unknown or later input 'visual'" in issue for issue in raised.exception.issues)
+        )
+
     def test_template_parameter_specs_accept_dialogue_definition(self) -> None:
         _, project = self._make_project(
             entity_templates={
@@ -1094,6 +1182,71 @@ class ProjectContentContractTests(unittest.TestCase):
         )
 
         validate_project_entity_templates(project)
+
+    def test_template_parameter_specs_accept_visual_and_animation_ids(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "animated_marker.json": {
+                    "kind": "marker",
+                    "parameters": {
+                        "visual": "body",
+                        "animation": "idle",
+                    },
+                    "parameter_specs": {
+                        "visual": {
+                            "type": "visual_id",
+                        },
+                        "animation": {
+                            "type": "animation_id",
+                            "of": "visual",
+                        },
+                    },
+                    "visuals": [
+                        {
+                            "id": "body",
+                            "path": "assets/project/sprites/test.png",
+                            "frame_width": 16,
+                            "frame_height": 16,
+                            "frames": [0],
+                            "animations": {
+                                "idle": {"frames": [0]},
+                            },
+                        }
+                    ],
+                }
+            }
+        )
+
+        validate_project_entity_templates(project)
+
+    def test_entity_template_validation_rejects_forward_parameter_of_references(self) -> None:
+        _, project = self._make_project(
+            entity_templates={
+                "bad_animation.json": {
+                    "kind": "marker",
+                    "parameters": {
+                        "visual": "body",
+                        "animation": "idle",
+                    },
+                    "parameter_specs": {
+                        "animation": {
+                            "type": "animation_id",
+                            "of": "visual",
+                        },
+                        "visual": {
+                            "type": "visual_id",
+                        },
+                    },
+                }
+            }
+        )
+
+        with self.assertRaises(EntityTemplateValidationError) as raised:
+            validate_project_entity_templates(project)
+
+        self.assertTrue(
+            any("unknown or later parameter 'visual'" in issue for issue in raised.exception.issues)
+        )
 
     def test_template_parameter_specs_accept_entity_dialogue_map_definitions(self) -> None:
         raw_area = _minimal_area()
@@ -1313,8 +1466,10 @@ class ProjectContentContractTests(unittest.TestCase):
                     **_minimal_area(),
                     "enter_commands": [
                         {
-                            "type": "route_inputs_to_entity",
+                            "type": "set_input_route",
+                            "action": "interact",
                             "entity_id": "self",
+                            "command_id": "interact",
                         }
                     ],
                 }
@@ -1326,7 +1481,7 @@ class ProjectContentContractTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'self' with strict primitive 'route_inputs_to_entity'"
+                "must not use symbolic entity id 'self' with strict primitive 'set_input_route'"
                 in issue
                 for issue in raised.exception.issues
             )

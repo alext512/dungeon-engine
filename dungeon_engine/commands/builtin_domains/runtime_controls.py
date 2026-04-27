@@ -37,37 +37,21 @@ def register_runtime_control_commands(
 ) -> None:
     """Register commands that steer runtime/session control surfaces."""
 
-    @registry.register("set_input_target")
-    def set_input_target(
+    @registry.register("set_input_route")
+    def set_input_route(
         world: Any,
         *,
         action: str,
         entity_id: str | None = None,
+        command_id: str | None = None,
     ) -> CommandHandle:
-        """Route one logical input action to a specific entity or clear it."""
+        """Route one logical input action to a specific entity command or clear it."""
         resolved_entity_id = (
             None
             if entity_id in (None, "")
             else require_exact_entity(world, entity_id).entity_id
         )
-        world.set_input_target(str(action), resolved_entity_id)
-        return ImmediateHandle()
-
-    @registry.register("route_inputs_to_entity")
-    def route_inputs_to_entity(
-        world: Any,
-        *,
-        entity_id: str | None = None,
-        actions: list[str] | None = None,
-    ) -> CommandHandle:
-        """Route selected logical inputs, or all inputs, to one entity."""
-        if entity_id in (None, ""):
-            world.route_inputs_to_entity(None, actions=actions)
-            return ImmediateHandle()
-        world.route_inputs_to_entity(
-            require_exact_entity(world, entity_id).entity_id,
-            actions=actions,
-        )
+        world.set_input_route(str(action), resolved_entity_id, command_id)
         return ImmediateHandle()
 
     @registry.register("push_input_routes")

@@ -35,7 +35,7 @@ Based on the current roadmap and future-features notes, the next valuable steps 
 - runtime launch or handoff from the editor
 - richer content editing for dialogue and commands
 
-Recent correctness-focused progress already moved `scope`, `color`, `input_map`,
+Recent correctness-focused progress already moved `scope`, `color`, visuals,
 `inventory`, `entity_commands`, and common template defaults into the structured
 entity-instance and template editing surfaces, so there are no remaining
 runtime-known authored entity fields that require whole-file raw JSON editing.

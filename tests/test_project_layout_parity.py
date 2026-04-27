@@ -124,11 +124,20 @@ class ProjectLayoutParityTests(unittest.TestCase):
             project_payload={
                 "startup_area": "  areas/intro/title_screen  ",
                 "save_dir": "session_saves",
-                "input_targets": {
-                    "interact": "player_1",
-                    "pause": "  pause_controller  ",
-                    "menu": "",
-                    "  ": "ignored",
+                "input_routes": {
+                    "interact": {
+                        "entity_id": "player_1",
+                        "command_id": "interact",
+                    },
+                    "pause": {
+                        "entity_id": "  pause_controller  ",
+                        "command_id": "open_pause",
+                    },
+                    "menu": None,
+                    "  ": {
+                        "entity_id": "ignored",
+                        "command_id": "ignored",
+                    },
                 },
                 "debug_inspection_enabled": True,
                 "global_entities": [
@@ -155,7 +164,7 @@ class ProjectLayoutParityTests(unittest.TestCase):
 
         self.assertEqual(runtime.startup_area, editor.startup_area)
         self.assertEqual(runtime.save_dir, editor.save_dir)
-        self.assertEqual(runtime.input_targets, editor.input_targets)
+        self.assertEqual(runtime.input_routes, editor.input_routes)
         self.assertEqual(runtime.debug_inspection_enabled, editor.debug_inspection_enabled)
         self.assertEqual(runtime.global_entities, editor.global_entities)
         self.assertEqual(

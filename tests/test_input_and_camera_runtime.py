@@ -217,10 +217,10 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         context.services.ui = CommandUiServices()
         return registry, context
 
-    def test_input_handler_only_dispatches_actions_with_explicit_input_map_entries(self) -> None:
+    def test_input_handler_only_dispatches_actions_with_explicit_input_routes(self) -> None:
         import pygame
 
-        world = World(default_input_targets={"interact": "player"})
+        world = World()
         player = _make_runtime_entity("player", kind="player")
         world.add_entity(player)
         runner = _RecordingInputDispatchRunner()
@@ -231,7 +231,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(runner.dispatched, [])
 
-        player.input_map["interact"] = "confirm"
+        world.set_input_route("interact", "player", "confirm")
         input_handler.handle_events(
             [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_SPACE})]
         )
@@ -241,7 +241,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
     def test_input_handler_routes_inventory_key_only_when_explicitly_mapped(self) -> None:
         import pygame
 
-        world = World(default_input_targets={"inventory": "player"})
+        world = World()
         player = _make_runtime_entity("player", kind="player")
         world.add_entity(player)
         runner = _RecordingInputDispatchRunner()
@@ -252,7 +252,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(runner.dispatched, [])
 
-        player.input_map["inventory"] = "open_inventory"
+        world.set_input_route("inventory", "player", "open_inventory")
         input_handler.handle_events(
             [pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_i})]
         )
@@ -262,9 +262,12 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
     def test_input_handler_blocks_immediate_direction_press_while_world_move_is_active(self) -> None:
         import pygame
 
-        world = World(default_input_targets={"move_right": "player"})
+        world = World(
+            default_input_routes={
+                "move_right": {"entity_id": "player", "command_id": "walk_right"}
+            }
+        )
         player = _make_runtime_entity("player", kind="player")
-        player.input_map["move_right"] = "walk_right"
         player.movement_state.active = True
         world.add_entity(player)
         runner = _RecordingInputDispatchRunner()
@@ -290,9 +293,12 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 self.actions.append(str(action_name))
                 return False
 
-        world = World(default_input_targets={"inventory": "player"})
+        world = World(
+            default_input_routes={
+                "inventory": {"entity_id": "player", "command_id": "open_inventory"}
+            }
+        )
         player = _make_runtime_entity("player", kind="player")
-        player.input_map["inventory"] = "open_inventory"
         world.add_entity(player)
         runner = _RecordingInputDispatchRunner()
         modal_runtime = _BlockingModalRuntime()
@@ -322,14 +328,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
     def test_input_handler_routes_debug_keys_only_when_explicit_targets_exist(self) -> None:
         import pygame
 
-        world = World(
-            default_input_targets={
-                "debug_toggle_pause": "debug_controller",
-                "debug_step_tick": "debug_controller",
-                "debug_zoom_out": "debug_controller",
-                "debug_zoom_in": "debug_controller",
-            }
-        )
+        world = World()
         debug_controller = _make_runtime_entity("debug_controller", kind="system")
         world.add_entity(debug_controller)
         runner = _RecordingInputDispatchRunner()
@@ -340,10 +339,10 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(runner.dispatched, [])
 
-        debug_controller.input_map["debug_toggle_pause"] = "toggle_pause"
-        debug_controller.input_map["debug_step_tick"] = "step_tick"
-        debug_controller.input_map["debug_zoom_out"] = "zoom_out"
-        debug_controller.input_map["debug_zoom_in"] = "zoom_in"
+        world.set_input_route("debug_toggle_pause", "debug_controller", "toggle_pause")
+        world.set_input_route("debug_step_tick", "debug_controller", "step_tick")
+        world.set_input_route("debug_zoom_out", "debug_controller", "zoom_out")
+        world.set_input_route("debug_zoom_in", "debug_controller", "zoom_in")
 
         input_handler.handle_events(
             [
@@ -364,11 +363,11 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
             ],
         )
 
-    def test_world_route_inputs_to_entity_clear_restores_defaults(self) -> None:
+    def test_set_input_route_clear_restores_defaults(self) -> None:
         world = World(
-            default_input_targets={
-                "interact": "player",
-                "menu": "dialogue_controller",
+            default_input_routes={
+                "interact": {"entity_id": "player", "command_id": "interact"},
+                "menu": {"entity_id": "dialogue_controller", "command_id": "menu"},
             },
         )
         world.add_entity(_make_runtime_entity("player", kind="player"))
@@ -381,16 +380,17 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
             )
         )
 
-        world.route_inputs_to_entity("dialogue_controller", actions=["interact"])
+        world.set_input_route("interact", "dialogue_controller", "choose")
         self.assertEqual(world.get_input_target_id("interact"), "dialogue_controller")
+        self.assertEqual(world.get_input_command_id("interact"), "choose")
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
 
-        world.route_inputs_to_entity(None, actions=["interact"])
+        world.set_input_route("interact", None, None)
 
         self.assertEqual(world.get_input_target_id("interact"), "player")
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
 
-    def test_route_inputs_to_entity_command_supports_instigator_ref_via_run_sequence(self) -> None:
+    def test_set_input_route_command_supports_instigator_ref_via_run_sequence(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -401,7 +401,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 scope="global",
             )
         )
-        world.route_inputs_to_entity("dialogue_controller")
+        world.set_input_route("menu", "dialogue_controller", "open_menu")
         registry, context = self._make_command_context(world=world)
 
         handle = execute_registered_command(
@@ -414,20 +414,24 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 },
                 "commands": [
                     {
-                        "type": "route_inputs_to_entity",
+                        "type": "set_input_route",
+                        "action": "menu",
                         "entity_id": "$ref_ids.instigator",
+                        "command_id": "open_menu",
                     }
                 ],
             },
         )
         handle.update(0.0)
 
-        for action in world.list_input_actions():
-            self.assertEqual(world.get_input_target_id(action), "player")
+        self.assertEqual(world.get_input_target_id("menu"), "player")
+        self.assertEqual(world.get_input_command_id("menu"), "open_menu")
 
-    def test_set_input_target_routes_one_action_without_affecting_others(self) -> None:
+    def test_set_input_route_routes_one_action_without_affecting_others(self) -> None:
         world = World(
-            default_input_targets={"interact": "player"},
+            default_input_routes={
+                "interact": {"entity_id": "player", "command_id": "interact"}
+            },
         )
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -443,26 +447,28 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_input_target",
+            "set_input_route",
             {
                 "action": "menu",
                 "entity_id": "dialogue_controller",
+                "command_id": "open_menu",
             },
         )
         handle.update(0.0)
 
         self.assertEqual(world.get_input_target_id("menu"), "dialogue_controller")
+        self.assertEqual(world.get_input_command_id("menu"), "open_menu")
         self.assertEqual(world.get_input_target_id("interact"), "player")
 
     def test_push_and_pop_input_routes_restore_nested_snapshots(self) -> None:
         world = World(
-            default_input_targets={
-                "move_up": "player",
-                "move_down": "player",
-                "move_left": "player",
-                "move_right": "player",
-                "interact": "player",
-                "menu": "pause_controller",
+            default_input_routes={
+                "move_up": {"entity_id": "player", "command_id": "move_up"},
+                "move_down": {"entity_id": "player", "command_id": "move_down"},
+                "move_left": {"entity_id": "player", "command_id": "move_left"},
+                "move_right": {"entity_id": "player", "command_id": "move_right"},
+                "interact": {"entity_id": "player", "command_id": "interact"},
+                "menu": {"entity_id": "pause_controller", "command_id": "menu"},
             },
         )
         world.add_entity(_make_runtime_entity("player", kind="player"))
@@ -495,12 +501,14 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         self.assertEqual(world.get_input_target_id("menu"), "pause_controller")
 
         world.push_input_routes()
-        world.route_inputs_to_entity("dialogue_controller")
+        for action in world.list_input_actions():
+            world.set_input_route(action, "dialogue_controller", action)
         for action in world.list_input_actions():
             self.assertEqual(world.get_input_target_id(action), "dialogue_controller")
 
         world.push_input_routes(actions=["interact", "menu"])
-        world.route_inputs_to_entity("save_controller", actions=["interact", "menu"])
+        for action in ("interact", "menu"):
+            world.set_input_route(action, "save_controller", action)
 
         self.assertEqual(world.get_input_target_id("interact"), "save_controller")
         self.assertEqual(world.get_input_target_id("menu"), "save_controller")
@@ -574,7 +582,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 scope="global",
             )
         )
-        world.route_inputs_to_entity("dialogue_controller", actions=["menu"])
+        world.set_input_route("menu", "dialogue_controller", "open_menu")
         registry, context = self._make_command_context(world=world)
         camera = _RecordingCamera()
         context.services.ui.camera = camera

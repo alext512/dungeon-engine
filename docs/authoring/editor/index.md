@@ -29,7 +29,7 @@ The current editor is already strong for project and area authoring. It can:
 - add, rename, delete, reorder, and duplicate tile layers
 - place, select, drag, delete, nudge, and double-click edit entities, including basic screen-space template placement from the screen pane
 - edit render properties
-- edit area startup behavior through a dedicated `Area Start` surface
+- edit area startup behavior from the area right-click menu
 - edit project manifest data, shared variables, items, global entities, templates, and entity instances through structured tabs or focused dialogs
 - tune entity-instance parameters through a focused `Parameters` tab, including typed reference pickers and boolean controls when `parameter_specs` provides them
 - fall back to guarded raw JSON where the structured UI is not enough

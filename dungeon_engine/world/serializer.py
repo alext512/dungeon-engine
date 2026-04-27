@@ -58,8 +58,8 @@ def serialize_area(
             )
         ],
     }
-    if world.default_input_targets != project.input_targets:
-        data["input_targets"] = copy.deepcopy(world.default_input_targets)
+    if world.default_input_routes != project.input_routes:
+        data["input_routes"] = copy.deepcopy(world.default_input_routes)
     if area.entry_points:
         data["entry_points"] = {
             entry_id: _serialize_entry_point(entry_point)
@@ -237,8 +237,6 @@ def _serialize_template_override_fields(entity: Any, tile_size: int) -> dict[str
     persistence = _serialize_entity_persistence(entity)
     if persistence is not None:
         data["persistence"] = persistence
-    if entity.input_map:
-        data["input_map"] = copy.deepcopy(entity.input_map)
     if data["inventory"] is None:
         data.pop("inventory", None)
     if entity.authored_facing is not None or entity.get_effective_facing() != "down":
@@ -290,8 +288,6 @@ def _serialize_runtime_entity_fields(
     persistence = _serialize_entity_persistence(entity)
     if persistence is not None:
         data["persistence"] = persistence
-    if entity.input_map:
-        data["input_map"] = copy.deepcopy(entity.input_map)
     if data["inventory"] is None:
         data.pop("inventory", None)
     data.update(_serialize_pixel_position_fields(entity, tile_size))

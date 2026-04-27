@@ -25,11 +25,11 @@
     },
     "on_completed_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "target_entity_id"
+      "of": "target_entity_id"
     },
     "on_uncompleted_command_id": {
       "type": "entity_command_id",
-      "entity_parameter": "target_entity_id"
+      "of": "target_entity_id"
     }
   },
   "variables": {

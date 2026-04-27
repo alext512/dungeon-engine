@@ -49,13 +49,31 @@ Minimal example:
       "template": "entity_templates/player"
     }
   ],
-  "input_targets": {
-    "move_up": "player_1",
-    "move_down": "player_1",
-    "move_left": "player_1",
-    "move_right": "player_1",
-    "interact": "player_1",
-    "inventory": "player_1"
+  "input_routes": {
+    "move_up": {
+      "entity_id": "player_1",
+      "command_id": "move_up"
+    },
+    "move_down": {
+      "entity_id": "player_1",
+      "command_id": "move_down"
+    },
+    "move_left": {
+      "entity_id": "player_1",
+      "command_id": "move_left"
+    },
+    "move_right": {
+      "entity_id": "player_1",
+      "command_id": "move_right"
+    },
+    "interact": {
+      "entity_id": "player_1",
+      "command_id": "interact"
+    },
+    "inventory": {
+      "entity_id": "player_1",
+      "command_id": "open_inventory"
+    }
   }
 }
 ```

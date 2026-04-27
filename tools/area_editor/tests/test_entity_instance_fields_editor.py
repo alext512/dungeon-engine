@@ -126,7 +126,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 },
                 "destination_entity_id": {
                     "type": "entity_id",
-                    "area_parameter": "target_area",
+                    "of": "target_area",
                     "scope": "area",
                     "space": "world",
                 },
@@ -157,7 +157,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 },
                 "target_press_command_id": {
                     "type": "entity_command_id",
-                    "entity_parameter": "target_entity_id",
+                    "of": "target_entity_id",
                 },
             },
             "entity_commands": {
@@ -191,6 +191,28 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 },
                 "commandish_string": {
                     "type": "string",
+                },
+            },
+        }
+        self.catalog._templates["entity_templates/animation_panel"] = {
+            "parameters": {
+                "target_entity_id": "",
+                "visual": "body",
+                "animation": "idle",
+            },
+            "parameter_specs": {
+                "target_entity_id": {
+                    "type": "entity_id",
+                    "scope": "area",
+                    "space": "world",
+                },
+                "visual": {
+                    "type": "visual_id",
+                    "of": "target_entity_id",
+                },
+                "animation": {
+                    "type": "animation_id",
+                    "of": "visual",
                 },
             },
         }
@@ -319,7 +341,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.assertEqual(updated.parameters, ["not", "a", "dict"])
 
-    def test_invalid_input_map_shows_warning_and_preserves_original_value(self):
+    def test_legacy_input_map_is_hidden_and_preserved(self):
         entity = EntityDocument(
             id="controller",
             grid_x=0,
@@ -333,7 +355,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         self.panel.load_entity(entity)
         fields = self.panel._fields_editor
 
-        self.assertFalse(fields._input_map_warning.isHidden())
+        self.assertTrue(fields._input_map_warning.isHidden())
         self.assertTrue(fields._input_map_text.isReadOnly())
 
         updated = self.panel.build_entity_from_fields()
@@ -868,7 +890,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.assertEqual(updated._extra["scope"], "global")
 
-    def test_build_entity_from_fields_updates_input_map(self):
+    def test_build_entity_from_fields_preserves_existing_input_map(self):
         entity = EntityDocument(
             id="controller",
             grid_x=1,
@@ -883,19 +905,17 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.panel.load_entity(entity)
         fields = self.panel._fields_editor
-        fields._input_map_text.setPlainText(
-            '{\n  "interact": "use_terminal",\n  "menu": "open_menu"\n}'
-        )
+        fields._kind_edit.setText("controller_panel")
 
         updated = self.panel.build_entity_from_fields()
 
         self.assertEqual(
             updated._extra["input_map"],
             {
-                "interact": "use_terminal",
-                "menu": "open_menu",
+                "interact": "interact",
             },
         )
+        self.assertEqual(updated._extra["kind"], "controller_panel")
 
     def test_build_entity_from_fields_updates_entity_commands(self):
         entity = EntityDocument(
@@ -944,6 +964,48 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                     "enabled": False,
                     "commands": [],
                 },
+            },
+        )
+
+    def test_entity_command_controls_can_add_named_command(self):
+        entity = EntityDocument(
+            id="controller",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+        )
+
+        self.panel.load_entity(entity)
+        self.panel.set_editing_enabled(True)
+        fields = self.panel._fields_editor
+
+        with patch.object(
+            fields,
+            "_prompt_entity_command_name",
+            return_value="interact",
+        ), patch.object(
+            fields,
+            "_open_entity_command_list_dialog",
+            return_value=[
+                {
+                    "type": "run_project_command",
+                    "command_id": "commands/system/open_gate",
+                }
+            ],
+        ):
+            fields._on_add_entity_command_clicked()
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["entity_commands"],
+            {
+                "interact": [
+                    {
+                        "type": "run_project_command",
+                        "command_id": "commands/system/open_gate",
+                    }
+                ],
             },
         )
 
@@ -1352,7 +1414,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             "spawn_marker",
         )
 
-    def test_entity_parameter_with_area_parameter_uses_selected_area_context(self):
+    def test_entity_parameter_with_of_area_uses_selected_area_context(self):
         entity = EntityDocument(
             id="to_cave_1",
             grid_x=1,
@@ -1388,7 +1450,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 current_value="",
                 parameter_spec={
                     "type": "entity_id",
-                    "area_parameter": "target_area",
+                    "of": "target_area",
                     "scope": "area",
                     "space": "world",
                 },
@@ -1443,7 +1505,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 current_value="",
                 parameter_spec={
                     "type": "entity_command_id",
-                    "entity_parameter": "target_entity_id",
+                    "of": "target_entity_id",
                 },
                 current_area_id="areas/demo",
                 entity_id="button_1",
@@ -1451,6 +1513,98 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                 parameter_values={
                     "target_entity_id": "gate_1",
                     "target_press_command_id": "contribute_on",
+                    "entity_id": "gate_1",
                 },
             ),
+        )
+
+    def test_visual_and_animation_parameters_use_of_picker_context(self):
+        entity = EntityDocument(
+            id="animator_1",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/animation_panel",
+        )
+
+        visual_requests: list[EntityReferencePickerRequest] = []
+        animation_requests: list[EntityReferencePickerRequest] = []
+
+        def pick_visual(
+            current: str,
+            request: EntityReferencePickerRequest,
+        ) -> str | None:
+            visual_requests.append(request)
+            return "shadow"
+
+        def pick_animation(
+            current: str,
+            request: EntityReferencePickerRequest,
+        ) -> str | None:
+            animation_requests.append(request)
+            return "pulse"
+
+        self.panel.set_reference_picker_callbacks(
+            visual_picker=pick_visual,
+            animation_picker=pick_animation,
+        )
+        self.panel.set_area_context("areas/demo")
+        self.panel.load_entity(entity)
+        parameters = self.panel._parameters_editor
+
+        self.assertFalse(parameters._parameter_browse_buttons["visual"].isEnabled())
+        self.assertFalse(parameters._parameter_browse_buttons["animation"].isEnabled())
+
+        parameters._parameter_edits["target_entity_id"].setText("target_1")
+        self.assertTrue(parameters._parameter_browse_buttons["visual"].isEnabled())
+        self.assertTrue(parameters._parameter_browse_buttons["animation"].isEnabled())
+
+        parameters._parameter_browse_buttons["visual"].click()
+        parameters._parameter_browse_buttons["animation"].click()
+
+        self.assertEqual(parameters._parameter_edits["visual"].text(), "shadow")
+        self.assertEqual(parameters._parameter_edits["animation"].text(), "pulse")
+        self.assertEqual(
+            visual_requests,
+            [
+                EntityReferencePickerRequest(
+                    parameter_name="visual",
+                    current_value="",
+                    parameter_spec={
+                        "type": "visual_id",
+                        "of": "target_entity_id",
+                    },
+                    current_area_id="areas/demo",
+                    entity_id="animator_1",
+                    entity_template_id="entity_templates/animation_panel",
+                    parameter_values={
+                        "target_entity_id": "target_1",
+                        "visual": "body",
+                        "animation": "idle",
+                        "entity_id": "target_1",
+                    },
+                )
+            ],
+        )
+        self.assertEqual(
+            animation_requests,
+            [
+                EntityReferencePickerRequest(
+                    parameter_name="animation",
+                    current_value="",
+                    parameter_spec={
+                        "type": "animation_id",
+                        "of": "visual",
+                    },
+                    current_area_id="areas/demo",
+                    entity_id="animator_1",
+                    entity_template_id="entity_templates/animation_panel",
+                    parameter_values={
+                        "target_entity_id": "target_1",
+                        "visual": "shadow",
+                        "animation": "idle",
+                        "entity_id": "target_1",
+                        "visual_id": "shadow",
+                    },
+                )
+            ],
         )

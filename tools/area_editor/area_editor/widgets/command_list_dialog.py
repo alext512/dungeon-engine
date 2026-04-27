@@ -154,8 +154,7 @@ _SUPPORTED_COMMAND_TYPES = {
     "set_visual_flip_x",
     "set_entity_command_enabled",
     "set_entity_commands_enabled",
-    "set_input_target",
-    "route_inputs_to_entity",
+    "set_input_route",
     "push_input_routes",
     "pop_input_routes",
     "wait_frames",
@@ -658,13 +657,10 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
         "enabled",
         "persistent",
     },
-    "set_input_target": {
+    "set_input_route": {
         "action",
         "entity_id",
-    },
-    "route_inputs_to_entity": {
-        "entity_id",
-        "actions",
+        "command_id",
     },
     "push_input_routes": {
         "actions",
@@ -797,8 +793,7 @@ _COMMAND_HELP_SUMMARIES: dict[str, str] = {
     "set_visual_flip_x": "Set whether one entity visual is flipped horizontally.",
     "set_entity_command_enabled": "Enable or disable one named entity command.",
     "set_entity_commands_enabled": "Enable or disable the entity-wide command switch.",
-    "set_input_target": "Route one logical input action to a specific entity.",
-    "route_inputs_to_entity": "Route multiple logical input actions to one entity.",
+    "set_input_route": "Route one logical input action to a specific entity command.",
     "push_input_routes": "Push a temporary set of routed input actions.",
     "pop_input_routes": "Pop the most recent temporary input-route layer.",
     "wait_frames": "Wait for a number of simulation frames.",
@@ -1060,8 +1055,6 @@ _ENTITY_FIELD_NAME_CHOICES: tuple[tuple[str, str], ...] = (
     ("sort_y_offset", "sort_y_offset"),
     ("stack_order", "stack_order"),
     ("color", "color"),
-    ("input_map", "input_map"),
-    ("input_map.interact", "input_map.interact"),
     ("visuals.main.flip_x", "visuals.main.flip_x"),
     ("visuals.main.visible", "visuals.main.visible"),
     ("visuals.main.current_frame", "visuals.main.current_frame"),
@@ -1337,21 +1330,13 @@ def _command_summary(command: object, index: int) -> str:
         fade_seconds = command.get("fade_seconds")
         if fade_seconds not in (None, ""):
             return f"{index + 1}. {command_type}: {fade_seconds}s"
-    if command_type == "set_input_target":
+    if command_type == "set_input_route":
         action = str(command.get("action", "")).strip()
         entity_id = str(command.get("entity_id", "")).strip()
-        details = action or entity_id
-        if action and entity_id:
-            details = f"{action} -> {entity_id}"
-        if details:
-            return f"{index + 1}. {command_type}: {details}"
-    if command_type == "route_inputs_to_entity":
-        entity_id = str(command.get("entity_id", "")).strip()
-        actions = command.get("actions")
-        action_count = len(actions) if isinstance(actions, list) else 0
-        details = entity_id or f"{action_count} actions"
-        if entity_id and action_count:
-            details = f"{entity_id} ({action_count} actions)"
+        command_id = str(command.get("command_id", "")).strip()
+        details = action or entity_id or command_id
+        if action and entity_id and command_id:
+            details = f"{action} -> {entity_id}.{command_id}"
         if details:
             return f"{index + 1}. {command_type}: {details}"
     if command_type == "push_input_routes":
@@ -2686,6 +2671,9 @@ class CommandEditorDialog(QDialog):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[[str], str | None] | None = None,
         command_picker: Callable[[str], str | None] | None = None,
+        project_command_inputs_provider: Callable[[str], dict[str, dict[str, Any]] | None] | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
         command_spec_id_label: str | None = None,
         current_entity_id: str | None = None,
         current_area_id: str | None = None,
@@ -2705,6 +2693,10 @@ class CommandEditorDialog(QDialog):
         self._item_picker = item_picker
         self._dialogue_picker = dialogue_picker
         self._command_picker = command_picker
+        self._project_command_inputs_provider = project_command_inputs_provider
+        self._visual_picker = visual_picker
+        self._animation_picker = animation_picker
+        self._run_project_input_fields: dict[str, dict[str, Any]] = {}
         self._command_spec_id_label = (
             str(command_spec_id_label).strip() or None
             if command_spec_id_label is not None
@@ -3008,11 +3000,24 @@ class CommandEditorDialog(QDialog):
             button_text="Browse..."
         )
         self._project_command_browse.clicked.connect(self._on_browse_project_command_id)
+        self._project_command_id_edit.textChanged.connect(
+            self._on_run_project_command_id_changed
+        )
         run_project_form.addRow("command_id", command_row)
         self._run_project_command_id_note = make_help_note(
             "Project-relative command id, for example commands/player/move_one_tile."
         )
         run_project_form.addRow(self._run_project_command_id_note)
+        self._run_project_inputs_note = make_help_note(
+            "Inputs declared by the selected project command."
+        )
+        run_project_form.addRow(self._run_project_inputs_note)
+        self._run_project_inputs_widget = QWidget()
+        self._run_project_inputs_form = QFormLayout(self._run_project_inputs_widget)
+        self._run_project_inputs_form.setContentsMargins(12, 0, 0, 0)
+        run_project_form.addRow(self._run_project_inputs_widget)
+        self._run_project_inputs_note.hide()
+        self._run_project_inputs_widget.hide()
         self._run_project_advanced_toggle = QToolButton()
         self._run_project_advanced_toggle.setText("Advanced")
         self._run_project_advanced_toggle.setCheckable(True)
@@ -4442,10 +4447,28 @@ class CommandEditorDialog(QDialog):
             self._play_animation_entity_ref,
         ) = make_entity_id_row()
         play_animation_form.addRow("entity_id", play_animation_entity_row)
-        self._play_animation_visual_id_field = _OptionalTextField()
+        self._play_animation_visual_id_field = _OptionalTextField(extra_button_text="Pick...")
+        if self._play_animation_visual_id_field.extra_button is not None:
+            self._play_animation_visual_id_field.extra_button.clicked.connect(
+                lambda: self._pick_visual_id_into_optional_field(
+                    self._play_animation_visual_id_field,
+                    entity_id_edit=self._play_animation_entity_id_edit,
+                )
+            )
         play_animation_form.addRow("visual_id", self._play_animation_visual_id_field)
-        self._play_animation_name_edit = QLineEdit()
-        play_animation_form.addRow("animation", self._play_animation_name_edit)
+        (
+            play_animation_name_row,
+            self._play_animation_name_edit,
+            self._play_animation_name_pick,
+        ) = _make_line_with_button(button_text="Pick...")
+        self._play_animation_name_pick.clicked.connect(
+            lambda: self._pick_animation_id_into_edit(
+                self._play_animation_name_edit,
+                entity_id_edit=self._play_animation_entity_id_edit,
+                visual_id_field=self._play_animation_visual_id_field,
+            )
+        )
+        play_animation_form.addRow("animation", play_animation_name_row)
         self._play_animation_frame_count_field = _OptionalIntField(
             minimum=1,
             maximum=999999,
@@ -4476,7 +4499,14 @@ class CommandEditorDialog(QDialog):
             self._wait_for_animation_entity_ref,
         ) = make_entity_id_row()
         wait_for_animation_form.addRow("entity_id", wait_for_animation_entity_row)
-        self._wait_for_animation_visual_id_field = _OptionalTextField()
+        self._wait_for_animation_visual_id_field = _OptionalTextField(extra_button_text="Pick...")
+        if self._wait_for_animation_visual_id_field.extra_button is not None:
+            self._wait_for_animation_visual_id_field.extra_button.clicked.connect(
+                lambda: self._pick_visual_id_into_optional_field(
+                    self._wait_for_animation_visual_id_field,
+                    entity_id_edit=self._wait_for_animation_entity_id_edit,
+                )
+            )
         wait_for_animation_form.addRow("visual_id", self._wait_for_animation_visual_id_field)
         self._command_stack.addWidget(self._wait_for_animation_page)
 
@@ -4490,7 +4520,14 @@ class CommandEditorDialog(QDialog):
             self._stop_animation_entity_ref,
         ) = make_entity_id_row()
         stop_animation_form.addRow("entity_id", stop_animation_entity_row)
-        self._stop_animation_visual_id_field = _OptionalTextField()
+        self._stop_animation_visual_id_field = _OptionalTextField(extra_button_text="Pick...")
+        if self._stop_animation_visual_id_field.extra_button is not None:
+            self._stop_animation_visual_id_field.extra_button.clicked.connect(
+                lambda: self._pick_visual_id_into_optional_field(
+                    self._stop_animation_visual_id_field,
+                    entity_id_edit=self._stop_animation_entity_id_edit,
+                )
+            )
         stop_animation_form.addRow("visual_id", self._stop_animation_visual_id_field)
         self._stop_animation_reset_field = QComboBox()
         self._setup_optional_bool_combo(self._stop_animation_reset_field)
@@ -6069,69 +6106,55 @@ class CommandEditorDialog(QDialog):
         interact_form.addRow("direction", self._interact_direction_field)
         self._command_stack.addWidget(self._interact_facing_page)
 
-        self._set_input_target_page = QWidget()
-        set_input_target_form = QFormLayout(self._set_input_target_page)
-        set_input_target_form.setContentsMargins(0, 0, 0, 0)
-        self._set_input_target_action_edit = QLineEdit()
-        set_input_target_form.addRow("action", self._set_input_target_action_edit)
-        self._set_input_target_entity_id_field = _OptionalTextField(
-            button_text="Pick...",
-            extra_button_text="Ref...",
+        self._set_input_route_page = QWidget()
+        set_input_route_form = QFormLayout(self._set_input_route_page)
+        set_input_route_form.setContentsMargins(0, 0, 0, 0)
+        self._set_input_route_action_edit = QLineEdit()
+        set_input_route_form.addRow("action", self._set_input_route_action_edit)
+        (
+            set_input_route_entity_row,
+            self._set_input_route_entity_id_edit,
+            self._set_input_route_entity_pick,
+            self._set_input_route_entity_ref,
+        ) = _make_line_with_two_buttons(
+            primary_button_text="Pick...",
+            secondary_button_text="Ref...",
         )
-        if self._set_input_target_entity_id_field.button is not None:
-            self._set_input_target_entity_id_field.button.clicked.connect(
-                lambda: self._pick_entity_into_optional_field(
-                    self._set_input_target_entity_id_field,
-                    parameter_name="entity_id",
-                )
+        self._set_input_route_entity_pick.clicked.connect(
+            lambda: self._pick_entity_into_edit(
+                self._set_input_route_entity_id_edit,
+                parameter_name="entity_id",
             )
-        if self._set_input_target_entity_id_field.extra_button is not None:
-            self._set_input_target_entity_id_field.extra_button.clicked.connect(
-                lambda: self._show_entity_token_menu_for_optional_field(
-                    self._set_input_target_entity_id_field,
-                    self._set_input_target_entity_id_field.extra_button,
-                )
-            )
-        set_input_target_form.addRow("entity_id", self._set_input_target_entity_id_field)
-        self._set_input_target_note = QLabel(
-            "Leave entity_id unset to clear the routed target for this action."
         )
-        self._set_input_target_note.setWordWrap(True)
-        self._set_input_target_note.setStyleSheet("color: #666;")
-        set_input_target_form.addRow(self._set_input_target_note)
-        self._command_stack.addWidget(self._set_input_target_page)
-
-        self._route_inputs_to_entity_page = QWidget()
-        route_inputs_form = QFormLayout(self._route_inputs_to_entity_page)
-        route_inputs_form.setContentsMargins(0, 0, 0, 0)
-        self._route_inputs_entity_id_field = _OptionalTextField(
-            button_text="Pick...",
-            extra_button_text="Ref...",
-        )
-        if self._route_inputs_entity_id_field.button is not None:
-            self._route_inputs_entity_id_field.button.clicked.connect(
-                lambda: self._pick_entity_into_optional_field(
-                    self._route_inputs_entity_id_field,
-                    parameter_name="entity_id",
-                )
+        self._set_input_route_entity_ref.clicked.connect(
+            lambda: self._show_entity_token_menu_for_edit(
+                self._set_input_route_entity_id_edit,
+                self._set_input_route_entity_ref,
             )
-        if self._route_inputs_entity_id_field.extra_button is not None:
-            self._route_inputs_entity_id_field.extra_button.clicked.connect(
-                lambda: self._show_entity_token_menu_for_optional_field(
-                    self._route_inputs_entity_id_field,
-                    self._route_inputs_entity_id_field.extra_button,
-                )
-            )
-        route_inputs_form.addRow("entity_id", self._route_inputs_entity_id_field)
-        self._route_inputs_actions_field = _OptionalTextField()
-        route_inputs_form.addRow("actions", self._route_inputs_actions_field)
-        self._route_inputs_note = QLabel(
-            "Actions are comma-separated. Leave entity_id unset to clear routing."
         )
-        self._route_inputs_note.setWordWrap(True)
-        self._route_inputs_note.setStyleSheet("color: #666;")
-        route_inputs_form.addRow(self._route_inputs_note)
-        self._command_stack.addWidget(self._route_inputs_to_entity_page)
+        self._set_input_route_entity_id_edit.textChanged.connect(
+            self._sync_entity_command_picker_button_state
+        )
+        set_input_route_form.addRow("entity_id", set_input_route_entity_row)
+        (
+            set_input_route_command_row,
+            self._set_input_route_command_id_edit,
+            self._set_input_route_command_pick,
+        ) = _make_line_with_button(button_text="Pick...")
+        self._set_input_route_command_pick.clicked.connect(
+            lambda: self._pick_entity_command_id_into_edit(
+                self._set_input_route_command_id_edit,
+                entity_id_edit=self._set_input_route_entity_id_edit,
+            )
+        )
+        set_input_route_form.addRow("command_id", set_input_route_command_row)
+        self._set_input_route_note = QLabel(
+            "Set both entity_id and command_id. Leave either unset to clear this action's route."
+        )
+        self._set_input_route_note.setWordWrap(True)
+        self._set_input_route_note.setStyleSheet("color: #666;")
+        set_input_route_form.addRow(self._set_input_route_note)
+        self._command_stack.addWidget(self._set_input_route_page)
 
         self._push_input_routes_page = QWidget()
         push_inputs_form = QFormLayout(self._push_input_routes_page)
@@ -6347,6 +6370,8 @@ class CommandEditorDialog(QDialog):
         self._sync_area_picker_button_state()
         self._sync_asset_picker_button_state()
         self._sync_item_picker_button_state()
+        self._sync_visual_picker_button_state()
+        self._sync_animation_picker_button_state()
         self._sync_entity_picker_button_state()
         self._sync_entity_command_picker_button_state()
         self._sync_entity_dialogue_picker_button_state()
@@ -6457,8 +6482,7 @@ class CommandEditorDialog(QDialog):
             "set_visual_flip_x": self._set_visual_flip_x_page,
             "set_entity_command_enabled": self._set_entity_command_enabled_page,
             "set_entity_commands_enabled": self._set_entity_commands_enabled_page,
-            "set_input_target": self._set_input_target_page,
-            "route_inputs_to_entity": self._route_inputs_to_entity_page,
+            "set_input_route": self._set_input_route_page,
             "push_input_routes": self._push_input_routes_page,
             "pop_input_routes": self._pop_input_routes_page,
             "wait_frames": self._wait_frames_page,
@@ -6676,6 +6700,8 @@ class CommandEditorDialog(QDialog):
         self._sync_entity_dialogue_picker_button_state()
         self._sync_entity_command_picker_button_state()
         self._sync_open_dialogue_source_visibility()
+        if command_type == "run_project_command":
+            self._sync_run_project_input_fields(self._loaded_command)
         if command_type == "open_dialogue_session":
             self._sync_open_dialogue_advanced_state(
                 expanded=self._open_dialogue_advanced_field_count() > 0
@@ -7803,15 +7829,9 @@ class CommandEditorDialog(QDialog):
             command.get("persistent"),
         )
 
-        self._set_input_target_action_edit.setText(str(command.get("action", "")))
-        self._set_input_target_entity_id_field.set_optional_value(
-            command.get("entity_id")
-        )
-
-        self._route_inputs_entity_id_field.set_optional_value(command.get("entity_id"))
-        self._route_inputs_actions_field.set_optional_value(
-            _string_list_to_text(command.get("actions"))
-        )
+        self._set_input_route_action_edit.setText(str(command.get("action", "")))
+        self._set_input_route_entity_id_edit.setText(str(command.get("entity_id", "")))
+        self._set_input_route_command_id_edit.setText(str(command.get("command_id", "")))
 
         self._push_input_routes_actions_field.set_optional_value(
             _string_list_to_text(command.get("actions"))
@@ -7915,7 +7935,7 @@ class CommandEditorDialog(QDialog):
             current_value=current_value,
             parameter_spec={
                 "type": "entity_dialogue_id",
-                "entity_parameter": "entity_id",
+                "of": "entity_id",
             },
             current_area_id=self._current_area_id,
             entity_id=self._current_entity_id,
@@ -7940,7 +7960,7 @@ class CommandEditorDialog(QDialog):
             current_value=current_value,
             parameter_spec={
                 "type": "entity_command_id",
-                "entity_parameter": "entity_id",
+                "of": "entity_id",
             },
             current_area_id=self._current_area_id,
             entity_id=self._current_entity_id,
@@ -7953,6 +7973,433 @@ class CommandEditorDialog(QDialog):
                 self._current_entity_command_names or None
             ),
         )
+
+    def _visual_picker_request(
+        self,
+        *,
+        current_value: str,
+        entity_id_value: str,
+    ) -> EntityReferencePickerRequest:
+        return EntityReferencePickerRequest(
+            parameter_name="visual_id",
+            current_value=current_value,
+            parameter_spec={
+                "type": "visual_id",
+                "of": "entity_id",
+            },
+            current_area_id=self._current_area_id,
+            entity_id=self._current_entity_id,
+            entity_template_id=None,
+            parameter_values={
+                "entity_id": entity_id_value,
+                "visual_id": current_value,
+            },
+        )
+
+    def _animation_picker_request(
+        self,
+        *,
+        current_value: str,
+        entity_id_value: str,
+        visual_id_value: str,
+    ) -> EntityReferencePickerRequest:
+        return EntityReferencePickerRequest(
+            parameter_name="animation",
+            current_value=current_value,
+            parameter_spec={
+                "type": "animation_id",
+                "of": "visual_id",
+            },
+            current_area_id=self._current_area_id,
+            entity_id=self._current_entity_id,
+            entity_template_id=None,
+            parameter_values={
+                "entity_id": entity_id_value,
+                "visual_id": visual_id_value,
+                "animation": current_value,
+            },
+        )
+
+    def _run_project_input_specs_for_command(
+        self,
+        command_id: str,
+    ) -> dict[str, dict[str, Any]]:
+        if self._project_command_inputs_provider is None:
+            return {}
+        normalized = command_id.strip()
+        if not normalized:
+            return {}
+        try:
+            raw_specs = self._project_command_inputs_provider(normalized)
+        except Exception:
+            return {}
+        if not isinstance(raw_specs, dict):
+            return {}
+        specs: dict[str, dict[str, Any]] = {}
+        for raw_name, raw_spec in raw_specs.items():
+            name = str(raw_name).strip()
+            if not name or not isinstance(raw_spec, dict):
+                continue
+            spec = copy.deepcopy(raw_spec)
+            spec_type = str(spec.get("type", "string")).strip() or "string"
+            spec["type"] = spec_type
+            specs[name] = spec
+        return specs
+
+    def _run_project_known_input_names_for_command_id(self, command_id: str) -> set[str]:
+        return set(self._run_project_input_specs_for_command(command_id))
+
+    def _clear_run_project_input_fields(self) -> None:
+        while self._run_project_inputs_form.rowCount() > 0:
+            self._run_project_inputs_form.removeRow(0)
+        self._run_project_input_fields.clear()
+
+    def _sync_run_project_input_fields(
+        self,
+        command: dict[str, Any] | None = None,
+    ) -> None:
+        command_id = self._project_command_id_edit.text().strip()
+        specs = self._run_project_input_specs_for_command(command_id)
+        source_values = command if isinstance(command, dict) else {}
+        existing_values = {
+            name: self._run_project_input_field_text(name)
+            for name in self._run_project_input_fields
+        }
+        self._clear_run_project_input_fields()
+        show_inputs = bool(specs)
+        self._run_project_inputs_note.setVisible(show_inputs)
+        self._run_project_inputs_widget.setVisible(show_inputs)
+        if not specs:
+            return
+        for name, spec in specs.items():
+            value = source_values.get(name)
+            if value is None and name in existing_values:
+                value = existing_values[name]
+            if value is None and "default" in spec:
+                value = spec.get("default")
+            self._add_run_project_input_field(name, spec, value)
+
+    def _add_run_project_input_field(
+        self,
+        name: str,
+        spec: dict[str, Any],
+        value: Any,
+    ) -> None:
+        spec_type = str(spec.get("type", "string")).strip() or "string"
+        label = str(spec.get("label", "")).strip() or name
+
+        if spec_type == "enum":
+            combo = QComboBox()
+            combo.setEditable(False)
+            values = spec.get("values")
+            if isinstance(values, list):
+                for raw_value in values:
+                    enum_value = str(raw_value).strip()
+                    if enum_value:
+                        combo.addItem(enum_value, enum_value)
+            current = str(value if value is not None else "").strip()
+            if current and combo.findData(current) < 0:
+                combo.insertItem(0, current, current)
+            if current:
+                combo.setCurrentIndex(max(0, combo.findData(current)))
+            combo.currentIndexChanged.connect(self._on_structured_draft_changed)
+            self._run_project_inputs_form.addRow(label, combo)
+            self._run_project_input_fields[name] = {
+                "spec": spec,
+                "type": spec_type,
+                "combo": combo,
+            }
+            return
+
+        row_widget: QWidget
+        edit: QLineEdit
+        pick_button: QPushButton | None = None
+        ref_button: QPushButton | None = None
+        if spec_type == "entity_id":
+            row_widget, edit, pick_button, ref_button = _make_line_with_two_buttons(
+                primary_button_text="Pick...",
+                secondary_button_text="Ref...",
+            )
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_entity_input(
+                    input_name
+                )
+            )
+            ref_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._show_entity_token_menu_for_edit(
+                    self._run_project_input_fields[input_name]["edit"],
+                    ref_button,
+                )
+            )
+        elif spec_type == "area_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_area_input(
+                    input_name
+                )
+            )
+        elif spec_type == "item_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_item_input(
+                    input_name
+                )
+            )
+        elif spec_type == "dialogue_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_dialogue_input(
+                    input_name
+                )
+            )
+        elif spec_type == "project_command_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_command_input(
+                    input_name
+                )
+            )
+        elif spec_type in {"asset_path", "image_path", "sound_path"}:
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Browse...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_asset_input(
+                    input_name
+                )
+            )
+        elif spec_type == "visual_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_visual_input(
+                    input_name
+                )
+            )
+        elif spec_type == "animation_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_animation_input(
+                    input_name
+                )
+            )
+        elif spec_type == "entity_command_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_entity_command_input(
+                    input_name
+                )
+            )
+        elif spec_type == "entity_dialogue_id":
+            row_widget, edit, pick_button = _make_line_with_button(button_text="Pick...")
+            pick_button.clicked.connect(
+                lambda _checked=False, input_name=name: self._pick_run_project_entity_dialogue_input(
+                    input_name
+                )
+            )
+        else:
+            edit = QLineEdit()
+            row_widget = edit
+
+        edit.setText(self._format_run_project_input_value(value))
+        edit.textChanged.connect(self._on_structured_draft_changed)
+        self._run_project_inputs_form.addRow(label, row_widget)
+        self._run_project_input_fields[name] = {
+            "spec": spec,
+            "type": spec_type,
+            "edit": edit,
+            "pick_button": pick_button,
+            "ref_button": ref_button,
+        }
+
+    @staticmethod
+    def _format_run_project_input_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False)
+
+    def _run_project_input_field_text(self, name: str) -> str:
+        field = self._run_project_input_fields.get(name)
+        if not field:
+            return ""
+        combo = field.get("combo")
+        if isinstance(combo, QComboBox):
+            value = combo.currentData()
+            return str(value if value is not None else combo.currentText()).strip()
+        edit = field.get("edit")
+        if isinstance(edit, QLineEdit):
+            return edit.text().strip()
+        return ""
+
+    def _run_project_parameter_values(self) -> dict[str, object]:
+        return {
+            name: self._run_project_input_field_text(name)
+            for name in self._run_project_input_fields
+        }
+
+    def _run_project_parent_input_name(self, input_name: str, parent_type: str) -> str:
+        spec = self._run_project_input_fields.get(input_name, {}).get("spec")
+        if not isinstance(spec, dict):
+            return ""
+        parent_name = str(spec.get("of", "")).strip()
+        if not parent_name:
+            return ""
+        parent_spec = self._run_project_input_fields.get(parent_name, {}).get("spec")
+        if not isinstance(parent_spec, dict):
+            return ""
+        if str(parent_spec.get("type", "")).strip() != parent_type:
+            return ""
+        return parent_name
+
+    def _run_project_entity_parent_value_for(self, input_name: str) -> str:
+        direct_parent = self._run_project_parent_input_name(input_name, "entity_id")
+        if direct_parent:
+            return self._run_project_input_field_text(direct_parent)
+        visual_parent = self._run_project_parent_input_name(input_name, "visual_id")
+        if visual_parent:
+            entity_parent = self._run_project_parent_input_name(visual_parent, "entity_id")
+            if entity_parent:
+                return self._run_project_input_field_text(entity_parent)
+        return ""
+
+    def _run_project_visual_parent_value_for(self, input_name: str) -> str:
+        visual_parent = self._run_project_parent_input_name(input_name, "visual_id")
+        if visual_parent:
+            return self._run_project_input_field_text(visual_parent)
+        return ""
+
+    def _set_run_project_input_text(self, input_name: str, value: str) -> None:
+        field = self._run_project_input_fields.get(input_name)
+        if not field:
+            return
+        edit = field.get("edit")
+        if isinstance(edit, QLineEdit):
+            edit.setText(value)
+
+    def _pick_run_project_entity_input(self, input_name: str) -> None:
+        current_value = self._run_project_input_field_text(input_name)
+        selected = call_reference_picker_callback(
+            self._entity_picker,
+            current_value,
+            request=self._entity_picker_request(
+                parameter_name=input_name,
+                current_value=current_value,
+            ),
+        )
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_area_input(self, input_name: str) -> None:
+        edit = self._run_project_input_fields[input_name]["edit"]
+        if isinstance(edit, QLineEdit):
+            self._pick_area_into_edit(edit, parameter_name=input_name)
+
+    def _pick_run_project_item_input(self, input_name: str) -> None:
+        edit = self._run_project_input_fields[input_name]["edit"]
+        if isinstance(edit, QLineEdit):
+            self._pick_item_into_edit(edit)
+
+    def _pick_run_project_dialogue_input(self, input_name: str) -> None:
+        if self._dialogue_picker is None:
+            return
+        current_value = self._run_project_input_field_text(input_name)
+        selected = self._dialogue_picker(current_value)
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_command_input(self, input_name: str) -> None:
+        if self._command_picker is None:
+            return
+        current_value = self._run_project_input_field_text(input_name)
+        selected = self._command_picker(current_value)
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_asset_input(self, input_name: str) -> None:
+        if self._asset_picker is None:
+            return
+        current_value = self._run_project_input_field_text(input_name)
+        selected = call_reference_picker_callback(self._asset_picker, current_value)
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_visual_input(self, input_name: str) -> None:
+        current_value = self._run_project_input_field_text(input_name)
+        entity_id_value = self._run_project_entity_parent_value_for(input_name)
+        selected = call_reference_picker_callback(
+            self._visual_picker,
+            current_value,
+            request=EntityReferencePickerRequest(
+                parameter_name=input_name,
+                current_value=current_value,
+                parameter_spec={"type": "visual_id", "of": "entity_id"},
+                current_area_id=self._current_area_id,
+                entity_id=self._current_entity_id,
+                entity_template_id=None,
+                parameter_values={
+                    **self._run_project_parameter_values(),
+                    "entity_id": entity_id_value,
+                    "visual_id": current_value,
+                },
+            ),
+        )
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_animation_input(self, input_name: str) -> None:
+        current_value = self._run_project_input_field_text(input_name)
+        entity_id_value = self._run_project_entity_parent_value_for(input_name)
+        visual_id_value = self._run_project_visual_parent_value_for(input_name)
+        selected = call_reference_picker_callback(
+            self._animation_picker,
+            current_value,
+            request=EntityReferencePickerRequest(
+                parameter_name=input_name,
+                current_value=current_value,
+                parameter_spec={
+                    "type": "animation_id",
+                    "of": "visual_id",
+                },
+                current_area_id=self._current_area_id,
+                entity_id=self._current_entity_id,
+                entity_template_id=None,
+                parameter_values={
+                    **self._run_project_parameter_values(),
+                    "entity_id": entity_id_value,
+                    "visual_id": visual_id_value,
+                    "animation": current_value,
+                },
+            ),
+        )
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_entity_command_input(self, input_name: str) -> None:
+        current_value = self._run_project_input_field_text(input_name)
+        entity_id_value = self._run_project_entity_parent_value_for(input_name)
+        selected = call_reference_picker_callback(
+            self._entity_command_picker,
+            current_value,
+            request=self._entity_command_picker_request(
+                current_value=current_value,
+                entity_id_value=entity_id_value,
+            ),
+        )
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
+
+    def _pick_run_project_entity_dialogue_input(self, input_name: str) -> None:
+        current_value = self._run_project_input_field_text(input_name)
+        entity_id_value = self._run_project_entity_parent_value_for(input_name)
+        selected = call_reference_picker_callback(
+            self._entity_dialogue_picker,
+            current_value,
+            request=self._entity_dialogue_picker_request(
+                current_value=current_value,
+                entity_id_value=entity_id_value,
+            ),
+        )
+        if selected:
+            self._set_run_project_input_text(input_name, selected)
 
     def _pick_entity_into_edit(self, edit: QLineEdit, *, parameter_name: str) -> None:
         selected = call_reference_picker_callback(
@@ -7990,6 +8437,44 @@ class CommandEditorDialog(QDialog):
         selected = call_reference_picker_callback(
             self._item_picker,
             edit.text().strip(),
+        )
+        if selected:
+            edit.setText(selected)
+
+    def _pick_visual_id_into_optional_field(
+        self,
+        field: _OptionalTextField,
+        *,
+        entity_id_edit: QLineEdit,
+    ) -> None:
+        current_value = field.optional_value() or field.edit.text().strip()
+        selected = call_reference_picker_callback(
+            self._visual_picker,
+            current_value,
+            request=self._visual_picker_request(
+                current_value=current_value,
+                entity_id_value=entity_id_edit.text().strip(),
+            ),
+        )
+        if selected:
+            field.set_optional_value(selected)
+
+    def _pick_animation_id_into_edit(
+        self,
+        edit: QLineEdit,
+        *,
+        entity_id_edit: QLineEdit,
+        visual_id_field: _OptionalTextField,
+    ) -> None:
+        current_value = edit.text().strip()
+        selected = call_reference_picker_callback(
+            self._animation_picker,
+            current_value,
+            request=self._animation_picker_request(
+                current_value=current_value,
+                entity_id_value=entity_id_edit.text().strip(),
+                visual_id_value=visual_id_field.optional_value() or "",
+            ),
         )
         if selected:
             edit.setText(selected)
@@ -8167,6 +8652,24 @@ class CommandEditorDialog(QDialog):
             if button is not None:
                 button.setEnabled(enabled)
 
+    def _sync_visual_picker_button_state(self) -> None:
+        enabled = self._visual_picker is not None
+        for field in (
+            getattr(self, "_play_animation_visual_id_field", None),
+            getattr(self, "_wait_for_animation_visual_id_field", None),
+            getattr(self, "_stop_animation_visual_id_field", None),
+        ):
+            if isinstance(field, _OptionalTextField) and field.extra_button is not None:
+                field.extra_button.setEnabled(enabled)
+
+    def _sync_animation_picker_button_state(self) -> None:
+        enabled = self._animation_picker is not None
+        for button in (
+            getattr(self, "_play_animation_name_pick", None),
+        ):
+            if button is not None:
+                button.setEnabled(enabled)
+
     def _pick_entity_command_id_into_edit(
         self,
         edit: QLineEdit,
@@ -8198,6 +8701,11 @@ class CommandEditorDialog(QDialog):
         )
         if getattr(self, "_set_entity_command_pick", None) is not None:
             self._set_entity_command_pick.setEnabled(set_entity_command_enabled)
+        set_input_route_enabled = picker_enabled and bool(
+            self._set_input_route_entity_id_edit.text().strip()
+        )
+        if getattr(self, "_set_input_route_command_pick", None) is not None:
+            self._set_input_route_command_pick.setEnabled(set_input_route_enabled)
 
     def _pick_dialogue_id_into_edit(
         self,
@@ -8675,6 +9183,72 @@ class CommandEditorDialog(QDialog):
     def _on_open_entity_advanced_toggled(self, checked: bool) -> None:
         self._sync_open_entity_advanced_state(expanded=bool(checked))
 
+    def _apply_run_project_input_fields(
+        self,
+        target: dict[str, Any],
+        *,
+        show_message: bool,
+    ) -> bool:
+        for name, field in self._run_project_input_fields.items():
+            spec = field.get("spec")
+            spec_type = str(field.get("type", "string")).strip() or "string"
+            if not isinstance(spec, dict):
+                spec = {}
+            target.pop(name, None)
+            raw_text = self._run_project_input_field_text(name)
+            if not raw_text:
+                if "default" in spec:
+                    continue
+                if show_message:
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Command",
+                        f"Project command input '{name}' cannot be blank.",
+                    )
+                return False
+            try:
+                target[name] = self._parse_run_project_input_value(
+                    name,
+                    spec_type,
+                    raw_text,
+                )
+            except ValueError as exc:
+                if show_message:
+                    QMessageBox.warning(self, "Invalid Command", str(exc))
+                return False
+        return True
+
+    @staticmethod
+    def _parse_run_project_input_value(
+        name: str,
+        spec_type: str,
+        raw_text: str,
+    ) -> Any:
+        text = raw_text.strip()
+        if spec_type == "int":
+            try:
+                return int(text)
+            except ValueError as exc:
+                raise ValueError(f"Project command input '{name}' must be an integer.") from exc
+        if spec_type == "float":
+            try:
+                return float(text)
+            except ValueError as exc:
+                raise ValueError(f"Project command input '{name}' must be a number.") from exc
+        if spec_type == "bool":
+            normalized = text.casefold()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+            raise ValueError(f"Project command input '{name}' must be true or false.")
+        if spec_type == "json":
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Project command input '{name}' must be valid JSON.") from exc
+        return text
+
     def _build_structured_command(self, *, show_message: bool) -> dict[str, Any] | None:
         command_type = self._command_type_combo.currentText().strip()
         if not command_type:
@@ -8734,7 +9308,19 @@ class CommandEditorDialog(QDialog):
                         "command_id cannot be blank.",
                     )
                 return None
+            previous_command_id = str(self._loaded_command.get("command_id", "")).strip()
+            known_input_names = (
+                self._run_project_known_input_names_for_command_id(previous_command_id)
+                | set(self._run_project_input_fields)
+            )
+            for input_name in known_input_names:
+                base.pop(input_name, None)
             base["command_id"] = command_id
+            if not self._apply_run_project_input_fields(
+                base,
+                show_message=show_message,
+            ):
+                return None
             self._set_optional_text_field(
                 base,
                 "source_entity_id",
@@ -10794,8 +11380,10 @@ class CommandEditorDialog(QDialog):
             base["flip_x"] = flip_x
             return base
 
-        if command_type == "set_input_target":
-            action = self._set_input_target_action_edit.text().strip()
+        if command_type == "set_input_route":
+            action = self._set_input_route_action_edit.text().strip()
+            entity_id = self._set_input_route_entity_id_edit.text().strip()
+            command_id = self._set_input_route_command_id_edit.text().strip()
             if not action:
                 if show_message:
                     QMessageBox.warning(
@@ -10804,27 +11392,21 @@ class CommandEditorDialog(QDialog):
                         "action cannot be blank.",
                     )
                 return None
+            if bool(entity_id) != bool(command_id):
+                if show_message:
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Command",
+                        "entity_id and command_id must both be set, or both left blank.",
+                    )
+                return None
             base["action"] = action
-            self._set_optional_text_field(
-                base,
-                "entity_id",
-                self._set_input_target_entity_id_field,
-            )
-            return base
-
-        if command_type == "route_inputs_to_entity":
-            self._set_optional_text_field(
-                base,
-                "entity_id",
-                self._route_inputs_entity_id_field,
-            )
-            actions = _parse_string_list_text(
-                self._route_inputs_actions_field.optional_value() or ""
-            )
-            if actions:
-                base["actions"] = actions
+            if entity_id and command_id:
+                base["entity_id"] = entity_id
+                base["command_id"] = command_id
             else:
-                base.pop("actions", None)
+                base.pop("entity_id", None)
+                base.pop("command_id", None)
             return base
 
         if command_type == "push_input_routes":
@@ -11118,6 +11700,11 @@ class CommandEditorDialog(QDialog):
         if selected:
             self._project_command_id_edit.setText(selected)
 
+    def _on_run_project_command_id_changed(self, _text: str) -> None:
+        if self._loading:
+            return
+        self._sync_run_project_input_fields()
+
     def _on_edit_inline_dialogue(self) -> None:
         updated = self._open_inline_dialogue_definition_dialog(
             self._inline_dialogue_definition or {"segments": []}
@@ -11145,6 +11732,9 @@ class CommandEditorDialog(QDialog):
             item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
+            project_command_inputs_provider=self._project_command_inputs_provider,
+            visual_picker=self._visual_picker,
+            animation_picker=self._animation_picker,
             current_entity_id=self._current_entity_id,
             current_area_id=self._current_area_id,
             current_entity_command_names=self._current_entity_command_names,
@@ -11172,6 +11762,9 @@ class CommandListDialog(QDialog):
         item_picker: Callable[..., str | None] | None = None,
         dialogue_picker: Callable[[str], str | None] | None = None,
         command_picker: Callable[[str], str | None] | None = None,
+        project_command_inputs_provider: Callable[[str], dict[str, dict[str, Any]] | None] | None = None,
+        visual_picker: Callable[..., str | None] | None = None,
+        animation_picker: Callable[..., str | None] | None = None,
         suggested_command_names: list[str] | tuple[str, ...] | None = None,
         command_spec_id_label: str | None = None,
         current_entity_id: str | None = None,
@@ -11192,6 +11785,9 @@ class CommandListDialog(QDialog):
         self._item_picker = item_picker
         self._dialogue_picker = dialogue_picker
         self._command_picker = command_picker
+        self._project_command_inputs_provider = project_command_inputs_provider
+        self._visual_picker = visual_picker
+        self._animation_picker = animation_picker
         self._suggested_command_names = tuple(
             str(name).strip()
             for name in (suggested_command_names or ())
@@ -11385,6 +11981,9 @@ class CommandListDialog(QDialog):
             item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
+            project_command_inputs_provider=self._project_command_inputs_provider,
+            visual_picker=self._visual_picker,
+            animation_picker=self._animation_picker,
             command_spec_id_label=self._command_spec_id_label,
             current_entity_id=self._current_entity_id,
             current_area_id=self._current_area_id,
@@ -11414,6 +12013,9 @@ class CommandListDialog(QDialog):
             item_picker=self._item_picker,
             dialogue_picker=self._dialogue_picker,
             command_picker=self._command_picker,
+            project_command_inputs_provider=self._project_command_inputs_provider,
+            visual_picker=self._visual_picker,
+            animation_picker=self._animation_picker,
             command_spec_id_label=self._command_spec_id_label,
             current_entity_id=self._current_entity_id,
             current_area_id=self._current_area_id,

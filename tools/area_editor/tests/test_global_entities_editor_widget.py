@@ -34,7 +34,12 @@ class TestGlobalEntitiesEditorWidget(unittest.TestCase):
                     "startup_area": "areas/demo",
                     "save_dir": "slot_data",
                     "shared_variables_path": "shared_variables.json",
-                    "input_targets": {"interact": "player_1"},
+                    "input_routes": {
+                        "interact": {
+                            "entity_id": "player_1",
+                            "command_id": "interact",
+                        }
+                    },
                     "debug_inspection_enabled": True,
                     "command_runtime": {
                         "max_settle_passes": 64,
@@ -73,7 +78,15 @@ class TestGlobalEntitiesEditorWidget(unittest.TestCase):
             self.assertEqual(saved["startup_area"], "areas/demo")
             self.assertEqual(saved["save_dir"], "slot_data")
             self.assertEqual(saved["shared_variables_path"], "shared_variables.json")
-            self.assertEqual(saved["input_targets"], {"interact": "player_1"})
+            self.assertEqual(
+                saved["input_routes"],
+                {
+                    "interact": {
+                        "entity_id": "player_1",
+                        "command_id": "interact",
+                    }
+                },
+            )
             self.assertTrue(saved["debug_inspection_enabled"])
             self.assertEqual(saved["command_runtime"], {"max_settle_passes": 64})
             self.assertEqual(
