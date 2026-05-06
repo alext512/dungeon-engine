@@ -9,8 +9,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -52,7 +52,9 @@ from area_editor.widgets.reference_picker_support import (
     EntityReferencePickerRequest,
     call_reference_picker_callback,
 )
+from area_editor.widgets.documentation_viewer import DocumentationDialog
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 _KNOWN_COMMAND_NAMES: tuple[str, ...] | None = None
 _ADVANCED_COMMAND_TYPES = {
     "set_current_area_var_length",
@@ -805,6 +807,81 @@ _COMMAND_HELP_SUMMARIES: dict[str, str] = {
     "set_entity_active_dialogue_by_order": "Set one entity's active dialogue by authored order number.",
 }
 
+_COMMAND_HELP_DETAILS: dict[str, tuple[str, ...]] = {
+    "open_dialogue_session": (
+        "Use this for a direct dialogue launch from a project dialogue file or inline dialogue definition.",
+        "This opens the dialogue immediately and waits until the dialogue session finishes.",
+    ),
+    "open_entity_dialogue": (
+        "Use this when the dialogue belongs to an entity, such as an NPC with several named dialogue entries.",
+        "If dialogue_id is empty, the command reads that entity's active_dialogue variable.",
+    ),
+    "set_entity_active_dialogue": (
+        "Use this when an entity has several named dialogue entries and you want to choose which one opens next.",
+        "This changes the entity's active_dialogue variable. It does not open a dialogue by itself.",
+    ),
+    "step_entity_active_dialogue": (
+        "Use this to move forward or backward through an entity's authored dialogue order.",
+        "This changes the entity's active_dialogue variable. It does not open a dialogue by itself.",
+    ),
+    "set_entity_active_dialogue_by_order": (
+        "Use this to pick one entity dialogue by its 1-based order in the editor.",
+        "This is convenient for simple cycling, but named dialogue ids are safer when the order may change.",
+    ),
+    "close_dialogue_session": (
+        "Use this inside dialogue hooks, options, or UI commands when the current dialogue should close early.",
+    ),
+}
+
+_COMMAND_HELP_EXAMPLES: dict[str, str] = {
+    "open_entity_dialogue": (
+        '{\n'
+        '  "type": "open_entity_dialogue",\n'
+        '  "entity_id": "old_miner"\n'
+        '}'
+    ),
+    "set_entity_active_dialogue": (
+        '{\n'
+        '  "type": "set_entity_active_dialogue",\n'
+        '  "entity_id": "old_miner",\n'
+        '  "dialogue_id": "after_gate_opens"\n'
+        '}'
+    ),
+    "step_entity_active_dialogue": (
+        '{\n'
+        '  "type": "step_entity_active_dialogue",\n'
+        '  "entity_id": "old_miner",\n'
+        '  "delta": 1,\n'
+        '  "wrap": true\n'
+        '}'
+    ),
+    "set_entity_active_dialogue_by_order": (
+        '{\n'
+        '  "type": "set_entity_active_dialogue_by_order",\n'
+        '  "entity_id": "old_miner",\n'
+        '  "order": 2\n'
+        '}'
+    ),
+}
+
+_COMMAND_DOC_TARGETS: dict[str, tuple[str, str]] = {
+    "open_dialogue_session": ("docs/authoring/commands/dialogue.md", "open_dialogue_session"),
+    "close_dialogue_session": ("docs/authoring/commands/dialogue.md", "close_dialogue_session"),
+    "open_entity_dialogue": ("docs/authoring/commands/dialogue.md", "open_entity_dialogue"),
+    "set_entity_active_dialogue": (
+        "docs/authoring/commands/dialogue.md",
+        "set_entity_active_dialogue",
+    ),
+    "step_entity_active_dialogue": (
+        "docs/authoring/commands/dialogue.md",
+        "step_entity_active_dialogue",
+    ),
+    "set_entity_active_dialogue_by_order": (
+        "docs/authoring/commands/dialogue.md",
+        "set_entity_active_dialogue_by_order",
+    ),
+}
+
 _COMMON_FIELD_HELP: dict[str, str] = {
     "entity_id": "Target entity id or token.",
     "entity_ids": "Optional list of entity ids or tokens targeted by this command.",
@@ -987,6 +1064,147 @@ _COMMAND_FIELD_HELP_OVERRIDES: dict[str, dict[str, str]] = {
         "name": "Variable key written under the target entity's variables map.",
     },
 }
+
+
+def _command_help_summary(command_type: str) -> str:
+    return _COMMAND_HELP_SUMMARIES.get(command_type, "").strip()
+
+
+def _command_field_help(command_type: str, field_name: str) -> str | None:
+    help_text = _COMMAND_FIELD_HELP_OVERRIDES.get(command_type, {}).get(field_name)
+    if help_text is None:
+        help_text = _COMMON_FIELD_HELP.get(field_name)
+    if help_text is None:
+        return None
+    text = str(help_text).strip()
+    return text or None
+
+
+def _command_docs_target(command_type: str) -> tuple[Path, str] | None:
+    normalized = str(command_type).strip()
+    target = _COMMAND_DOC_TARGETS.get(normalized)
+    if target is None:
+        return None
+    relative_path, anchor = target
+    docs_path = _REPO_ROOT / relative_path
+    if not docs_path.exists():
+        return None
+    return docs_path, anchor
+
+
+def _command_docs_url(command_type: str) -> QUrl | None:
+    target = _command_docs_target(command_type)
+    if target is None:
+        return None
+    docs_path, anchor = target
+    url = QUrl.fromLocalFile(str(docs_path))
+    if anchor:
+        url.setFragment(anchor)
+    return url
+
+
+def _open_command_docs(command_type: str, parent: QWidget | None = None) -> bool:
+    target = _command_docs_target(command_type)
+    if target is None:
+        return False
+    docs_path, anchor = target
+    owner = parent
+    modal_dialog = None
+    while owner is not None:
+        if modal_dialog is None and isinstance(owner, QDialog) and owner.isModal():
+            modal_dialog = owner
+        open_docs_file = getattr(owner, "_open_docs_file", None)
+        if callable(open_docs_file):
+            if modal_dialog is not None:
+                dialog = DocumentationDialog(
+                    modal_dialog,
+                    start_path=docs_path,
+                    fragment=anchor,
+                )
+                dialog.exec()
+                return True
+            open_docs_file(docs_path, anchor)
+            return True
+        owner = owner.parentWidget()
+    if modal_dialog is not None:
+        dialog = DocumentationDialog(
+            modal_dialog,
+            start_path=docs_path,
+            fragment=anchor,
+        )
+        dialog.exec()
+        return True
+    url = _command_docs_url(command_type)
+    if url is None:
+        return False
+    return bool(QDesktopServices.openUrl(url))
+
+
+def _command_help_text(command_type: str) -> str:
+    normalized = str(command_type).strip()
+    if not normalized:
+        return "This command has no command type yet."
+
+    summary = _command_help_summary(normalized)
+    if not summary:
+        return (
+            f"{normalized}\n\n"
+            "No built-in help is available for this command type. It may be a "
+            "custom or unsupported command. Open it in the command editor or "
+            "Raw JSON to inspect its fields."
+        )
+
+    lines = [normalized, "", summary]
+    details = _COMMAND_HELP_DETAILS.get(normalized, ())
+    if details:
+        lines.extend(["", *details])
+    field_names = sorted(_OWNED_FIELDS_BY_COMMAND_TYPE.get(normalized, set()))
+    field_lines = []
+    for field_name in field_names:
+        help_text = _command_field_help(normalized, field_name)
+        if help_text:
+            field_lines.append(f"- {field_name}: {help_text}")
+    if field_lines:
+        lines.extend(["", "Fields:", *field_lines])
+    example = _COMMAND_HELP_EXAMPLES.get(normalized)
+    if example:
+        lines.extend(["", "Example:", example])
+    if _command_docs_target(normalized) is not None:
+        lines.extend(["", "Use Open Docs for the full page."])
+    return "\n".join(lines)
+
+
+def _build_command_help_message_box(
+    parent: QWidget | None,
+    command_type: str,
+) -> tuple[QMessageBox, QPushButton | None]:
+    normalized = str(command_type).strip() or "Command"
+    message_box = QMessageBox(parent)
+    message_box.setIcon(QMessageBox.Icon.Information)
+    message_box.setWindowTitle(f"Command Help - {normalized}")
+    message_box.setText(_command_help_text(normalized))
+    message_box.setTextFormat(Qt.TextFormat.PlainText)
+    open_docs_button = None
+    if _command_docs_target(normalized) is not None:
+        open_docs_button = message_box.addButton(
+            "Open Docs",
+            QMessageBox.ButtonRole.ActionRole,
+        )
+    message_box.addButton(QMessageBox.StandardButton.Ok)
+    return message_box, open_docs_button
+
+
+def _show_command_help_dialog(parent: QWidget | None, command_type: str) -> None:
+    normalized = str(command_type).strip() or "Command"
+    message_box, open_docs_button = _build_command_help_message_box(parent, normalized)
+    message_box.exec()
+    if open_docs_button is not None and message_box.clickedButton() == open_docs_button:
+        if not _open_command_docs(normalized, parent):
+            QMessageBox.warning(
+                parent,
+                "Command Docs",
+                "The command documentation could not be opened.",
+            )
 
 _COMMON_ENTITY_REFERENCE_TOKENS: tuple[tuple[str, str], ...] = (
     ("$self_id", "Self"),
@@ -2533,6 +2751,7 @@ class _CommandTypePickerDialog(QDialog):
         outer.addWidget(self._search_edit)
 
         self._command_list = QListWidget()
+        self._command_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         outer.addWidget(self._command_list, 1)
 
         self._buttons = QDialogButtonBox(
@@ -2547,6 +2766,9 @@ class _CommandTypePickerDialog(QDialog):
         self._command_list.itemDoubleClicked.connect(lambda _item: self.accept())
         self._command_list.currentRowChanged.connect(
             lambda _row: self._sync_accept_button()
+        )
+        self._command_list.customContextMenuRequested.connect(
+            self._on_command_context_menu_requested
         )
 
         self._apply_filter("")
@@ -2614,13 +2836,32 @@ class _CommandTypePickerDialog(QDialog):
     def _add_command_item(self, command_name: str) -> QListWidgetItem:
         item = QListWidgetItem(command_name)
         item.setData(Qt.ItemDataRole.UserRole, command_name)
+        summary = _command_help_summary(command_name)
+        if summary:
+            item.setToolTip(summary)
         self._command_list.addItem(item)
         return item
 
     def _sync_accept_button(self) -> None:
         ok_button = self._buttons.button(QDialogButtonBox.StandardButton.Ok)
         if ok_button is not None:
-            ok_button.setEnabled(self._command_list.currentItem() is not None)
+            ok_button.setEnabled(self.selected_command_type() is not None)
+
+    def _on_command_context_menu_requested(self, position) -> None:
+        item = self._command_list.itemAt(position)
+        if item is None:
+            return
+        command_type = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(command_type, str) or not command_type.strip():
+            return
+        menu = QMenu(self)
+        help_action = menu.addAction("Help")
+        chosen = menu.exec(self._command_list.viewport().mapToGlobal(position))
+        if chosen == help_action:
+            self._show_command_help(command_type)
+
+    def _show_command_help(self, command_type: str) -> None:
+        _show_command_help_dialog(self, command_type)
 
     def accept(self) -> None:  # noqa: D401
         if self.selected_command_type() is None:
@@ -2884,15 +3125,15 @@ class CommandEditorDialog(QDialog):
         inline_layout.setContentsMargins(0, 0, 0, 0)
         inline_layout.setSpacing(6)
         self._inline_dialogue_summary = QLabel("0 segments")
-        self._edit_inline_dialogue_button = QPushButton("Edit Dialogue...")
+        self._edit_inline_dialogue_button = QPushButton("Write Dialogue...")
         self._edit_inline_dialogue_button.setAutoDefault(False)
         self._edit_inline_dialogue_button.setDefault(False)
         self._edit_inline_dialogue_button.clicked.connect(self._on_edit_inline_dialogue)
         inline_layout.addWidget(self._inline_dialogue_summary, 1)
         inline_layout.addWidget(self._edit_inline_dialogue_button)
-        open_dialogue_form.addRow("dialogue_definition", inline_row)
+        open_dialogue_form.addRow("dialogue content", inline_row)
         self._open_dialogue_definition_note = make_help_note(
-            "Edit the inline dialogue stored directly on this command, used only when dialogue_source is Inline Dialogue."
+            "Click Write Dialogue to add text segments, choices, and branches. Used only when dialogue_source is Inline Dialogue."
         )
         open_dialogue_form.addRow(self._open_dialogue_definition_note)
 
@@ -6496,17 +6737,11 @@ class CommandEditorDialog(QDialog):
 
     @staticmethod
     def _command_help_summary(command_type: str) -> str:
-        return _COMMAND_HELP_SUMMARIES.get(command_type, "").strip()
+        return _command_help_summary(command_type)
 
     @staticmethod
     def _command_field_help(command_type: str, field_name: str) -> str | None:
-        help_text = _COMMAND_FIELD_HELP_OVERRIDES.get(command_type, {}).get(field_name)
-        if help_text is None:
-            help_text = _COMMON_FIELD_HELP.get(field_name)
-        if help_text is None:
-            return None
-        text = str(help_text).strip()
-        return text or None
+        return _command_field_help(command_type, field_name)
 
     @classmethod
     def _iter_form_label_rows(
@@ -12048,9 +12283,11 @@ class CommandListDialog(QDialog):
         menu = QMenu(self)
         add_action = menu.addAction("Add Command...")
         edit_action = None
+        help_action = None
         delete_action = None
         if target_row >= 0:
             edit_action = menu.addAction("Edit...")
+            help_action = menu.addAction("Help")
             menu.addSeparator()
             delete_action = menu.addAction("Delete")
         chosen = menu.exec(self._command_list.viewport().mapToGlobal(position))
@@ -12058,8 +12295,17 @@ class CommandListDialog(QDialog):
             self._add_command_after(target_row if target_row >= 0 else None)
         elif edit_action is not None and chosen == edit_action:
             self._edit_command_at(target_row)
+        elif help_action is not None and chosen == help_action:
+            self._show_command_help_at(target_row)
         elif delete_action is not None and chosen == delete_action:
             self._delete_command_at(target_row)
+
+    def _show_command_help_at(self, row: int) -> None:
+        command = self._command_at_row(row)
+        if command is None:
+            return
+        command_type = str(command.get("type", "")).strip() or "(no type)"
+        _show_command_help_dialog(self, command_type)
 
     def _on_command_visual_order_changed(self, visual_order: list[int]) -> None:
         if len(visual_order) != len(self._commands):

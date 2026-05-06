@@ -43,6 +43,7 @@ class ContentType(Enum):
     SHARED_VARIABLES = auto()
     PROJECT_MANIFEST = auto()
     GLOBAL_ENTITIES = auto()
+    DOCUMENTATION = auto()
 
 
 class _TabInfo:
@@ -271,6 +272,8 @@ class DocumentTabWidget(QStackedWidget):
             base = info.file_path.stem
         elif info.content_type == ContentType.GLOBAL_ENTITIES:
             base = "global_entities"
+        elif info.content_type == ContentType.DOCUMENTATION:
+            base = "Docs"
         else:
             base = info.content_id.rsplit("/", 1)[-1]
         return f"*{base}" if info.dirty else base

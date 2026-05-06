@@ -12,8 +12,14 @@ import json
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QTransform
+from PySide6.QtCore import QSize, QSettings, Qt
+from PySide6.QtGui import (
+    QAction,
+    QCloseEvent,
+    QIcon,
+    QKeySequence,
+    QTransform,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -117,6 +123,10 @@ from area_editor.widgets.canvas_tool_strip import CanvasToolStrip
 from area_editor.widgets.cell_flag_brush_panel import CellFlagBrushPanel
 from area_editor.widgets.command_list_dialog import CommandListDialog
 from area_editor.widgets.document_tab_widget import ContentType, DocumentTabWidget
+from area_editor.widgets.documentation_viewer import (
+    AUTHORING_DOCS_PATH,
+    DocumentationViewerWidget,
+)
 from area_editor.widgets.entity_instance_dialog import EntityInstanceDialog
 from area_editor.widgets.entity_instance_json_panel import (
     EntityReferencePickerRequest,
@@ -229,6 +239,7 @@ class MainWindow(
         self._item_panel = FileTreePanel(
             "Items",
             object_name="ItemPanel",
+            icon_size=24,
             content_prefix="items",
         )
         self._global_entities_panel = GlobalEntitiesPanel()
@@ -719,7 +730,7 @@ class MainWindow(
         self._template_panel.set_templates(
             self._manifest, self._templates, self._catalog
         )
-        self._item_panel.populate(self._manifest.item_paths)
+        self._refresh_item_panel()
         self._global_entities_panel.populate(discover_global_entities(self._manifest))
         self._dialogue_panel.populate(self._manifest.dialogue_paths)
         self._command_panel.populate(self._manifest.command_paths)
@@ -759,11 +770,17 @@ class MainWindow(
 
         file_menu.addSeparator()
 
-        self._save_action = QAction("&Save", self)
+        self._save_action = QAction("Save Current &Tab", self)
         self._save_action.setShortcut(QKeySequence.StandardKey.Save)
         self._save_action.setEnabled(False)
         self._save_action.triggered.connect(self._on_save_active)
         file_menu.addAction(self._save_action)
+
+        self._save_all_action = QAction("Save &All", self)
+        self._save_all_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self._save_all_action.setEnabled(False)
+        self._save_all_action.triggered.connect(self._on_save_all)
+        file_menu.addAction(self._save_all_action)
 
         file_menu.addSeparator()
 
@@ -1054,6 +1071,38 @@ class MainWindow(
             lambda: self._on_change_area_extent("remove_right_columns")
         )
         area_menu.addAction(self._remove_right_columns_action)
+
+        self._help_menu = self.menuBar().addMenu("&Help")
+
+        self._open_documentation_action = QAction("Documentation", self)
+        self._open_documentation_action.setStatusTip(
+            "Open the integrated documentation browser."
+        )
+        self._open_documentation_action.triggered.connect(
+            lambda: self._open_docs_file(AUTHORING_DOCS_PATH)
+        )
+        self._help_menu.addAction(self._open_documentation_action)
+
+    def _open_docs_file(self, docs_path: Path, fragment: str = "") -> None:
+        """Open one local Markdown documentation file in the editor docs tab."""
+        if not docs_path.exists():
+            QMessageBox.warning(
+                self,
+                "Documentation",
+                f"Documentation file not found:\n{docs_path}",
+            )
+            return
+        widget = self._tab_widget.widget_for_content("docs/authoring")
+        if not isinstance(widget, DocumentationViewerWidget):
+            widget = DocumentationViewerWidget(start_path=docs_path)
+        opened_widget = self._tab_widget.open_tab(
+            "docs/authoring",
+            AUTHORING_DOCS_PATH,
+            ContentType.DOCUMENTATION,
+            widget=widget,
+        )
+        if isinstance(opened_widget, DocumentationViewerWidget):
+            opened_widget.open_document(docs_path, fragment)
 
     def _build_tool_bar(self) -> None:
         """Expose the main canvas tools near the document area."""
@@ -1780,6 +1829,7 @@ class MainWindow(
             self._layer_panel.set_layers(doc.tile_layers)
             self._status_area.setText(content_id)
             self._save_action.setEnabled(True)
+            self._save_all_action.setEnabled(True)
             self._cell_flags_action.setEnabled(True)
             self._set_area_actions_enabled(True)
 
@@ -1835,6 +1885,7 @@ class MainWindow(
             self._status_gid.setText("")
             self._status_zoom.setText("")
             self._save_action.setEnabled(self._active_json_widget() is not None)
+            self._save_all_action.setEnabled(True)
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
@@ -1870,6 +1921,7 @@ class MainWindow(
             self._status_gid.setText("")
             self._status_zoom.setText("")
             self._save_action.setEnabled(False)
+            self._save_all_action.setEnabled(False)
             self._cell_flags_action.setEnabled(False)
             self._paint_tiles_action.setEnabled(False)
             self._select_action.setEnabled(False)
@@ -1960,7 +2012,7 @@ class MainWindow(
         self._template_panel.set_templates(
             self._manifest, self._templates, self._catalog
         )
-        self._item_panel.populate(self._manifest.item_paths)
+        self._refresh_item_panel()
         self._global_entities_panel.populate(discover_global_entities(self._manifest))
         self._dialogue_panel.populate(self._manifest.dialogue_paths)
         self._command_panel.populate(self._manifest.command_paths)
@@ -1982,6 +2034,62 @@ class MainWindow(
                 self._templates,
                 self._catalog,
             )
+
+    def _refresh_item_panel(self) -> None:
+        if self._manifest is None:
+            return
+        self._item_panel.populate(
+            self._manifest.item_paths,
+            icon_provider=self._item_browser_icon,
+        )
+
+    def _item_browser_icon(self, _content_id: str, file_path: Path) -> QIcon | None:
+        if self._catalog is None:
+            return None
+        try:
+            data = load_json_data(file_path)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        icon = data.get("icon")
+        if not isinstance(icon, dict):
+            return None
+        path = icon.get("path")
+        if not isinstance(path, str) or not path.strip():
+            return None
+
+        frame_width = self._coerce_positive_int(icon.get("frame_width", 16), 16)
+        frame_height = self._coerce_positive_int(icon.get("frame_height", 16), 16)
+        frame_index = self._coerce_non_negative_int(icon.get("frame", 0), 0)
+        pixmap = self._project_sprite_frame_pixmap(
+            path.strip(),
+            frame_width,
+            frame_height,
+            frame_index,
+        )
+        if pixmap is None or pixmap.isNull():
+            return None
+        scaled = pixmap.scaled(
+            QSize(24, 24),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation,
+        )
+        return QIcon(scaled)
+
+    @staticmethod
+    def _coerce_positive_int(raw_value: object, default: int) -> int:
+        try:
+            return max(1, int(raw_value))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_non_negative_int(raw_value: object, default: int) -> int:
+        try:
+            return max(0, int(raw_value))
+        except (TypeError, ValueError):
+            return default
 
     def _populate_area_context_menu(self, menu, content_id: str, file_path: Path) -> None:
         self._add_open_area_raw_json_action(menu, content_id, file_path)
@@ -3789,6 +3897,17 @@ class MainWindow(
             return
         if self._save_content(info.content_id):
             self.statusBar().showMessage(f"Saved {info.content_id}", 3000)
+
+    def _on_save_all(self) -> None:
+        dirty_ids = self._dirty_content_ids_for_save()
+        if not dirty_ids:
+            self.statusBar().showMessage("No edited tabs to save.", 3000)
+            return
+        for content_id in dirty_ids:
+            if not self._save_content(content_id):
+                return
+        noun = "tab" if len(dirty_ids) == 1 else "tabs"
+        self.statusBar().showMessage(f"Saved {len(dirty_ids)} edited {noun}.", 3000)
 
     # ------------------------------------------------------------------
     # Slots — canvas status
@@ -6023,22 +6142,39 @@ class MainWindow(
             self._refresh_project_metadata_surfaces()
         elif info.content_type == ContentType.ENTITY_TEMPLATE:
             self._refresh_template_surfaces()
+        elif info.content_type == ContentType.ITEM:
+            self._refresh_item_panel()
         elif info.content_type == ContentType.NAMED_COMMAND:
             self._refresh_project_metadata_surfaces()
         return True
 
-    def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
+    def _dirty_content_ids_for_save(
+        self,
+        content_ids: list[str] | None = None,
+    ) -> list[str]:
         dirty_ids = self._tab_widget.dirty_content_ids()
         if content_ids is not None:
             wanted = set(content_ids)
             dirty_ids = [content_id for content_id in dirty_ids if content_id in wanted]
+        regular_ids: list[str] = []
+        raw_area_json_ids: list[str] = []
+        for content_id in dirty_ids:
+            info = self._tab_widget.content_info(content_id)
+            if info is not None and info.content_type == ContentType.AREA_JSON:
+                raw_area_json_ids.append(content_id)
+            else:
+                regular_ids.append(content_id)
+        return regular_ids + raw_area_json_ids
+
+    def _maybe_save_dirty_tabs(self, content_ids: list[str] | None = None) -> bool:
+        dirty_ids = self._dirty_content_ids_for_save(content_ids)
         if not dirty_ids:
             return True
 
         message = (
             f"Save changes to {dirty_ids[0]} before continuing?"
             if len(dirty_ids) == 1
-            else f"Save changes to {len(dirty_ids)} edited areas before continuing?"
+            else f"Save changes to {len(dirty_ids)} edited tabs before continuing?"
         )
         choice = QMessageBox.question(
             self,
@@ -7081,3 +7217,19 @@ class MainWindow(
         if pixmap is not None and visual.flip_x:
             return pixmap.transformed(QTransform().scale(-1, 1))
         return pixmap
+
+    def _project_sprite_frame_pixmap(
+        self,
+        authored_path: str,
+        frame_width: int,
+        frame_height: int,
+        frame_index: int,
+    ):
+        if self._catalog is None:
+            return None
+        return self._catalog.get_sprite_frame(
+            authored_path,
+            frame_width,
+            frame_height,
+            frame_index,
+        )

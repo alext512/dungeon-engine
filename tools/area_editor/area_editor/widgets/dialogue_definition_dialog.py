@@ -478,7 +478,7 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         self._dialogue_summary_label.setWordWrap(True)
         dialogue_layout.addWidget(self._dialogue_summary_label)
         self._dialogue_note_label = QLabel(
-            "Right-click this dialogue in the tree to insert segments, or use the buttons below."
+            "Add a text segment, then select that segment to write the dialogue text."
         )
         self._dialogue_note_label.setWordWrap(True)
         self._dialogue_note_label.setStyleSheet("color: #666;")
@@ -506,9 +506,10 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         self._segment_type_label = QLabel("-")
         segment_form.addRow("type", self._segment_type_label)
         segment_layout.addLayout(segment_form)
-        segment_layout.addWidget(QLabel("text"))
+        self._segment_text_label = QLabel("dialogue text")
+        segment_layout.addWidget(self._segment_text_label)
         self._segment_text_edit = QPlainTextEdit()
-        self._segment_text_edit.setPlaceholderText("Segment text or choice prompt")
+        self._segment_text_edit.setPlaceholderText("Write the dialogue text here")
         self._segment_text_edit.setFixedHeight(110)
         segment_layout.addWidget(self._segment_text_edit)
         segment_start_row = QHBoxLayout()
@@ -1124,6 +1125,12 @@ class _DialogueDefinitionStructuredEditor(QWidget):
         self._segment_text_edit.setPlainText(
             "" if segment.get("text") is None else str(segment.get("text", ""))
         )
+        if segment_type == "choice":
+            self._segment_text_label.setText("choice prompt")
+            self._segment_text_edit.setPlaceholderText("Write the choice prompt here")
+        else:
+            self._segment_text_label.setText("dialogue text")
+            self._segment_text_edit.setPlaceholderText("Write the dialogue text here")
         with QSignalBlocker(self._segment_end_dialogue_checkbox):
             self._segment_end_dialogue_checkbox.setChecked(
                 self._segment_end_dialogue_enabled(segment)

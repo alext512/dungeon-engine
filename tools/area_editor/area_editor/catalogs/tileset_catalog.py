@@ -28,6 +28,7 @@ class TilesetCatalog:
         self._resolver = resolver
         self._sheet_cache: dict[str, QPixmap | None] = {}
         self._frame_cache: dict[tuple[str, int], QPixmap] = {}
+        self._sprite_frame_cache: dict[tuple[str, int, int, int], QPixmap] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -97,8 +98,8 @@ class TilesetCatalog:
 
         Used for entity visual rendering (not GID-based).
         """
-        cache_key = (authored_path, frame_index)
-        cached = self._frame_cache.get(cache_key)
+        cache_key = (authored_path, frame_width, frame_height, frame_index)
+        cached = self._sprite_frame_cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -123,7 +124,7 @@ class TilesetCatalog:
             return None
 
         frame = sheet.copy(src)
-        self._frame_cache[cache_key] = frame
+        self._sprite_frame_cache[cache_key] = frame
         return frame
 
     def get_sheet(self, authored_path: str) -> QPixmap | None:
@@ -147,6 +148,7 @@ class TilesetCatalog:
         """Drop all cached data (e.g. when switching projects)."""
         self._sheet_cache.clear()
         self._frame_cache.clear()
+        self._sprite_frame_cache.clear()
 
     # ------------------------------------------------------------------
     # Internals

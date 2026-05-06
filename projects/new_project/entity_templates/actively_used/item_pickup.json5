@@ -1,0 +1,26 @@
+/*
+  NOTES
+
+  Add file-level notes here.
+*/
+
+{
+  "kind": "item_pickup",
+  "space": "world",
+  "scope": "area",
+  "solid": false,
+  "interactable": false,
+  "render_order": 10,
+  "y_sort": true,
+  "visuals": [
+    {
+      "id": "main",
+      "path": "assets/project/items/glimmer_berry_icon.png",
+      "frame_width": 16,
+      "frame_height": 16,
+      "frames": [
+        0
+      ]
+    }
+  ]
+}

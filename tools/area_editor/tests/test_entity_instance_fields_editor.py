@@ -532,6 +532,34 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         )
         self.assertEqual(updated._extra["custom_field"], "keep-me")
 
+    def test_variables_table_updates_instance_variables(self):
+        entity = EntityDocument(
+            id="berry_pickup",
+            grid_x=2,
+            grid_y=3,
+            template="entity_templates/area_door",
+            _extra={"variables": {"opened": False}},
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        fields._variables_table.set_variables({})
+        fields._variables_table.add_variable(
+            "item_id",
+            "items/consumables/glimmer_berry",
+        )
+        fields._variables_table.add_variable("quantity", "1")
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["variables"],
+            {
+                "item_id": "items/consumables/glimmer_berry",
+                "quantity": 1,
+            },
+        )
+
     def test_template_managed_field_defaults_drive_ui_without_forcing_overrides(self):
         entity = EntityDocument(
             id="sign_1",
@@ -1009,6 +1037,44 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
             },
         )
 
+    def test_entity_command_name_prompt_suggests_standard_hooks(self):
+        entity = EntityDocument(
+            id="trigger",
+            grid_x=1,
+            grid_y=1,
+            template="entity_templates/reference_panel",
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+        captured: dict[str, object] = {}
+
+        def fake_get_item(parent, title, label, items, current, editable):
+            captured["label"] = label
+            captured["items"] = list(items)
+            captured["current"] = current
+            captured["editable"] = editable
+            return "on_occupant_leave", True
+
+        with patch(
+            "area_editor.widgets.entity_instance_json_panel.QInputDialog.getItem",
+            fake_get_item,
+        ):
+            selected = fields._prompt_entity_command_name(
+                title="Add Entity Command",
+                existing_names={"interact", "on_occupant_enter"},
+            )
+
+        self.assertEqual(selected, "on_occupant_leave")
+        self.assertIn("type a custom name", str(captured["label"]))
+        self.assertNotIn("interact", captured["items"])
+        self.assertNotIn("on_occupant_enter", captured["items"])
+        self.assertIn("on_blocked", captured["items"])
+        self.assertIn("on_occupant_leave", captured["items"])
+        self.assertIn("custom_command", captured["items"])
+        self.assertEqual(captured["current"], 0)
+        self.assertTrue(captured["editable"])
+
     def test_build_entity_from_fields_updates_inventory(self):
         entity = EntityDocument(
             id="carrier",
@@ -1177,9 +1243,19 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         self.panel.load_entity(entity)
         fields = self.panel._fields_editor
         fields._persistence_entity_state_check.setChecked(False)
-        fields._persistence_variables_text.setPlainText(
-            '{\n  "times_pushed": true,\n  "shake_timer": false\n}'
+        self.assertEqual(fields._persistence_variables_table.rowCount(), 1)
+        self.assertEqual(
+            fields._persistence_variables_table.item(0, 0).text(),
+            "shake_timer",
         )
+
+        fields._add_persistence_variable_rule("times_pushed")
+        times_pushed_row = fields._persistence_variables_table.currentRow()
+        times_pushed_combo = fields._persistence_variables_table.cellWidget(
+            times_pushed_row,
+            1,
+        )
+        self.assertEqual(times_pushed_combo.currentData(), True)
 
         updated = self.panel.build_entity_from_fields()
 
@@ -1192,6 +1268,46 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
                     "shake_timer": False,
                 },
             },
+        )
+
+    def test_persistence_table_tracks_template_and_instance_variables(self):
+        self.catalog._templates["entity_templates/area_door"]["variables"] = {
+            "opened": False,
+        }
+        entity = EntityDocument(
+            id="door_1",
+            grid_x=2,
+            grid_y=3,
+            template="entity_templates/area_door",
+            _extra={"variables": {"visited": True}},
+        )
+
+        self.panel.load_entity(entity)
+        fields = self.panel._fields_editor
+
+        self.assertEqual(fields._persistence_variables_table.rowCount(), 2)
+        self.assertEqual(
+            [
+                fields._persistence_variables_table.item(row, 0).text()
+                for row in range(fields._persistence_variables_table.rowCount())
+            ],
+            ["opened", "visited"],
+        )
+        for row in range(fields._persistence_variables_table.rowCount()):
+            combo = fields._persistence_variables_table.cellWidget(row, 1)
+            self.assertEqual(
+                combo.currentData(),
+                None,
+            )
+
+        visited_combo = fields._persistence_variables_table.cellWidget(1, 1)
+        visited_combo.setCurrentIndex(visited_combo.findData(True))
+
+        updated = self.panel.build_entity_from_fields()
+
+        self.assertEqual(
+            updated._extra["persistence"],
+            {"entity_state": False, "variables": {"visited": True}},
         )
 
     def test_parameter_reference_picker_buttons_fill_known_reference_fields(self):
@@ -1374,7 +1490,7 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
         reset = self.panel.build_entity_from_fields()
         self.assertIsNone(reset.parameters)
 
-    def test_build_entity_from_fields_rejects_invalid_persistence_variables(self):
+    def test_build_entity_from_fields_rejects_blank_persistence_variable_names(self):
         entity = EntityDocument(
             id="crate_1",
             grid_x=2,
@@ -1384,11 +1500,15 @@ class TestEntityInstanceFieldsEditor(unittest.TestCase):
 
         self.panel.load_entity(entity)
         fields = self.panel._fields_editor
-        fields._persistence_variables_text.setPlainText('{"times_pushed": 1}')
+        fields._insert_persistence_variable_row(
+            variable_name="",
+            rule=True,
+            custom=True,
+        )
 
         with self.assertRaisesRegex(
             ValueError,
-            "Persistence variable 'times_pushed' must be true or false.",
+            "Persistence variable names must not be blank.",
         ):
             self.panel.build_entity_from_fields()
 

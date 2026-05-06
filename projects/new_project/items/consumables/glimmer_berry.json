@@ -17,25 +17,15 @@
   "consume_quantity_on_use": 1,
   "use_commands": [
     {
-      "type": "set_entity_var",
-      "entity_id": "$instigator_id",
-      "name": "last_used_item",
-      "value": "items/consumables/glimmer_berry",
-      "persistent": true
-    },
-    {
-      "type": "show_screen_text",
-      "element_id": "sample_item_use_message",
-      "text": "The glimmer berry hums softly.",
-      "x": 128,
-      "y": 104,
-      "layer": 110,
-      "anchor": "center",
-      "color": [
-        245,
-        232,
-        190
-      ]
+      "type": "open_dialogue_session",
+      "dialogue_definition": {
+        "segments": [
+          {
+            "type": "text",
+            "text": "Ate glimmer berry"
+          }
+        ]
+      }
     }
   ]
 }

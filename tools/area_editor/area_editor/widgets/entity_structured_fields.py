@@ -23,6 +23,12 @@ ENTITY_INT_DEFAULTS = {
 }
 ENTITY_FACING_VALUES = ("down", "up", "left", "right")
 DEFAULT_ENTITY_COLOR = (255, 255, 255)
+STANDARD_ENTITY_COMMAND_HOOK_NAMES = (
+    "interact",
+    "on_blocked",
+    "on_occupant_enter",
+    "on_occupant_leave",
+)
 
 
 def parse_tag_list(text: str) -> list[str]:
@@ -226,6 +232,32 @@ def suggested_entity_command_copy_name(
     while f"{prefix}_{index}" in existing_names:
         index += 1
     return f"{prefix}_{index}"
+
+
+def suggested_entity_command_names(
+    *,
+    existing_names: set[str] | None = None,
+    current_name: str = "",
+) -> list[str]:
+    existing = existing_names or set()
+    current = current_name.strip()
+    names = [
+        name
+        for name in STANDARD_ENTITY_COMMAND_HOOK_NAMES
+        if name not in existing or name == current
+    ]
+    if current and current not in names:
+        names.insert(0, current)
+    custom_name = (
+        "custom_command"
+        if "custom_command" not in existing
+        else suggested_entity_command_copy_name("custom_command", existing)
+    )
+    if custom_name != current and custom_name not in names:
+        names.append(custom_name)
+    if not names:
+        names.append("custom_command")
+    return names
 
 
 def build_entity_commands(

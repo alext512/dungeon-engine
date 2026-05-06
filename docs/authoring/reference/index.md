@@ -8,6 +8,7 @@ This subsection is the quick lookup layer for game authors working through JSON 
 - [Content Types](content-types.md) for areas, templates, commands, items, and ordinary project JSON
 - [Built-in Commands](builtin-commands.md) for the runtime command inventory
 - [Runtime Tokens](runtime-tokens.md) for command-time lookups and structured value sources
+- [Command Pages](../commands/index.md) for editor-friendly command examples and cross-links
 
 ## Use The Long-Form Manuals When You Need More Depth
 

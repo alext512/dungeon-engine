@@ -420,6 +420,29 @@ class TestDialogueDefinitionDialog(unittest.TestCase):
             "set_entity_var",
         )
 
+    def test_structured_editor_points_text_segments_at_dialogue_text_field(self):
+        dialog = DialogueDefinitionDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_definition({"segments": []})
+
+        editor = dialog._structured_editor
+        editor._insert_text_segment()
+        text_item = editor._find_tree_item(("segment", (), 0))
+        self.assertIsNotNone(text_item)
+        editor._tree.setCurrentItem(text_item)
+        self.assertEqual(editor._segment_text_label.text(), "dialogue text")
+        self.assertIn(
+            "dialogue text",
+            editor._segment_text_edit.placeholderText(),
+        )
+
+        editor._insert_choice_segment()
+        choice_item = editor._find_tree_item(("segment", (), 1))
+        self.assertIsNotNone(choice_item)
+        editor._tree.setCurrentItem(choice_item)
+        self.assertEqual(editor._segment_text_label.text(), "choice prompt")
+        self.assertIn("choice prompt", editor._segment_text_edit.placeholderText())
+
     def test_structured_editor_can_reorder_segments_by_visual_order(self):
         dialog = DialogueDefinitionDialog()
         self.addCleanup(dialog.close)

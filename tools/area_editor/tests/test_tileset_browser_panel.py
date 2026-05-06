@@ -24,6 +24,28 @@ class TestTilesetBrowserPanel(unittest.TestCase):
     def setUpClass(cls):
         cls._app = QApplication.instance() or QApplication([])
 
+    def test_sprite_frame_cache_distinguishes_dimensions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            assets = root / "assets"
+            assets.mkdir()
+
+            sheet = QPixmap(32, 32)
+            sheet.fill(QColor("red"))
+            self.assertTrue(sheet.save(str(assets / "sheet.png")))
+
+            catalog = TilesetCatalog(AssetResolver([assets]))
+
+            small = catalog.get_sprite_frame("assets/sheet.png", 16, 16, 0)
+            large = catalog.get_sprite_frame("assets/sheet.png", 32, 32, 0)
+
+            self.assertIsNotNone(small)
+            self.assertIsNotNone(large)
+            assert small is not None
+            assert large is not None
+            self.assertEqual((small.width(), small.height()), (16, 16))
+            self.assertEqual((large.width(), large.height()), (32, 32))
+
     def test_select_gid_switches_to_owning_tileset(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

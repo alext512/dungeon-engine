@@ -17,11 +17,17 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 ## Dialogue
 
 - `open_dialogue_session` opens the engine-owned dialogue runtime from either a dialogue JSON file or an inline `dialogue_definition`.
+- `open_entity_dialogue` opens one dialogue from an entity's authored `dialogues` map.
 - `close_dialogue_session` closes the current engine-owned dialogue session.
+- `set_entity_active_dialogue` chooses one named entity dialogue for later `open_entity_dialogue` calls.
+- `step_entity_active_dialogue` moves an entity's active dialogue through its authored order.
+- `set_entity_active_dialogue_by_order` chooses an entity dialogue by 1-based authored order.
 
 Normal dialogue-option branching may now use option-level
 `next_dialogue_path` / `next_dialogue_definition`; keep `open_dialogue_session`
 for the general command path and advanced/custom cases.
+
+For examples and related-command notes, see [Dialogue Commands](../commands/dialogue.md).
 
 ## Inventory
 

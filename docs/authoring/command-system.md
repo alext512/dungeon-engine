@@ -267,5 +267,6 @@ The exact startup audit surface is documented in [Startup Checks](startup-checks
 
 For the complete built-in inventory, signatures, deferred nested command fields, and command-chain rules, use:
 
+- [Command Pages](commands/index.md)
 - [Built-in Commands](reference/builtin-commands.md)
 - [Engine JSON Interface](manuals/engine-json-interface.md)

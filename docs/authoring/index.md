@@ -22,6 +22,7 @@ The fastest way to orient yourself is:
 - [Engine Concepts](engine-concepts.md)
 - [Authoring Workflow](authoring-workflow.md)
 - [Command System](command-system.md)
+- [Command Pages](commands/index.md)
 
 Then use the long-form manuals when you need more depth:
 
@@ -47,6 +48,8 @@ Then use the long-form manuals when you need more depth:
 ### I want exact JSON fields and command details
 
 - Use the `JSON and Command Reference` subsection in this same `Game Authoring` section.
+- Use [Command Pages](commands/index.md) when you want editor-friendly command
+  examples and related links.
 - Drop into the long-form manuals when you need the full contract.
 
 ## If You Are Changing Engine Code

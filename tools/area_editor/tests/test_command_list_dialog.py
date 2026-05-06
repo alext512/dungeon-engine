@@ -5,18 +5,22 @@ from __future__ import annotations
 import json
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox
 
 from area_editor.widgets.reference_picker_support import EntityReferencePickerRequest
 from area_editor.widgets.command_list_dialog import (
     CommandEditorDialog,
     CommandListDialog,
     _CommandTypePickerDialog,
+    _build_command_help_message_box,
+    _command_docs_url,
+    _command_help_text,
+    _open_command_docs,
     summarize_command_list,
 )
 
@@ -47,6 +51,118 @@ class TestCommandListDialog(unittest.TestCase):
             "2 commands: wait_frames...",
         )
 
+    def test_command_help_text_describes_known_and_unknown_commands(self):
+        help_text = _command_help_text("set_entity_var")
+
+        self.assertIn("Write one variable on an entity", help_text)
+        self.assertIn("entity_id", help_text)
+        self.assertIn("Target entity id", help_text)
+        self.assertIn("name", help_text)
+
+        custom_help = _command_help_text("custom_project_plugin_command")
+        self.assertIn("No built-in help", custom_help)
+
+    def test_command_type_picker_help_popup_uses_command_help(self):
+        dialog = _CommandTypePickerDialog(
+            command_names=[
+                "set_entity_var",
+                "wait_frames",
+            ]
+        )
+        self.addCleanup(dialog.close)
+
+        with patch(
+            "area_editor.widgets.command_list_dialog._show_command_help_dialog"
+        ) as show_help:
+            dialog._show_command_help("set_entity_var")
+
+        show_help.assert_called_once_with(dialog, "set_entity_var")
+
+    def test_command_list_help_popup_uses_selected_command_type(self):
+        dialog = CommandListDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_commands(
+            [
+                {
+                    "type": "set_entity_var",
+                    "entity_id": "$instigator_id",
+                    "name": "last_used_item",
+                }
+            ]
+        )
+
+        with patch(
+            "area_editor.widgets.command_list_dialog._show_command_help_dialog"
+        ) as show_help:
+            dialog._show_command_help_at(0)
+
+        show_help.assert_called_once_with(dialog, "set_entity_var")
+
+    def test_command_help_dialog_links_documented_commands(self):
+        message_box, open_docs_button = _build_command_help_message_box(
+            None,
+            "set_entity_active_dialogue",
+        )
+        self.addCleanup(message_box.deleteLater)
+
+        self.assertIsNotNone(open_docs_button)
+        self.assertEqual(open_docs_button.text(), "Open Docs")
+        self.assertIn("does not open a dialogue by itself", message_box.text())
+        self.assertIn('"dialogue_id": "after_gate_opens"', message_box.text())
+
+        docs_url = _command_docs_url("set_entity_active_dialogue")
+        self.assertIsNotNone(docs_url)
+        self.assertEqual(docs_url.fragment(), "set_entity_active_dialogue")
+        self.assertTrue(
+            docs_url.toLocalFile().replace("/", os.sep).endswith(
+                os.path.join("docs", "authoring", "commands", "dialogue.md")
+            )
+        )
+
+    def test_open_command_docs_uses_local_docs_url(self):
+        parent = QLabel()
+        self.addCleanup(parent.close)
+        parent._open_docs_file = Mock()
+
+        self.assertTrue(_open_command_docs("set_entity_active_dialogue", parent))
+
+        parent._open_docs_file.assert_called_once()
+        opened_path, opened_anchor = parent._open_docs_file.call_args.args
+        self.assertTrue(
+            str(opened_path).replace("/", os.sep).endswith(
+                os.path.join("docs", "authoring", "commands", "dialogue.md")
+            )
+        )
+        self.assertEqual(opened_anchor, "set_entity_active_dialogue")
+
+        with patch(
+            "area_editor.widgets.command_list_dialog.QDesktopServices.openUrl",
+            return_value=True,
+        ) as open_url:
+            self.assertTrue(_open_command_docs("set_entity_active_dialogue"))
+
+        open_url.assert_called_once()
+        self.assertEqual(open_url.call_args.args[0].fragment(), "set_entity_active_dialogue")
+
+        self.assertFalse(_open_command_docs("custom_project_plugin_command"))
+
+    def test_open_command_docs_uses_foreground_dialog_from_modal_editor(self):
+        owner = QLabel()
+        self.addCleanup(owner.close)
+        owner._open_docs_file = Mock()
+        modal_parent = QDialog(owner)
+        self.addCleanup(modal_parent.close)
+        modal_parent.setModal(True)
+
+        with patch(
+            "area_editor.widgets.command_list_dialog.DocumentationDialog.exec",
+            return_value=int(QDialog.DialogCode.Rejected),
+        ) as exec_docs:
+            self.assertTrue(_open_command_docs("set_entity_active_dialogue", modal_parent))
+
+        exec_docs.assert_called_once()
+        owner._open_docs_file.assert_not_called()
+
     def test_command_type_picker_filters_and_returns_selection(self):
         dialog = _CommandTypePickerDialog(
             command_names=[
@@ -65,6 +181,10 @@ class TestCommandListDialog(unittest.TestCase):
         self.assertEqual(
             dialog.selected_command_type(),
             "open_dialogue_session",
+        )
+        self.assertIn(
+            "Start a dialogue session",
+            dialog._command_list.item(1).toolTip(),
         )
 
     def test_command_type_picker_shows_suggested_before_full_list(self):
@@ -191,6 +311,11 @@ class TestCommandListDialog(unittest.TestCase):
         self.assertIn(
             "Inline Dialogue stores the content directly on this command",
             dialog._open_dialogue_source_note.text(),
+        )
+        self.assertEqual(dialog._edit_inline_dialogue_button.text(), "Write Dialogue...")
+        self.assertIn(
+            "add text segments",
+            dialog._open_dialogue_definition_note.text(),
         )
 
         dialog.load_command({"type": "run_project_command"})

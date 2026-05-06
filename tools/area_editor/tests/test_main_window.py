@@ -21,6 +21,10 @@ from area_editor.catalogs.template_catalog import TemplateCatalog
 from area_editor.documents.area_document import EntityDocument
 from area_editor.json_io import DEFAULT_JSON5_FILE_HEADER, load_json_data
 from area_editor.widgets.document_tab_widget import ContentType
+from area_editor.widgets.documentation_viewer import (
+    AUTHORING_DOCS_PATH,
+    DocumentationViewerWidget,
+)
 from area_editor.widgets.browser_workspace_dock import BrowserWorkspaceDock
 from area_editor.widgets.canvas_tool_strip import CanvasToolStrip
 from area_editor.widgets.entity_template_editor_widget import EntityTemplateEditorWidget
@@ -58,6 +62,16 @@ def _find_menu_action(menu, text: str):
     raise AssertionError(f"Menu action '{text}' was not found.")
 
 
+def _find_menu_bar_menu(window: MainWindow, text: str):
+    for action in window.menuBar().actions():
+        if action.text() == text:
+            menu = action.menu()
+            if menu is None:
+                break
+            return menu
+    raise AssertionError(f"Menu '{text}' was not found.")
+
+
 class TestMainWindowTilesetEditing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -76,6 +90,24 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
     _panel_file_entries = staticmethod(panel_file_entries)
     _panel_folder_entries = staticmethod(panel_folder_entries)
     _find_tree_item_by_folder_path = staticmethod(find_tree_item_by_folder_path)
+
+    def test_help_menu_opens_general_docs(self):
+        window = MainWindow()
+        self.addCleanup(window.close)
+
+        help_menu = window._help_menu
+        documentation_action = _find_menu_action(help_menu, "Documentation")
+
+        documentation_action.trigger()
+
+        docs_widget = window._tab_widget.widget_for_content("docs/authoring")
+        self.assertIsInstance(docs_widget, DocumentationViewerWidget)
+        assert isinstance(docs_widget, DocumentationViewerWidget)
+        self.assertEqual(docs_widget.current_path, AUTHORING_DOCS_PATH.resolve())
+        self.assertEqual(
+            window._tab_widget.content_info("docs/authoring").content_type,
+            ContentType.DOCUMENTATION,
+        )
 
     def test_entity_dialogue_picker_resolves_self_target_and_browses_dialogues(self):
         window = MainWindow()
@@ -1874,11 +1906,12 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 widget.fields_editor.section_labels(),
                 [
                     "Basics",
+                    "Variables",
                     "Dialogues",
                     "Visuals",
                     "Entity Commands",
                     "Inventory",
-                    "Persistence",
+                    "Save State",
                     "Raw JSON",
                 ],
             )
@@ -2415,6 +2448,21 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
     def test_open_project_populates_items_panel_and_project_actions(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_file = self._create_project_content_project(Path(tmp))
+            (project_file.parent / "items" / "apple.json").write_text(
+                (
+                    '{\n'
+                    '  "name": "Apple",\n'
+                    '  "max_stack": 9,\n'
+                    '  "icon": {\n'
+                    '    "path": "assets/base.png",\n'
+                    '    "frame_width": 16,\n'
+                    '    "frame_height": 16,\n'
+                    '    "frame": 0\n'
+                    '  }\n'
+                    '}\n'
+                ),
+                encoding="utf-8",
+            )
             window = MainWindow()
             self.addCleanup(window.close)
             window.open_project(project_file)
@@ -2428,6 +2476,10 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
                 [content_id for content_id, _path in entries],
                 ["items/apple", "items/keys/silver_key"],
             )
+            apple_item = window._item_panel._find_item("items/apple")
+            self.assertIsNotNone(apple_item)
+            assert apple_item is not None
+            self.assertFalse(apple_item.icon(0).isNull())
             self.assertEqual(window._global_entities_panel._tree.topLevelItemCount(), 1)
             self.assertEqual(
                 window._global_entities_panel._tree.topLevelItem(0).text(0),
@@ -2731,6 +2783,10 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"icon"', saved)
             self.assertIn('"portrait"', saved)
             self.assertFalse(window._tab_widget.is_dirty("items/apple"))
+            apple_item = window._item_panel._find_item("items/apple")
+            self.assertIsNotNone(apple_item)
+            assert apple_item is not None
+            self.assertFalse(apple_item.icon(0).isNull())
 
     def test_project_and_shared_variables_tabs_open_and_save_through_focused_surfaces(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2792,6 +2848,46 @@ class TestMainWindowTilesetEditing(unittest.TestCase):
             self.assertIn('"internal_width": 400', saved)
             self.assertIn('"internal_height": 224', saved)
             self.assertIn('"ticks_per_tile": 20', saved)
+            self.assertFalse(window._tab_widget.is_dirty("project/shared_variables"))
+
+    def test_save_all_saves_every_dirty_open_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_file = self._create_project_content_project(Path(tmp))
+            window = MainWindow()
+            self.addCleanup(window.close)
+            window.open_project(project_file)
+
+            window._open_project_manifest_tab()
+            project_widget = window._tab_widget.active_widget()
+            self.assertIsInstance(project_widget, ProjectManifestEditorWidget)
+            assert isinstance(project_widget, ProjectManifestEditorWidget)
+            window._enable_json_editing_action.setChecked(True)
+
+            project_widget.fields_editor._save_dir_edit.setText("slot_data")
+            QApplication.processEvents()
+
+            window._open_shared_variables_tab()
+            shared_widget = window._tab_widget.active_widget()
+            self.assertIsInstance(shared_widget, SharedVariablesEditorWidget)
+            assert isinstance(shared_widget, SharedVariablesEditorWidget)
+
+            shared_widget.fields_editor._width_spin.setValue(400)
+            shared_widget.fields_editor._height_spin.setValue(224)
+            QApplication.processEvents()
+
+            self.assertTrue(window._tab_widget.is_dirty("project/project"))
+            self.assertTrue(window._tab_widget.is_dirty("project/shared_variables"))
+
+            window._on_save_all()
+
+            saved_project = project_file.read_text(encoding="utf-8")
+            saved_shared = (project_file.parent / "shared_variables.json").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn('"save_dir": "slot_data"', saved_project)
+            self.assertIn('"internal_width": 400', saved_shared)
+            self.assertIn('"internal_height": 224', saved_shared)
+            self.assertFalse(window._tab_widget.is_dirty("project/project"))
             self.assertFalse(window._tab_widget.is_dirty("project/shared_variables"))
 
     def test_template_rename_moves_file_and_updates_known_template_references(self):

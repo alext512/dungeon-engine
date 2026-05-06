@@ -656,6 +656,44 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                 },
             )
 
+    def test_variables_table_updates_template_variables(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "pickup.json"
+            _write_json(
+                template_path,
+                {
+                    "kind": "item_pickup",
+                    "space": "world",
+                    "variables": {"opened": False},
+                    "visuals": [],
+                },
+            )
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/item_pickup",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+
+            fields = widget.fields_editor
+            fields._variables_table.set_variables({})
+            fields._variables_table.add_variable(
+                "item_id",
+                "items/consumables/glimmer_berry",
+            )
+            fields._variables_table.add_variable("quantity", "1")
+            widget.save_to_file()
+
+            saved = json.loads(template_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["variables"],
+                {
+                    "item_id": "items/consumables/glimmer_berry",
+                    "quantity": 1,
+                },
+            )
+
     def test_space_switch_keeps_implicit_render_defaults_implicit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             template_path = Path(tmp) / "backdrop.json"
@@ -860,6 +898,45 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                 },
             )
 
+    def test_entity_command_name_prompt_suggests_standard_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = Path(tmp) / "console.json"
+            _write_json(template_path, {"visuals": []})
+
+            widget = EntityTemplateEditorWidget(
+                "entity_templates/console",
+                template_path,
+            )
+            self.addCleanup(widget.close)
+            fields = widget.fields_editor
+            captured: dict[str, object] = {}
+
+            def fake_get_item(parent, title, label, items, current, editable):
+                captured["label"] = label
+                captured["items"] = list(items)
+                captured["current"] = current
+                captured["editable"] = editable
+                return "on_occupant_enter", True
+
+            with patch(
+                "area_editor.widgets.entity_template_editor_widget.QInputDialog.getItem",
+                fake_get_item,
+            ):
+                selected = fields._prompt_entity_command_name(
+                    title="Add Entity Command",
+                    existing_names={"interact"},
+                )
+
+            self.assertEqual(selected, "on_occupant_enter")
+            self.assertIn("type a custom name", str(captured["label"]))
+            self.assertNotIn("interact", captured["items"])
+            self.assertIn("on_blocked", captured["items"])
+            self.assertIn("on_occupant_enter", captured["items"])
+            self.assertIn("on_occupant_leave", captured["items"])
+            self.assertIn("custom_command", captured["items"])
+            self.assertEqual(captured["current"], 0)
+            self.assertTrue(captured["editable"])
+
     def test_structured_fields_can_update_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             template_path = Path(tmp) / "console.json"
@@ -1001,16 +1078,10 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                 ["shake_timer", "times_pushed"],
             )
 
-            shake_override = fields._persistence_variables_table.item(0, 1)
-            self.assertIsNotNone(shake_override)
-            shake_override.setCheckState(Qt.CheckState.Checked)
-            shake_combo = fields._persistence_variables_table.cellWidget(0, 2)
+            shake_combo = fields._persistence_variables_table.cellWidget(0, 1)
             shake_combo.setCurrentIndex(shake_combo.findData(False))
 
-            pushed_override = fields._persistence_variables_table.item(1, 1)
-            self.assertIsNotNone(pushed_override)
-            pushed_override.setCheckState(Qt.CheckState.Checked)
-            pushed_combo = fields._persistence_variables_table.cellWidget(1, 2)
+            pushed_combo = fields._persistence_variables_table.cellWidget(1, 1)
             pushed_combo.setCurrentIndex(pushed_combo.findData(True))
 
             widget.save_to_file()
@@ -1053,15 +1124,13 @@ class TestEntityTemplateEditorWidget(unittest.TestCase):
                 ["opened", "flash_timer"],
             )
             for row in range(fields._persistence_variables_table.rowCount()):
+                combo = fields._persistence_variables_table.cellWidget(row, 1)
                 self.assertEqual(
-                    fields._persistence_variables_table.item(row, 1).checkState(),
-                    Qt.CheckState.Unchecked,
+                    combo.currentData(),
+                    None,
                 )
 
-            opened_override = fields._persistence_variables_table.item(0, 1)
-            self.assertIsNotNone(opened_override)
-            opened_override.setCheckState(Qt.CheckState.Checked)
-            opened_combo = fields._persistence_variables_table.cellWidget(0, 2)
+            opened_combo = fields._persistence_variables_table.cellWidget(0, 1)
             opened_combo.setCurrentIndex(opened_combo.findData(True))
             widget.save_to_file()
 

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
@@ -59,12 +60,14 @@ from area_editor.widgets.entity_structured_fields import (
     parse_tag_list,
     replace_entity_command_command_list,
     suggested_entity_command_copy_name,
+    suggested_entity_command_names,
     summarize_entity_commands,
 )
 from area_editor.widgets.entity_visuals_editor import (
     EntityVisualsEditor,
     parse_visuals,
 )
+from area_editor.widgets.entity_variables_table import EntityVariablesTable
 from area_editor.widgets.command_list_dialog import CommandListDialog
 from area_editor.widgets.dialogue_definition_dialog import (
     EntityDialoguesDialog,
@@ -97,6 +100,7 @@ class _TemplateFieldsEditor(QWidget):
         self._inventory_editable = True
         self._persistence_editable = True
         self._visuals_editable = True
+        self._variables_editable = True
         self._dialogues_editable = True
         self._dialogues_value: dict[str, dict[str, Any]] = {}
         self._reference_picker_callbacks: dict[str, Callable[..., str | None] | None] = {
@@ -263,21 +267,39 @@ class _TemplateFieldsEditor(QWidget):
         self._stack_order_spin.valueChanged.connect(self._on_text_changed)
         basics_form.addRow("stack_order", self._stack_order_spin)
         basics_layout.addLayout(basics_form)
+        self._sections_tabs.addTab(basics_tab, "Basics")
 
+        variables_tab = QWidget()
+        variables_layout = QVBoxLayout(variables_tab)
+        variables_layout.setContentsMargins(0, 0, 0, 0)
         variables_note = QLabel(
-            "Optional template-level default variables. Use JSON object syntax."
+            "Template-level default variables. Use plain text for strings, or JSON "
+            "literals for numbers, true/false, null, arrays, and objects."
         )
         variables_note.setWordWrap(True)
         variables_note.setStyleSheet("color: #666; font-style: italic;")
-        basics_layout.addWidget(variables_note)
+        variables_layout.addWidget(variables_note)
+
+        self._variables_warning = QLabel("")
+        self._variables_warning.setWordWrap(True)
+        self._variables_warning.setStyleSheet("color: #a25b00;")
+        self._variables_warning.hide()
+        variables_layout.addWidget(self._variables_warning)
+
+        self._variables_table = EntityVariablesTable(
+            empty_message="No template variables defined."
+        )
+        self._variables_table.changed.connect(self._on_variables_table_changed)
+        variables_layout.addWidget(self._variables_table, 1)
 
         self._variables_text = QPlainTextEdit()
         self._variables_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._variables_text.setPlaceholderText("{\n  \"opened\": false\n}")
         self._variables_text.setFont(font)
+        self._variables_text.hide()
         self._variables_text.textChanged.connect(self._on_variables_text_changed)
-        basics_layout.addWidget(self._variables_text, 1)
-        self._sections_tabs.addTab(basics_tab, "Basics")
+        variables_layout.addWidget(self._variables_text)
+        self._sections_tabs.addTab(variables_tab, "Variables")
 
         dialogues_tab = QWidget()
         dialogues_layout = QVBoxLayout(dialogues_tab)
@@ -393,7 +415,9 @@ class _TemplateFieldsEditor(QWidget):
         entity_commands_layout.addWidget(self._entity_commands_warning)
 
         entity_commands_note = QLabel(
-            "Optional named entity commands. Use Raw JSON for unsupported command metadata."
+            "Optional named entity commands. Standard hooks: interact, on_blocked, "
+            "on_occupant_enter, on_occupant_leave. Use Raw JSON for unsupported "
+            "command metadata."
         )
         entity_commands_note.setWordWrap(True)
         entity_commands_note.setStyleSheet("color: #666; font-style: italic;")
@@ -518,26 +542,26 @@ class _TemplateFieldsEditor(QWidget):
         persistence_layout.addWidget(self._persistence_warning)
 
         persistence_form = QFormLayout()
-        self._entity_state_check = QCheckBox("Persist entity state")
+        self._entity_state_check = QCheckBox("Save this entity's changes by default")
         self._entity_state_check.toggled.connect(self._on_text_changed)
-        persistence_form.addRow("persistence.entity_state", self._entity_state_check)
+        persistence_form.addRow("Default save behavior", self._entity_state_check)
         persistence_layout.addLayout(persistence_form)
 
         persistence_note = QLabel(
-            "Template variables are listed automatically. Check Override to "
-            "write a per-variable persistence rule."
+            "Template variables are listed automatically. Choose a save rule only "
+            "when a variable should ignore the default above."
         )
         persistence_note.setWordWrap(True)
         persistence_note.setStyleSheet("color: #666; font-style: italic;")
         persistence_layout.addWidget(persistence_note)
 
         persistence_buttons = QHBoxLayout()
-        self._add_persistence_variable_button = QPushButton("Add Extra Variable")
+        self._add_persistence_variable_button = QPushButton("Add Unlisted Variable")
         self._add_persistence_variable_button.clicked.connect(
             self._on_add_persistence_variable_clicked
         )
         persistence_buttons.addWidget(self._add_persistence_variable_button)
-        self._remove_persistence_variable_button = QPushButton("Remove Selected")
+        self._remove_persistence_variable_button = QPushButton("Clear Rule")
         self._remove_persistence_variable_button.clicked.connect(
             self._on_remove_persistence_variable_clicked
         )
@@ -545,9 +569,18 @@ class _TemplateFieldsEditor(QWidget):
         persistence_buttons.addStretch(1)
         persistence_layout.addLayout(persistence_buttons)
 
-        self._persistence_variables_table = QTableWidget(0, 3)
+        self._persistence_variables_table = QTableWidget(0, 2)
         self._persistence_variables_table.setHorizontalHeaderLabels(
-            ["Variable", "Override", "Persistent"]
+            ["Variable", "Save Rule"]
+        )
+        self._persistence_variables_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self._persistence_variables_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self._persistence_variables_table.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
         )
         self._persistence_variables_table.horizontalHeader().setStretchLastSection(True)
         self._persistence_variables_table.cellChanged.connect(
@@ -558,14 +591,25 @@ class _TemplateFieldsEditor(QWidget):
                 self._editing_enabled and self._persistence_editable
             )
         )
+        self._persistence_variables_table.customContextMenuRequested.connect(
+            self._show_persistence_variables_context_menu
+        )
         persistence_layout.addWidget(self._persistence_variables_table, 1)
+
+        self._persistence_empty_label = QLabel(
+            "No template variables are defined. Add variables on the Basics tab, "
+            "or add an unlisted variable only when commands create it later."
+        )
+        self._persistence_empty_label.setWordWrap(True)
+        self._persistence_empty_label.setStyleSheet("color: #666; font-style: italic;")
+        persistence_layout.addWidget(self._persistence_empty_label)
 
         self._persistence_variables_text = QPlainTextEdit()
         self._persistence_variables_text.hide()
         self._persistence_variables_text.textChanged.connect(
             self._on_legacy_persistence_variables_text_changed
         )
-        self._sections_tabs.addTab(persistence_tab, "Persistence")
+        self._sections_tabs.addTab(persistence_tab, "Save State")
 
         buttons = QHBoxLayout()
         self._apply_button = QPushButton("Apply")
@@ -652,6 +696,7 @@ class _TemplateFieldsEditor(QWidget):
         self._sort_y_offset_spin.setEnabled(enabled)
         self._stack_order_spin.setEnabled(enabled)
         self._variables_text.setReadOnly(not enabled)
+        self._variables_table.set_editing_enabled(enabled and self._variables_editable)
         self._dialogues_edit_button.setEnabled(enabled and self._dialogues_editable)
         self._visuals_editor.set_editing_enabled(enabled and self._visuals_editable)
         self._set_input_map_controls_enabled(enabled and self._input_map_editable)
@@ -681,6 +726,7 @@ class _TemplateFieldsEditor(QWidget):
         inventory: dict[str, Any] | None = None
         visuals_warning: str | None = None
         visuals: list[dict[str, Any]] = []
+        variables_warning: str | None = None
         dialogues_warning: str | None = None
         try:
             color = parse_color(data.get("color"))
@@ -723,6 +769,18 @@ class _TemplateFieldsEditor(QWidget):
                 f"{exc}"
             )
             self._visuals_editable = False
+        raw_variables = data.get("variables", {})
+        try:
+            self._variables_table.set_variables(raw_variables)
+            self._variables_editable = True
+        except ValueError as exc:
+            variables_warning = (
+                "Variables are not using the supported object shape. "
+                "Use the Raw JSON tab to edit them.\n"
+                f"{exc}"
+            )
+            self._variables_table.set_variables({})
+            self._variables_editable = False
         try:
             self._dialogues_value = normalize_entity_dialogues(data.get("dialogues"))
             self._dialogues_editable = True
@@ -865,6 +923,11 @@ class _TemplateFieldsEditor(QWidget):
             self._visuals_warning.show()
         else:
             self._visuals_warning.hide()
+        if variables_warning:
+            self._variables_warning.setText(variables_warning)
+            self._variables_warning.show()
+        else:
+            self._variables_warning.hide()
         if dialogues_warning:
             self._dialogues_warning.setText(dialogues_warning)
             self._dialogues_warning.show()
@@ -888,6 +951,9 @@ class _TemplateFieldsEditor(QWidget):
         )
         self._visuals_editor.set_editing_enabled(
             self._editing_enabled and self._visuals_editable
+        )
+        self._variables_table.set_editing_enabled(
+            self._editing_enabled and self._variables_editable
         )
         self._set_inventory_controls_enabled(
             self._editing_enabled and self._inventory_editable
@@ -1144,6 +1210,28 @@ class _TemplateFieldsEditor(QWidget):
         self._remove_persistence_variable_button.setEnabled(
             enabled and self._persistence_variables_table.currentRow() >= 0
         )
+        self._persistence_empty_label.setVisible(
+            self._persistence_variables_table.rowCount() == 0
+        )
+
+    def _show_persistence_variables_context_menu(self, pos) -> None:
+        if not (self._editing_enabled and self._persistence_editable):
+            return
+        row = self._persistence_variables_table.rowAt(pos.y())
+        if row >= 0:
+            self._persistence_variables_table.setCurrentCell(row, 0)
+
+        menu = QMenu(self)
+        add_action = menu.addAction("Add Unlisted Variable")
+        remove_action = None
+        if self._persistence_variables_table.currentRow() >= 0:
+            remove_action = menu.addAction("Clear Rule")
+
+        chosen = menu.exec(self._persistence_variables_table.viewport().mapToGlobal(pos))
+        if chosen == add_action:
+            self._on_add_persistence_variable_clicked()
+        elif remove_action is not None and chosen == remove_action:
+            self._on_remove_persistence_variable_clicked()
 
     def _current_template_variable_names(self) -> list[str] | None:
         variables_text = self._variables_text.toPlainText().strip()
@@ -1165,11 +1253,13 @@ class _TemplateFieldsEditor(QWidget):
                 names.append(name)
         return names
 
-    def _make_persistence_value_combo(self, persistent: bool) -> QComboBox:
+    def _make_persistence_value_combo(self, rule: bool | None) -> QComboBox:
         combo = QComboBox()
-        combo.addItem("true", True)
-        combo.addItem("false", False)
-        combo.setCurrentIndex(0 if persistent else 1)
+        combo.addItem("Use default", None)
+        combo.addItem("Save", True)
+        combo.addItem("Do not save", False)
+        index = combo.findData(rule)
+        combo.setCurrentIndex(index if index >= 0 else 0)
         combo.currentIndexChanged.connect(self._on_persistence_variables_table_changed)
         return combo
 
@@ -1177,8 +1267,7 @@ class _TemplateFieldsEditor(QWidget):
         self,
         *,
         variable_name: str,
-        included: bool,
-        persistent: bool,
+        rule: bool | None,
         custom: bool,
     ) -> int:
         row = self._persistence_variables_table.rowCount()
@@ -1190,20 +1279,8 @@ class _TemplateFieldsEditor(QWidget):
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self._persistence_variables_table.setItem(row, 0, name_item)
 
-        include_item = QTableWidgetItem("")
-        include_item.setFlags(
-            include_item.flags()
-            | Qt.ItemFlag.ItemIsUserCheckable
-            | Qt.ItemFlag.ItemIsEnabled
-        )
-        include_item.setCheckState(
-            Qt.CheckState.Checked if included else Qt.CheckState.Unchecked
-        )
-        self._persistence_variables_table.setItem(row, 1, include_item)
-
-        combo = self._make_persistence_value_combo(persistent)
-        combo.setEnabled(included)
-        self._persistence_variables_table.setCellWidget(row, 2, combo)
+        combo = self._make_persistence_value_combo(rule)
+        self._persistence_variables_table.setCellWidget(row, 1, combo)
         return row
 
     def _set_persistence_variables_table(
@@ -1230,8 +1307,7 @@ class _TemplateFieldsEditor(QWidget):
             for variable_name in ordered_names:
                 self._insert_persistence_variable_row(
                     variable_name=str(variable_name),
-                    included=variable_name in variables,
-                    persistent=variables.get(variable_name, True),
+                    rule=variables[variable_name] if variable_name in variables else None,
                     custom=variable_name not in known_names,
                 )
         finally:
@@ -1245,14 +1321,7 @@ class _TemplateFieldsEditor(QWidget):
         return bool(item is not None and item.data(Qt.ItemDataRole.UserRole))
 
     def _sync_persistence_row_enabled(self, row: int) -> None:
-        include_item = self._persistence_variables_table.item(row, 1)
-        included = (
-            include_item is not None
-            and include_item.checkState() == Qt.CheckState.Checked
-        )
-        combo = self._persistence_variables_table.cellWidget(row, 2)
-        if isinstance(combo, QComboBox):
-            combo.setEnabled(included)
+        return
 
     def _sync_all_persistence_row_enabled(self) -> None:
         for row in range(self._persistence_variables_table.rowCount()):
@@ -1262,29 +1331,32 @@ class _TemplateFieldsEditor(QWidget):
         variables: dict[str, bool] = {}
         for row in range(self._persistence_variables_table.rowCount()):
             name_item = self._persistence_variables_table.item(row, 0)
-            include_item = self._persistence_variables_table.item(row, 1)
             name = name_item.text().strip() if name_item is not None else ""
-            included = (
-                include_item is not None
-                and include_item.checkState() == Qt.CheckState.Checked
-            )
-            if not included:
+            combo = self._persistence_variables_table.cellWidget(row, 1)
+            if isinstance(combo, QComboBox):
+                rule = combo.currentData()
+            else:
+                rule_item = self._persistence_variables_table.item(row, 1)
+                rule_text = (
+                    rule_item.text().strip().lower() if rule_item is not None else ""
+                )
+                if rule_text in {"", "default", "use default"}:
+                    rule = None
+                elif rule_text in {"true", "save"}:
+                    rule = True
+                elif rule_text in {"false", "do not save", "don't save"}:
+                    rule = False
+                else:
+                    raise ValueError(
+                        f"Persistence variable '{name}' rule must be Use default, Save, or Do not save."
+                    )
+            if rule is None:
                 continue
             if not name:
                 raise ValueError("Persistence variable names must not be blank.")
             if name in variables:
                 raise ValueError(f"Duplicate persistence variable '{name}'.")
-            combo = self._persistence_variables_table.cellWidget(row, 2)
-            if isinstance(combo, QComboBox):
-                variables[name] = bool(combo.currentData())
-                continue
-            value_item = self._persistence_variables_table.item(row, 2)
-            value_text = (
-                value_item.text().strip().lower() if value_item is not None else ""
-            )
-            if value_text not in {"true", "false"}:
-                raise ValueError(f"Persistence variable '{name}' must be true or false.")
-            variables[name] = value_text == "true"
+            variables[name] = bool(rule)
         return variables
 
     def _build_persistence_policy_from_table(self) -> dict[str, Any] | None:
@@ -1311,10 +1383,38 @@ class _TemplateFieldsEditor(QWidget):
             self._loading = was_loading
 
     def _on_add_persistence_variable_clicked(self) -> None:
+        variable_name, accepted = QInputDialog.getText(
+            self,
+            "Add Unlisted Variable",
+            "Variable name:",
+        )
+        if not accepted:
+            return
+        self._add_persistence_variable_rule(variable_name)
+
+    def _add_persistence_variable_rule(
+        self,
+        variable_name: str,
+        *,
+        rule: bool | None = True,
+    ) -> None:
+        variable_name = variable_name.strip()
+        if not variable_name:
+            self._persistence_warning.setText("Persistence variable names must not be blank.")
+            self._persistence_warning.show()
+            return
+        for row in range(self._persistence_variables_table.rowCount()):
+            name_item = self._persistence_variables_table.item(row, 0)
+            if name_item is not None and name_item.text().strip() == variable_name:
+                self._persistence_variables_table.setCurrentCell(row, 0)
+                self._persistence_warning.setText(
+                    f"Persistence variable '{variable_name}' is already listed."
+                )
+                self._persistence_warning.show()
+                return
         row = self._insert_persistence_variable_row(
-            variable_name="",
-            included=True,
-            persistent=True,
+            variable_name=variable_name,
+            rule=rule,
             custom=True,
         )
         self._persistence_variables_table.setCurrentCell(row, 0)
@@ -1330,10 +1430,9 @@ class _TemplateFieldsEditor(QWidget):
         if self._persistence_row_is_custom(row):
             self._persistence_variables_table.removeRow(row)
         else:
-            include_item = self._persistence_variables_table.item(row, 1)
-            if include_item is not None:
-                include_item.setCheckState(Qt.CheckState.Unchecked)
-            self._sync_persistence_row_enabled(row)
+            combo = self._persistence_variables_table.cellWidget(row, 1)
+            if isinstance(combo, QComboBox):
+                combo.setCurrentIndex(combo.findData(None))
         try:
             self._sync_persistence_variables_text_from_table()
         except ValueError:
@@ -1544,12 +1643,21 @@ class _TemplateFieldsEditor(QWidget):
         *,
         title: str,
         current_name: str = "",
+        existing_names: set[str] | None = None,
     ) -> str | None:
-        value, accepted = QInputDialog.getText(
+        suggestions = suggested_entity_command_names(
+            existing_names=existing_names,
+            current_name=current_name,
+        )
+        current = current_name.strip()
+        current_index = suggestions.index(current) if current in suggestions else 0
+        value, accepted = QInputDialog.getItem(
             self,
             title,
-            "Command name",
-            text=current_name,
+            "Command name (choose one or type a custom name)",
+            suggestions,
+            current_index,
+            True,
         )
         if not accepted:
             return None
@@ -1629,7 +1737,10 @@ class _TemplateFieldsEditor(QWidget):
         entity_commands = self._current_entity_commands_value()
         if entity_commands is None:
             return
-        command_name = self._prompt_entity_command_name(title="Add Entity Command")
+        command_name = self._prompt_entity_command_name(
+            title="Add Entity Command",
+            existing_names=set(entity_commands.keys()),
+        )
         if command_name is None:
             return
         if command_name in entity_commands:
@@ -1690,6 +1801,7 @@ class _TemplateFieldsEditor(QWidget):
         new_name = self._prompt_entity_command_name(
             title="Duplicate Entity Command",
             current_name=suggested_name,
+            existing_names=set(entity_commands.keys()),
         )
         if new_name is None:
             return
@@ -1750,6 +1862,7 @@ class _TemplateFieldsEditor(QWidget):
             next_variables.pop("active_dialogue", None)
         self._loading = True
         try:
+            self._variables_table.set_variables(next_variables)
             self._variables_text.setPlainText(
                 json.dumps(next_variables, indent=2, ensure_ascii=False)
                 if next_variables
@@ -1897,9 +2010,14 @@ class _TemplateFieldsEditor(QWidget):
             default=0,
         )
 
-        variables_value = self._build_variables_value()
-        if variables_value:
-            updated["variables"] = variables_value
+        if self._variables_editable:
+            variables_value = self._build_variables_value()
+            if variables_value:
+                updated["variables"] = variables_value
+            else:
+                updated.pop("variables", None)
+        elif "variables" in base_data:
+            updated["variables"] = copy.deepcopy(base_data["variables"])
         else:
             updated.pop("variables", None)
 
@@ -1961,19 +2079,8 @@ class _TemplateFieldsEditor(QWidget):
         return updated
 
     def _build_variables_value(self) -> dict[str, Any] | None:
-        variables_text = self._variables_text.toPlainText().strip()
-        if not variables_text:
-            return None
-        try:
-            variables_value = loads_json_data(
-                variables_text,
-                source_name="Template variables",
-            )
-        except JsonDataDecodeError as exc:
-            raise ValueError(f"Variables must be valid JSON.\n{exc}") from exc
-        if not isinstance(variables_value, dict):
-            raise ValueError("Variables must be a JSON object.")
-        return variables_value
+        variables_value = self._variables_table.variables()
+        return variables_value or None
 
     def _apply_defaulted_field(
         self,
@@ -2065,9 +2172,20 @@ class _TemplateFieldsEditor(QWidget):
             return
         self._set_dirty(True)
 
-    def _on_variables_text_changed(self) -> None:
-        if self._loading:
-            return
+    def _sync_variables_text_from_table(self) -> None:
+        variables = self._variables_table.variables()
+        was_loading = self._loading
+        self._loading = True
+        try:
+            self._variables_text.setPlainText(
+                json.dumps(variables, indent=2, ensure_ascii=False)
+                if variables
+                else ""
+            )
+        finally:
+            self._loading = was_loading
+
+    def _after_variables_changed(self) -> None:
         self._sync_dialogues_summary()
         variable_names = self._current_template_variable_names()
         if variable_names is not None and self._persistence_editable:
@@ -2080,6 +2198,38 @@ class _TemplateFieldsEditor(QWidget):
                 variable_names=variable_names,
             )
         self._set_dirty(True)
+
+    def _on_variables_table_changed(self) -> None:
+        if self._loading:
+            return
+        try:
+            self._sync_variables_text_from_table()
+            self._variables_warning.hide()
+        except ValueError as exc:
+            self._variables_warning.setText(str(exc))
+            self._variables_warning.show()
+        self._after_variables_changed()
+
+    def _on_variables_text_changed(self) -> None:
+        if self._loading:
+            return
+        raw_text = self._variables_text.toPlainText().strip()
+        try:
+            variables = (
+                loads_json_data(raw_text, source_name="Template variables")
+                if raw_text
+                else {}
+            )
+            if not isinstance(variables, dict):
+                raise ValueError("Variables must be a JSON object.")
+        except (JsonDataDecodeError, ValueError) as exc:
+            self._variables_warning.setText(f"Variables must be valid JSON.\n{exc}")
+            self._variables_warning.show()
+            self._set_dirty(True)
+            return
+        self._variables_table.set_variables(variables)
+        self._variables_warning.hide()
+        self._after_variables_changed()
 
     def _on_color_check_toggled(self) -> None:
         if self._loading:
