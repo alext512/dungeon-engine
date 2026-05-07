@@ -1,0 +1,35 @@
+/*
+  NOTES
+
+  Move the camera instantly by wrapping move_camera with zero frames.
+*/
+{
+  "inputs": {
+    "x": {
+      "type": "float"
+    },
+    "y": {
+      "type": "float"
+    },
+    "space": {
+      "type": "enum",
+      "values": ["world_pixel", "world_grid"],
+      "default": "world_pixel"
+    },
+    "mode": {
+      "type": "enum",
+      "values": ["absolute", "relative"],
+      "default": "absolute"
+    }
+  },
+  "commands": [
+    {
+      "type": "move_camera",
+      "x": "$x",
+      "y": "$y",
+      "space": "$space",
+      "mode": "$mode",
+      "frames_needed": 0
+    }
+  ]
+}

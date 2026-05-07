@@ -121,18 +121,16 @@ These debug commands are gated behind `debug_inspection_enabled`.
 
 ## Camera
 
-- `set_camera_follow_entity` follows one explicit entity.
-- `set_camera_follow_input_target` follows the current routed target for one logical action.
-- `clear_camera_follow` clears follow behavior.
-- `set_camera_policy` updates follow, bounds, or deadzone in one command.
+- `set_camera_policy` updates follow, bounds, or deadzone in one command. Its
+  `follow` object can target one explicit entity or the current routed target
+  for one logical input action.
 - `push_camera_state` saves the current camera state.
 - `pop_camera_state` restores the most recently pushed camera state.
-- `set_camera_bounds` defines camera bounds.
-- `clear_camera_bounds` removes camera bounds.
-- `set_camera_deadzone` defines a camera deadzone.
-- `clear_camera_deadzone` removes the camera deadzone.
 - `move_camera` interpolates camera movement.
-- `teleport_camera` jumps the camera immediately.
+
+Common authoring conveniences such as clearing follow, setting bounds, setting
+deadzone, and teleporting the camera should be project-command presets that wrap
+`set_camera_policy` or `move_camera`.
 
 ## Entity State
 

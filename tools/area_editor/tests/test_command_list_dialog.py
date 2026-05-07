@@ -119,6 +119,25 @@ class TestCommandListDialog(unittest.TestCase):
             )
         )
 
+        camera_box, camera_docs_button = _build_command_help_message_box(
+            None,
+            "set_camera_policy",
+        )
+        self.addCleanup(camera_box.deleteLater)
+
+        self.assertIsNotNone(camera_docs_button)
+        self.assertIn("real camera policy primitive", camera_box.text())
+        self.assertIn('"bounds"', camera_box.text())
+
+        camera_url = _command_docs_url("set_camera_policy")
+        self.assertIsNotNone(camera_url)
+        self.assertEqual(camera_url.fragment(), "set_camera_policy")
+        self.assertTrue(
+            camera_url.toLocalFile().replace("/", os.sep).endswith(
+                os.path.join("docs", "authoring", "commands", "camera.md")
+            )
+        )
+
     def test_open_command_docs_uses_local_docs_url(self):
         parent = QLabel()
         self.addCleanup(parent.close)
@@ -376,12 +395,9 @@ class TestCommandListDialog(unittest.TestCase):
         commands_label = self._find_label(dialog._run_parallel_page, "commands")
         self.assertIn("parallel branch roots", commands_label.toolTip())
 
-        dialog.load_command({"type": "set_camera_follow_input_target"})
-        action_label = self._find_label(
-            dialog._set_camera_follow_input_target_page,
-            "action",
-        )
-        self.assertIn("currently routed target", action_label.toolTip())
+        dialog.load_command({"type": "set_camera_policy"})
+        follow_label = self._find_label(dialog._set_camera_policy_page, "follow")
+        self.assertIn("umbrella camera-policy command", follow_label.toolTip())
 
         dialog.load_command({"type": "set_entity_field"})
         field_name_label = self._find_label(dialog._set_entity_field_page, "field_name")
@@ -1454,46 +1470,6 @@ class TestCommandListDialog(unittest.TestCase):
             },
         )
 
-    def test_command_editor_builds_set_camera_follow_entity_command(self):
-        dialog = CommandEditorDialog()
-        self.addCleanup(dialog.close)
-        dialog.load_command({"type": "set_camera_follow_entity"})
-
-        dialog._set_camera_follow_entity_id_edit.setText("$self_id")
-        dialog._set_camera_follow_entity_offset_x_spin.setValue(4.0)
-        dialog._set_camera_follow_entity_offset_y_spin.setValue(-2.0)
-
-        command = dialog.command()
-
-        self.assertEqual(
-            command,
-            {
-                "type": "set_camera_follow_entity",
-                "entity_id": "$self_id",
-                "offset_x": 4.0,
-                "offset_y": -2.0,
-            },
-        )
-
-    def test_command_editor_builds_set_camera_follow_input_target_command(self):
-        dialog = CommandEditorDialog()
-        self.addCleanup(dialog.close)
-        dialog.load_command({"type": "set_camera_follow_input_target"})
-
-        dialog._set_camera_follow_input_action_edit.setText("menu")
-        dialog._set_camera_follow_input_offset_y_spin.setValue(-8.0)
-
-        command = dialog.command()
-
-        self.assertEqual(
-            command,
-            {
-                "type": "set_camera_follow_input_target",
-                "action": "menu",
-                "offset_y": -8.0,
-            },
-        )
-
     def test_command_editor_builds_camera_policy_commands(self):
         state_dialog = CommandEditorDialog()
         self.addCleanup(state_dialog.close)
@@ -1539,11 +1515,6 @@ class TestCommandListDialog(unittest.TestCase):
             },
         )
 
-        clear_follow_dialog = CommandEditorDialog()
-        self.addCleanup(clear_follow_dialog.close)
-        clear_follow_dialog.load_command({"type": "clear_camera_follow"})
-        self.assertEqual(clear_follow_dialog.command(), {"type": "clear_camera_follow"})
-
         push_dialog = CommandEditorDialog()
         self.addCleanup(push_dialog.close)
         push_dialog.load_command({"type": "push_camera_state"})
@@ -1553,70 +1524,6 @@ class TestCommandListDialog(unittest.TestCase):
         self.addCleanup(pop_dialog.close)
         pop_dialog.load_command({"type": "pop_camera_state"})
         self.assertEqual(pop_dialog.command(), {"type": "pop_camera_state"})
-
-        bounds_dialog = CommandEditorDialog()
-        self.addCleanup(bounds_dialog.close)
-        bounds_dialog.load_command({"type": "set_camera_bounds"})
-        bounds_dialog._set_camera_bounds_editor.set_rect(
-            {
-                "x": 1,
-                "y": 2,
-                "width": 10,
-                "height": 8,
-                "space": "world_grid",
-            }
-        )
-        self.assertEqual(
-            bounds_dialog.command(),
-            {
-                "type": "set_camera_bounds",
-                "x": 1.0,
-                "y": 2.0,
-                "width": 10.0,
-                "height": 8.0,
-                "space": "world_grid",
-            },
-        )
-
-        clear_bounds_dialog = CommandEditorDialog()
-        self.addCleanup(clear_bounds_dialog.close)
-        clear_bounds_dialog.load_command({"type": "clear_camera_bounds"})
-        self.assertEqual(
-            clear_bounds_dialog.command(),
-            {"type": "clear_camera_bounds"},
-        )
-
-        deadzone_dialog = CommandEditorDialog()
-        self.addCleanup(deadzone_dialog.close)
-        deadzone_dialog.load_command({"type": "set_camera_deadzone"})
-        deadzone_dialog._set_camera_deadzone_editor.set_rect(
-            {
-                "x": 32,
-                "y": 16,
-                "width": 120,
-                "height": 80,
-                "space": "viewport_pixel",
-            }
-        )
-        self.assertEqual(
-            deadzone_dialog.command(),
-            {
-                "type": "set_camera_deadzone",
-                "x": 32.0,
-                "y": 16.0,
-                "width": 120.0,
-                "height": 80.0,
-                "space": "viewport_pixel",
-            },
-        )
-
-        clear_deadzone_dialog = CommandEditorDialog()
-        self.addCleanup(clear_deadzone_dialog.close)
-        clear_deadzone_dialog.load_command({"type": "clear_camera_deadzone"})
-        self.assertEqual(
-            clear_deadzone_dialog.command(),
-            {"type": "clear_camera_deadzone"},
-        )
 
         move_dialog = CommandEditorDialog()
         self.addCleanup(move_dialog.close)
@@ -1639,24 +1546,6 @@ class TestCommandListDialog(unittest.TestCase):
                 "duration": 0.5,
                 "frames_needed": 12,
                 "speed_px_per_second": 96.0,
-            },
-        )
-
-        teleport_dialog = CommandEditorDialog()
-        self.addCleanup(teleport_dialog.close)
-        teleport_dialog.load_command({"type": "teleport_camera"})
-        teleport_dialog._teleport_camera_x_spin.setValue(128.0)
-        teleport_dialog._teleport_camera_y_spin.setValue(64.0)
-        teleport_dialog._teleport_camera_space_field.setCurrentText("world_pixel")
-        teleport_dialog._teleport_camera_mode_field.setCurrentText("absolute")
-        self.assertEqual(
-            teleport_dialog.command(),
-            {
-                "type": "teleport_camera",
-                "x": 128.0,
-                "y": 64.0,
-                "space": "world_pixel",
-                "mode": "absolute",
             },
         )
 

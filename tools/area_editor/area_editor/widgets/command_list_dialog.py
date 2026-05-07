@@ -93,18 +93,10 @@ _SUPPORTED_COMMAND_TYPES = {
     "move_entity_screen_position",
     "push_facing",
     "wait_for_move",
-    "set_camera_follow_entity",
-    "set_camera_follow_input_target",
-    "clear_camera_follow",
     "set_camera_policy",
     "push_camera_state",
     "pop_camera_state",
-    "set_camera_bounds",
-    "clear_camera_bounds",
-    "set_camera_deadzone",
-    "clear_camera_deadzone",
     "move_camera",
-    "teleport_camera",
     "play_audio",
     "set_sound_volume",
     "play_music",
@@ -331,17 +323,6 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
     "wait_for_move": {
         "entity_id",
     },
-    "set_camera_follow_entity": {
-        "entity_id",
-        "offset_x",
-        "offset_y",
-    },
-    "set_camera_follow_input_target": {
-        "action",
-        "offset_x",
-        "offset_y",
-    },
-    "clear_camera_follow": set(),
     "set_camera_policy": {
         "follow",
         "bounds",
@@ -349,22 +330,6 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
     },
     "push_camera_state": set(),
     "pop_camera_state": set(),
-    "set_camera_bounds": {
-        "x",
-        "y",
-        "width",
-        "height",
-        "space",
-    },
-    "clear_camera_bounds": set(),
-    "set_camera_deadzone": {
-        "x",
-        "y",
-        "width",
-        "height",
-        "space",
-    },
-    "clear_camera_deadzone": set(),
     "move_camera": {
         "x",
         "y",
@@ -373,12 +338,6 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
         "duration",
         "frames_needed",
         "speed_px_per_second",
-    },
-    "teleport_camera": {
-        "x",
-        "y",
-        "space",
-        "mode",
     },
     "play_audio": {
         "path",
@@ -732,18 +691,10 @@ _COMMAND_HELP_SUMMARIES: dict[str, str] = {
     "move_entity_screen_position": "Move a screen-space entity over time.",
     "push_facing": "Attempt one push from the entity's facing direction.",
     "wait_for_move": "Wait until the target entity finishes its active movement.",
-    "set_camera_follow_entity": "Make the camera follow one specific entity.",
-    "set_camera_follow_input_target": "Make the camera follow whichever entity currently owns a routed input action.",
-    "clear_camera_follow": "Remove the current camera follow policy.",
     "set_camera_policy": "Patch camera follow, bounds, and deadzone together.",
     "push_camera_state": "Push the current camera state onto the camera stack.",
     "pop_camera_state": "Restore the last camera state from the camera stack.",
-    "set_camera_bounds": "Set camera movement bounds.",
-    "clear_camera_bounds": "Remove camera movement bounds.",
-    "set_camera_deadzone": "Set the camera deadzone rectangle.",
-    "clear_camera_deadzone": "Remove the camera deadzone.",
     "move_camera": "Move the camera over time.",
-    "teleport_camera": "Move the camera instantly.",
     "play_audio": "Play a one-shot sound effect.",
     "set_sound_volume": "Set the default volume for future sound effects.",
     "play_music": "Start or replace the current music track.",
@@ -831,6 +782,14 @@ _COMMAND_HELP_DETAILS: dict[str, tuple[str, ...]] = {
     "close_dialogue_session": (
         "Use this inside dialogue hooks, options, or UI commands when the current dialogue should close early.",
     ),
+    "set_camera_policy": (
+        "Use this for the real camera policy primitive: follow, bounds, and deadzone can be patched together.",
+        "Project commands can wrap common presets like clear_camera_follow or set_camera_bounds.",
+    ),
+    "move_camera": (
+        "Use this for camera movement in world pixel or world grid space.",
+        "An instant camera jump is the same primitive with frames_needed set to 0.",
+    ),
 }
 
 _COMMAND_HELP_EXAMPLES: dict[str, str] = {
@@ -862,6 +821,29 @@ _COMMAND_HELP_EXAMPLES: dict[str, str] = {
         '  "order": 2\n'
         '}'
     ),
+    "set_camera_policy": (
+        '{\n'
+        '  "type": "set_camera_policy",\n'
+        '  "follow": null,\n'
+        '  "bounds": {\n'
+        '    "x": 0,\n'
+        '    "y": 0,\n'
+        '    "width": 20,\n'
+        '    "height": 15,\n'
+        '    "space": "world_grid"\n'
+        '  }\n'
+        '}'
+    ),
+    "move_camera": (
+        '{\n'
+        '  "type": "move_camera",\n'
+        '  "x": 4,\n'
+        '  "y": 0,\n'
+        '  "space": "world_grid",\n'
+        '  "mode": "relative",\n'
+        '  "frames_needed": 12\n'
+        '}'
+    ),
 }
 
 _COMMAND_DOC_TARGETS: dict[str, tuple[str, str]] = {
@@ -880,6 +862,8 @@ _COMMAND_DOC_TARGETS: dict[str, tuple[str, str]] = {
         "docs/authoring/commands/dialogue.md",
         "set_entity_active_dialogue_by_order",
     ),
+    "set_camera_policy": ("docs/authoring/commands/camera.md", "set_camera_policy"),
+    "move_camera": ("docs/authoring/commands/camera.md", "move_camera"),
 }
 
 _COMMON_FIELD_HELP: dict[str, str] = {
@@ -1000,9 +984,6 @@ _COMMAND_FIELD_HELP_OVERRIDES: dict[str, dict[str, str]] = {
     },
     "run_parallel": {
         "commands": "Edit the parallel branch roots. If one branch needs multiple steps, make that branch a nested run_sequence.",
-    },
-    "set_camera_follow_input_target": {
-        "action": "Logical input action whose currently routed target should be followed by the camera.",
     },
     "run_commands_for_collection": {
         "value": "JSON value that resolves to a list, tuple, or null. Token strings must be wrapped in quotes.",
@@ -1439,16 +1420,6 @@ def _command_summary(command: object, index: int) -> str:
         entity_id = str(command.get("entity_id", "")).strip()
         if entity_id:
             return f"{index + 1}. {command_type}: {entity_id}"
-    if command_type == "set_camera_follow_entity":
-        target = str(command.get("entity_id", "")).strip()
-        details = target or "entity"
-        return f"{index + 1}. {command_type}: {details}"
-    if command_type == "set_camera_follow_input_target":
-        action = str(command.get("action", "")).strip()
-        details = action or "input_target"
-        return f"{index + 1}. {command_type}: {details}"
-    if command_type in {"clear_camera_follow", "clear_camera_bounds", "clear_camera_deadzone"}:
-        return f"{index + 1}. {command_type}"
     if command_type == "set_camera_policy":
         section_summaries: list[str] = []
         for section_name in ("follow", "bounds", "deadzone"):
@@ -1461,12 +1432,7 @@ def _command_summary(command: object, index: int) -> str:
                 section_summaries.append(section_name)
         if section_summaries:
             return f"{index + 1}. {command_type}: {', '.join(section_summaries)}"
-    if command_type in {"set_camera_bounds", "set_camera_deadzone"}:
-        width = command.get("width")
-        height = command.get("height")
-        if width not in (None, "") and height not in (None, ""):
-            return f"{index + 1}. {command_type}: {width}x{height}"
-    if command_type in {"move_camera", "teleport_camera"}:
+    if command_type == "move_camera":
         x = command.get("x")
         y = command.get("y")
         if x not in (None, "") and y not in (None, ""):
@@ -4047,72 +4013,6 @@ class CommandEditorDialog(QDialog):
         new_game_form.addRow("camera_follow", self._new_game_camera_follow_field)
         self._command_stack.addWidget(self._new_game_page)
 
-        self._set_camera_follow_entity_page = QWidget()
-        set_camera_follow_entity_form = QFormLayout(self._set_camera_follow_entity_page)
-        set_camera_follow_entity_form.setContentsMargins(0, 0, 0, 0)
-        (
-            entity_follow_row,
-            self._set_camera_follow_entity_id_edit,
-            self._set_camera_follow_entity_pick,
-            self._set_camera_follow_entity_ref,
-        ) = _make_line_with_two_buttons(
-            primary_button_text="Pick...",
-            secondary_button_text="Ref...",
-        )
-        self._set_camera_follow_entity_pick.clicked.connect(
-            lambda: self._pick_entity_into_edit(
-                self._set_camera_follow_entity_id_edit,
-                parameter_name="entity_id",
-            )
-        )
-        self._set_camera_follow_entity_ref.clicked.connect(
-            lambda: self._show_entity_token_menu_for_edit(
-                self._set_camera_follow_entity_id_edit,
-                self._set_camera_follow_entity_ref,
-            )
-        )
-        set_camera_follow_entity_form.addRow("entity_id", entity_follow_row)
-        self._set_camera_follow_entity_offset_x_spin = QDoubleSpinBox()
-        self._set_camera_follow_entity_offset_x_spin.setRange(-999999.0, 999999.0)
-        self._set_camera_follow_entity_offset_x_spin.setDecimals(3)
-        self._set_camera_follow_entity_offset_x_spin.setSingleStep(1.0)
-        set_camera_follow_entity_form.addRow("offset_x", self._set_camera_follow_entity_offset_x_spin)
-        self._set_camera_follow_entity_offset_y_spin = QDoubleSpinBox()
-        self._set_camera_follow_entity_offset_y_spin.setRange(-999999.0, 999999.0)
-        self._set_camera_follow_entity_offset_y_spin.setDecimals(3)
-        self._set_camera_follow_entity_offset_y_spin.setSingleStep(1.0)
-        set_camera_follow_entity_form.addRow("offset_y", self._set_camera_follow_entity_offset_y_spin)
-        self._command_stack.addWidget(self._set_camera_follow_entity_page)
-
-        self._set_camera_follow_input_target_page = QWidget()
-        set_camera_follow_input_form = QFormLayout(self._set_camera_follow_input_target_page)
-        set_camera_follow_input_form.setContentsMargins(0, 0, 0, 0)
-        self._set_camera_follow_input_action_edit = QLineEdit()
-        set_camera_follow_input_form.addRow("action", self._set_camera_follow_input_action_edit)
-        self._set_camera_follow_input_offset_x_spin = QDoubleSpinBox()
-        self._set_camera_follow_input_offset_x_spin.setRange(-999999.0, 999999.0)
-        self._set_camera_follow_input_offset_x_spin.setDecimals(3)
-        self._set_camera_follow_input_offset_x_spin.setSingleStep(1.0)
-        set_camera_follow_input_form.addRow("offset_x", self._set_camera_follow_input_offset_x_spin)
-        self._set_camera_follow_input_offset_y_spin = QDoubleSpinBox()
-        self._set_camera_follow_input_offset_y_spin.setRange(-999999.0, 999999.0)
-        self._set_camera_follow_input_offset_y_spin.setDecimals(3)
-        self._set_camera_follow_input_offset_y_spin.setSingleStep(1.0)
-        set_camera_follow_input_form.addRow("offset_y", self._set_camera_follow_input_offset_y_spin)
-        self._command_stack.addWidget(self._set_camera_follow_input_target_page)
-
-        self._clear_camera_follow_page = QWidget()
-        clear_camera_follow_layout = QVBoxLayout(self._clear_camera_follow_page)
-        clear_camera_follow_layout.setContentsMargins(0, 0, 0, 0)
-        self._clear_camera_follow_note = QLabel(
-            "Clear the current camera follow target without changing bounds or deadzone."
-        )
-        self._clear_camera_follow_note.setWordWrap(True)
-        self._clear_camera_follow_note.setStyleSheet("color: #666;")
-        clear_camera_follow_layout.addWidget(self._clear_camera_follow_note)
-        clear_camera_follow_layout.addStretch(1)
-        self._command_stack.addWidget(self._clear_camera_follow_page)
-
         self._set_camera_policy_page = QWidget()
         set_camera_policy_form = QFormLayout(self._set_camera_policy_page)
         set_camera_policy_form.setContentsMargins(0, 0, 0, 0)
@@ -4157,48 +4057,6 @@ class CommandEditorDialog(QDialog):
         pop_camera_state_layout.addWidget(self._pop_camera_state_note)
         pop_camera_state_layout.addStretch(1)
         self._command_stack.addWidget(self._pop_camera_state_page)
-
-        self._set_camera_bounds_page = QWidget()
-        set_camera_bounds_form = QFormLayout(self._set_camera_bounds_page)
-        set_camera_bounds_form.setContentsMargins(0, 0, 0, 0)
-        self._set_camera_bounds_editor = _CameraRectEditor(
-            space_choices=_CAMERA_WORLD_SPACE_CHOICES,
-        )
-        set_camera_bounds_form.addRow("bounds", self._set_camera_bounds_editor)
-        self._command_stack.addWidget(self._set_camera_bounds_page)
-
-        self._clear_camera_bounds_page = QWidget()
-        clear_camera_bounds_layout = QVBoxLayout(self._clear_camera_bounds_page)
-        clear_camera_bounds_layout.setContentsMargins(0, 0, 0, 0)
-        self._clear_camera_bounds_note = QLabel(
-            "Remove the active camera bounds rectangle."
-        )
-        self._clear_camera_bounds_note.setWordWrap(True)
-        self._clear_camera_bounds_note.setStyleSheet("color: #666;")
-        clear_camera_bounds_layout.addWidget(self._clear_camera_bounds_note)
-        clear_camera_bounds_layout.addStretch(1)
-        self._command_stack.addWidget(self._clear_camera_bounds_page)
-
-        self._set_camera_deadzone_page = QWidget()
-        set_camera_deadzone_form = QFormLayout(self._set_camera_deadzone_page)
-        set_camera_deadzone_form.setContentsMargins(0, 0, 0, 0)
-        self._set_camera_deadzone_editor = _CameraRectEditor(
-            space_choices=_CAMERA_VIEWPORT_SPACE_CHOICES,
-        )
-        set_camera_deadzone_form.addRow("deadzone", self._set_camera_deadzone_editor)
-        self._command_stack.addWidget(self._set_camera_deadzone_page)
-
-        self._clear_camera_deadzone_page = QWidget()
-        clear_camera_deadzone_layout = QVBoxLayout(self._clear_camera_deadzone_page)
-        clear_camera_deadzone_layout.setContentsMargins(0, 0, 0, 0)
-        self._clear_camera_deadzone_note = QLabel(
-            "Remove the active camera deadzone rectangle."
-        )
-        self._clear_camera_deadzone_note.setWordWrap(True)
-        self._clear_camera_deadzone_note.setStyleSheet("color: #666;")
-        clear_camera_deadzone_layout.addWidget(self._clear_camera_deadzone_note)
-        clear_camera_deadzone_layout.addStretch(1)
-        self._command_stack.addWidget(self._clear_camera_deadzone_page)
 
         self._move_camera_page = QWidget()
         move_camera_form = QFormLayout(self._move_camera_page)
@@ -4251,33 +4109,6 @@ class CommandEditorDialog(QDialog):
             self._move_camera_speed_field,
         )
         self._command_stack.addWidget(self._move_camera_page)
-
-        self._teleport_camera_page = QWidget()
-        teleport_camera_form = QFormLayout(self._teleport_camera_page)
-        teleport_camera_form.setContentsMargins(0, 0, 0, 0)
-        self._teleport_camera_x_spin = QDoubleSpinBox()
-        self._teleport_camera_x_spin.setRange(-999999.0, 999999.0)
-        self._teleport_camera_x_spin.setDecimals(3)
-        self._teleport_camera_x_spin.setSingleStep(1.0)
-        teleport_camera_form.addRow("x", self._teleport_camera_x_spin)
-        self._teleport_camera_y_spin = QDoubleSpinBox()
-        self._teleport_camera_y_spin.setRange(-999999.0, 999999.0)
-        self._teleport_camera_y_spin.setDecimals(3)
-        self._teleport_camera_y_spin.setSingleStep(1.0)
-        teleport_camera_form.addRow("y", self._teleport_camera_y_spin)
-        self._teleport_camera_space_field = QComboBox()
-        self._setup_optional_choice_combo(
-            self._teleport_camera_space_field,
-            list(_CAMERA_WORLD_SPACE_CHOICES),
-        )
-        teleport_camera_form.addRow("space", self._teleport_camera_space_field)
-        self._teleport_camera_mode_field = QComboBox()
-        self._setup_optional_choice_combo(
-            self._teleport_camera_mode_field,
-            list(_CAMERA_MOVE_MODE_CHOICES),
-        )
-        teleport_camera_form.addRow("mode", self._teleport_camera_mode_field)
-        self._command_stack.addWidget(self._teleport_camera_page)
 
         self._load_game_page = QWidget()
         load_game_form = QFormLayout(self._load_game_page)
@@ -6660,18 +6491,10 @@ class CommandEditorDialog(QDialog):
             "push_facing": self._push_facing_page,
             "wait_for_move": self._wait_for_move_page,
             "step_in_direction": self._step_in_direction_page,
-            "set_camera_follow_entity": self._set_camera_follow_entity_page,
-            "set_camera_follow_input_target": self._set_camera_follow_input_target_page,
-            "clear_camera_follow": self._clear_camera_follow_page,
             "set_camera_policy": self._set_camera_policy_page,
             "push_camera_state": self._push_camera_state_page,
             "pop_camera_state": self._pop_camera_state_page,
-            "set_camera_bounds": self._set_camera_bounds_page,
-            "clear_camera_bounds": self._clear_camera_bounds_page,
-            "set_camera_deadzone": self._set_camera_deadzone_page,
-            "clear_camera_deadzone": self._clear_camera_deadzone_page,
             "move_camera": self._move_camera_page,
-            "teleport_camera": self._teleport_camera_page,
             "play_audio": self._play_audio_page,
             "set_sound_volume": self._set_sound_volume_page,
             "play_music": self._play_music_page,
@@ -7416,32 +7239,6 @@ class CommandEditorDialog(QDialog):
             command.get("persistent"),
         )
 
-        self._set_camera_follow_entity_id_edit.setText(str(command.get("entity_id", "")))
-        try:
-            self._set_camera_follow_entity_offset_x_spin.setValue(
-                float(command.get("offset_x", 0.0))
-            )
-        except (TypeError, ValueError):
-            self._set_camera_follow_entity_offset_x_spin.setValue(0.0)
-        try:
-            self._set_camera_follow_entity_offset_y_spin.setValue(
-                float(command.get("offset_y", 0.0))
-            )
-        except (TypeError, ValueError):
-            self._set_camera_follow_entity_offset_y_spin.setValue(0.0)
-        self._set_camera_follow_input_action_edit.setText(str(command.get("action", "")))
-        try:
-            self._set_camera_follow_input_offset_x_spin.setValue(
-                float(command.get("offset_x", 0.0))
-            )
-        except (TypeError, ValueError):
-            self._set_camera_follow_input_offset_x_spin.setValue(0.0)
-        try:
-            self._set_camera_follow_input_offset_y_spin.setValue(
-                float(command.get("offset_y", 0.0))
-            )
-        except (TypeError, ValueError):
-            self._set_camera_follow_input_offset_y_spin.setValue(0.0)
         self._set_camera_policy_follow_field.set_patch_state(
             "set"
             if isinstance(command.get("follow"), dict)
@@ -7460,9 +7257,6 @@ class CommandEditorDialog(QDialog):
             else ("clear" if "deadzone" in command else "omit"),
             command.get("deadzone"),
         )
-        self._set_camera_bounds_editor.set_rect(command)
-        self._set_camera_deadzone_editor.set_rect(command)
-
         try:
             self._move_camera_x_spin.setValue(float(command.get("x", 0.0)))
         except (TypeError, ValueError):
@@ -7485,23 +7279,6 @@ class CommandEditorDialog(QDialog):
         )
         self._move_camera_speed_field.set_optional_value(
             command.get("speed_px_per_second")
-        )
-
-        try:
-            self._teleport_camera_x_spin.setValue(float(command.get("x", 0.0)))
-        except (TypeError, ValueError):
-            self._teleport_camera_x_spin.setValue(0.0)
-        try:
-            self._teleport_camera_y_spin.setValue(float(command.get("y", 0.0)))
-        except (TypeError, ValueError):
-            self._teleport_camera_y_spin.setValue(0.0)
-        self._set_optional_choice_combo_value(
-            self._teleport_camera_space_field,
-            command.get("space"),
-        )
-        self._set_optional_choice_combo_value(
-            self._teleport_camera_mode_field,
-            command.get("mode"),
         )
 
         self._play_audio_path_edit.setText(str(command.get("path", "")))
@@ -8828,7 +8605,6 @@ class CommandEditorDialog(QDialog):
             getattr(self, "_set_entity_commands_entity_pick", None),
             getattr(self, "_set_entity_field_entity_pick", None),
             getattr(self, "_set_entity_fields_entity_pick", None),
-            getattr(self, "_set_camera_follow_entity_pick", None),
             getattr(self, "_reset_transient_entity_pick", None),
             getattr(self, "_set_active_entity_pick", None),
             getattr(self, "_step_entity_pick", None),
@@ -10189,47 +9965,6 @@ class CommandEditorDialog(QDialog):
             )
             return base
 
-        if command_type == "set_camera_follow_entity":
-            entity_id = self._set_camera_follow_entity_id_edit.text().strip()
-            if not entity_id:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            offset_x = float(self._set_camera_follow_entity_offset_x_spin.value())
-            offset_y = float(self._set_camera_follow_entity_offset_y_spin.value())
-            if offset_x != 0.0:
-                base["offset_x"] = offset_x
-            if offset_y != 0.0:
-                base["offset_y"] = offset_y
-            return base
-
-        if command_type == "set_camera_follow_input_target":
-            action = self._set_camera_follow_input_action_edit.text().strip()
-            if not action:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "action cannot be blank.",
-                    )
-                return None
-            base["action"] = action
-            offset_x = float(self._set_camera_follow_input_offset_x_spin.value())
-            offset_y = float(self._set_camera_follow_input_offset_y_spin.value())
-            if offset_x != 0.0:
-                base["offset_x"] = offset_x
-            if offset_y != 0.0:
-                base["offset_y"] = offset_y
-            return base
-
-        if command_type == "clear_camera_follow":
-            return base
-
         if command_type == "set_camera_policy":
             if not self._set_camera_follow_patch_field(
                 base,
@@ -10260,30 +9995,6 @@ class CommandEditorDialog(QDialog):
         if command_type == "pop_camera_state":
             return base
 
-        if command_type == "set_camera_bounds":
-            try:
-                base.update(self._set_camera_bounds_editor.rect_value())
-            except ValueError as exc:
-                if show_message:
-                    QMessageBox.warning(self, "Invalid Command", str(exc))
-                return None
-            return base
-
-        if command_type == "clear_camera_bounds":
-            return base
-
-        if command_type == "set_camera_deadzone":
-            try:
-                base.update(self._set_camera_deadzone_editor.rect_value())
-            except ValueError as exc:
-                if show_message:
-                    QMessageBox.warning(self, "Invalid Command", str(exc))
-                return None
-            return base
-
-        if command_type == "clear_camera_deadzone":
-            return base
-
         if command_type == "move_camera":
             base["x"] = float(self._move_camera_x_spin.value())
             base["y"] = float(self._move_camera_y_spin.value())
@@ -10308,17 +10019,6 @@ class CommandEditorDialog(QDialog):
                 "speed_px_per_second",
                 self._move_camera_speed_field,
             )
-            return base
-
-        if command_type == "teleport_camera":
-            base["x"] = float(self._teleport_camera_x_spin.value())
-            base["y"] = float(self._teleport_camera_y_spin.value())
-            space = self._optional_choice_combo_value(self._teleport_camera_space_field)
-            if isinstance(space, str) and space.strip():
-                base["space"] = space.strip()
-            mode = self._optional_choice_combo_value(self._teleport_camera_mode_field)
-            if isinstance(mode, str) and mode.strip():
-                base["mode"] = mode.strip()
             return base
 
         if command_type == "play_audio":

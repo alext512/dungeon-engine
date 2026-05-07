@@ -23,7 +23,6 @@ STRICT_ENTITY_TARGET_COMMANDS = frozenset(
         "set_input_route",
         "set_entity_field",
         "set_entity_fields",
-        "set_camera_follow_entity",
         "set_entity_grid_position",
         "set_entity_world_position",
         "set_entity_screen_position",

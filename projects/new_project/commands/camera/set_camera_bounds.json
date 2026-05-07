@@ -1,0 +1,38 @@
+/*
+  NOTES
+
+  Set world-space camera movement bounds.
+*/
+{
+  "inputs": {
+    "x": {
+      "type": "float"
+    },
+    "y": {
+      "type": "float"
+    },
+    "width": {
+      "type": "float"
+    },
+    "height": {
+      "type": "float"
+    },
+    "space": {
+      "type": "enum",
+      "values": ["world_pixel", "world_grid"],
+      "default": "world_pixel"
+    }
+  },
+  "commands": [
+    {
+      "type": "set_camera_policy",
+      "bounds": {
+        "x": "$x",
+        "y": "$y",
+        "width": "$width",
+        "height": "$height",
+        "space": "$space"
+      }
+    }
+  ]
+}

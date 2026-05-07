@@ -1,0 +1,31 @@
+/*
+  NOTES
+
+  Follow whichever entity currently owns one routed input action.
+*/
+{
+  "inputs": {
+    "action": {
+      "type": "string"
+    },
+    "offset_x": {
+      "type": "float",
+      "default": 0
+    },
+    "offset_y": {
+      "type": "float",
+      "default": 0
+    }
+  },
+  "commands": [
+    {
+      "type": "set_camera_policy",
+      "follow": {
+        "mode": "input_target",
+        "action": "$action",
+        "offset_x": "$offset_x",
+        "offset_y": "$offset_y"
+      }
+    }
+  ]
+}

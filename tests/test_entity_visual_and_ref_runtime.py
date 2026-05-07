@@ -228,12 +228,6 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 },
             ),
             (
-                "set_camera_follow_entity",
-                {
-                    "entity_id": "self",
-                },
-            ),
-            (
                 "set_visual_frame",
                 {
                     "entity_id": "self",

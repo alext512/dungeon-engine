@@ -1,0 +1,13 @@
+/*
+  NOTES
+
+  Clear only the active camera follow deadzone.
+*/
+{
+  "commands": [
+    {
+      "type": "set_camera_policy",
+      "deadzone": null
+    }
+  ]
+}

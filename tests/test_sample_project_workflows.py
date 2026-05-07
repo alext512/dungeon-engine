@@ -348,12 +348,17 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         self.assertEqual(new_game_command["camera_follow"]["entity_id"], "player_1")
 
         title_screen = load_json_data(project_root / "areas" / "title_screen.json")
-        enter_command_types = [
-            command["type"] for command in title_screen.get("enter_commands", [])
+        enter_camera_commands = [
+            (command["type"], command.get("command_id"))
+            for command in title_screen.get("enter_commands", [])[:3]
         ]
         self.assertEqual(
-            enter_command_types[:3],
-            ["clear_camera_follow", "clear_camera_bounds", "clear_camera_deadzone"],
+            enter_camera_commands,
+            [
+                ("run_project_command", "commands/camera/clear_camera_follow"),
+                ("run_project_command", "commands/camera/clear_camera_bounds"),
+                ("run_project_command", "commands/camera/clear_camera_deadzone"),
+            ],
         )
 
 

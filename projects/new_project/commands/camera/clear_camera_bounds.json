@@ -1,0 +1,13 @@
+/*
+  NOTES
+
+  Clear only the active camera movement bounds.
+*/
+{
+  "commands": [
+    {
+      "type": "set_camera_policy",
+      "bounds": null
+    }
+  ]
+}

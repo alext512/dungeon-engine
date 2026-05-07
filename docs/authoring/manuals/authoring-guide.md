@@ -2186,20 +2186,12 @@ Camera behavior is explicit runtime state controlled by commands.
 
 Useful commands:
 
-- `set_camera_follow_entity`
-- `set_camera_follow_input_target`
-- `clear_camera_follow`
 - `set_camera_policy`
 - `push_camera_state`
 - `pop_camera_state`
-- `set_camera_bounds`
-- `clear_camera_bounds`
-- `set_camera_deadzone`
-- `clear_camera_deadzone`
 - `move_camera`
-- `teleport_camera`
 
-`set_camera_follow_entity` and `set_camera_follow_input_target` are the focused follow setters. `clear_camera_follow`, `clear_camera_bounds`, and `clear_camera_deadzone` are the focused clear commands. `set_camera_policy` is the atomic patch command for `follow`, `bounds`, and `deadzone`; omitted sections stay unchanged, and explicit `null` clears that section. Authored `follow.mode` can be `entity` or `input_target`. `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`. `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`. `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"` plus `mode: "absolute"` or `mode: "relative"`. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow.entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
+`set_camera_policy` is the atomic patch command for `follow`, `bounds`, and `deadzone`; omitted sections stay unchanged, and explicit `null` clears that section. Authored `follow.mode` can be `entity` or `input_target`. Project commands can wrap common camera-policy presets, such as following one explicit entity, following the current target for one routed input action, clearing one camera-policy section, setting bounds, setting a deadzone, or teleporting the camera. `set_camera_policy.bounds` uses `space: "world_pixel"` or `space: "world_grid"`. `set_camera_policy.deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`. `move_camera` uses `space: "world_pixel"` or `space: "world_grid"` plus `mode: "absolute"` or `mode: "relative"`; `frames_needed: 0` makes it instant. To read camera state, use runtime tokens like `$camera.x`, `$camera.follow.entity_id`, `$camera.bounds`, or `$camera.has_bounds` with normal explicit variable commands.
 
 Example:
 
@@ -2207,13 +2199,17 @@ Example:
 {
   "commands": [
     {
-      "type": "set_camera_follow_entity",
-      "entity_id": "$self_id",
-      "offset_x": 0,
-      "offset_y": -8
+      "type": "set_camera_policy",
+      "follow": {
+        "mode": "entity",
+        "entity_id": "$self_id",
+        "offset_x": 0,
+        "offset_y": -8
+      }
     },
     {
-      "type": "set_camera_deadzone",
+      "type": "run_project_command",
+      "command_id": "commands/camera/set_camera_deadzone",
       "x": 4,
       "y": 3,
       "width": 8,

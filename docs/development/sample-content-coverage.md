@@ -21,6 +21,7 @@ for what the sample proves today and what it still does not prove.
 - title-screen dialogue data through `dialogues/system/title_menu.json`
 - runtime-control commands: `new_game`, `load_game`, and `quit_game`
 - typed project-command `inputs` through `commands/player/move_one_tile.json`
+  and camera presets under `commands/camera/`
 - direct input routing through area/project `input_routes`
 - entity command dispatch for movement, interaction, and inventory
 - inventory session opening through `open_inventory_session`
@@ -71,8 +72,9 @@ Use these files as the first examples when checking sample behavior:
   `projects/new_project/dialogues/signs/cycle_intro.json` for an entity-owned
   `dialogues` map, `active_dialogue` selection, file-backed plus inline
   variants, and post-interaction dialogue switching
-- `projects/new_project/commands/player/move_one_tile.json` for reusable project
-  command loading and command composition
+- `projects/new_project/commands/player/move_one_tile.json` and
+  `projects/new_project/commands/camera/` for reusable project command loading,
+  typed inputs, and command composition
 - `projects/new_project/entity_templates/player.json` for player input,
   inventory session opening, persistence defaults, collision, movement, and
   rendering

@@ -167,7 +167,7 @@ _AREA_DUPLICATE_LAYOUT = "Layout Copy"
 _AREA_JSON_TAB_SUFFIX = " [Raw JSON]"
 _AREA_START_SUGGESTED_COMMAND_NAMES = (
     "set_input_route",
-    "set_camera_follow_entity",
+    "set_camera_policy",
     "run_entity_command",
     "open_dialogue_session",
     "play_music",

@@ -536,7 +536,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 {},
             )
 
-    def test_set_camera_follow_entity_supports_named_ref_via_run_sequence(self) -> None:
+    def test_set_camera_policy_follow_supports_named_ref_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -554,10 +554,13 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
                 },
                 "commands": [
                     {
-                        "type": "set_camera_follow_entity",
-                        "entity_id": "$ref_ids.caller",
-                        "offset_x": 4,
-                        "offset_y": -2,
+                        "type": "set_camera_policy",
+                        "follow": {
+                            "mode": "entity",
+                            "entity_id": "$ref_ids.caller",
+                            "offset_x": 4,
+                            "offset_y": -2,
+                        },
                     }
                 ],
             },
@@ -567,11 +570,8 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         self.assertEqual(camera.followed_entity_id, "lever")
         self.assertEqual(camera.follow_offset_x, 4.0)
         self.assertEqual(camera.follow_offset_y, -2.0)
-        self.assertEqual(len(camera.update_calls), 1)
-        self.assertIs(camera.update_calls[0][0], world)
-        self.assertFalse(camera.update_calls[0][1])
 
-    def test_set_camera_follow_input_target_tracks_routed_action(self) -> None:
+    def test_set_camera_policy_follow_tracks_routed_input_action(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         world.add_entity(
@@ -590,18 +590,18 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_camera_follow_input_target",
+            "set_camera_policy",
             {
-                "action": "menu",
+                "follow": {
+                    "mode": "input_target",
+                    "action": "menu",
+                },
             },
         )
         handle.update(0.0)
 
         self.assertEqual(camera.follow_mode, "input_target")
         self.assertEqual(camera.follow_input_action, "menu")
-        self.assertEqual(len(camera.update_calls), 1)
-        self.assertIs(camera.update_calls[0][0], world)
-        self.assertFalse(camera.update_calls[0][1])
 
     def test_set_camera_policy_push_and_pop_restore_previous_camera_policy(self) -> None:
         world = World()
@@ -668,7 +668,7 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
             {"x": 32.0, "y": 16.0, "width": 80.0, "height": 64.0},
         )
 
-    def test_clear_camera_commands_reset_one_section_without_replacing_others(self) -> None:
+    def test_set_camera_policy_clears_one_section_without_replacing_others(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("player", kind="player"))
         registry, context = self._make_command_context(world=world)
@@ -678,48 +678,56 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "set_camera_follow_entity",
+            "set_camera_policy",
             {
-                "entity_id": "player",
-                "offset_x": 5,
-                "offset_y": -3,
-            },
-        ).update(0.0)
-        execute_registered_command(
-            registry,
-            context,
-            "set_camera_bounds",
-            {
-                "x": 1,
-                "y": 2,
-                "width": 3,
-                "height": 4,
-                "space": "world_grid",
-            },
-        ).update(0.0)
-        execute_registered_command(
-            registry,
-            context,
-            "set_camera_deadzone",
-            {
-                "x": 2,
-                "y": 1,
-                "width": 5,
-                "height": 4,
-                "space": "viewport_grid",
+                "follow": {
+                    "mode": "entity",
+                    "entity_id": "player",
+                    "offset_x": 5,
+                    "offset_y": -3,
+                },
+                "bounds": {
+                    "x": 1,
+                    "y": 2,
+                    "width": 3,
+                    "height": 4,
+                    "space": "world_grid",
+                },
+                "deadzone": {
+                    "x": 2,
+                    "y": 1,
+                    "width": 5,
+                    "height": 4,
+                    "space": "viewport_grid",
+                },
             },
         ).update(0.0)
 
-        execute_registered_command(registry, context, "clear_camera_follow", {}).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_camera_policy",
+            {"follow": None},
+        ).update(0.0)
         self.assertEqual(camera.follow_mode, "none")
         self.assertIsNotNone(camera.bounds)
         self.assertIsNotNone(camera.deadzone)
 
-        execute_registered_command(registry, context, "clear_camera_bounds", {}).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_camera_policy",
+            {"bounds": None},
+        ).update(0.0)
         self.assertIsNone(camera.bounds)
         self.assertIsNotNone(camera.deadzone)
 
-        execute_registered_command(registry, context, "clear_camera_deadzone", {}).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_camera_policy",
+            {"deadzone": None},
+        ).update(0.0)
         self.assertIsNone(camera.deadzone)
 
     def test_set_camera_follow_player_is_removed(self) -> None:
@@ -745,6 +753,14 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         context.services.ui.camera = _RecordingCamera()
 
         for command_name in (
+            "set_camera_follow_entity",
+            "set_camera_follow_input_target",
+            "clear_camera_follow",
+            "set_camera_bounds",
+            "clear_camera_bounds",
+            "set_camera_deadzone",
+            "clear_camera_deadzone",
+            "teleport_camera",
             "set_camera_follow",
             "set_camera_state",
             "set_camera_bounds_rect",
@@ -833,13 +849,15 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         bounds_handle = execute_registered_command(
             registry,
             context,
-            "set_camera_bounds",
+            "set_camera_policy",
             {
-                "x": 1,
-                "y": 2,
-                "width": 3,
-                "height": 4,
-                "space": "world_grid",
+                "bounds": {
+                    "x": 1,
+                    "y": 2,
+                    "width": 3,
+                    "height": 4,
+                    "space": "world_grid",
+                },
             },
         )
         bounds_handle.update(0.0)
@@ -851,13 +869,15 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         deadzone_handle = execute_registered_command(
             registry,
             context,
-            "set_camera_deadzone",
+            "set_camera_policy",
             {
-                "x": 8,
-                "y": 12,
-                "width": 24,
-                "height": 30,
-                "space": "viewport_pixel",
+                "deadzone": {
+                    "x": 8,
+                    "y": 12,
+                    "width": 24,
+                    "height": 30,
+                    "space": "viewport_pixel",
+                },
             },
         )
         deadzone_handle.update(0.0)
@@ -869,11 +889,14 @@ class InputAndCameraRuntimeTests(unittest.TestCase):
         follow_set_handle = execute_registered_command(
             registry,
             context,
-            "set_camera_follow_entity",
+            "set_camera_policy",
             {
-                "entity_id": "player",
-                "offset_x": 6,
-                "offset_y": -2,
+                "follow": {
+                    "mode": "entity",
+                    "entity_id": "player",
+                    "offset_x": 6,
+                    "offset_y": -2,
+                },
             },
         )
         follow_set_handle.update(0.0)

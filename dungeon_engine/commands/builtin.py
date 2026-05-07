@@ -1252,7 +1252,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
 
     register_camera_commands(
         registry,
-        require_exact_entity=_require_exact_entity,
         normalize_camera_follow_spec=_normalize_camera_follow_spec,
         normalize_camera_rect_spec=_normalize_camera_rect_spec,
     )

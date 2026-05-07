@@ -55,7 +55,7 @@ The current editor can:
   `Cell Flags` stay in their own focused tabs
 - edit area `enter_commands` from the area right-click menu, including
   common actions like `set_input_route`, `run_entity_command`,
-  `open_dialogue_session`, `set_camera_follow_entity`, and `play_music`
+  `open_dialogue_session`, `set_camera_policy`, and `play_music`
 - edit entity instances through a structured dialog with a focused
   `Parameters` tab for common template tuning, an advanced instance editor for
   identity, scope, common engine fields, `color`, `entity_commands`, variables,
@@ -132,18 +132,10 @@ Current structured command coverage:
 - area, game, and camera control
   - `change_area`
   - `new_game`
-  - `set_camera_follow_entity`
-  - `set_camera_follow_input_target`
-  - `clear_camera_follow`
   - `set_camera_policy`
   - `push_camera_state`
   - `pop_camera_state`
-  - `set_camera_bounds`
-  - `clear_camera_bounds`
-  - `set_camera_deadzone`
-  - `clear_camera_deadzone`
   - `move_camera`
-  - `teleport_camera`
 
 - runtime/session controls
   - `load_game`

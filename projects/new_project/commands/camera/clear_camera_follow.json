@@ -1,0 +1,13 @@
+/*
+  NOTES
+
+  Clear only the active camera follow target.
+*/
+{
+  "commands": [
+    {
+      "type": "set_camera_policy",
+      "follow": null
+    }
+  ]
+}

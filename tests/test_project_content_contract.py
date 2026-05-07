@@ -1431,6 +1431,35 @@ class ProjectContentContractTests(unittest.TestCase):
             )
         )
 
+    def test_project_command_validation_rejects_symbolic_entity_refs_for_camera_policy_follow(self) -> None:
+        _, project = self._make_project(
+            commands={
+                "bad_camera_policy.json": {
+                    "params": [],
+                    "commands": [
+                        {
+                            "type": "set_camera_policy",
+                            "follow": {
+                                "mode": "entity",
+                                "entity_id": "self",
+                            },
+                        }
+                    ],
+                }
+            }
+        )
+
+        with self.assertRaises(ProjectCommandValidationError) as raised:
+            validate_project_commands(project)
+
+        self.assertTrue(
+            any(
+                "must not use symbolic entity id 'self' inside 'set_camera_policy.follow.entity_id'"
+                in issue
+                for issue in raised.exception.issues
+            )
+        )
+
     def test_area_validation_rejects_removed_interact_commands_field(self) -> None:
         _, project = self._make_project(
             areas={

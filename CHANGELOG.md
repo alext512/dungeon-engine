@@ -4,6 +4,18 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Camera Project Command Presets
+
+- Moved camera convenience helpers out of the built-in command registry and into
+  sample project-command presets under `commands/camera/`
+- Kept `set_camera_policy` and `move_camera` as the camera primitives; project
+  presets now cover common follow, bounds, deadzone, clear, and teleport shapes
+- Updated the editor help, command docs, sample content, and tests so camera
+  authoring is presented through primitives plus reusable project-command
+  presets
+
+---
+
 ## Direct Input Routes
 
 - Replaced authored input routing with `input_routes`, where each logical

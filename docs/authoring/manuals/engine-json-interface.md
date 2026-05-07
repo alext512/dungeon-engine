@@ -2146,30 +2146,27 @@ These commands are gated by project `debug_inspection_enabled`.
 
 ### Camera
 
-- `set_camera_follow_entity(entity_id, offset_x?, offset_y?)`
-- `set_camera_follow_input_target(action, offset_x?, offset_y?)`
-- `clear_camera_follow()`
 - `set_camera_policy(follow?, bounds?, deadzone?)`
 - `push_camera_state()`
 - `pop_camera_state()`
-- `set_camera_bounds(x, y, width, height, space?)`
-- `clear_camera_bounds()`
-- `set_camera_deadzone(x, y, width, height, space?)`
-- `clear_camera_deadzone()`
 - `move_camera(x, y, space?, mode?, duration?, frames_needed?, speed_px_per_second?)`
-- `teleport_camera(x, y, space?, mode?)`
 
 Notes:
 - authored `follow.mode` can be `entity` or `input_target`
+- project command wrappers can be used as named presets when you want a shorter
+  authoring shape for a common camera policy
 - `set_camera_policy` uses patch semantics:
   - omitted section = unchanged
   - `null` section = clear
   - object = set
-- use `clear_camera_follow`, `clear_camera_bounds`, and `clear_camera_deadzone`
-  when you want the focused single-purpose clear commands
-- `set_camera_bounds` uses `space: "world_pixel"` or `space: "world_grid"`
-- `set_camera_deadzone` uses `space: "viewport_pixel"` or `space: "viewport_grid"`
-- `move_camera` and `teleport_camera` use `space: "world_pixel"` or `space: "world_grid"`
+- project command presets such as `commands/camera/clear_camera_follow`,
+  `commands/camera/set_camera_bounds`, `commands/camera/set_camera_deadzone`,
+  and `commands/camera/teleport_camera` are ordinary project-authored wrappers,
+  not built-ins
+- `set_camera_policy.bounds` uses `space: "world_pixel"` or `"world_grid"`
+- `set_camera_policy.deadzone` uses `space: "viewport_pixel"` or `"viewport_grid"`
+- `move_camera` uses `space: "world_pixel"` or `"world_grid"`; pass
+  `frames_needed: 0` for an instant move
 
 ### Entity State
 

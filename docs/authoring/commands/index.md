@@ -16,6 +16,8 @@ Each command page should answer:
 
 - [Dialogue Commands](dialogue.md) for opening dialogue sessions and choosing
   entity-owned dialogue entries
+- [Camera Commands](camera.md) for camera policy, movement, and common camera
+  project-command presets
 
 ## Related Reference
 

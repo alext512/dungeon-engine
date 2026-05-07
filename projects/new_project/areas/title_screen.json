@@ -38,13 +38,16 @@
   ],
   "enter_commands": [
     {
-      "type": "clear_camera_follow"
+      "type": "run_project_command",
+      "command_id": "commands/camera/clear_camera_follow"
     },
     {
-      "type": "clear_camera_bounds"
+      "type": "run_project_command",
+      "command_id": "commands/camera/clear_camera_bounds"
     },
     {
-      "type": "clear_camera_deadzone"
+      "type": "run_project_command",
+      "command_id": "commands/camera/clear_camera_deadzone"
     },
     {
       "type": "spawn_flow",
