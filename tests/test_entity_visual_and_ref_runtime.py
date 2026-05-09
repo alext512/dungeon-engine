@@ -103,9 +103,31 @@ class _RecordingAnimationSystem:
 
 class _RecordingMovementSystem:
     def __init__(self) -> None:
+        self.grid_positions: list[tuple[str, int, int, bool | None]] = []
+        self.pixel_positions: list[tuple[str, float, float, bool | None]] = []
         self.move_by_offsets: list[
             tuple[str, float, float, float | None, int | None, float | None, str, int | None, int | None]
         ] = []
+
+    def set_grid_position(
+        self,
+        entity_id: str,
+        x: int,
+        y: int,
+        *,
+        persistent: bool | None = None,
+    ) -> None:
+        self.grid_positions.append((entity_id, x, y, persistent))
+
+    def set_pixel_position(
+        self,
+        entity_id: str,
+        x: float,
+        y: float,
+        *,
+        persistent: bool | None = None,
+    ) -> None:
+        self.pixel_positions.append((entity_id, x, y, persistent))
 
     def request_move_by_offset(
         self,
@@ -189,6 +211,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         )
         world.add_entity(_make_runtime_entity("player", kind="player", with_visual=True))
         registry, context = self._make_command_context(world=world)
+        context.services.world.movement_system = _RecordingMovementSystem()
         context.services.ui.camera = _RecordingCamera()
 
         for command_name, params in (
@@ -228,16 +251,18 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 },
             ),
             (
-                "set_visual_frame",
+                "play_animation",
                 {
                     "entity_id": "self",
-                    "frame": 2,
+                    "visual_id": "main",
+                    "animation": "idle",
                 },
             ),
             (
-                "move_entity_world_position",
+                "move_entity_position",
                 {
                     "entity_id": "self",
+                    "space": "world_pixel",
                     "x": 16,
                     "y": 0,
                     "mode": "relative",
@@ -249,6 +274,32 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                     execute_registered_command(registry, context, command_name, params)
                 self.assertIsNotNone(raised.exception.__cause__)
                 self.assertIn("use '$self_id' or '$ref_ids.<name>'", str(raised.exception.__cause__))
+
+    def test_removed_entity_position_commands_raise_unknown_command(self) -> None:
+        registry, context = self._make_command_context()
+
+        for command_name in (
+            "set_entity_grid_position",
+            "set_entity_world_position",
+            "set_entity_screen_position",
+            "move_entity_world_position",
+            "move_entity_screen_position",
+        ):
+            with self.subTest(command_name=command_name):
+                with self.assertRaises(CommandExecutionError) as raised:
+                    execute_registered_command(registry, context, command_name, {})
+                self.assertIsNotNone(raised.exception.__cause__)
+                self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
+
+    def test_removed_visual_shortcut_commands_raise_unknown_command(self) -> None:
+        registry, context = self._make_command_context()
+
+        for command_name in ("set_visual_frame", "set_visual_flip_x"):
+            with self.subTest(command_name=command_name):
+                with self.assertRaises(CommandExecutionError) as raised:
+                    execute_registered_command(registry, context, command_name, {})
+                self.assertIsNotNone(raised.exception.__cause__)
+                self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
 
     def test_animation_commands_accept_visual_id_and_named_ref_via_run_sequence(self) -> None:
         _, project = self._make_project()
@@ -306,6 +357,43 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
             [("lever", "open", "main", 2, 8)],
         )
         self.assertEqual(animation_system.queries, [("lever", "main")])
+
+    def test_set_entity_position_routes_by_space(self) -> None:
+        world = World()
+        world.add_entity(_make_runtime_entity("crate", kind="crate"))
+        world.add_entity(_make_runtime_entity("logo", kind="ui", space="screen"))
+        registry, context = self._make_command_context(world=world)
+        movement_system = _RecordingMovementSystem()
+        context.services.world.movement_system = movement_system
+
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_position",
+            {
+                "entity_id": "crate",
+                "space": "world_grid",
+                "x": 3,
+                "y": 4,
+                "persistent": True,
+            },
+        ).update(0.0)
+        execute_registered_command(
+            registry,
+            context,
+            "set_entity_position",
+            {
+                "entity_id": "logo",
+                "space": "screen_pixel",
+                "x": 12.5,
+                "y": 8,
+                "mode": "relative",
+                "persistent": False,
+            },
+        ).update(0.0)
+
+        self.assertEqual(movement_system.grid_positions, [("crate", 3, 4, True)])
+        self.assertEqual(movement_system.pixel_positions, [("logo", 12.5, 8.0, False)])
 
     def test_animation_system_plays_named_clips_with_duration_and_phase(self) -> None:
         visual = EntityVisual(
@@ -441,7 +529,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
 
         self.assertEqual(npc.require_visual("body").current_frame, 1)
 
-    def test_move_entity_world_position_supports_named_ref_via_run_sequence(self) -> None:
+    def test_move_entity_position_supports_named_ref_via_run_sequence(self) -> None:
         caller = _make_runtime_entity("lever", kind="lever")
         world = World()
         world.add_entity(caller)
@@ -459,8 +547,9 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
                 },
                 "commands": [
                     {
-                        "type": "move_entity_world_position",
+                        "type": "move_entity_position",
                         "entity_id": "$ref_ids.caller",
+                        "space": "world_pixel",
                         "x": 16,
                         "y": 0,
                         "mode": "relative",
@@ -477,7 +566,7 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
             [("lever", 16.0, 0.0, None, 8, None, "none", None, None)],
         )
 
-    def test_set_visual_frame_updates_primary_visual(self) -> None:
+    def test_set_entity_field_updates_visual_frame(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -487,17 +576,18 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_visual_frame",
+            "set_entity_field",
             {
                 "entity_id": "lever",
-                "frame": 2,
+                "field_name": "visuals.main.current_frame",
+                "value": 2,
             },
         )
         handle.update(0.0)
 
         self.assertEqual(world.get_entity("lever").require_visual("main").current_frame, 2)  # type: ignore[union-attr]
 
-    def test_set_visual_flip_x_updates_primary_visual(self) -> None:
+    def test_set_entity_field_updates_visual_flip_x(self) -> None:
         _, project = self._make_project()
         caller = _make_runtime_entity("lever", kind="lever", with_visual=True)
         world = World()
@@ -507,10 +597,11 @@ class EntityVisualAndRefRuntimeTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_visual_flip_x",
+            "set_entity_field",
             {
                 "entity_id": "lever",
-                "flip_x": True,
+                "field_name": "visuals.main.flip_x",
+                "value": True,
             },
         )
         handle.update(0.0)

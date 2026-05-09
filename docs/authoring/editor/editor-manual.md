@@ -120,11 +120,8 @@ Current structured command coverage:
 
 - movement and position
   - `step_in_direction`
-  - `set_entity_grid_position`
-  - `set_entity_world_position`
-  - `set_entity_screen_position`
-  - `move_entity_world_position`
-  - `move_entity_screen_position`
+  - `set_entity_position`
+  - `move_entity_position`
   - `push_facing`
   - `wait_for_move`
   - `interact_facing`
@@ -172,12 +169,6 @@ Current structured command coverage:
   - `open_inventory_session`
   - `close_inventory_session`
   - `set_current_area_var`
-  - `add_current_area_var`
-  - `add_entity_var`
-  - `toggle_current_area_var`
-  - `toggle_entity_var`
-  - `set_current_area_var_length`
-  - `set_entity_var_length`
   - `append_current_area_var`
   - `append_entity_var`
   - `pop_current_area_var`
@@ -188,20 +179,23 @@ Current structured command coverage:
   - `set_entity_var`
   - `set_entity_field`
   - `set_entity_fields`
-  - `set_visible`
-  - `set_present`
-  - `set_color`
   - `destroy_entity`
   - `spawn_entity`
   - `reset_transient_state`
   - `reset_persistent_state`
-  - `set_visual_frame`
-  - `set_visual_flip_x`
   - `set_entity_command_enabled`
-  - `set_entity_commands_enabled`
   - `play_animation`
   - `wait_for_animation`
   - `stop_animation`
+
+Common entity-field and visual-field shortcuts such as `set_visible`,
+`set_present`, `set_color`, `set_visual_frame`, `set_visual_flip_x`, and
+`set_entity_commands_enabled` are project commands when they exist in the
+active project, rather than separate built-in command primitives.
+Numeric variable shortcuts such as `add_current_area_var` and `add_entity_var`
+follow the same pattern when project command presets exist. Boolean toggle and
+value-length shortcuts such as `toggle_entity_var` and `set_entity_var_length`
+are also project commands, not separate built-in primitives.
 
 - input routing and waiting
   - `set_input_route`
@@ -223,8 +217,6 @@ Those ref rows allow custom ref names plus typed entity picking and token insert
 To keep the add-command picker less noisy, the more niche collection-shaping
 commands are grouped under **Advanced / Rare Commands**:
 
-- `set_current_area_var_length`
-- `set_entity_var_length`
 - `append_current_area_var`
 - `append_entity_var`
 - `pop_current_area_var`

@@ -1,0 +1,43 @@
+/*
+  NOTES
+
+  Add a numeric amount to one entity variable.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "name": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "float",
+      "default": 1
+    },
+    "persistent": {
+      "type": "bool",
+      "default": null
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$entity_id",
+      "name": "$name",
+      "value": {
+        "$add": [
+          {
+            "$entity_var": {
+              "entity_id": "$entity_id",
+              "name": "$name",
+              "default": 0
+            }
+          },
+          "$amount"
+        ]
+      },
+      "persistent": "$persistent"
+    }
+  ]
+}

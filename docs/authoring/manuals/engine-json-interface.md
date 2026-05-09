@@ -599,7 +599,7 @@ Entities and templates can now author persistence defaults directly:
 
 Current rules:
 
-- `persistence.entity_state` is the default save policy for entity-targeted state mutations such as `set_entity_field`, `set_visible`, `destroy_entity`, and `spawn_entity`
+- `persistence.entity_state` is the default save policy for entity-targeted state mutations such as `set_entity_field`, `destroy_entity`, and `spawn_entity`
 - `persistence.variables.<name>` overrides that default for one specific variable name
 - omitting `persistence` means the entity is transient by default
 - explicit command `persistent: true` / `persistent: false` still overrides the entity policy when a command supports it
@@ -1140,6 +1140,8 @@ Current value sources:
 - `$and`
 - `$or`
 - `$not`
+- `$boolean_not`
+- `$length`
 - `$random_int`
 - `$random_choice`
 - `$find_in_collection`
@@ -1673,6 +1675,35 @@ Notes:
 - `$and` and `$or` resolve every authored child value first, then apply normal truthiness
 - `$not` negates one resolved value's truthiness
 
+### `$boolean_not`
+
+Strict boolean negation for authored boolean state.
+
+Shape:
+
+```json
+{ "$boolean_not": "$self.enabled" }
+```
+
+Notes:
+- `true` becomes `false`
+- `false`, missing values, and `null` become `true`
+- any other value type raises an error
+
+### `$length`
+
+Returns the length of a string, list, tuple, or dict-like value.
+
+Shape:
+
+```json
+{ "$length": "$self.history" }
+```
+
+Notes:
+- `null` returns `0`
+- values without a length raise an error
+
 ### `$random_int`
 
 Returns one inclusive random integer.
@@ -1801,14 +1832,23 @@ Current builtin commands, grouped by role.
 
 ### Movement And Position
 
-- `set_entity_grid_position(entity_id, x, y, mode?, persistent?)`
-- `set_entity_world_position(entity_id, x, y, mode?, persistent?)`
-- `set_entity_screen_position(entity_id, x, y, mode?, persistent?)`
+- `set_entity_position(entity_id, space, x, y, mode?, persistent?)`
 - `step_in_direction(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
 - `push_facing(entity_id, direction?, push_strength?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
-- `move_entity_world_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
-- `move_entity_screen_position(entity_id, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
+- `move_entity_position(entity_id, space, x, y, mode?, duration?, frames_needed?, speed_px_per_second?, wait?, persistent?)`
 - `wait_for_move(entity_id)`
+
+Notes:
+- `set_entity_position.space` can be `world_grid`, `world_pixel`, or
+  `screen_pixel`
+- `move_entity_position.space` can be `world_pixel` or `screen_pixel`
+- `world_grid` updates logical grid occupancy without snapping pixel position
+- project command presets such as `commands/entity/set_entity_grid_position`,
+  `commands/entity/set_entity_world_position`,
+  `commands/entity/set_entity_screen_position`,
+  `commands/entity/move_entity_world_position`, and
+  `commands/entity/move_entity_screen_position` are ordinary project-authored
+  wrappers, not built-ins
 
 ### Interaction
 
@@ -1926,8 +1966,6 @@ Current inventory rules:
 - `play_animation(entity_id, visual_id?, animation, frame_count?, duration_ticks?, wait?)`
 - `wait_for_animation(entity_id, visual_id?)`
 - `stop_animation(entity_id, visual_id?, reset_to_default?)`
-- `set_visual_frame(entity_id, visual_id?, frame)`
-- `set_visual_flip_x(entity_id, visual_id?, flip_x)`
 - `play_audio(path, volume?)`
 - `set_sound_volume(volume)`
 - `play_music(path, loop?, volume?, restart_if_same?)`
@@ -1937,6 +1975,9 @@ Current inventory rules:
 - `set_music_volume(volume)`
 
 Notes:
+- visual frame/flip shortcuts such as `commands/entity/set_visual_frame` and
+  `commands/entity/set_visual_flip_x` are ordinary project-authored wrappers
+  around `set_entity_field`, not built-ins
 - `play_animation` plays a named clip from the target visual's `animations`
   object. It does not accept raw `frame_sequence`; author frame lists once on
   the visual clip and call them by name.
@@ -2094,14 +2135,15 @@ Both commands forward any additional fields on the command object into the calle
 ### Entity-Command/Input Routing
 
 - `set_entity_command_enabled(entity_id, command_id, enabled, persistent?)`
-- `set_entity_commands_enabled(entity_id, enabled, persistent?)`
 - `set_input_route(action, entity_id?, command_id?)`
 - `push_input_routes(actions?)`
 - `pop_input_routes()`
 
 Notes:
 - `set_entity_command_enabled` targets one named entity command on one entity
-- `set_entity_commands_enabled` gates the entity's command system as a whole
+- the entity-wide command switch is the `entity_commands_enabled` entity field;
+  sample project command `commands/entity/set_entity_commands_enabled` wraps
+  `set_entity_field` for the common authoring shape
 - `set_input_route` sets one action to run one entity command; leave both `entity_id` and `command_id` unset to restore that action's authored default route
 - `push_input_routes` stores the current routed entity commands for the selected actions on a runtime stack
 - `pop_input_routes` restores the most recently pushed routing snapshot for those actions
@@ -2171,11 +2213,14 @@ Notes:
 ### Entity State
 
 - `set_entity_field(entity_id, field_name, value, persistent?)` - supported field names: `present`, `visible`, `facing`, `solid`, `pushable`, `weight`, `push_strength`, `collision_push_strength`, `interactable`, `interaction_priority`, `entity_commands_enabled`, `render_order`, `y_sort`, `sort_y_offset`, `stack_order`, `color`, and `visuals.<visual_id>.<field>`
-- `set_visible(entity_id, visible, persistent?)`
 - `visuals.<visual_id>.<field>` supports `flip_x`, `visible`, `current_frame`, `tint`, `offset_x`, `offset_y`, and `animation_fps`
 - `set_entity_fields(entity_id, set, persistent?)` - structured batch mutation for `fields`, `variables`, and `visuals`; validates the full payload before applying any changes
-- `set_present(entity_id, present, persistent?)`
-- `set_color(entity_id, color, persistent?)`
+- project command presets such as `commands/entity/set_visible`,
+  `commands/entity/set_present`, `commands/entity/set_color`,
+  `commands/entity/set_visual_frame`, and
+  `commands/entity/set_visual_flip_x`, and
+  `commands/entity/set_entity_commands_enabled` are ordinary project-authored
+  wrappers around `set_entity_field`, not built-ins
 - `destroy_entity(entity_id, persistent?)`
 - `spawn_entity(entity?, entity_id?, template?, kind?, x?, y?, parameters?, present?, persistent?)` - two forms: pass a full `entity` dict, or pass individual fields (`entity_id`, `x`, `y`, and optionally `template`, `kind`, `parameters`)
 
@@ -2186,13 +2231,7 @@ Notes:
 - `set_entity_active_dialogue(entity_id, dialogue_id, persistent?)`
 - `step_entity_active_dialogue(entity_id, delta?, wrap?, persistent?)`
 - `set_entity_active_dialogue_by_order(entity_id, order, wrap?, persistent?)`
-- `add_current_area_var(name, amount?, persistent?)`
 - `value_mode: "raw"` is a valid authored top-level field on `set_current_area_var`, `set_entity_var`, `append_current_area_var`, and `append_entity_var`. It stores the supplied `value` without recursively resolving nested runtime tokens or value-source objects. Use this when storing command-list payloads or hook data that should later be executed with `run_sequence`.
-- `add_entity_var(entity_id, name, amount?, persistent?)`
-- `toggle_current_area_var(name, persistent?)`
-- `toggle_entity_var(entity_id, name, persistent?)`
-- `set_current_area_var_length(name, value?, persistent?)`
-- `set_entity_var_length(entity_id, name, value?, persistent?)`
 - `append_current_area_var(name, value, persistent?)`
 - `append_entity_var(entity_id, name, value, persistent?)`
 - `pop_current_area_var(name, store_var?, default?, persistent?)`
@@ -2201,6 +2240,11 @@ Notes:
 - `set_area_var(area_id, name, value)`
 - `set_area_entity_var(area_id, entity_id, name, value)`
 - `set_area_entity_field(area_id, entity_id, field_name, value)`
+- project command presets such as `commands/variables/add_current_area_var`,
+  `commands/variables/toggle_entity_var`, and
+  `commands/variables/set_entity_var_length` are ordinary project-authored
+  wrappers around `set_current_area_var` or `set_entity_var` with structured
+  value sources
 
 Current comparison operators:
 - `eq`
@@ -2222,9 +2266,13 @@ Notes:
   entity's authored dialogue order; `delta` defaults to `1`
 - `set_entity_active_dialogue_by_order` uses human-facing 1-based order; with
   `wrap: true`, out-of-range values wrap around the available dialogue list
-- `toggle_current_area_var` / `toggle_entity_var` treat missing or `null` as `false`, then flip the value; non-boolean existing values raise an error
-- entity-targeted mutation commands (`set_entity_var`, `add_entity_var`, `toggle_entity_var`, `set_entity_var_length`, `append_entity_var`, `pop_entity_var`, `set_entity_field`, `set_entity_fields`, `set_visible`, `set_present`, `set_color`, `destroy_entity`, `spawn_entity`, `set_entity_command_enabled`, `set_entity_commands_enabled`) inherit from the target entity's authored `persistence` block when `persistent` is omitted
-- movement/position commands (`set_entity_grid_position`, `set_entity_world_position`, `set_entity_screen_position`, `step_in_direction`, `push_facing`, `move_entity_world_position`, `move_entity_screen_position`) also follow that same override-or-inherit rule
+- `commands/variables/toggle_current_area_var` and
+  `commands/variables/toggle_entity_var` use `$boolean_not`; missing or `null`
+  means `false`, while non-boolean existing values raise an error
+- entity-targeted mutation commands (`set_entity_var`, `append_entity_var`, `pop_entity_var`, `set_entity_field`, `set_entity_fields`, `destroy_entity`, `spawn_entity`, `set_entity_command_enabled`) inherit from the target entity's authored `persistence` block when `persistent` is omitted
+- movement/position commands (`set_entity_position`, `step_in_direction`,
+  `push_facing`, `move_entity_position`) also follow that same
+  override-or-inherit rule
 - inventory mutation commands (`add_inventory_item`, `remove_inventory_item`, `use_inventory_item`, `set_inventory_max_stacks`) treat inventory as coarse entity state and also follow that same override-or-inherit rule
 - on those entity-targeted commands, explicit `persistent: true` / `persistent: false` overrides the entity policy
 - current-area variable commands still use command-level persistence only; omitted `persistent` there means transient

@@ -93,6 +93,8 @@ Current sources include:
 - `$and`
 - `$or`
 - `$not`
+- `$boolean_not`
+- `$length`
 - `$random_int`
 - `$random_choice`
 - `$find_in_collection`
@@ -142,6 +144,28 @@ Current sources include:
 ```
 
 The arithmetic helpers are `$add`, `$subtract`, `$multiply`, and `$divide`. Use these structured value sources instead of inline math strings.
+
+### Flip strict boolean state
+
+```json
+{
+  "$boolean_not": "$self.enabled"
+}
+```
+
+`$boolean_not` treats `null` or a missing value as `false`, then flips it. It
+raises an error for non-boolean, non-null values.
+
+### Store a value length
+
+```json
+{
+  "$length": "$self.history"
+}
+```
+
+`$length` returns `0` for `null` and otherwise expects a value with a length,
+such as a list, string, or object.
 
 ## When To Reach For Value Sources
 

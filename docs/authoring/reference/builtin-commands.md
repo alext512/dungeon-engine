@@ -4,15 +4,16 @@ This page is the quick inventory. For the exact signatures and edge-case notes, 
 
 ## Movement And Position
 
-- `set_entity_grid_position` sets a world entity in grid coordinates.
-- `set_entity_world_position` sets a world entity in world-pixel coordinates.
-- `set_entity_screen_position` sets a screen-space entity in screen-pixel coordinates.
+- `set_entity_position` sets an entity position instantly in grid, world-pixel, or screen-pixel space.
 - `step_in_direction` performs standard grid movement with engine physics support.
 - `push_facing` pushes in a direction, usually from the actor's facing.
-- `move_entity_world_position` interpolates movement in world-pixel space.
-- `move_entity_screen_position` interpolates movement in screen space.
+- `move_entity_position` interpolates movement in world-pixel or screen-pixel space.
 - `wait_for_move` waits for a moving entity to finish.
 - `interact_facing` resolves a standard facing interaction target.
+
+Common authoring conveniences such as `set_entity_grid_position` and
+`move_entity_screen_position` should be project-command presets that wrap
+`set_entity_position` or `move_entity_position`.
 
 ## Dialogue
 
@@ -43,8 +44,6 @@ For examples and related-command notes, see [Dialogue Commands](../commands/dial
 - `play_animation` plays a named animation clip on an entity visual.
 - `wait_for_animation` waits for an entity animation to finish.
 - `stop_animation` stops an entity animation.
-- `set_visual_frame` forces one visual frame.
-- `set_visual_flip_x` changes horizontal flipping.
 - `play_audio` plays a one-shot sound effect.
 - `set_sound_volume` changes the default SFX volume.
 - `play_music` plays or swaps the music track.
@@ -52,6 +51,10 @@ For examples and related-command notes, see [Dialogue Commands](../commands/dial
 - `pause_music` pauses the music channel.
 - `resume_music` resumes the music channel.
 - `set_music_volume` changes music volume.
+
+Common authoring conveniences such as `set_visual_frame` and
+`set_visual_flip_x` should be project-command presets that wrap
+`set_entity_field` visual paths.
 
 ## Screen-Space UI Elements
 
@@ -90,7 +93,6 @@ When a called flow needs referenced entities, author `entity_refs` on the caller
 ## Entity-Command And Input Routing
 
 - `set_entity_command_enabled` enables or disables one named entity command.
-- `set_entity_commands_enabled` gates the entity command system as a whole.
 - `set_input_route` routes one logical action to one specific entity command.
 - `push_input_routes` stores the current routing for later restore.
 - `pop_input_routes` restores the most recently pushed routing snapshot.
@@ -136,24 +138,29 @@ deadzone, and teleporting the camera should be project-command presets that wrap
 
 - `set_entity_field` changes one supported entity field.
 - `set_entity_fields` performs a validated batch mutation.
-- `set_visible` toggles entity visibility.
-- `set_present` toggles whether an entity exists in play.
-- `set_color` changes tint or color.
 - `destroy_entity` removes an entity.
 - `spawn_entity` creates a new entity from a full definition or partial inputs.
+
+Common authoring conveniences such as `set_visible`, `set_present`,
+`set_color`, `set_visual_frame`, and `set_visual_flip_x` should be
+project-command presets that wrap `set_entity_field`.
+For examples and related-command notes, see [Entity Field Commands](../commands/entity-fields.md).
 
 ## Current-Area Variables, Entity Variables, And Cross-Area Writes
 
 - `set_current_area_var` writes one current-area runtime variable.
 - `set_entity_var` writes one entity variable.
-- `add_current_area_var` and `add_entity_var` add numeric amounts.
-- `toggle_current_area_var` and `toggle_entity_var` flip booleans.
-- `set_current_area_var_length` and `set_entity_var_length` resize collections.
 - `append_current_area_var` and `append_entity_var` append to collections.
 - `pop_current_area_var` and `pop_entity_var` pop from collections.
 - `set_area_var` writes persistent state into another area.
 - `set_area_entity_var` writes persistent state into another area's entity.
 - `set_area_entity_field` writes a persistent field into another area's entity.
+
+Numeric add, boolean toggle, and value-length conveniences such as
+`add_current_area_var`, `toggle_entity_var`, and `set_entity_var_length` should
+be project-command presets that wrap `set_current_area_var` or `set_entity_var`
+with structured value sources.
+For examples and related-command notes, see [Variable Commands](../commands/variables.md).
 
 ## Reset And Persistence Helpers
 

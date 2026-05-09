@@ -533,51 +533,5 @@ def register_presentation_commands(
         )
         return ImmediateHandle()
 
-    @registry.register("set_visual_frame")
-    def set_visual_frame(
-        services: CommandServices | None,
-        world: Any,
-        *,
-        entity_id: str,
-        visual_id: str | None = None,
-        frame: int,
-        **_: Any,
-    ) -> CommandHandle:
-        """Set the currently displayed visual frame directly."""
-        resolved_world, _ = _resolve_world_and_animation(
-            services=services,
-            world=world,
-            animation_system=None,
-        )
-        entity = require_exact_entity(resolved_world, entity_id)
-        visual = entity.require_visual(visual_id) if visual_id is not None else entity.get_primary_visual()
-        if visual is None:
-            raise KeyError(f"Entity '{entity.entity_id}' has no visual to set a frame on.")
-        visual.current_frame = int(frame)
-        return ImmediateHandle()
-
-    @registry.register("set_visual_flip_x")
-    def set_visual_flip_x(
-        services: CommandServices | None,
-        world: Any,
-        *,
-        entity_id: str,
-        visual_id: str | None = None,
-        flip_x: bool,
-        **_: Any,
-    ) -> CommandHandle:
-        """Set whether an entity's visual should be mirrored horizontally."""
-        resolved_world, _ = _resolve_world_and_animation(
-            services=services,
-            world=world,
-            animation_system=None,
-        )
-        entity = require_exact_entity(resolved_world, entity_id)
-        visual = entity.require_visual(visual_id) if visual_id is not None else entity.get_primary_visual()
-        if visual is None:
-            raise KeyError(f"Entity '{entity.entity_id}' has no visual to set flip_x on.")
-        visual.flip_x = bool(flip_x)
-        return ImmediateHandle()
-
 
 __all__ = ["register_presentation_commands"]

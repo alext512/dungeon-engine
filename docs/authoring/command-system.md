@@ -115,8 +115,8 @@ Use commands such as:
 - `step_in_direction`
 - `push_facing`
 - `interact_facing`
-- `set_entity_grid_position`
-- `move_entity_world_position`
+- `set_entity_position`
+- `move_entity_position`
 
 ### Flow composition
 

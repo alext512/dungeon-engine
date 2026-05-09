@@ -1,0 +1,38 @@
+/*
+  NOTES
+
+  Add a numeric amount to one current-area runtime variable.
+*/
+{
+  "inputs": {
+    "name": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "float",
+      "default": 1
+    },
+    "persistent": {
+      "type": "bool",
+      "default": false
+    }
+  },
+  "commands": [
+    {
+      "type": "set_current_area_var",
+      "name": "$name",
+      "value": {
+        "$add": [
+          {
+            "$current_area_var": {
+              "name": "$name",
+              "default": 0
+            }
+          },
+          "$amount"
+        ]
+      },
+      "persistent": "$persistent"
+    }
+  ]
+}

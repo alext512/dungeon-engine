@@ -1,0 +1,35 @@
+/*
+  NOTES
+
+  Set whether one visual is mirrored horizontally. This requires an explicit
+  visual id so the command does not depend on whichever visual is primary.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "visual_id": {
+      "type": "visual_id",
+      "of": "entity_id"
+    },
+    "flip_x": {
+      "type": "bool"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": false
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$entity_id",
+      "field_name": {
+        "$join_text": ["visuals.", "$visual_id", ".flip_x"]
+      },
+      "value": "$flip_x",
+      "persistent": "$persistent"
+    }
+  ]
+}

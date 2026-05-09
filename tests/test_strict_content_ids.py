@@ -1003,7 +1003,7 @@ class StrictContentIdTests(unittest.TestCase):
 
         self.assertEqual(button.variables["left_by"], "player")
 
-    def test_set_present_false_runs_occupant_leave_hook(self) -> None:
+    def test_set_entity_field_present_false_runs_occupant_leave_hook(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -1040,10 +1040,11 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_present",
+            "set_entity_field",
             {
                 "entity_id": "player",
-                "present": False,
+                "field_name": "present",
+                "value": False,
             },
         )
         handle.update(0.0)
@@ -1051,7 +1052,7 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertFalse(actor.present)
         self.assertEqual(button.variables["released_by"], "player")
 
-    def test_set_present_true_runs_occupant_enter_hook(self) -> None:
+    def test_set_entity_field_present_true_runs_occupant_enter_hook(self) -> None:
         area = Area(
             area_id="areas/test_room",
             tile_size=16,
@@ -1089,16 +1090,50 @@ class StrictContentIdTests(unittest.TestCase):
         handle = execute_registered_command(
             registry,
             context,
-            "set_present",
+            "set_entity_field",
             {
                 "entity_id": "player",
-                "present": True,
+                "field_name": "present",
+                "value": True,
             },
         )
         handle.update(0.0)
 
         self.assertTrue(actor.present)
         self.assertEqual(button.variables["entered_by"], "player")
+
+    def test_removed_entity_field_shortcuts_raise_unknown_command(self) -> None:
+        registry, context = self._make_command_context()
+
+        for command_name in (
+            "set_visible",
+            "set_present",
+            "set_color",
+            "set_entity_commands_enabled",
+        ):
+            with self.subTest(command_name=command_name):
+                with self.assertRaises(CommandExecutionError) as raised:
+                    execute_registered_command(registry, context, command_name, {})
+                self.assertIsNotNone(raised.exception.__cause__)
+                self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
+
+    def test_removed_variable_shortcuts_raise_unknown_command(self) -> None:
+        registry, context = self._make_command_context()
+
+        command_names = (
+            "add_current_area_var",
+            "add_entity_var",
+            "toggle_current_area_var",
+            "toggle_entity_var",
+            "set_current_area_var_length",
+            "set_entity_var_length",
+        )
+        for command_name in command_names:
+            with self.subTest(command_name=command_name):
+                with self.assertRaises(CommandExecutionError) as raised:
+                    execute_registered_command(registry, context, command_name, {})
+                self.assertIsNotNone(raised.exception.__cause__)
+                self.assertIn(f"Unknown command '{command_name}'", str(raised.exception.__cause__))
 
     def test_destroy_entity_runs_occupant_leave_hook_before_removal(self) -> None:
         area = Area(
@@ -1463,14 +1498,25 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": "menu",
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "add_entity_var",
             {
+                "type": "set_entity_var",
                 "entity_id": "dialogue_controller",
                 "name": "choice_index",
-                "amount": 2,
+                "value": {
+                    "$add": [
+                        {
+                            "$entity_var": {
+                                "entity_id": "dialogue_controller",
+                                "name": "choice_index",
+                                "default": 0,
+                            }
+                        },
+                        2,
+                    ]
+                },
             },
         ).update(0.0)
         execute_registered_command(
@@ -1493,14 +1539,14 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": {"dialogue_path": "dialogues/system/save_prompt.json"},
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "set_entity_var_length",
             {
+                "type": "set_entity_var",
                 "entity_id": "dialogue_controller",
                 "name": "stack_count",
-                "value": [{"a": 1}, {"b": 2}],
+                "value": {"$length": [{"a": 1}, {"b": 2}]},
             },
         ).update(0.0)
         execute_command_spec(
@@ -1585,13 +1631,23 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": "play",
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "add_current_area_var",
             {
+                "type": "set_current_area_var",
                 "name": "turn_count",
-                "amount": 3,
+                "value": {
+                    "$add": [
+                        {
+                            "$current_area_var": {
+                                "name": "turn_count",
+                                "default": 0,
+                            }
+                        },
+                        3,
+                    ]
+                },
             },
         ).update(0.0)
         execute_registered_command(
@@ -1612,13 +1668,15 @@ class StrictContentIdTests(unittest.TestCase):
                 "value": "areas/village_house",
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "set_current_area_var_length",
             {
+                "type": "set_current_area_var",
                 "name": "visited_room_count",
-                "value": context.services.world.world.variables["visited_rooms"],
+                "value": {
+                    "$length": context.services.world.world.variables["visited_rooms"]
+                },
             },
         ).update(0.0)
         execute_command_spec(
@@ -1672,35 +1730,58 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertEqual(context.services.world.world.variables["popped_room"], "areas/village_house")
         self.assertTrue(context.services.world.world.variables["world_branch_hit"])
 
-    def test_toggle_var_primitives_flip_boolean_values(self) -> None:
+    def test_boolean_not_value_source_flips_boolean_values(self) -> None:
         world = World()
         world.add_entity(_make_runtime_entity("switch", kind="switch"))
         registry, context = self._make_command_context(world=world)
 
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "toggle_entity_var",
             {
+                "type": "set_entity_var",
                 "entity_id": "switch",
                 "name": "enabled",
+                "value": {
+                    "$boolean_not": {
+                        "$entity_var": {
+                            "entity_id": "switch",
+                            "name": "enabled",
+                        }
+                    }
+                },
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "toggle_entity_var",
             {
+                "type": "set_entity_var",
                 "entity_id": "switch",
                 "name": "enabled",
+                "value": {
+                    "$boolean_not": {
+                        "$entity_var": {
+                            "entity_id": "switch",
+                            "name": "enabled",
+                        }
+                    }
+                },
             },
         ).update(0.0)
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "toggle_current_area_var",
             {
+                "type": "set_current_area_var",
                 "name": "paused",
+                "value": {
+                    "$boolean_not": {
+                        "$current_area_var": {
+                            "name": "paused",
+                        }
+                    }
+                },
             },
         ).update(0.0)
 
@@ -1710,14 +1791,25 @@ class StrictContentIdTests(unittest.TestCase):
         self.assertTrue(context.services.world.world.variables["paused"])
 
         switch.variables["enabled"] = "yes"
-        with self.assertRaises(CommandExecutionError):
-            execute_registered_command(
+        with self.assertRaisesRegex(
+            TypeError,
+            r"\$boolean_not value source expects a boolean or null value",
+        ):
+            execute_command_spec(
                 registry,
                 context,
-                "toggle_entity_var",
                 {
+                    "type": "set_entity_var",
                     "entity_id": "switch",
                     "name": "enabled",
+                    "value": {
+                        "$boolean_not": {
+                            "$entity_var": {
+                                "entity_id": "switch",
+                                "name": "enabled",
+                            }
+                        }
+                    },
                 },
             ).update(0.0)
 
@@ -1956,14 +2048,25 @@ class StrictContentIdTests(unittest.TestCase):
             persistence_runtime=runtime,
         )
 
-        execute_registered_command(
+        execute_command_spec(
             registry,
             context,
-            "add_entity_var",
             {
+                "type": "set_entity_var",
                 "entity_id": "brown_box",
                 "name": "times_pushed",
-                "amount": 1,
+                "value": {
+                    "$add": [
+                        {
+                            "$entity_var": {
+                                "entity_id": "brown_box",
+                                "name": "times_pushed",
+                                "default": 0,
+                            }
+                        },
+                        1,
+                    ]
+                },
             },
         ).update(0.0)
 
@@ -2028,10 +2131,11 @@ class StrictContentIdTests(unittest.TestCase):
         execute_registered_command(
             registry,
             context,
-            "set_visible",
+            "set_entity_field",
             {
                 "entity_id": "dialogue_controller",
-                "visible": False,
+                "field_name": "visible",
+                "value": False,
             },
         ).update(0.0)
 

@@ -53,7 +53,8 @@
       "type": "spawn_flow",
       "commands": [
         {
-          "type": "move_entity_screen_position",
+          "type": "run_project_command",
+          "command_id": "commands/entity/move_entity_screen_position",
           "entity_id": "title_logo",
           "x": 0,
           "y": 0,

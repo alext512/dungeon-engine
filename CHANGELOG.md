@@ -4,6 +4,65 @@ Reverse-chronological log of functionality changes. Each entry describes what wa
 
 ---
 
+## Entity Command Switch Project Command Preset
+
+- Moved `set_entity_commands_enabled` out of the built-in command registry and
+  into a sample project-command preset under `commands/entity/`
+- Kept `set_entity_command_enabled` as the built-in command for toggling one
+  named entity command entry
+- Updated docs, editor help, and tests so the entity-wide command switch follows
+  the same entity-field preset pattern as `set_visible` and `set_present`
+
+---
+
+## Variable Project Command Presets
+
+- Moved `add_current_area_var`, `add_entity_var`, `toggle_current_area_var`,
+  `toggle_entity_var`, `set_current_area_var_length`, and
+  `set_entity_var_length` out of the built-in command registry and into sample
+  project-command presets under `commands/variables/`
+- Kept direct variable writes on `set_current_area_var` and `set_entity_var`,
+  using `$add`, `$boolean_not`, and `$length` in project commands for common
+  variable conveniences
+- Updated docs, editor help, sample content, and tests so variable shortcuts
+  follow the primitive-plus-preset pattern
+
+---
+
+## Visual Field Project Command Presets
+
+- Moved `set_visual_frame` and `set_visual_flip_x` out of the built-in command
+  registry and into sample project-command presets under `commands/entity/`
+- Kept visual field mutation on the `set_entity_field` primitive using explicit
+  paths such as `visuals.main.current_frame` and `visuals.main.flip_x`
+- Updated docs, editor help, and tests so visual shortcuts follow the same
+  primitive-plus-preset pattern as other entity-field shortcuts
+
+---
+
+## Entity Field Project Command Presets
+
+- Moved `set_visible`, `set_present`, and `set_color` out of the built-in
+  command registry and into sample project-command presets under
+  `commands/entity/`
+- Kept `set_entity_field` and `set_entity_fields` as the entity-state
+  primitives, including `present` occupancy-hook behavior
+- Added entity-field command docs and updated the editor help/tests so common
+  field shortcuts are presented as reusable project commands
+
+---
+
+## Entity Position Project Command Presets
+
+- Replaced the five focused entity-position built-ins with two primitives:
+  `set_entity_position` and `move_entity_position`
+- Added sample project-command presets under `commands/entity/` for the familiar
+  grid/world/screen set and move shapes
+- Updated editor help, command documentation, sample content, and tests so
+  entity-position authoring follows the primitive-plus-preset model
+
+---
+
 ## Camera Project Command Presets
 
 - Moved camera convenience helpers out of the built-in command registry and into

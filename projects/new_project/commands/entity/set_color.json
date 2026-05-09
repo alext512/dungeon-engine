@@ -1,0 +1,34 @@
+/*
+  NOTES
+
+  Set an entity's RGB debug/fallback render color.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "red": {
+      "type": "int"
+    },
+    "green": {
+      "type": "int"
+    },
+    "blue": {
+      "type": "int"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": null
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$entity_id",
+      "field_name": "color",
+      "value": ["$red", "$green", "$blue"],
+      "persistent": "$persistent"
+    }
+  ]
+}

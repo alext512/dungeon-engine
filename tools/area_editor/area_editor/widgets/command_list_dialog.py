@@ -57,8 +57,6 @@ from area_editor.widgets.documentation_viewer import DocumentationDialog
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _KNOWN_COMMAND_NAMES: tuple[str, ...] | None = None
 _ADVANCED_COMMAND_TYPES = {
-    "set_current_area_var_length",
-    "set_entity_var_length",
     "append_current_area_var",
     "append_entity_var",
     "pop_current_area_var",
@@ -86,11 +84,8 @@ _SUPPORTED_COMMAND_TYPES = {
     "adjust_output_scale",
     "open_entity_dialogue",
     "step_in_direction",
-    "set_entity_grid_position",
-    "set_entity_world_position",
-    "set_entity_screen_position",
-    "move_entity_world_position",
-    "move_entity_screen_position",
+    "set_entity_position",
+    "move_entity_position",
     "push_facing",
     "wait_for_move",
     "set_camera_policy",
@@ -121,12 +116,6 @@ _SUPPORTED_COMMAND_TYPES = {
     "open_inventory_session",
     "close_inventory_session",
     "set_current_area_var",
-    "add_current_area_var",
-    "add_entity_var",
-    "toggle_current_area_var",
-    "toggle_entity_var",
-    "set_current_area_var_length",
-    "set_entity_var_length",
     "append_current_area_var",
     "append_entity_var",
     "pop_current_area_var",
@@ -140,14 +129,8 @@ _SUPPORTED_COMMAND_TYPES = {
     "reset_transient_state",
     "reset_persistent_state",
     "set_entity_var",
-    "set_visible",
-    "set_present",
-    "set_color",
     "destroy_entity",
-    "set_visual_frame",
-    "set_visual_flip_x",
     "set_entity_command_enabled",
-    "set_entity_commands_enabled",
     "set_input_route",
     "push_input_routes",
     "pop_input_routes",
@@ -267,40 +250,17 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
         "wait",
         "persistent",
     },
-    "set_entity_grid_position": {
+    "set_entity_position": {
         "entity_id",
+        "space",
         "x",
         "y",
         "mode",
         "persistent",
     },
-    "set_entity_world_position": {
+    "move_entity_position": {
         "entity_id",
-        "x",
-        "y",
-        "mode",
-        "persistent",
-    },
-    "set_entity_screen_position": {
-        "entity_id",
-        "x",
-        "y",
-        "mode",
-        "persistent",
-    },
-    "move_entity_world_position": {
-        "entity_id",
-        "x",
-        "y",
-        "mode",
-        "duration",
-        "frames_needed",
-        "speed_px_per_second",
-        "wait",
-        "persistent",
-    },
-    "move_entity_screen_position": {
-        "entity_id",
+        "space",
         "x",
         "y",
         "mode",
@@ -463,37 +423,6 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
         "persistent",
         "value_mode",
     },
-    "add_current_area_var": {
-        "name",
-        "amount",
-        "persistent",
-    },
-    "add_entity_var": {
-        "entity_id",
-        "name",
-        "amount",
-        "persistent",
-    },
-    "toggle_current_area_var": {
-        "name",
-        "persistent",
-    },
-    "toggle_entity_var": {
-        "entity_id",
-        "name",
-        "persistent",
-    },
-    "set_current_area_var_length": {
-        "name",
-        "value",
-        "persistent",
-    },
-    "set_entity_var_length": {
-        "entity_id",
-        "name",
-        "value",
-        "persistent",
-    },
     "append_current_area_var": {
         "name",
         "value",
@@ -578,43 +507,13 @@ _OWNED_FIELDS_BY_COMMAND_TYPE: dict[str, set[str]] = {
         "persistent",
         "value_mode",
     },
-    "set_visible": {
-        "entity_id",
-        "visible",
-        "persistent",
-    },
-    "set_present": {
-        "entity_id",
-        "present",
-        "persistent",
-    },
-    "set_color": {
-        "entity_id",
-        "color",
-        "persistent",
-    },
     "destroy_entity": {
         "entity_id",
         "persistent",
     },
-    "set_visual_frame": {
-        "entity_id",
-        "visual_id",
-        "frame",
-    },
-    "set_visual_flip_x": {
-        "entity_id",
-        "visual_id",
-        "flip_x",
-    },
     "set_entity_command_enabled": {
         "entity_id",
         "command_id",
-        "enabled",
-        "persistent",
-    },
-    "set_entity_commands_enabled": {
-        "entity_id",
         "enabled",
         "persistent",
     },
@@ -684,11 +583,8 @@ _COMMAND_HELP_SUMMARIES: dict[str, str] = {
     "adjust_output_scale": "Change the current output scale by a relative amount.",
     "open_entity_dialogue": "Open one dialogue owned by a specific entity.",
     "step_in_direction": "Attempt one tile step in a direction, using the engine's movement rules.",
-    "set_entity_grid_position": "Snap a world-space entity to a grid cell.",
-    "set_entity_world_position": "Set a world-space entity position in world pixels.",
-    "set_entity_screen_position": "Set a screen-space entity position in screen pixels.",
-    "move_entity_world_position": "Move a world-space entity over time.",
-    "move_entity_screen_position": "Move a screen-space entity over time.",
+    "set_entity_position": "Set an entity position instantly in grid, world-pixel, or screen-pixel space.",
+    "move_entity_position": "Move an entity over time in world-pixel or screen-pixel space.",
     "push_facing": "Attempt one push from the entity's facing direction.",
     "wait_for_move": "Wait until the target entity finishes its active movement.",
     "set_camera_policy": "Patch camera follow, bounds, and deadzone together.",
@@ -719,12 +615,6 @@ _COMMAND_HELP_SUMMARIES: dict[str, str] = {
     "open_inventory_session": "Open the inventory UI for one entity.",
     "close_inventory_session": "Close the active inventory UI session.",
     "set_current_area_var": "Write one current-area runtime variable.",
-    "add_current_area_var": "Add a numeric amount to one current-area variable.",
-    "add_entity_var": "Add a numeric amount to one entity variable.",
-    "toggle_current_area_var": "Flip one current-area boolean variable.",
-    "toggle_entity_var": "Flip one entity boolean variable.",
-    "set_current_area_var_length": "Resize one current-area collection-like value.",
-    "set_entity_var_length": "Resize one entity collection-like value.",
     "append_current_area_var": "Append one value to a current-area list variable.",
     "append_entity_var": "Append one value to an entity list variable.",
     "pop_current_area_var": "Pop the last value from a current-area list variable.",
@@ -738,14 +628,8 @@ _COMMAND_HELP_SUMMARIES: dict[str, str] = {
     "reset_transient_state": "Reset transient runtime state now or queue it for later application.",
     "reset_persistent_state": "Reset persistent saved state now or queue it for later application.",
     "set_entity_var": "Write one variable on an entity.",
-    "set_visible": "Set whether an entity is visible.",
-    "set_present": "Set whether an entity is present in the world.",
-    "set_color": "Set an entity tint/color override.",
     "destroy_entity": "Remove an entity from the current world.",
-    "set_visual_frame": "Set one entity visual frame index directly.",
-    "set_visual_flip_x": "Set whether one entity visual is flipped horizontally.",
     "set_entity_command_enabled": "Enable or disable one named entity command.",
-    "set_entity_commands_enabled": "Enable or disable the entity-wide command switch.",
     "set_input_route": "Route one logical input action to a specific entity command.",
     "push_input_routes": "Push a temporary set of routed input actions.",
     "pop_input_routes": "Pop the most recent temporary input-route layer.",
@@ -781,6 +665,23 @@ _COMMAND_HELP_DETAILS: dict[str, tuple[str, ...]] = {
     ),
     "close_dialogue_session": (
         "Use this inside dialogue hooks, options, or UI commands when the current dialogue should close early.",
+    ),
+    "set_entity_field": (
+        "Use this for one direct engine-owned entity field change, such as visible, present, facing, or color.",
+        "Visual paths such as visuals.main.current_frame and visuals.main.flip_x are supported.",
+        "Project commands can wrap common shortcuts like set_visible, set_present, set_color, set_visual_frame, and set_visual_flip_x.",
+    ),
+    "set_entity_fields": (
+        "Use this when one command should update several entity fields, variables, or visual fields together.",
+        "The whole payload is validated before any change is applied.",
+    ),
+    "set_entity_position": (
+        "Use this for the real instant-position primitive: choose world_grid, world_pixel, or screen_pixel.",
+        "Project commands can wrap common names like set_entity_grid_position or set_entity_screen_position.",
+    ),
+    "move_entity_position": (
+        "Use this for the real pixel movement primitive: choose world_pixel or screen_pixel.",
+        "Project commands can wrap common names like move_entity_world_position or move_entity_screen_position.",
     ),
     "set_camera_policy": (
         "Use this for the real camera policy primitive: follow, bounds, and deadzone can be patched together.",
@@ -819,6 +720,46 @@ _COMMAND_HELP_EXAMPLES: dict[str, str] = {
         '  "type": "set_entity_active_dialogue_by_order",\n'
         '  "entity_id": "old_miner",\n'
         '  "order": 2\n'
+        '}'
+    ),
+    "set_entity_field": (
+        '{\n'
+        '  "type": "set_entity_field",\n'
+        '  "entity_id": "gate_1",\n'
+        '  "field_name": "visible",\n'
+        '  "value": false\n'
+        '}'
+    ),
+    "set_entity_fields": (
+        '{\n'
+        '  "type": "set_entity_fields",\n'
+        '  "entity_id": "gate_1",\n'
+        '  "set": {\n'
+        '    "fields": {"present": false},\n'
+        '    "variables": {"opened": true}\n'
+        '  }\n'
+        '}'
+    ),
+    "set_entity_position": (
+        '{\n'
+        '  "type": "set_entity_position",\n'
+        '  "entity_id": "door_1",\n'
+        '  "space": "world_grid",\n'
+        '  "x": 5,\n'
+        '  "y": 8,\n'
+        '  "mode": "absolute"\n'
+        '}'
+    ),
+    "move_entity_position": (
+        '{\n'
+        '  "type": "move_entity_position",\n'
+        '  "entity_id": "title_logo",\n'
+        '  "space": "screen_pixel",\n'
+        '  "x": 0,\n'
+        '  "y": -24,\n'
+        '  "mode": "relative",\n'
+        '  "frames_needed": 20,\n'
+        '  "wait": true\n'
         '}'
     ),
     "set_camera_policy": (
@@ -864,6 +805,16 @@ _COMMAND_DOC_TARGETS: dict[str, tuple[str, str]] = {
     ),
     "set_camera_policy": ("docs/authoring/commands/camera.md", "set_camera_policy"),
     "move_camera": ("docs/authoring/commands/camera.md", "move_camera"),
+    "set_entity_position": ("docs/authoring/commands/movement.md", "set_entity_position"),
+    "move_entity_position": ("docs/authoring/commands/movement.md", "move_entity_position"),
+    "set_entity_field": ("docs/authoring/commands/entity-fields.md", "set_entity_field"),
+    "set_entity_fields": ("docs/authoring/commands/entity-fields.md", "set_entity_fields"),
+    "set_current_area_var": ("docs/authoring/commands/variables.md", "set_current_area_var"),
+    "set_entity_var": ("docs/authoring/commands/variables.md", "set_entity_var"),
+    "append_current_area_var": ("docs/authoring/commands/variables.md", "built-in-variable-primitives"),
+    "append_entity_var": ("docs/authoring/commands/variables.md", "built-in-variable-primitives"),
+    "pop_current_area_var": ("docs/authoring/commands/variables.md", "built-in-variable-primitives"),
+    "pop_entity_var": ("docs/authoring/commands/variables.md", "built-in-variable-primitives"),
 }
 
 _COMMON_FIELD_HELP: dict[str, str] = {
@@ -1011,15 +962,6 @@ _COMMAND_FIELD_HELP_OVERRIDES: dict[str, dict[str, str]] = {
     "set_current_area_var": {
         "name": "Current-area runtime variable name.",
     },
-    "add_current_area_var": {
-        "name": "Current-area runtime variable name.",
-    },
-    "toggle_current_area_var": {
-        "name": "Current-area runtime variable name.",
-    },
-    "set_current_area_var_length": {
-        "name": "Current-area runtime variable name.",
-    },
     "append_current_area_var": {
         "name": "Current-area runtime variable name.",
     },
@@ -1027,15 +969,6 @@ _COMMAND_FIELD_HELP_OVERRIDES: dict[str, dict[str, str]] = {
         "name": "Current-area runtime variable name.",
     },
     "set_entity_var": {
-        "name": "Variable key written under the target entity's variables map.",
-    },
-    "add_entity_var": {
-        "name": "Variable key written under the target entity's variables map.",
-    },
-    "toggle_entity_var": {
-        "name": "Variable key written under the target entity's variables map.",
-    },
-    "set_entity_var_length": {
         "name": "Variable key written under the target entity's variables map.",
     },
     "append_entity_var": {
@@ -1215,6 +1148,17 @@ _CAMERA_VIEWPORT_SPACE_CHOICES: tuple[tuple[str, str], ...] = (
     ("viewport_grid", "viewport_grid"),
 )
 
+_ENTITY_SET_POSITION_SPACE_CHOICES: tuple[tuple[str, str], ...] = (
+    ("world_grid", "world_grid"),
+    ("world_pixel", "world_pixel"),
+    ("screen_pixel", "screen_pixel"),
+)
+
+_ENTITY_MOVE_POSITION_SPACE_CHOICES: tuple[tuple[str, str], ...] = (
+    ("world_pixel", "world_pixel"),
+    ("screen_pixel", "screen_pixel"),
+)
+
 _CAMERA_MOVE_MODE_CHOICES: tuple[tuple[str, str], ...] = (
     ("absolute", "absolute"),
     ("relative", "relative"),
@@ -1392,13 +1336,7 @@ def _command_summary(command: object, index: int) -> str:
             details = f"{entity_id} ({direction})"
         if details:
             return f"{index + 1}. {command_type}: {details}"
-    if command_type in {
-        "set_entity_grid_position",
-        "set_entity_world_position",
-        "set_entity_screen_position",
-        "move_entity_world_position",
-        "move_entity_screen_position",
-    }:
+    if command_type in {"set_entity_position", "move_entity_position"}:
         entity_id = str(command.get("entity_id", "")).strip()
         x = command.get("x")
         y = command.get("y")
@@ -1552,9 +1490,6 @@ def _command_summary(command: object, index: int) -> str:
         return f"{index + 1}. {command_type}: {details}"
     if command_type in {
         "set_current_area_var",
-        "add_current_area_var",
-        "toggle_current_area_var",
-        "set_current_area_var_length",
         "append_current_area_var",
         "pop_current_area_var",
         "set_area_var",
@@ -1563,9 +1498,6 @@ def _command_summary(command: object, index: int) -> str:
         if name:
             return f"{index + 1}. {command_type}: {name}"
     if command_type in {
-        "add_entity_var",
-        "toggle_entity_var",
-        "set_entity_var_length",
         "append_entity_var",
         "pop_entity_var",
         "set_area_entity_var",
@@ -1612,65 +1544,16 @@ def _command_summary(command: object, index: int) -> str:
         if entity_id or name:
             parts = [part for part in (entity_id, name) if part]
             return f"{index + 1}. {command_type}: {'.'.join(parts)}"
-    if command_type in {"set_visible", "set_present"}:
-        entity_id = str(command.get("entity_id", "")).strip()
-        value_name = "visible" if command_type == "set_visible" else "present"
-        value = command.get(value_name)
-        details = entity_id
-        if not details and value not in (None, ""):
-            details = str(value)
-        if entity_id and value not in (None, ""):
-            details = f"{entity_id} -> {value}"
-        if details:
-            return f"{index + 1}. {command_type}: {details}"
-    if command_type == "set_color":
-        entity_id = str(command.get("entity_id", "")).strip()
-        color_text = _rgb_to_text(command.get("color"))
-        details = entity_id or color_text
-        if entity_id and color_text:
-            details = f"{entity_id} -> {color_text}"
-        if details:
-            return f"{index + 1}. {command_type}: {details}"
     if command_type == "destroy_entity":
         entity_id = str(command.get("entity_id", "")).strip()
         if entity_id:
             return f"{index + 1}. {command_type}: {entity_id}"
-    if command_type == "set_visual_frame":
-        entity_id = str(command.get("entity_id", "")).strip()
-        frame = command.get("frame")
-        details = entity_id
-        if not details and frame not in (None, ""):
-            details = f"frame={frame}"
-        if entity_id and frame not in (None, ""):
-            details = f"{entity_id} frame={frame}"
-        if details:
-            return f"{index + 1}. {command_type}: {details}"
-    if command_type == "set_visual_flip_x":
-        entity_id = str(command.get("entity_id", "")).strip()
-        flip_x = command.get("flip_x")
-        details = entity_id
-        if not details and flip_x not in (None, ""):
-            details = f"flip_x={flip_x}"
-        if entity_id and flip_x not in (None, ""):
-            details = f"{entity_id} flip_x={flip_x}"
-        if details:
-            return f"{index + 1}. {command_type}: {details}"
     if command_type == "set_entity_command_enabled":
         entity_id = str(command.get("entity_id", "")).strip()
         command_id = str(command.get("command_id", "")).strip()
         parts = [part for part in (entity_id, command_id) if part]
         if parts:
             return f"{index + 1}. {command_type}: {' -> '.join(parts)}"
-    if command_type == "set_entity_commands_enabled":
-        entity_id = str(command.get("entity_id", "")).strip()
-        enabled = command.get("enabled")
-        details = entity_id
-        if not details and enabled not in (None, ""):
-            details = str(enabled)
-        if entity_id and enabled not in (None, ""):
-            details = f"{entity_id} -> {enabled}"
-        if details:
-            return f"{index + 1}. {command_type}: {details}"
     return f"{index + 1}. {command_type}"
 
 
@@ -1706,13 +1589,6 @@ def _known_command_names() -> tuple[str, ...]:
             for contract in registry.iter_command_contracts()
         )
     return _KNOWN_COMMAND_NAMES
-
-
-def _coerce_numeric_literal(value: float | int) -> float | int:
-    numeric = float(value)
-    if numeric.is_integer():
-        return int(numeric)
-    return numeric
 
 
 def _parse_json_text_value(
@@ -4801,178 +4677,6 @@ class CommandEditorDialog(QDialog):
         )
         self._command_stack.addWidget(self._set_current_area_var_page)
 
-        self._add_current_area_var_page = QWidget()
-        add_current_area_var_form = QFormLayout(self._add_current_area_var_page)
-        add_current_area_var_form.setContentsMargins(0, 0, 0, 0)
-        self._add_current_area_var_name_edit = QLineEdit()
-        add_current_area_var_form.addRow("name", self._add_current_area_var_name_edit)
-        self._add_current_area_var_amount_field = _OptionalFloatField(
-            minimum=-999999.0,
-            maximum=999999.0,
-            default_value=1.0,
-            decimals=3,
-            step=1.0,
-        )
-        add_current_area_var_form.addRow(
-            "amount",
-            self._add_current_area_var_amount_field,
-        )
-        self._add_current_area_var_amount_note = QLabel(
-            "Leave amount unset to add 1."
-        )
-        self._add_current_area_var_amount_note.setWordWrap(True)
-        self._add_current_area_var_amount_note.setStyleSheet("color: #666;")
-        add_current_area_var_form.addRow(self._add_current_area_var_amount_note)
-        self._add_current_area_var_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._add_current_area_var_persistent_field)
-        add_current_area_var_form.addRow(
-            "persistent",
-            self._add_current_area_var_persistent_field,
-        )
-        self._command_stack.addWidget(self._add_current_area_var_page)
-
-        self._add_entity_var_page = QWidget()
-        add_entity_var_form = QFormLayout(self._add_entity_var_page)
-        add_entity_var_form.setContentsMargins(0, 0, 0, 0)
-        (
-            add_entity_var_entity_row,
-            self._add_entity_var_entity_id_edit,
-            self._add_entity_var_entity_pick,
-            self._add_entity_var_entity_ref,
-        ) = make_entity_id_row()
-        add_entity_var_form.addRow("entity_id", add_entity_var_entity_row)
-        self._add_entity_var_name_edit = QLineEdit()
-        add_entity_var_form.addRow("name", self._add_entity_var_name_edit)
-        self._add_entity_var_amount_field = _OptionalFloatField(
-            minimum=-999999.0,
-            maximum=999999.0,
-            default_value=1.0,
-            decimals=3,
-            step=1.0,
-        )
-        add_entity_var_form.addRow("amount", self._add_entity_var_amount_field)
-        self._add_entity_var_amount_note = QLabel("Leave amount unset to add 1.")
-        self._add_entity_var_amount_note.setWordWrap(True)
-        self._add_entity_var_amount_note.setStyleSheet("color: #666;")
-        add_entity_var_form.addRow(self._add_entity_var_amount_note)
-        self._add_entity_var_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._add_entity_var_persistent_field)
-        add_entity_var_form.addRow("persistent", self._add_entity_var_persistent_field)
-        self._command_stack.addWidget(self._add_entity_var_page)
-
-        self._toggle_current_area_var_page = QWidget()
-        toggle_current_area_var_form = QFormLayout(self._toggle_current_area_var_page)
-        toggle_current_area_var_form.setContentsMargins(0, 0, 0, 0)
-        self._toggle_current_area_var_name_edit = QLineEdit()
-        toggle_current_area_var_form.addRow("name", self._toggle_current_area_var_name_edit)
-        self._toggle_current_area_var_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._toggle_current_area_var_persistent_field)
-        toggle_current_area_var_form.addRow(
-            "persistent",
-            self._toggle_current_area_var_persistent_field,
-        )
-        self._toggle_current_area_var_note = QLabel(
-            "Missing or null values are treated as false before toggling."
-        )
-        self._toggle_current_area_var_note.setWordWrap(True)
-        self._toggle_current_area_var_note.setStyleSheet("color: #666;")
-        toggle_current_area_var_form.addRow(self._toggle_current_area_var_note)
-        self._command_stack.addWidget(self._toggle_current_area_var_page)
-
-        self._toggle_entity_var_page = QWidget()
-        toggle_entity_var_form = QFormLayout(self._toggle_entity_var_page)
-        toggle_entity_var_form.setContentsMargins(0, 0, 0, 0)
-        (
-            toggle_entity_var_entity_row,
-            self._toggle_entity_var_entity_id_edit,
-            self._toggle_entity_var_entity_pick,
-            self._toggle_entity_var_entity_ref,
-        ) = make_entity_id_row()
-        toggle_entity_var_form.addRow("entity_id", toggle_entity_var_entity_row)
-        self._toggle_entity_var_name_edit = QLineEdit()
-        toggle_entity_var_form.addRow("name", self._toggle_entity_var_name_edit)
-        self._toggle_entity_var_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._toggle_entity_var_persistent_field)
-        toggle_entity_var_form.addRow("persistent", self._toggle_entity_var_persistent_field)
-        self._toggle_entity_var_note = QLabel(
-            "Missing or null values are treated as false before toggling."
-        )
-        self._toggle_entity_var_note.setWordWrap(True)
-        self._toggle_entity_var_note.setStyleSheet("color: #666;")
-        toggle_entity_var_form.addRow(self._toggle_entity_var_note)
-        self._command_stack.addWidget(self._toggle_entity_var_page)
-
-        self._set_current_area_var_length_page = QWidget()
-        set_current_area_var_length_form = QFormLayout(self._set_current_area_var_length_page)
-        set_current_area_var_length_form.setContentsMargins(0, 0, 0, 0)
-        self._set_current_area_var_length_name_edit = QLineEdit()
-        set_current_area_var_length_form.addRow(
-            "name",
-            self._set_current_area_var_length_name_edit,
-        )
-        self._set_current_area_var_length_value_edit = QPlainTextEdit()
-        self._set_current_area_var_length_value_edit.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
-        self._set_current_area_var_length_value_edit.setFont(generic_font)
-        self._set_current_area_var_length_value_edit.setPlaceholderText(
-            '[1, 2, 3]\n\nor\n\n"hello"\n\nLeave blank to store 0.'
-        )
-        self._set_current_area_var_length_value_edit.setFixedHeight(110)
-        set_current_area_var_length_form.addRow(
-            "value",
-            self._set_current_area_var_length_value_edit,
-        )
-        self._set_current_area_var_length_note = QLabel(
-            "Stores the length of the supplied value, not the value itself."
-        )
-        self._set_current_area_var_length_note.setWordWrap(True)
-        self._set_current_area_var_length_note.setStyleSheet("color: #666;")
-        set_current_area_var_length_form.addRow(self._set_current_area_var_length_note)
-        self._set_current_area_var_length_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_current_area_var_length_persistent_field)
-        set_current_area_var_length_form.addRow(
-            "persistent",
-            self._set_current_area_var_length_persistent_field,
-        )
-        self._command_stack.addWidget(self._set_current_area_var_length_page)
-
-        self._set_entity_var_length_page = QWidget()
-        set_entity_var_length_form = QFormLayout(self._set_entity_var_length_page)
-        set_entity_var_length_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_entity_var_length_entity_row,
-            self._set_entity_var_length_entity_id_edit,
-            self._set_entity_var_length_entity_pick,
-            self._set_entity_var_length_entity_ref,
-        ) = make_entity_id_row()
-        set_entity_var_length_form.addRow("entity_id", set_entity_var_length_entity_row)
-        self._set_entity_var_length_name_edit = QLineEdit()
-        set_entity_var_length_form.addRow("name", self._set_entity_var_length_name_edit)
-        self._set_entity_var_length_value_edit = QPlainTextEdit()
-        self._set_entity_var_length_value_edit.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
-        self._set_entity_var_length_value_edit.setFont(generic_font)
-        self._set_entity_var_length_value_edit.setPlaceholderText(
-            '[1, 2, 3]\n\nor\n\n"hello"\n\nLeave blank to store 0.'
-        )
-        self._set_entity_var_length_value_edit.setFixedHeight(110)
-        set_entity_var_length_form.addRow("value", self._set_entity_var_length_value_edit)
-        self._set_entity_var_length_note = QLabel(
-            "Stores the length of the supplied value, not the value itself."
-        )
-        self._set_entity_var_length_note.setWordWrap(True)
-        self._set_entity_var_length_note.setStyleSheet("color: #666;")
-        set_entity_var_length_form.addRow(self._set_entity_var_length_note)
-        self._set_entity_var_length_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_entity_var_length_persistent_field)
-        set_entity_var_length_form.addRow(
-            "persistent",
-            self._set_entity_var_length_persistent_field,
-        )
-        self._command_stack.addWidget(self._set_entity_var_length_page)
-
         self._append_current_area_var_page = QWidget()
         append_current_area_var_form = QFormLayout(self._append_current_area_var_page)
         append_current_area_var_form.setContentsMargins(0, 0, 0, 0)
@@ -5507,243 +5211,126 @@ class CommandEditorDialog(QDialog):
         open_entity_form.addRow(self._open_entity_advanced_widget)
         self._command_stack.addWidget(self._open_entity_dialogue_page)
 
-        self._set_entity_grid_position_page = QWidget()
-        set_grid_position_form = QFormLayout(self._set_entity_grid_position_page)
-        set_grid_position_form.setContentsMargins(0, 0, 0, 0)
+        self._set_entity_position_page = QWidget()
+        set_entity_position_form = QFormLayout(self._set_entity_position_page)
+        set_entity_position_form.setContentsMargins(0, 0, 0, 0)
         (
-            set_grid_entity_row,
-            self._set_grid_entity_id_edit,
-            self._set_grid_entity_pick,
-            self._set_grid_entity_ref,
+            set_position_entity_row,
+            self._set_position_entity_id_edit,
+            self._set_position_entity_pick,
+            self._set_position_entity_ref,
         ) = make_entity_id_row()
-        set_grid_position_form.addRow("entity_id", set_grid_entity_row)
-        self._set_grid_x_spin = QSpinBox()
-        self._set_grid_x_spin.setRange(-999999, 999999)
-        set_grid_position_form.addRow("x", self._set_grid_x_spin)
-        self._set_grid_y_spin = QSpinBox()
-        self._set_grid_y_spin.setRange(-999999, 999999)
-        set_grid_position_form.addRow("y", self._set_grid_y_spin)
-        self._set_grid_mode_field = QComboBox()
+        set_entity_position_form.addRow("entity_id", set_position_entity_row)
+        self._set_position_space_field = QComboBox()
         self._setup_optional_choice_combo(
-            self._set_grid_mode_field,
+            self._set_position_space_field,
+            list(_ENTITY_SET_POSITION_SPACE_CHOICES),
+        )
+        self._set_position_space_field.setCurrentIndex(1)
+        set_entity_position_form.addRow("space", self._set_position_space_field)
+        self._set_position_x_spin = QDoubleSpinBox()
+        self._set_position_x_spin.setRange(-999999.0, 999999.0)
+        self._set_position_x_spin.setDecimals(3)
+        self._set_position_x_spin.setSingleStep(1.0)
+        set_entity_position_form.addRow("x", self._set_position_x_spin)
+        self._set_position_y_spin = QDoubleSpinBox()
+        self._set_position_y_spin.setRange(-999999.0, 999999.0)
+        self._set_position_y_spin.setDecimals(3)
+        self._set_position_y_spin.setSingleStep(1.0)
+        set_entity_position_form.addRow("y", self._set_position_y_spin)
+        self._set_position_mode_field = QComboBox()
+        self._setup_optional_choice_combo(
+            self._set_position_mode_field,
             list(_CAMERA_MOVE_MODE_CHOICES),
             not_set_label="Default (absolute)",
         )
-        set_grid_position_form.addRow("mode", self._set_grid_mode_field)
-        self._set_grid_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_grid_persistent_field)
-        set_grid_position_form.addRow("persistent", self._set_grid_persistent_field)
-        self._set_grid_position_note = QLabel("Requires a world-space entity.")
-        self._set_grid_position_note.setWordWrap(True)
-        self._set_grid_position_note.setStyleSheet("color: #666;")
-        set_grid_position_form.addRow(self._set_grid_position_note)
-        self._command_stack.addWidget(self._set_entity_grid_position_page)
+        set_entity_position_form.addRow("mode", self._set_position_mode_field)
+        self._set_position_persistent_field = QComboBox()
+        self._setup_optional_bool_combo(self._set_position_persistent_field)
+        set_entity_position_form.addRow("persistent", self._set_position_persistent_field)
+        self._set_entity_position_note = QLabel(
+            "world_grid changes logical occupancy; pixel spaces change visual position."
+        )
+        self._set_entity_position_note.setWordWrap(True)
+        self._set_entity_position_note.setStyleSheet("color: #666;")
+        set_entity_position_form.addRow(self._set_entity_position_note)
+        self._command_stack.addWidget(self._set_entity_position_page)
 
-        self._set_entity_world_position_page = QWidget()
-        set_world_position_form = QFormLayout(self._set_entity_world_position_page)
-        set_world_position_form.setContentsMargins(0, 0, 0, 0)
+        self._move_entity_position_page = QWidget()
+        move_entity_position_form = QFormLayout(self._move_entity_position_page)
+        move_entity_position_form.setContentsMargins(0, 0, 0, 0)
         (
-            set_world_entity_row,
-            self._set_world_entity_id_edit,
-            self._set_world_entity_pick,
-            self._set_world_entity_ref,
+            move_position_entity_row,
+            self._move_position_entity_id_edit,
+            self._move_position_entity_pick,
+            self._move_position_entity_ref,
         ) = make_entity_id_row()
-        set_world_position_form.addRow("entity_id", set_world_entity_row)
-        self._set_world_x_spin = QDoubleSpinBox()
-        self._set_world_x_spin.setRange(-999999.0, 999999.0)
-        self._set_world_x_spin.setDecimals(3)
-        self._set_world_x_spin.setSingleStep(1.0)
-        set_world_position_form.addRow("x", self._set_world_x_spin)
-        self._set_world_y_spin = QDoubleSpinBox()
-        self._set_world_y_spin.setRange(-999999.0, 999999.0)
-        self._set_world_y_spin.setDecimals(3)
-        self._set_world_y_spin.setSingleStep(1.0)
-        set_world_position_form.addRow("y", self._set_world_y_spin)
-        self._set_world_mode_field = QComboBox()
+        move_entity_position_form.addRow("entity_id", move_position_entity_row)
+        self._move_position_space_field = QComboBox()
         self._setup_optional_choice_combo(
-            self._set_world_mode_field,
+            self._move_position_space_field,
+            list(_ENTITY_MOVE_POSITION_SPACE_CHOICES),
+        )
+        self._move_position_space_field.setCurrentIndex(1)
+        move_entity_position_form.addRow("space", self._move_position_space_field)
+        self._move_position_x_spin = QDoubleSpinBox()
+        self._move_position_x_spin.setRange(-999999.0, 999999.0)
+        self._move_position_x_spin.setDecimals(3)
+        self._move_position_x_spin.setSingleStep(1.0)
+        move_entity_position_form.addRow("x", self._move_position_x_spin)
+        self._move_position_y_spin = QDoubleSpinBox()
+        self._move_position_y_spin.setRange(-999999.0, 999999.0)
+        self._move_position_y_spin.setDecimals(3)
+        self._move_position_y_spin.setSingleStep(1.0)
+        move_entity_position_form.addRow("y", self._move_position_y_spin)
+        self._move_position_mode_field = QComboBox()
+        self._setup_optional_choice_combo(
+            self._move_position_mode_field,
             list(_CAMERA_MOVE_MODE_CHOICES),
             not_set_label="Default (absolute)",
         )
-        set_world_position_form.addRow("mode", self._set_world_mode_field)
-        self._set_world_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_world_persistent_field)
-        set_world_position_form.addRow("persistent", self._set_world_persistent_field)
-        self._set_world_position_note = QLabel("Requires a world-space entity.")
-        self._set_world_position_note.setWordWrap(True)
-        self._set_world_position_note.setStyleSheet("color: #666;")
-        set_world_position_form.addRow(self._set_world_position_note)
-        self._command_stack.addWidget(self._set_entity_world_position_page)
-
-        self._set_entity_screen_position_page = QWidget()
-        set_screen_position_form = QFormLayout(self._set_entity_screen_position_page)
-        set_screen_position_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_screen_entity_row,
-            self._set_screen_entity_id_edit,
-            self._set_screen_entity_pick,
-            self._set_screen_entity_ref,
-        ) = make_entity_id_row()
-        set_screen_position_form.addRow("entity_id", set_screen_entity_row)
-        self._set_screen_x_spin = QDoubleSpinBox()
-        self._set_screen_x_spin.setRange(-999999.0, 999999.0)
-        self._set_screen_x_spin.setDecimals(3)
-        self._set_screen_x_spin.setSingleStep(1.0)
-        set_screen_position_form.addRow("x", self._set_screen_x_spin)
-        self._set_screen_y_spin = QDoubleSpinBox()
-        self._set_screen_y_spin.setRange(-999999.0, 999999.0)
-        self._set_screen_y_spin.setDecimals(3)
-        self._set_screen_y_spin.setSingleStep(1.0)
-        set_screen_position_form.addRow("y", self._set_screen_y_spin)
-        self._set_screen_mode_field = QComboBox()
-        self._setup_optional_choice_combo(
-            self._set_screen_mode_field,
-            list(_CAMERA_MOVE_MODE_CHOICES),
-            not_set_label="Default (absolute)",
-        )
-        set_screen_position_form.addRow("mode", self._set_screen_mode_field)
-        self._set_screen_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_screen_persistent_field)
-        set_screen_position_form.addRow("persistent", self._set_screen_persistent_field)
-        self._set_screen_position_note = QLabel("Requires a screen-space entity.")
-        self._set_screen_position_note.setWordWrap(True)
-        self._set_screen_position_note.setStyleSheet("color: #666;")
-        set_screen_position_form.addRow(self._set_screen_position_note)
-        self._command_stack.addWidget(self._set_entity_screen_position_page)
-
-        self._move_entity_world_position_page = QWidget()
-        move_world_position_form = QFormLayout(self._move_entity_world_position_page)
-        move_world_position_form.setContentsMargins(0, 0, 0, 0)
-        (
-            move_world_entity_row,
-            self._move_world_entity_id_edit,
-            self._move_world_entity_pick,
-            self._move_world_entity_ref,
-        ) = make_entity_id_row()
-        move_world_position_form.addRow("entity_id", move_world_entity_row)
-        self._move_world_x_spin = QDoubleSpinBox()
-        self._move_world_x_spin.setRange(-999999.0, 999999.0)
-        self._move_world_x_spin.setDecimals(3)
-        self._move_world_x_spin.setSingleStep(1.0)
-        move_world_position_form.addRow("x", self._move_world_x_spin)
-        self._move_world_y_spin = QDoubleSpinBox()
-        self._move_world_y_spin.setRange(-999999.0, 999999.0)
-        self._move_world_y_spin.setDecimals(3)
-        self._move_world_y_spin.setSingleStep(1.0)
-        move_world_position_form.addRow("y", self._move_world_y_spin)
-        self._move_world_mode_field = QComboBox()
-        self._setup_optional_choice_combo(
-            self._move_world_mode_field,
-            list(_CAMERA_MOVE_MODE_CHOICES),
-            not_set_label="Default (absolute)",
-        )
-        move_world_position_form.addRow("mode", self._move_world_mode_field)
-        self._move_world_duration_field = _OptionalFloatField(
+        move_entity_position_form.addRow("mode", self._move_position_mode_field)
+        self._move_position_duration_field = _OptionalFloatField(
             minimum=0.0,
             maximum=999999.0,
             default_value=0.0,
             decimals=3,
             step=0.1,
         )
-        move_world_position_form.addRow("duration", self._move_world_duration_field)
-        self._move_world_frames_needed_field = _OptionalIntField(
+        move_entity_position_form.addRow("duration", self._move_position_duration_field)
+        self._move_position_frames_needed_field = _OptionalIntField(
             minimum=1,
             maximum=999999,
             default_value=1,
         )
-        move_world_position_form.addRow(
+        move_entity_position_form.addRow(
             "frames_needed",
-            self._move_world_frames_needed_field,
+            self._move_position_frames_needed_field,
         )
-        self._move_world_speed_field = _OptionalFloatField(
+        self._move_position_speed_field = _OptionalFloatField(
             minimum=0.0,
             maximum=999999.0,
             default_value=0.0,
             decimals=3,
             step=1.0,
         )
-        move_world_position_form.addRow(
+        move_entity_position_form.addRow(
             "speed_px_per_second",
-            self._move_world_speed_field,
+            self._move_position_speed_field,
         )
-        self._move_world_wait_field = QComboBox()
-        self._setup_optional_bool_combo(self._move_world_wait_field)
-        move_world_position_form.addRow("wait", self._move_world_wait_field)
-        self._move_world_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._move_world_persistent_field)
-        move_world_position_form.addRow("persistent", self._move_world_persistent_field)
-        self._move_world_position_note = QLabel("Requires a world-space entity.")
-        self._move_world_position_note.setWordWrap(True)
-        self._move_world_position_note.setStyleSheet("color: #666;")
-        move_world_position_form.addRow(self._move_world_position_note)
-        self._command_stack.addWidget(self._move_entity_world_position_page)
-
-        self._move_entity_screen_position_page = QWidget()
-        move_screen_position_form = QFormLayout(self._move_entity_screen_position_page)
-        move_screen_position_form.setContentsMargins(0, 0, 0, 0)
-        (
-            move_screen_entity_row,
-            self._move_screen_entity_id_edit,
-            self._move_screen_entity_pick,
-            self._move_screen_entity_ref,
-        ) = make_entity_id_row()
-        move_screen_position_form.addRow("entity_id", move_screen_entity_row)
-        self._move_screen_x_spin = QDoubleSpinBox()
-        self._move_screen_x_spin.setRange(-999999.0, 999999.0)
-        self._move_screen_x_spin.setDecimals(3)
-        self._move_screen_x_spin.setSingleStep(1.0)
-        move_screen_position_form.addRow("x", self._move_screen_x_spin)
-        self._move_screen_y_spin = QDoubleSpinBox()
-        self._move_screen_y_spin.setRange(-999999.0, 999999.0)
-        self._move_screen_y_spin.setDecimals(3)
-        self._move_screen_y_spin.setSingleStep(1.0)
-        move_screen_position_form.addRow("y", self._move_screen_y_spin)
-        self._move_screen_mode_field = QComboBox()
-        self._setup_optional_choice_combo(
-            self._move_screen_mode_field,
-            list(_CAMERA_MOVE_MODE_CHOICES),
-            not_set_label="Default (absolute)",
+        self._move_position_wait_field = QComboBox()
+        self._setup_optional_bool_combo(self._move_position_wait_field)
+        move_entity_position_form.addRow("wait", self._move_position_wait_field)
+        self._move_position_persistent_field = QComboBox()
+        self._setup_optional_bool_combo(self._move_position_persistent_field)
+        move_entity_position_form.addRow("persistent", self._move_position_persistent_field)
+        self._move_entity_position_note = QLabel(
+            "Moves through pixel space. Use step_in_direction for normal grid movement."
         )
-        move_screen_position_form.addRow("mode", self._move_screen_mode_field)
-        self._move_screen_duration_field = _OptionalFloatField(
-            minimum=0.0,
-            maximum=999999.0,
-            default_value=0.0,
-            decimals=3,
-            step=0.1,
-        )
-        move_screen_position_form.addRow("duration", self._move_screen_duration_field)
-        self._move_screen_frames_needed_field = _OptionalIntField(
-            minimum=1,
-            maximum=999999,
-            default_value=1,
-        )
-        move_screen_position_form.addRow(
-            "frames_needed",
-            self._move_screen_frames_needed_field,
-        )
-        self._move_screen_speed_field = _OptionalFloatField(
-            minimum=0.0,
-            maximum=999999.0,
-            default_value=0.0,
-            decimals=3,
-            step=1.0,
-        )
-        move_screen_position_form.addRow(
-            "speed_px_per_second",
-            self._move_screen_speed_field,
-        )
-        self._move_screen_wait_field = QComboBox()
-        self._setup_optional_bool_combo(self._move_screen_wait_field)
-        move_screen_position_form.addRow("wait", self._move_screen_wait_field)
-        self._move_screen_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._move_screen_persistent_field)
-        move_screen_position_form.addRow("persistent", self._move_screen_persistent_field)
-        self._move_screen_position_note = QLabel("Requires a screen-space entity.")
-        self._move_screen_position_note.setWordWrap(True)
-        self._move_screen_position_note.setStyleSheet("color: #666;")
-        move_screen_position_form.addRow(self._move_screen_position_note)
-        self._command_stack.addWidget(self._move_entity_screen_position_page)
+        self._move_entity_position_note.setWordWrap(True)
+        self._move_entity_position_note.setStyleSheet("color: #666;")
+        move_entity_position_form.addRow(self._move_entity_position_note)
+        self._command_stack.addWidget(self._move_entity_position_page)
 
         self._push_facing_page = QWidget()
         push_facing_form = QFormLayout(self._push_facing_page)
@@ -5950,65 +5537,6 @@ class CommandEditorDialog(QDialog):
         set_var_form.addRow(self._set_var_value_mode_note)
         self._command_stack.addWidget(self._set_entity_var_page)
 
-        self._set_visible_page = QWidget()
-        set_visible_form = QFormLayout(self._set_visible_page)
-        set_visible_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_visible_entity_row,
-            self._set_visible_entity_id_edit,
-            self._set_visible_entity_pick,
-            self._set_visible_entity_ref,
-        ) = make_entity_id_row()
-        set_visible_form.addRow("entity_id", set_visible_entity_row)
-        self._set_visible_value_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_visible_value_field)
-        set_visible_form.addRow("visible", self._set_visible_value_field)
-        self._set_visible_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_visible_persistent_field)
-        set_visible_form.addRow("persistent", self._set_visible_persistent_field)
-        self._command_stack.addWidget(self._set_visible_page)
-
-        self._set_present_page = QWidget()
-        set_present_form = QFormLayout(self._set_present_page)
-        set_present_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_present_entity_row,
-            self._set_present_entity_id_edit,
-            self._set_present_entity_pick,
-            self._set_present_entity_ref,
-        ) = make_entity_id_row()
-        set_present_form.addRow("entity_id", set_present_entity_row)
-        self._set_present_value_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_present_value_field)
-        set_present_form.addRow("present", self._set_present_value_field)
-        self._set_present_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_present_persistent_field)
-        set_present_form.addRow("persistent", self._set_present_persistent_field)
-        self._command_stack.addWidget(self._set_present_page)
-
-        self._set_color_page = QWidget()
-        set_color_form = QFormLayout(self._set_color_page)
-        set_color_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_color_entity_row,
-            self._set_color_entity_id_edit,
-            self._set_color_entity_pick,
-            self._set_color_entity_ref,
-        ) = make_entity_id_row()
-        set_color_form.addRow("entity_id", set_color_entity_row)
-        self._set_color_value_edit = QLineEdit()
-        set_color_form.addRow("color", self._set_color_value_edit)
-        self._set_color_note = QLabel(
-            "Use comma-separated RGB, for example: 255, 255, 255"
-        )
-        self._set_color_note.setWordWrap(True)
-        self._set_color_note.setStyleSheet("color: #666;")
-        set_color_form.addRow(self._set_color_note)
-        self._set_color_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_color_persistent_field)
-        set_color_form.addRow("persistent", self._set_color_persistent_field)
-        self._command_stack.addWidget(self._set_color_page)
-
         self._destroy_entity_page = QWidget()
         destroy_entity_form = QFormLayout(self._destroy_entity_page)
         destroy_entity_form.setContentsMargins(0, 0, 0, 0)
@@ -6029,52 +5557,6 @@ class CommandEditorDialog(QDialog):
         self._destroy_entity_note.setStyleSheet("color: #666;")
         destroy_entity_form.addRow(self._destroy_entity_note)
         self._command_stack.addWidget(self._destroy_entity_page)
-
-        self._set_visual_frame_page = QWidget()
-        set_visual_frame_form = QFormLayout(self._set_visual_frame_page)
-        set_visual_frame_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_visual_frame_entity_row,
-            self._set_visual_frame_entity_id_edit,
-            self._set_visual_frame_entity_pick,
-            self._set_visual_frame_entity_ref,
-        ) = make_entity_id_row()
-        set_visual_frame_form.addRow("entity_id", set_visual_frame_entity_row)
-        self._set_visual_frame_visual_id_field = _OptionalTextField()
-        set_visual_frame_form.addRow("visual_id", self._set_visual_frame_visual_id_field)
-        self._set_visual_frame_spin = QSpinBox()
-        self._set_visual_frame_spin.setRange(0, 999999)
-        set_visual_frame_form.addRow("frame", self._set_visual_frame_spin)
-        self._set_visual_frame_note = QLabel(
-            "Leave visual_id unset to target the entity's primary visual."
-        )
-        self._set_visual_frame_note.setWordWrap(True)
-        self._set_visual_frame_note.setStyleSheet("color: #666;")
-        set_visual_frame_form.addRow(self._set_visual_frame_note)
-        self._command_stack.addWidget(self._set_visual_frame_page)
-
-        self._set_visual_flip_x_page = QWidget()
-        set_visual_flip_x_form = QFormLayout(self._set_visual_flip_x_page)
-        set_visual_flip_x_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_visual_flip_entity_row,
-            self._set_visual_flip_entity_id_edit,
-            self._set_visual_flip_entity_pick,
-            self._set_visual_flip_entity_ref,
-        ) = make_entity_id_row()
-        set_visual_flip_x_form.addRow("entity_id", set_visual_flip_entity_row)
-        self._set_visual_flip_visual_id_field = _OptionalTextField()
-        set_visual_flip_x_form.addRow("visual_id", self._set_visual_flip_visual_id_field)
-        self._set_visual_flip_x_value_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_visual_flip_x_value_field)
-        set_visual_flip_x_form.addRow("flip_x", self._set_visual_flip_x_value_field)
-        self._set_visual_flip_note = QLabel(
-            "Leave visual_id unset to target the entity's primary visual."
-        )
-        self._set_visual_flip_note.setWordWrap(True)
-        self._set_visual_flip_note.setStyleSheet("color: #666;")
-        set_visual_flip_x_form.addRow(self._set_visual_flip_note)
-        self._command_stack.addWidget(self._set_visual_flip_x_page)
 
         self._set_entity_command_enabled_page = QWidget()
         set_entity_command_form = QFormLayout(self._set_entity_command_enabled_page)
@@ -6111,33 +5593,6 @@ class CommandEditorDialog(QDialog):
             self._set_entity_command_persistent_field,
         )
         self._command_stack.addWidget(self._set_entity_command_enabled_page)
-
-        self._set_entity_commands_enabled_page = QWidget()
-        set_entity_commands_form = QFormLayout(self._set_entity_commands_enabled_page)
-        set_entity_commands_form.setContentsMargins(0, 0, 0, 0)
-        (
-            set_entity_commands_entity_row,
-            self._set_entity_commands_entity_id_edit,
-            self._set_entity_commands_entity_pick,
-            self._set_entity_commands_entity_ref,
-        ) = make_entity_id_row()
-        set_entity_commands_form.addRow("entity_id", set_entity_commands_entity_row)
-        self._set_entity_commands_enabled_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_entity_commands_enabled_field)
-        set_entity_commands_form.addRow("enabled", self._set_entity_commands_enabled_field)
-        self._set_entity_commands_persistent_field = QComboBox()
-        self._setup_optional_bool_combo(self._set_entity_commands_persistent_field)
-        set_entity_commands_form.addRow(
-            "persistent",
-            self._set_entity_commands_persistent_field,
-        )
-        self._set_entity_commands_note = QLabel(
-            "This toggles the entity-wide command switch without rewriting each command entry."
-        )
-        self._set_entity_commands_note.setWordWrap(True)
-        self._set_entity_commands_note.setStyleSheet("color: #666;")
-        set_entity_commands_form.addRow(self._set_entity_commands_note)
-        self._command_stack.addWidget(self._set_entity_commands_enabled_page)
 
         self._interact_facing_page = QWidget()
         interact_form = QFormLayout(self._interact_facing_page)
@@ -6483,11 +5938,8 @@ class CommandEditorDialog(QDialog):
             "step_simulation_tick": self._step_simulation_tick_page,
             "adjust_output_scale": self._adjust_output_scale_page,
             "open_entity_dialogue": self._open_entity_dialogue_page,
-            "set_entity_grid_position": self._set_entity_grid_position_page,
-            "set_entity_world_position": self._set_entity_world_position_page,
-            "set_entity_screen_position": self._set_entity_screen_position_page,
-            "move_entity_world_position": self._move_entity_world_position_page,
-            "move_entity_screen_position": self._move_entity_screen_position_page,
+            "set_entity_position": self._set_entity_position_page,
+            "move_entity_position": self._move_entity_position_page,
             "push_facing": self._push_facing_page,
             "wait_for_move": self._wait_for_move_page,
             "step_in_direction": self._step_in_direction_page,
@@ -6519,12 +5971,6 @@ class CommandEditorDialog(QDialog):
             "open_inventory_session": self._open_inventory_session_page,
             "close_inventory_session": self._close_inventory_session_page,
             "set_current_area_var": self._set_current_area_var_page,
-            "add_current_area_var": self._add_current_area_var_page,
-            "add_entity_var": self._add_entity_var_page,
-            "toggle_current_area_var": self._toggle_current_area_var_page,
-            "toggle_entity_var": self._toggle_entity_var_page,
-            "set_current_area_var_length": self._set_current_area_var_length_page,
-            "set_entity_var_length": self._set_entity_var_length_page,
             "append_current_area_var": self._append_current_area_var_page,
             "append_entity_var": self._append_entity_var_page,
             "pop_current_area_var": self._pop_current_area_var_page,
@@ -6538,14 +5984,8 @@ class CommandEditorDialog(QDialog):
             "reset_transient_state": self._reset_transient_state_page,
             "reset_persistent_state": self._reset_persistent_state_page,
             "set_entity_var": self._set_entity_var_page,
-            "set_visible": self._set_visible_page,
-            "set_present": self._set_present_page,
-            "set_color": self._set_color_page,
             "destroy_entity": self._destroy_entity_page,
-            "set_visual_frame": self._set_visual_frame_page,
-            "set_visual_flip_x": self._set_visual_flip_x_page,
             "set_entity_command_enabled": self._set_entity_command_enabled_page,
-            "set_entity_commands_enabled": self._set_entity_commands_enabled_page,
             "set_input_route": self._set_input_route_page,
             "push_input_routes": self._push_input_routes_page,
             "pop_input_routes": self._pop_input_routes_page,
@@ -7081,115 +6521,58 @@ class CommandEditorDialog(QDialog):
         self._open_entity_caller_id_field.set_optional_value(command.get("caller_id"))
         self._open_entity_entity_refs_field.set_refs(command.get("entity_refs"))
 
-        self._set_grid_entity_id_edit.setText(str(command.get("entity_id", "")))
-        try:
-            self._set_grid_x_spin.setValue(int(command.get("x", 0)))
-        except (TypeError, ValueError):
-            self._set_grid_x_spin.setValue(0)
-        try:
-            self._set_grid_y_spin.setValue(int(command.get("y", 0)))
-        except (TypeError, ValueError):
-            self._set_grid_y_spin.setValue(0)
+        self._set_position_entity_id_edit.setText(str(command.get("entity_id", "")))
         self._set_optional_choice_combo_value(
-            self._set_grid_mode_field,
+            self._set_position_space_field,
+            command.get("space"),
+        )
+        try:
+            self._set_position_x_spin.setValue(float(command.get("x", 0.0)))
+        except (TypeError, ValueError):
+            self._set_position_x_spin.setValue(0.0)
+        try:
+            self._set_position_y_spin.setValue(float(command.get("y", 0.0)))
+        except (TypeError, ValueError):
+            self._set_position_y_spin.setValue(0.0)
+        self._set_optional_choice_combo_value(
+            self._set_position_mode_field,
             command.get("mode"),
         )
         self._set_optional_bool_combo_value(
-            self._set_grid_persistent_field,
+            self._set_position_persistent_field,
             command.get("persistent"),
         )
 
-        self._set_world_entity_id_edit.setText(str(command.get("entity_id", "")))
-        try:
-            self._set_world_x_spin.setValue(float(command.get("x", 0.0)))
-        except (TypeError, ValueError):
-            self._set_world_x_spin.setValue(0.0)
-        try:
-            self._set_world_y_spin.setValue(float(command.get("y", 0.0)))
-        except (TypeError, ValueError):
-            self._set_world_y_spin.setValue(0.0)
+        self._move_position_entity_id_edit.setText(str(command.get("entity_id", "")))
         self._set_optional_choice_combo_value(
-            self._set_world_mode_field,
+            self._move_position_space_field,
+            command.get("space"),
+        )
+        try:
+            self._move_position_x_spin.setValue(float(command.get("x", 0.0)))
+        except (TypeError, ValueError):
+            self._move_position_x_spin.setValue(0.0)
+        try:
+            self._move_position_y_spin.setValue(float(command.get("y", 0.0)))
+        except (TypeError, ValueError):
+            self._move_position_y_spin.setValue(0.0)
+        self._set_optional_choice_combo_value(
+            self._move_position_mode_field,
             command.get("mode"),
         )
-        self._set_optional_bool_combo_value(
-            self._set_world_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._set_screen_entity_id_edit.setText(str(command.get("entity_id", "")))
-        try:
-            self._set_screen_x_spin.setValue(float(command.get("x", 0.0)))
-        except (TypeError, ValueError):
-            self._set_screen_x_spin.setValue(0.0)
-        try:
-            self._set_screen_y_spin.setValue(float(command.get("y", 0.0)))
-        except (TypeError, ValueError):
-            self._set_screen_y_spin.setValue(0.0)
-        self._set_optional_choice_combo_value(
-            self._set_screen_mode_field,
-            command.get("mode"),
-        )
-        self._set_optional_bool_combo_value(
-            self._set_screen_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._move_world_entity_id_edit.setText(str(command.get("entity_id", "")))
-        try:
-            self._move_world_x_spin.setValue(float(command.get("x", 0.0)))
-        except (TypeError, ValueError):
-            self._move_world_x_spin.setValue(0.0)
-        try:
-            self._move_world_y_spin.setValue(float(command.get("y", 0.0)))
-        except (TypeError, ValueError):
-            self._move_world_y_spin.setValue(0.0)
-        self._set_optional_choice_combo_value(
-            self._move_world_mode_field,
-            command.get("mode"),
-        )
-        self._move_world_duration_field.set_optional_value(command.get("duration"))
-        self._move_world_frames_needed_field.set_optional_value(
+        self._move_position_duration_field.set_optional_value(command.get("duration"))
+        self._move_position_frames_needed_field.set_optional_value(
             command.get("frames_needed")
         )
-        self._move_world_speed_field.set_optional_value(
+        self._move_position_speed_field.set_optional_value(
             command.get("speed_px_per_second")
         )
         self._set_optional_bool_combo_value(
-            self._move_world_wait_field,
+            self._move_position_wait_field,
             command.get("wait"),
         )
         self._set_optional_bool_combo_value(
-            self._move_world_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._move_screen_entity_id_edit.setText(str(command.get("entity_id", "")))
-        try:
-            self._move_screen_x_spin.setValue(float(command.get("x", 0.0)))
-        except (TypeError, ValueError):
-            self._move_screen_x_spin.setValue(0.0)
-        try:
-            self._move_screen_y_spin.setValue(float(command.get("y", 0.0)))
-        except (TypeError, ValueError):
-            self._move_screen_y_spin.setValue(0.0)
-        self._set_optional_choice_combo_value(
-            self._move_screen_mode_field,
-            command.get("mode"),
-        )
-        self._move_screen_duration_field.set_optional_value(command.get("duration"))
-        self._move_screen_frames_needed_field.set_optional_value(
-            command.get("frames_needed")
-        )
-        self._move_screen_speed_field.set_optional_value(
-            command.get("speed_px_per_second")
-        )
-        self._set_optional_bool_combo_value(
-            self._move_screen_wait_field,
-            command.get("wait"),
-        )
-        self._set_optional_bool_combo_value(
-            self._move_screen_persistent_field,
+            self._move_position_persistent_field,
             command.get("persistent"),
         )
 
@@ -7509,59 +6892,6 @@ class CommandEditorDialog(QDialog):
             command.get("value_mode"),
         )
 
-        self._add_current_area_var_name_edit.setText(str(command.get("name", "")))
-        self._add_current_area_var_amount_field.set_optional_value(command.get("amount"))
-        self._set_optional_bool_combo_value(
-            self._add_current_area_var_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._add_entity_var_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._add_entity_var_name_edit.setText(str(command.get("name", "")))
-        self._add_entity_var_amount_field.set_optional_value(command.get("amount"))
-        self._set_optional_bool_combo_value(
-            self._add_entity_var_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._toggle_current_area_var_name_edit.setText(str(command.get("name", "")))
-        self._set_optional_bool_combo_value(
-            self._toggle_current_area_var_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._toggle_entity_var_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._toggle_entity_var_name_edit.setText(str(command.get("name", "")))
-        self._set_optional_bool_combo_value(
-            self._toggle_entity_var_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._set_current_area_var_length_name_edit.setText(str(command.get("name", "")))
-        if "value" in command:
-            self._set_current_area_var_length_value_edit.setPlainText(
-                json.dumps(command.get("value"), indent=2, ensure_ascii=False)
-            )
-        else:
-            self._set_current_area_var_length_value_edit.clear()
-        self._set_optional_bool_combo_value(
-            self._set_current_area_var_length_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._set_entity_var_length_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_entity_var_length_name_edit.setText(str(command.get("name", "")))
-        if "value" in command:
-            self._set_entity_var_length_value_edit.setPlainText(
-                json.dumps(command.get("value"), indent=2, ensure_ascii=False)
-            )
-        else:
-            self._set_entity_var_length_value_edit.clear()
-        self._set_optional_bool_combo_value(
-            self._set_entity_var_length_persistent_field,
-            command.get("persistent"),
-        )
-
         self._append_current_area_var_name_edit.setText(str(command.get("name", "")))
         if "value" in command:
             self._append_current_area_var_value_edit.setPlainText(
@@ -7769,55 +7099,10 @@ class CommandEditorDialog(QDialog):
             command.get("value_mode"),
         )
 
-        self._set_visible_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_optional_bool_combo_value(
-            self._set_visible_value_field,
-            command.get("visible"),
-        )
-        self._set_optional_bool_combo_value(
-            self._set_visible_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._set_present_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_optional_bool_combo_value(
-            self._set_present_value_field,
-            command.get("present"),
-        )
-        self._set_optional_bool_combo_value(
-            self._set_present_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._set_color_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_color_value_edit.setText(_rgb_to_text(command.get("color")))
-        self._set_optional_bool_combo_value(
-            self._set_color_persistent_field,
-            command.get("persistent"),
-        )
-
         self._destroy_entity_id_edit.setText(str(command.get("entity_id", "")))
         self._set_optional_bool_combo_value(
             self._destroy_entity_persistent_field,
             command.get("persistent"),
-        )
-
-        self._set_visual_frame_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_visual_frame_visual_id_field.set_optional_value(
-            command.get("visual_id")
-        )
-        try:
-            self._set_visual_frame_spin.setValue(max(0, int(command.get("frame", 0))))
-        except (TypeError, ValueError):
-            self._set_visual_frame_spin.setValue(0)
-
-        self._set_visual_flip_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_visual_flip_visual_id_field.set_optional_value(
-            command.get("visual_id")
-        )
-        self._set_optional_bool_combo_value(
-            self._set_visual_flip_x_value_field,
-            command.get("flip_x"),
         )
 
         self._set_entity_command_entity_id_edit.setText(str(command.get("entity_id", "")))
@@ -7828,16 +7113,6 @@ class CommandEditorDialog(QDialog):
         )
         self._set_optional_bool_combo_value(
             self._set_entity_command_persistent_field,
-            command.get("persistent"),
-        )
-
-        self._set_entity_commands_entity_id_edit.setText(str(command.get("entity_id", "")))
-        self._set_optional_bool_combo_value(
-            self._set_entity_commands_enabled_field,
-            command.get("enabled"),
-        )
-        self._set_optional_bool_combo_value(
-            self._set_entity_commands_persistent_field,
             command.get("persistent"),
         )
 
@@ -8576,20 +7851,14 @@ class CommandEditorDialog(QDialog):
         enabled = self._entity_picker is not None
         for button in (
             getattr(self, "_open_entity_entity_pick", None),
-            getattr(self, "_set_grid_entity_pick", None),
-            getattr(self, "_set_world_entity_pick", None),
-            getattr(self, "_set_screen_entity_pick", None),
-            getattr(self, "_move_world_entity_pick", None),
-            getattr(self, "_move_screen_entity_pick", None),
+            getattr(self, "_set_position_entity_pick", None),
+            getattr(self, "_move_position_entity_pick", None),
             getattr(self, "_push_facing_entity_pick", None),
             getattr(self, "_wait_for_move_entity_pick", None),
             getattr(self, "_step_in_direction_entity_pick", None),
             getattr(self, "_run_entity_entity_pick", None),
             getattr(self, "_interact_entity_pick", None),
             getattr(self, "_set_var_entity_pick", None),
-            getattr(self, "_set_visible_entity_pick", None),
-            getattr(self, "_set_present_entity_pick", None),
-            getattr(self, "_set_color_entity_pick", None),
             getattr(self, "_destroy_entity_pick", None),
             getattr(self, "_play_animation_entity_pick", None),
             getattr(self, "_wait_for_animation_entity_pick", None),
@@ -8599,10 +7868,7 @@ class CommandEditorDialog(QDialog):
             getattr(self, "_use_inventory_entity_pick", None),
             getattr(self, "_set_inventory_max_entity_pick", None),
             getattr(self, "_open_inventory_entity_pick", None),
-            getattr(self, "_set_visual_frame_entity_pick", None),
-            getattr(self, "_set_visual_flip_entity_pick", None),
             getattr(self, "_set_entity_command_entity_pick", None),
-            getattr(self, "_set_entity_commands_entity_pick", None),
             getattr(self, "_set_entity_field_entity_pick", None),
             getattr(self, "_set_entity_fields_entity_pick", None),
             getattr(self, "_reset_transient_entity_pick", None),
@@ -9713,8 +8979,8 @@ class CommandEditorDialog(QDialog):
                 return None
             return base
 
-        if command_type == "set_entity_grid_position":
-            entity_id = self._set_grid_entity_id_edit.text().strip()
+        if command_type == "set_entity_position":
+            entity_id = self._set_position_entity_id_edit.text().strip()
             if not entity_id:
                 if show_message:
                     QMessageBox.warning(
@@ -9723,21 +8989,31 @@ class CommandEditorDialog(QDialog):
                         "entity_id cannot be blank.",
                     )
                 return None
+            space = self._optional_choice_combo_value(self._set_position_space_field)
+            if not isinstance(space, str) or not space.strip():
+                if show_message:
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Command",
+                        "space cannot be blank.",
+                    )
+                return None
             base["entity_id"] = entity_id
-            base["x"] = int(self._set_grid_x_spin.value())
-            base["y"] = int(self._set_grid_y_spin.value())
-            mode = self._optional_choice_combo_value(self._set_grid_mode_field)
+            base["space"] = space.strip()
+            base["x"] = float(self._set_position_x_spin.value())
+            base["y"] = float(self._set_position_y_spin.value())
+            mode = self._optional_choice_combo_value(self._set_position_mode_field)
             if isinstance(mode, str) and mode.strip():
                 base["mode"] = mode.strip()
             self._set_optional_bool_field(
                 base,
                 "persistent",
-                self._set_grid_persistent_field,
+                self._set_position_persistent_field,
             )
             return base
 
-        if command_type == "set_entity_world_position":
-            entity_id = self._set_world_entity_id_edit.text().strip()
+        if command_type == "move_entity_position":
+            entity_id = self._move_position_entity_id_edit.text().strip()
             if not entity_id:
                 if show_message:
                     QMessageBox.warning(
@@ -9746,125 +9022,46 @@ class CommandEditorDialog(QDialog):
                         "entity_id cannot be blank.",
                     )
                 return None
-            base["entity_id"] = entity_id
-            base["x"] = float(self._set_world_x_spin.value())
-            base["y"] = float(self._set_world_y_spin.value())
-            mode = self._optional_choice_combo_value(self._set_world_mode_field)
-            if isinstance(mode, str) and mode.strip():
-                base["mode"] = mode.strip()
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_world_persistent_field,
-            )
-            return base
-
-        if command_type == "set_entity_screen_position":
-            entity_id = self._set_screen_entity_id_edit.text().strip()
-            if not entity_id:
+            space = self._optional_choice_combo_value(self._move_position_space_field)
+            if not isinstance(space, str) or not space.strip():
                 if show_message:
                     QMessageBox.warning(
                         self,
                         "Invalid Command",
-                        "entity_id cannot be blank.",
+                        "space cannot be blank.",
                     )
                 return None
             base["entity_id"] = entity_id
-            base["x"] = float(self._set_screen_x_spin.value())
-            base["y"] = float(self._set_screen_y_spin.value())
-            mode = self._optional_choice_combo_value(self._set_screen_mode_field)
-            if isinstance(mode, str) and mode.strip():
-                base["mode"] = mode.strip()
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_screen_persistent_field,
-            )
-            return base
-
-        if command_type == "move_entity_world_position":
-            entity_id = self._move_world_entity_id_edit.text().strip()
-            if not entity_id:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["x"] = float(self._move_world_x_spin.value())
-            base["y"] = float(self._move_world_y_spin.value())
-            mode = self._optional_choice_combo_value(self._move_world_mode_field)
+            base["space"] = space.strip()
+            base["x"] = float(self._move_position_x_spin.value())
+            base["y"] = float(self._move_position_y_spin.value())
+            mode = self._optional_choice_combo_value(self._move_position_mode_field)
             if isinstance(mode, str) and mode.strip():
                 base["mode"] = mode.strip()
             self._set_optional_float_field(
                 base,
                 "duration",
-                self._move_world_duration_field,
+                self._move_position_duration_field,
             )
             self._set_optional_int_field(
                 base,
                 "frames_needed",
-                self._move_world_frames_needed_field,
+                self._move_position_frames_needed_field,
             )
             self._set_optional_float_field(
                 base,
                 "speed_px_per_second",
-                self._move_world_speed_field,
+                self._move_position_speed_field,
             )
             self._set_optional_bool_field(
                 base,
                 "wait",
-                self._move_world_wait_field,
+                self._move_position_wait_field,
             )
             self._set_optional_bool_field(
                 base,
                 "persistent",
-                self._move_world_persistent_field,
-            )
-            return base
-
-        if command_type == "move_entity_screen_position":
-            entity_id = self._move_screen_entity_id_edit.text().strip()
-            if not entity_id:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["x"] = float(self._move_screen_x_spin.value())
-            base["y"] = float(self._move_screen_y_spin.value())
-            mode = self._optional_choice_combo_value(self._move_screen_mode_field)
-            if isinstance(mode, str) and mode.strip():
-                base["mode"] = mode.strip()
-            self._set_optional_float_field(
-                base,
-                "duration",
-                self._move_screen_duration_field,
-            )
-            self._set_optional_int_field(
-                base,
-                "frames_needed",
-                self._move_screen_frames_needed_field,
-            )
-            self._set_optional_float_field(
-                base,
-                "speed_px_per_second",
-                self._move_screen_speed_field,
-            )
-            self._set_optional_bool_field(
-                base,
-                "wait",
-                self._move_screen_wait_field,
-            )
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._move_screen_persistent_field,
+                self._move_position_persistent_field,
             )
             return base
 
@@ -10539,26 +9736,6 @@ class CommandEditorDialog(QDialog):
             )
             return base
 
-        if command_type == "set_entity_commands_enabled":
-            entity_id = self._set_entity_commands_entity_id_edit.text().strip()
-            enabled = self._optional_bool_combo_value(self._set_entity_commands_enabled_field)
-            if not entity_id or enabled is None:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id must be set, and enabled must be True or False.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["enabled"] = enabled
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_entity_commands_persistent_field,
-            )
-            return base
-
         if command_type == "set_entity_active_dialogue":
             entity_id = self._set_active_entity_id_edit.text().strip()
             dialogue_id = self._set_active_dialogue_id_edit.text().strip()
@@ -10612,150 +9789,6 @@ class CommandEditorDialog(QDialog):
             )
             if isinstance(value_mode, str) and value_mode.strip():
                 base["value_mode"] = value_mode.strip()
-            return base
-
-        if command_type == "add_current_area_var":
-            name = self._add_current_area_var_name_edit.text().strip()
-            if not name:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "name cannot be blank.",
-                    )
-                return None
-            base["name"] = name
-            amount = self._add_current_area_var_amount_field.optional_value()
-            if amount is not None:
-                base["amount"] = _coerce_numeric_literal(amount)
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._add_current_area_var_persistent_field,
-            )
-            return base
-
-        if command_type == "add_entity_var":
-            entity_id = self._add_entity_var_entity_id_edit.text().strip()
-            name = self._add_entity_var_name_edit.text().strip()
-            if not entity_id or not name:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id and name cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["name"] = name
-            amount = self._add_entity_var_amount_field.optional_value()
-            if amount is not None:
-                base["amount"] = _coerce_numeric_literal(amount)
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._add_entity_var_persistent_field,
-            )
-            return base
-
-        if command_type == "toggle_current_area_var":
-            name = self._toggle_current_area_var_name_edit.text().strip()
-            if not name:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "name cannot be blank.",
-                    )
-                return None
-            base["name"] = name
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._toggle_current_area_var_persistent_field,
-            )
-            return base
-
-        if command_type == "toggle_entity_var":
-            entity_id = self._toggle_entity_var_entity_id_edit.text().strip()
-            name = self._toggle_entity_var_name_edit.text().strip()
-            if not entity_id or not name:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id and name cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["name"] = name
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._toggle_entity_var_persistent_field,
-            )
-            return base
-
-        if command_type == "set_current_area_var_length":
-            name = self._set_current_area_var_length_name_edit.text().strip()
-            if not name:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "name cannot be blank.",
-                    )
-                return None
-            base["name"] = name
-            value_text = self._set_current_area_var_length_value_edit.toPlainText().strip()
-            if value_text:
-                try:
-                    base["value"] = _parse_json_text_value(value_text)
-                except (ValueError, json.JSONDecodeError) as exc:
-                    if show_message:
-                        QMessageBox.warning(
-                            self,
-                            "Invalid Command",
-                            f"Value must be valid JSON.\n{exc}",
-                        )
-                    return None
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_current_area_var_length_persistent_field,
-            )
-            return base
-
-        if command_type == "set_entity_var_length":
-            entity_id = self._set_entity_var_length_entity_id_edit.text().strip()
-            name = self._set_entity_var_length_name_edit.text().strip()
-            if not entity_id or not name:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id and name cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["name"] = name
-            value_text = self._set_entity_var_length_value_edit.toPlainText().strip()
-            if value_text:
-                try:
-                    base["value"] = _parse_json_text_value(value_text)
-                except (ValueError, json.JSONDecodeError) as exc:
-                    if show_message:
-                        QMessageBox.warning(
-                            self,
-                            "Invalid Command",
-                            f"Value must be valid JSON.\n{exc}",
-                        )
-                    return None
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_entity_var_length_persistent_field,
-            )
             return base
 
         if command_type == "append_current_area_var":
@@ -11193,71 +10226,6 @@ class CommandEditorDialog(QDialog):
                 base["value_mode"] = value_mode.strip()
             return base
 
-        if command_type == "set_visible":
-            entity_id = self._set_visible_entity_id_edit.text().strip()
-            visible = self._optional_bool_combo_value(self._set_visible_value_field)
-            if not entity_id or visible is None:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id must be set and visible must be True or False.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["visible"] = visible
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_visible_persistent_field,
-            )
-            return base
-
-        if command_type == "set_present":
-            entity_id = self._set_present_entity_id_edit.text().strip()
-            present = self._optional_bool_combo_value(self._set_present_value_field)
-            if not entity_id or present is None:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id must be set and present must be True or False.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            base["present"] = present
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_present_persistent_field,
-            )
-            return base
-
-        if command_type == "set_color":
-            entity_id = self._set_color_entity_id_edit.text().strip()
-            color_text = self._set_color_value_edit.text().strip()
-            if not entity_id or not color_text:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id and color cannot be blank.",
-                    )
-                return None
-            try:
-                base["color"] = list(_parse_rgb_text(color_text))
-            except ValueError as exc:
-                if show_message:
-                    QMessageBox.warning(self, "Invalid Command", str(exc))
-                return None
-            base["entity_id"] = entity_id
-            self._set_optional_bool_field(
-                base,
-                "persistent",
-                self._set_color_persistent_field,
-            )
-            return base
-
         if command_type == "destroy_entity":
             entity_id = self._destroy_entity_id_edit.text().strip()
             if not entity_id:
@@ -11274,45 +10242,6 @@ class CommandEditorDialog(QDialog):
                 "persistent",
                 self._destroy_entity_persistent_field,
             )
-            return base
-
-        if command_type == "set_visual_frame":
-            entity_id = self._set_visual_frame_entity_id_edit.text().strip()
-            if not entity_id:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id cannot be blank.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            self._set_optional_text_field(
-                base,
-                "visual_id",
-                self._set_visual_frame_visual_id_field,
-            )
-            base["frame"] = int(self._set_visual_frame_spin.value())
-            return base
-
-        if command_type == "set_visual_flip_x":
-            entity_id = self._set_visual_flip_entity_id_edit.text().strip()
-            flip_x = self._optional_bool_combo_value(self._set_visual_flip_x_value_field)
-            if not entity_id or flip_x is None:
-                if show_message:
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Command",
-                        "entity_id must be set and flip_x must be True or False.",
-                    )
-                return None
-            base["entity_id"] = entity_id
-            self._set_optional_text_field(
-                base,
-                "visual_id",
-                self._set_visual_flip_visual_id_field,
-            )
-            base["flip_x"] = flip_x
             return base
 
         if command_type == "set_input_route":

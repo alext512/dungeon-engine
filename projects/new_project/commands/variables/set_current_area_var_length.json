@@ -1,0 +1,30 @@
+/*
+  NOTES
+
+  Store the length of a supplied value in one current-area variable.
+*/
+{
+  "inputs": {
+    "name": {
+      "type": "string"
+    },
+    "value": {
+      "type": "json",
+      "default": null
+    },
+    "persistent": {
+      "type": "bool",
+      "default": false
+    }
+  },
+  "commands": [
+    {
+      "type": "set_current_area_var",
+      "name": "$name",
+      "value": {
+        "$length": "$value"
+      },
+      "persistent": "$persistent"
+    }
+  ]
+}

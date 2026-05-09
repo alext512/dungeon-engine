@@ -1,0 +1,29 @@
+/*
+  NOTES
+
+  Enable or disable all entity commands on one entity through the normal
+  entity_commands_enabled field.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "enabled": {
+      "type": "bool"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": null
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$entity_id",
+      "field_name": "entity_commands_enabled",
+      "value": "$enabled",
+      "persistent": "$persistent"
+    }
+  ]
+}

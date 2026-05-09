@@ -257,6 +257,25 @@ def resolve_not_value(resolved_source: Any) -> bool:
     return not bool(resolved_source)
 
 
+def resolve_boolean_not_value(resolved_source: Any) -> bool:
+    """Return a strict boolean negation, treating null as false."""
+    if resolved_source is None:
+        return True
+    if not isinstance(resolved_source, bool):
+        raise TypeError("$boolean_not value source expects a boolean or null value.")
+    return not resolved_source
+
+
+def resolve_length_value(resolved_source: Any) -> int:
+    """Return the length of a sized value, treating null as length 0."""
+    if resolved_source is None:
+        return 0
+    try:
+        return int(len(resolved_source))
+    except TypeError as exc:
+        raise TypeError("$length value source requires a sized value or null.") from exc
+
+
 def runtime_random_generator(context: Any) -> Any:
     """Return the active RNG for authored runtime helpers."""
     if context.random_generator is not None:

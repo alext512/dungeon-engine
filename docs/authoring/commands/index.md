@@ -16,8 +16,14 @@ Each command page should answer:
 
 - [Dialogue Commands](dialogue.md) for opening dialogue sessions and choosing
   entity-owned dialogue entries
+- [Movement Commands](movement.md) for entity position primitives, grid motion,
+  and common movement project-command presets
 - [Camera Commands](camera.md) for camera policy, movement, and common camera
   project-command presets
+- [Entity Field Commands](entity-fields.md) for entity state primitives and
+  common field project-command presets
+- [Variable Commands](variables.md) for current-area/entity variable writes and
+  common variable project-command presets
 
 ## Related Reference
 

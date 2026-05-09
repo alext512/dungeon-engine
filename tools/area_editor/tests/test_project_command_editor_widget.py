@@ -168,6 +168,36 @@ class TestProjectCommandEditorWidget(unittest.TestCase):
                 },
             )
 
+    def test_focused_save_preserves_explicit_null_input_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            command_path = Path(tmp) / "optional_timing.json"
+            _write_json(
+                command_path,
+                {
+                    "inputs": {
+                        "duration": {
+                            "type": "float",
+                            "default": None,
+                        },
+                        "persistent": {
+                            "type": "bool",
+                            "default": None,
+                        },
+                    },
+                    "commands": [],
+                },
+            )
+
+            widget = ProjectCommandEditorWidget("commands/optional_timing", command_path)
+            self.addCleanup(widget.close)
+            widget.set_editing_enabled(True)
+            widget.fields_editor._set_dirty(True)
+            widget.save_to_file()
+
+            saved = json.loads(command_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["inputs"]["duration"]["default"], None)
+            self.assertEqual(saved["inputs"]["persistent"]["default"], None)
+
     def test_command_body_edits_through_command_list_dialog(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             command_path = Path(tmp) / "show_message.json"

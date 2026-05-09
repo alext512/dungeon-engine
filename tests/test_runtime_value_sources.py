@@ -123,6 +123,46 @@ class RuntimeValueSourceTests(unittest.TestCase):
             {
                 "type": "set_entity_var",
                 "entity_id": "dialogue_controller",
+                "name": "strict_not_true",
+                "value": {"$boolean_not": True},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "strict_not_null",
+                "value": {"$boolean_not": None},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "list_length",
+                "value": {"$length": [1, 2, 3]},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
+                "name": "null_length",
+                "value": {"$length": None},
+            },
+        ).update(0.0)
+        execute_command_spec(
+            registry,
+            context,
+            {
+                "type": "set_entity_var",
+                "entity_id": "dialogue_controller",
                 "name": "random_roll",
                 "value": {"$random_int": {"min": 2, "max": 6}},
             },
@@ -163,11 +203,26 @@ class RuntimeValueSourceTests(unittest.TestCase):
         self.assertTrue(controller.variables["all_true"])
         self.assertTrue(controller.variables["any_true"])
         self.assertTrue(controller.variables["negated"])
+        self.assertFalse(controller.variables["strict_not_true"])
+        self.assertTrue(controller.variables["strict_not_null"])
+        self.assertEqual(controller.variables["list_length"], 3)
+        self.assertEqual(controller.variables["null_length"], 0)
         self.assertEqual(controller.variables["random_roll"], 4)
         self.assertEqual(controller.variables["picked_color"], "blue")
         self.assertEqual(controller.variables["empty_pick"], "fallback")
         self.assertEqual(fixed_random.randint_calls, [(2, 6)])
         self.assertEqual(fixed_random.choice_calls, [["red", "blue", "green"]])
+
+        with self.assertRaisesRegex(
+            TypeError,
+            r"\$boolean_not value source expects a boolean or null value",
+        ):
+            _resolve_runtime_values({"$boolean_not": "yes"}, context, {})
+        with self.assertRaisesRegex(
+            TypeError,
+            r"\$length value source requires a sized value or null",
+        ):
+            _resolve_runtime_values({"$length": 5}, context, {})
 
     def test_arithmetic_value_sources_store_resolved_values(self) -> None:
         world = World()

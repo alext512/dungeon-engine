@@ -1,0 +1,35 @@
+/*
+  NOTES
+
+  Set one visual's current frame. This requires an explicit visual id so the
+  command does not depend on whichever visual is currently primary.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "visual_id": {
+      "type": "visual_id",
+      "of": "entity_id"
+    },
+    "frame": {
+      "type": "int"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": false
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_field",
+      "entity_id": "$entity_id",
+      "field_name": {
+        "$join_text": ["visuals.", "$visual_id", ".current_frame"]
+      },
+      "value": "$frame",
+      "persistent": "$persistent"
+    }
+  ]
+}

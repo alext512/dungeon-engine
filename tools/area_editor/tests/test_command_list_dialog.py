@@ -138,6 +138,24 @@ class TestCommandListDialog(unittest.TestCase):
             )
         )
 
+        movement_box, movement_docs_button = _build_command_help_message_box(
+            None,
+            "move_entity_position",
+        )
+        self.addCleanup(movement_box.deleteLater)
+
+        self.assertIsNotNone(movement_docs_button)
+        self.assertIn("real pixel movement primitive", movement_box.text())
+
+        movement_url = _command_docs_url("move_entity_position")
+        self.assertIsNotNone(movement_url)
+        self.assertEqual(movement_url.fragment(), "move_entity_position")
+        self.assertTrue(
+            movement_url.toLocalFile().replace("/", os.sep).endswith(
+                os.path.join("docs", "authoring", "commands", "movement.md")
+            )
+        )
+
     def test_open_command_docs_uses_local_docs_url(self):
         parent = QLabel()
         self.addCleanup(parent.close)
@@ -228,7 +246,7 @@ class TestCommandListDialog(unittest.TestCase):
             command_names=[
                 "open_dialogue_session",
                 "run_project_command",
-                "set_current_area_var_length",
+                "set_current_area_var",
                 "append_entity_var",
             ],
             suggested_command_names=[
@@ -1325,82 +1343,49 @@ class TestCommandListDialog(unittest.TestCase):
         )
 
     def test_command_editor_builds_entity_position_commands(self):
-        grid_dialog = CommandEditorDialog()
-        self.addCleanup(grid_dialog.close)
-        grid_dialog.load_command({"type": "set_entity_grid_position"})
-        grid_dialog._set_grid_entity_id_edit.setText("$self_id")
-        grid_dialog._set_grid_x_spin.setValue(3)
-        grid_dialog._set_grid_y_spin.setValue(-2)
-        grid_dialog._set_grid_mode_field.setCurrentText("relative")
-        grid_dialog._set_grid_persistent_field.setCurrentIndex(1)
+        dialog = CommandEditorDialog()
+        self.addCleanup(dialog.close)
+        dialog.load_command({"type": "set_entity_position"})
+        dialog._set_position_entity_id_edit.setText("$self_id")
+        dialog._set_position_space_field.setCurrentText("world_grid")
+        dialog._set_position_x_spin.setValue(3)
+        dialog._set_position_y_spin.setValue(-2)
+        dialog._set_position_mode_field.setCurrentText("relative")
+        dialog._set_position_persistent_field.setCurrentIndex(1)
+
         self.assertEqual(
-            grid_dialog.command(),
+            dialog.command(),
             {
-                "type": "set_entity_grid_position",
+                "type": "set_entity_position",
                 "entity_id": "$self_id",
-                "x": 3,
-                "y": -2,
+                "space": "world_grid",
+                "x": 3.0,
+                "y": -2.0,
                 "mode": "relative",
                 "persistent": True,
             },
         )
 
-        world_dialog = CommandEditorDialog()
-        self.addCleanup(world_dialog.close)
-        world_dialog.load_command({"type": "set_entity_world_position"})
-        world_dialog._set_world_entity_id_edit.setText("npc_1")
-        world_dialog._set_world_x_spin.setValue(128.5)
-        world_dialog._set_world_y_spin.setValue(64.25)
-        world_dialog._set_world_mode_field.setCurrentText("absolute")
-        world_dialog._set_world_persistent_field.setCurrentIndex(2)
-        self.assertEqual(
-            world_dialog.command(),
-            {
-                "type": "set_entity_world_position",
-                "entity_id": "npc_1",
-                "x": 128.5,
-                "y": 64.25,
-                "mode": "absolute",
-                "persistent": False,
-            },
-        )
-
-        screen_dialog = CommandEditorDialog()
-        self.addCleanup(screen_dialog.close)
-        screen_dialog.load_command({"type": "set_entity_screen_position"})
-        screen_dialog._set_screen_entity_id_edit.setText("logo")
-        screen_dialog._set_screen_x_spin.setValue(24.0)
-        screen_dialog._set_screen_y_spin.setValue(12.0)
-        screen_dialog._set_screen_mode_field.setCurrentText("relative")
-        self.assertEqual(
-            screen_dialog.command(),
-            {
-                "type": "set_entity_screen_position",
-                "entity_id": "logo",
-                "x": 24.0,
-                "y": 12.0,
-                "mode": "relative",
-            },
-        )
-
     def test_command_editor_builds_entity_move_push_and_wait_commands(self):
-        move_world_dialog = CommandEditorDialog()
-        self.addCleanup(move_world_dialog.close)
-        move_world_dialog.load_command({"type": "move_entity_world_position"})
-        move_world_dialog._move_world_entity_id_edit.setText("$self_id")
-        move_world_dialog._move_world_x_spin.setValue(10.0)
-        move_world_dialog._move_world_y_spin.setValue(-6.0)
-        move_world_dialog._move_world_mode_field.setCurrentText("relative")
-        move_world_dialog._move_world_duration_field.set_optional_value(0.5)
-        move_world_dialog._move_world_frames_needed_field.set_optional_value(12)
-        move_world_dialog._move_world_speed_field.set_optional_value(96.0)
-        move_world_dialog._move_world_wait_field.setCurrentIndex(2)
-        move_world_dialog._move_world_persistent_field.setCurrentIndex(1)
+        move_dialog = CommandEditorDialog()
+        self.addCleanup(move_dialog.close)
+        move_dialog.load_command({"type": "move_entity_position"})
+        move_dialog._move_position_entity_id_edit.setText("$self_id")
+        move_dialog._move_position_space_field.setCurrentText("world_pixel")
+        move_dialog._move_position_x_spin.setValue(10.0)
+        move_dialog._move_position_y_spin.setValue(-6.0)
+        move_dialog._move_position_mode_field.setCurrentText("relative")
+        move_dialog._move_position_duration_field.set_optional_value(0.5)
+        move_dialog._move_position_frames_needed_field.set_optional_value(12)
+        move_dialog._move_position_speed_field.set_optional_value(96.0)
+        move_dialog._move_position_wait_field.setCurrentIndex(2)
+        move_dialog._move_position_persistent_field.setCurrentIndex(1)
         self.assertEqual(
-            move_world_dialog.command(),
+            move_dialog.command(),
             {
-                "type": "move_entity_world_position",
+                "type": "move_entity_position",
                 "entity_id": "$self_id",
+                "space": "world_pixel",
                 "x": 10.0,
                 "y": -6.0,
                 "mode": "relative",
@@ -1409,26 +1394,6 @@ class TestCommandListDialog(unittest.TestCase):
                 "speed_px_per_second": 96.0,
                 "wait": False,
                 "persistent": True,
-            },
-        )
-
-        move_screen_dialog = CommandEditorDialog()
-        self.addCleanup(move_screen_dialog.close)
-        move_screen_dialog.load_command({"type": "move_entity_screen_position"})
-        move_screen_dialog._move_screen_entity_id_edit.setText("title_logo")
-        move_screen_dialog._move_screen_x_spin.setValue(18.0)
-        move_screen_dialog._move_screen_y_spin.setValue(4.0)
-        move_screen_dialog._move_screen_duration_field.set_optional_value(0.25)
-        move_screen_dialog._move_screen_wait_field.setCurrentIndex(1)
-        self.assertEqual(
-            move_screen_dialog.command(),
-            {
-                "type": "move_entity_screen_position",
-                "entity_id": "title_logo",
-                "x": 18.0,
-                "y": 4.0,
-                "duration": 0.25,
-                "wait": True,
             },
         )
 
@@ -1939,36 +1904,6 @@ class TestCommandListDialog(unittest.TestCase):
             },
         )
 
-        add_dialog = CommandEditorDialog()
-        self.addCleanup(add_dialog.close)
-        add_dialog.load_command({"type": "add_current_area_var"})
-        add_dialog._add_current_area_var_name_edit.setText("score")
-        add_dialog._add_current_area_var_amount_field.set_optional_value(2.5)
-        add_dialog._add_current_area_var_persistent_field.setCurrentIndex(2)
-        self.assertEqual(
-            add_dialog.command(),
-            {
-                "type": "add_current_area_var",
-                "name": "score",
-                "amount": 2.5,
-                "persistent": False,
-            },
-        )
-
-        toggle_dialog = CommandEditorDialog()
-        self.addCleanup(toggle_dialog.close)
-        toggle_dialog.load_command({"type": "toggle_current_area_var"})
-        toggle_dialog._toggle_current_area_var_name_edit.setText("alarm_on")
-        toggle_dialog._toggle_current_area_var_persistent_field.setCurrentIndex(1)
-        self.assertEqual(
-            toggle_dialog.command(),
-            {
-                "type": "toggle_current_area_var",
-                "name": "alarm_on",
-                "persistent": True,
-            },
-        )
-
     def test_command_editor_builds_entity_var_collection_commands(self):
         append_dialog = CommandEditorDialog()
         self.addCleanup(append_dialog.close)
@@ -2202,54 +2137,6 @@ class TestCommandListDialog(unittest.TestCase):
         )
 
     def test_command_editor_builds_entity_state_commands(self):
-        visible_dialog = CommandEditorDialog()
-        self.addCleanup(visible_dialog.close)
-        visible_dialog.load_command({"type": "set_visible"})
-        visible_dialog._set_visible_entity_id_edit.setText("$self_id")
-        visible_dialog._set_visible_value_field.setCurrentIndex(1)
-        visible_dialog._set_visible_persistent_field.setCurrentIndex(2)
-        self.assertEqual(
-            visible_dialog.command(),
-            {
-                "type": "set_visible",
-                "entity_id": "$self_id",
-                "visible": True,
-                "persistent": False,
-            },
-        )
-
-        present_dialog = CommandEditorDialog()
-        self.addCleanup(present_dialog.close)
-        present_dialog.load_command({"type": "set_present"})
-        present_dialog._set_present_entity_id_edit.setText("crate_1")
-        present_dialog._set_present_value_field.setCurrentIndex(2)
-        present_dialog._set_present_persistent_field.setCurrentIndex(1)
-        self.assertEqual(
-            present_dialog.command(),
-            {
-                "type": "set_present",
-                "entity_id": "crate_1",
-                "present": False,
-                "persistent": True,
-            },
-        )
-
-        color_dialog = CommandEditorDialog()
-        self.addCleanup(color_dialog.close)
-        color_dialog.load_command({"type": "set_color"})
-        color_dialog._set_color_entity_id_edit.setText("crate_1")
-        color_dialog._set_color_value_edit.setText("120, 80, 40")
-        color_dialog._set_color_persistent_field.setCurrentIndex(1)
-        self.assertEqual(
-            color_dialog.command(),
-            {
-                "type": "set_color",
-                "entity_id": "crate_1",
-                "color": [120, 80, 40],
-                "persistent": True,
-            },
-        )
-
         destroy_dialog = CommandEditorDialog()
         self.addCleanup(destroy_dialog.close)
         destroy_dialog.load_command({"type": "destroy_entity"})
@@ -2261,39 +2148,6 @@ class TestCommandListDialog(unittest.TestCase):
                 "type": "destroy_entity",
                 "entity_id": "crate_1",
                 "persistent": True,
-            },
-        )
-
-    def test_command_editor_builds_visual_state_commands(self):
-        frame_dialog = CommandEditorDialog()
-        self.addCleanup(frame_dialog.close)
-        frame_dialog.load_command({"type": "set_visual_frame"})
-        frame_dialog._set_visual_frame_entity_id_edit.setText("npc_1")
-        frame_dialog._set_visual_frame_visual_id_field.set_optional_value("portrait")
-        frame_dialog._set_visual_frame_spin.setValue(3)
-        self.assertEqual(
-            frame_dialog.command(),
-            {
-                "type": "set_visual_frame",
-                "entity_id": "npc_1",
-                "visual_id": "portrait",
-                "frame": 3,
-            },
-        )
-
-        flip_dialog = CommandEditorDialog()
-        self.addCleanup(flip_dialog.close)
-        flip_dialog.load_command({"type": "set_visual_flip_x"})
-        flip_dialog._set_visual_flip_entity_id_edit.setText("npc_1")
-        flip_dialog._set_visual_flip_visual_id_field.set_optional_value("portrait")
-        flip_dialog._set_visual_flip_x_value_field.setCurrentIndex(2)
-        self.assertEqual(
-            flip_dialog.command(),
-            {
-                "type": "set_visual_flip_x",
-                "entity_id": "npc_1",
-                "visual_id": "portrait",
-                "flip_x": False,
             },
         )
 
@@ -2463,22 +2317,6 @@ class TestCommandListDialog(unittest.TestCase):
                     entity_command_names_override=("interact", "on_blocked"),
                 )
             ],
-        )
-
-        all_dialog = CommandEditorDialog()
-        self.addCleanup(all_dialog.close)
-        all_dialog.load_command({"type": "set_entity_commands_enabled"})
-        all_dialog._set_entity_commands_entity_id_edit.setText("npc_1")
-        all_dialog._set_entity_commands_enabled_field.setCurrentIndex(1)
-        all_dialog._set_entity_commands_persistent_field.setCurrentIndex(2)
-        self.assertEqual(
-            all_dialog.command(),
-            {
-                "type": "set_entity_commands_enabled",
-                "entity_id": "npc_1",
-                "enabled": True,
-                "persistent": False,
-            },
         )
 
     def test_command_editor_builds_set_input_route_command(self):

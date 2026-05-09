@@ -32,7 +32,8 @@
       "entity_commands": {
         "mark_start_entry": [
           {
-            "type": "add_entity_var",
+            "type": "run_project_command",
+            "command_id": "commands/variables/add_entity_var",
             "entity_id": "$self_id",
             "name": "start_entries",
             "amount": 1

@@ -231,6 +231,7 @@ def _set_entity_grid_position(
     x: int,
     y: int,
     mode: str = "absolute",
+    command_name: str = "set_entity_position",
     persistent: bool | None = None,
     **_: Any,
 ) -> CommandHandle:
@@ -239,7 +240,7 @@ def _set_entity_grid_position(
         entity_id,
         require_exact_entity=require_exact_entity,
         expected_space="world",
-        command_name="set_entity_grid_position",
+        command_name=command_name,
     )
     if mode not in {"absolute", "relative"}:
         raise ValueError(f"Unknown grid-position mode '{mode}'.")
@@ -353,53 +354,20 @@ def register_movement_commands(
 ) -> None:
     """Register builtin commands that move entities or use facing interactions."""
 
-    @registry.register("set_entity_grid_position")
-    def set_entity_grid_position(
+    @registry.register("set_entity_position")
+    def set_entity_position(
         services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
         entity_id: str,
-        x: int,
-        y: int,
-        mode: str = "absolute",
-        persistent: bool | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Instantly update a world-space entity's logical grid position."""
-        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
-            services=services,
-            world=world,
-            area=None,
-            movement_system=movement_system,
-            collision_system=None,
-            interaction_system=None,
-        )
-        return _set_entity_grid_position(
-            require_exact_entity=require_exact_entity,
-            world=resolved_world,
-            movement_system=resolved_movement_system,
-            entity_id=entity_id,
-            x=x,
-            y=y,
-            mode=mode,
-            persistent=persistent,
-        )
-
-    @registry.register("set_entity_world_position")
-    def set_entity_world_position(
-        services: CommandServices | None,
-        world: Any,
-        movement_system: Any,
-        *,
-        entity_id: str,
+        space: str,
         x: int | float,
         y: int | float,
         mode: str = "absolute",
         persistent: bool | None = None,
-        **_: Any,
     ) -> CommandHandle:
-        """Instantly update a world-space entity's pixel position."""
+        """Instantly update an entity position in the requested authored space."""
         resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
             services=services,
             world=world,
@@ -408,61 +376,58 @@ def register_movement_commands(
             collision_system=None,
             interaction_system=None,
         )
-        return _set_entity_pixel_position(
-            require_exact_entity=require_exact_entity,
-            world=resolved_world,
-            movement_system=resolved_movement_system,
-            entity_id=entity_id,
-            x=x,
-            y=y,
-            mode=mode,
-            expected_space="world",
-            command_name="set_entity_world_position",
-            persistent=persistent,
+        if resolved_movement_system is None:
+            raise ValueError("set_entity_position requires an active movement system.")
+        if space == "world_grid":
+            return _set_entity_grid_position(
+                require_exact_entity=require_exact_entity,
+                world=resolved_world,
+                movement_system=resolved_movement_system,
+                entity_id=entity_id,
+                x=int(x),
+                y=int(y),
+                mode=mode,
+                command_name="set_entity_position",
+                persistent=persistent,
+            )
+        if space == "world_pixel":
+            return _set_entity_pixel_position(
+                require_exact_entity=require_exact_entity,
+                world=resolved_world,
+                movement_system=resolved_movement_system,
+                entity_id=entity_id,
+                x=x,
+                y=y,
+                mode=mode,
+                expected_space="world",
+                command_name="set_entity_position",
+                persistent=persistent,
+            )
+        if space == "screen_pixel":
+            return _set_entity_pixel_position(
+                require_exact_entity=require_exact_entity,
+                world=resolved_world,
+                movement_system=resolved_movement_system,
+                entity_id=entity_id,
+                x=x,
+                y=y,
+                mode=mode,
+                expected_space="screen",
+                command_name="set_entity_position",
+                persistent=persistent,
+            )
+        raise ValueError(
+            "set_entity_position space must be 'world_grid', 'world_pixel', or 'screen_pixel'."
         )
 
-    @registry.register("set_entity_screen_position")
-    def set_entity_screen_position(
+    @registry.register("move_entity_position")
+    def move_entity_position(
         services: CommandServices | None,
         world: Any,
         movement_system: Any,
         *,
         entity_id: str,
-        x: int | float,
-        y: int | float,
-        mode: str = "absolute",
-        persistent: bool | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Instantly update a screen-space entity's pixel position."""
-        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
-            services=services,
-            world=world,
-            area=None,
-            movement_system=movement_system,
-            collision_system=None,
-            interaction_system=None,
-        )
-        return _set_entity_pixel_position(
-            require_exact_entity=require_exact_entity,
-            world=resolved_world,
-            movement_system=resolved_movement_system,
-            entity_id=entity_id,
-            x=x,
-            y=y,
-            mode=mode,
-            expected_space="screen",
-            command_name="set_entity_screen_position",
-            persistent=persistent,
-        )
-
-    @registry.register("move_entity_world_position")
-    def move_entity_world_position(
-        services: CommandServices | None,
-        world: Any,
-        movement_system: Any,
-        *,
-        entity_id: str,
+        space: str,
         x: int | float,
         y: int | float,
         mode: str = "absolute",
@@ -471,9 +436,8 @@ def register_movement_commands(
         speed_px_per_second: float | None = None,
         wait: bool = True,
         persistent: bool | None = None,
-        **_: Any,
     ) -> CommandHandle:
-        """Interpolate a world-space entity's pixel position."""
+        """Interpolate an entity's pixel position in world or screen space."""
         resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
             services=services,
             world=world,
@@ -482,6 +446,14 @@ def register_movement_commands(
             collision_system=None,
             interaction_system=None,
         )
+        if resolved_movement_system is None:
+            raise ValueError("move_entity_position requires an active movement system.")
+        if space == "world_pixel":
+            expected_space = "world"
+        elif space == "screen_pixel":
+            expected_space = "screen"
+        else:
+            raise ValueError("move_entity_position space must be 'world_pixel' or 'screen_pixel'.")
         return _move_entity_pixel_position(
             require_exact_entity=require_exact_entity,
             movement_handle_factory=MovementCommandHandle,
@@ -491,52 +463,8 @@ def register_movement_commands(
             x=x,
             y=y,
             mode=mode,
-            expected_space="world",
-            command_name="move_entity_world_position",
-            duration=duration,
-            frames_needed=frames_needed,
-            speed_px_per_second=speed_px_per_second,
-            wait=wait,
-            persistent=persistent,
-        )
-
-    @registry.register("move_entity_screen_position")
-    def move_entity_screen_position(
-        services: CommandServices | None,
-        world: Any,
-        movement_system: Any,
-        *,
-        entity_id: str,
-        x: int | float,
-        y: int | float,
-        mode: str = "absolute",
-        duration: float | None = None,
-        frames_needed: int | None = None,
-        speed_px_per_second: float | None = None,
-        wait: bool = True,
-        persistent: bool | None = None,
-        **_: Any,
-    ) -> CommandHandle:
-        """Interpolate a screen-space entity's pixel position."""
-        resolved_world, _, resolved_movement_system, _, _ = _resolve_world_services(
-            services=services,
-            world=world,
-            area=None,
-            movement_system=movement_system,
-            collision_system=None,
-            interaction_system=None,
-        )
-        return _move_entity_pixel_position(
-            require_exact_entity=require_exact_entity,
-            movement_handle_factory=MovementCommandHandle,
-            world=resolved_world,
-            movement_system=resolved_movement_system,
-            entity_id=entity_id,
-            x=x,
-            y=y,
-            mode=mode,
-            expected_space="screen",
-            command_name="move_entity_screen_position",
+            expected_space=expected_space,
+            command_name="move_entity_position",
             duration=duration,
             frames_needed=frames_needed,
             speed_px_per_second=speed_px_per_second,

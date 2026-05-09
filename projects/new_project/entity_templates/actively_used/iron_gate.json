@@ -38,7 +38,8 @@
   "entity_commands": {
     "contribute_on": [
       {
-        "type": "add_entity_var",
+        "type": "run_project_command",
+        "command_id": "commands/variables/add_entity_var",
         "entity_id": "$self_id",
         "name": "current_count",
         "amount": 1
@@ -63,7 +64,8 @@
             "right": 0,
             "then": [
               {
-                "type": "add_entity_var",
+                "type": "run_project_command",
+                "command_id": "commands/variables/add_entity_var",
                 "entity_id": "$self_id",
                 "name": "current_count",
                 "amount": -1

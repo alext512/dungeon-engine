@@ -1,0 +1,30 @@
+/*
+  NOTES
+
+  Flip one current-area boolean variable. Missing or null means false.
+*/
+{
+  "inputs": {
+    "name": {
+      "type": "string"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": false
+    }
+  },
+  "commands": [
+    {
+      "type": "set_current_area_var",
+      "name": "$name",
+      "value": {
+        "$boolean_not": {
+          "$current_area_var": {
+            "name": "$name"
+          }
+        }
+      },
+      "persistent": "$persistent"
+    }
+  ]
+}

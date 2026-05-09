@@ -1,0 +1,38 @@
+/*
+  NOTES
+
+  Set a world entity's pixel position.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "x": {
+      "type": "float"
+    },
+    "y": {
+      "type": "float"
+    },
+    "mode": {
+      "type": "enum",
+      "values": ["absolute", "relative"],
+      "default": "absolute"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": null
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_position",
+      "entity_id": "$entity_id",
+      "space": "world_pixel",
+      "x": "$x",
+      "y": "$y",
+      "mode": "$mode",
+      "persistent": "$persistent"
+    }
+  ]
+}

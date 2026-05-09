@@ -1,0 +1,35 @@
+/*
+  NOTES
+
+  Flip one entity boolean variable. Missing or null means false.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "name": {
+      "type": "string"
+    },
+    "persistent": {
+      "type": "bool",
+      "default": null
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$entity_id",
+      "name": "$name",
+      "value": {
+        "$boolean_not": {
+          "$entity_var": {
+            "entity_id": "$entity_id",
+            "name": "$name"
+          }
+        }
+      },
+      "persistent": "$persistent"
+    }
+  ]
+}

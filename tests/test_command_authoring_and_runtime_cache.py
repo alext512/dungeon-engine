@@ -180,9 +180,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                     "params": [],
                     "commands": [
                         {
-                            "type": "set_visible",
+                            "type": "set_entity_field",
                             "entity_id": "gate",
-                            "visible": False,
+                            "field_name": "visible",
+                            "value": False,
                             "persitent": True,
                         }
                     ],
@@ -194,7 +195,7 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "command 'set_visible' contains unknown field(s): persitent."
+                "command 'set_entity_field' contains unknown field(s): persitent."
                 in issue
                 for issue in issues
             )
@@ -256,9 +257,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                     "entity_commands": {
                         "interact": [
                             {
-                                "type": "set_visible",
+                                "type": "set_entity_field",
                                 "entity_id": "gate",
-                                "visible": False,
+                                "field_name": "visible",
+                                "value": False,
                                 "persitent": True,
                             }
                         ]
@@ -272,7 +274,7 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "entity_commands.interact" in issue
-                and "command 'set_visible' contains unknown field(s): persitent."
+                and "command 'set_entity_field' contains unknown field(s): persitent."
                 in issue
                 for issue in issues
             )
@@ -314,9 +316,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                                     "option_commands_by_id": {
                                         "continue": [
                                             {
-                                                "type": "set_visible",
+                                                "type": "set_entity_field",
                                                 "entity_id": "gate",
-                                                "visible": False,
+                                                "field_name": "visible",
+                                                "value": False,
                                                 "persitent": True,
                                             }
                                         ]
@@ -374,9 +377,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                                                 "text": "Open",
                                                 "commands": [
                                                     {
-                                                        "type": "set_visible",
+                                                        "type": "set_entity_field",
                                                         "entity_id": "gate",
-                                                        "visible": False,
+                                                        "field_name": "visible",
+                                                        "value": False,
                                                         "persitent": True,
                                                     }
                                                 ],
@@ -428,9 +432,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                                                                     "text": "Continue",
                                                                     "commands": [
                                                                         {
-                                                                            "type": "set_visible",
+                                                                            "type": "set_entity_field",
                                                                             "entity_id": "gate",
-                                                                            "visible": False,
+                                                                            "field_name": "visible",
+                                                                            "value": False,
                                                                             "persitent": True,
                                                                         }
                                                                     ],
@@ -478,9 +483,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                                                 "text": "Open",
                                                 "commands": [
                                                     {
-                                                        "type": "set_visible",
+                                                        "type": "set_entity_field",
                                                         "entity_id": "gate",
-                                                        "visible": False,
+                                                        "field_name": "visible",
+                                                        "value": False,
                                                         "persitent": True,
                                                     }
                                                 ],
@@ -663,9 +669,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                             "command_id": "commands/call_hook",
                             "hook": [
                                 {
-                                    "type": "set_visible",
+                                    "type": "set_entity_field",
                                     "entity_id": "gate",
-                                    "visible": False,
+                                    "field_name": "visible",
+                                    "value": False,
                                     "persitent": True,
                                 }
                             ],
@@ -680,7 +687,7 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "commands[0].hook[0]" in issue
-                and "command 'set_visible' contains unknown field(s): persitent."
+                and "command 'set_entity_field' contains unknown field(s): persitent."
                 in issue
                 for issue in issues
             )
@@ -695,9 +702,10 @@ class CommandAuthoringAndRuntimeCacheTests(unittest.TestCase):
                     "params": [],
                     "commands": [
                         {
-                            "type": "set_visible",
+                            "type": "set_entity_field",
                             "entity_id": "gate",
-                            "visible": False,
+                            "field_name": "visible",
+                            "value": False,
                             "persitent": True,
                         }
                     ],

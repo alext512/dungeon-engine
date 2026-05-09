@@ -224,7 +224,10 @@ class _CommandInputRow(QWidget):
             }
             self._id_edit.setText(input_id)
             self._set_type(str(spec.get("type", "string")).strip() or "string")
-            self._default_edit.setText(_format_default_value(spec.get("default")))
+            if "default" in spec and spec.get("default") is None:
+                self._default_edit.setText("null")
+            else:
+                self._default_edit.setText(_format_default_value(spec.get("default")))
             self._values_edit.setText(_format_enum_values(spec.get("values")))
             self.refresh_of_choices([], selected=str(spec.get("of", "") or ""))
             self._sync_type_state()
@@ -293,15 +296,19 @@ class _CommandInputRow(QWidget):
             spec["of"] = of_value.strip()
         else:
             spec.pop("of", None)
-        default_value = _parse_default_value(input_id, input_type, self._default_edit.text())
-        if default_value is not None:
-            spec["default"] = default_value
+        raw_default_text = self._default_edit.text().strip()
+        if raw_default_text.casefold() == "null":
+            spec["default"] = None
         else:
-            spec.pop("default", None)
+            default_value = _parse_default_value(input_id, input_type, raw_default_text)
+            if default_value is not None:
+                spec["default"] = default_value
+            else:
+                spec.pop("default", None)
         if input_type == "enum":
             values = _parse_enum_values(input_id, self._values_edit.text())
             spec["values"] = values
-            if "default" in spec and spec["default"] not in values:
+            if "default" in spec and spec["default"] is not None and spec["default"] not in values:
                 raise ValueError(f"Default for enum input '{input_id}' must be one of its values.")
         else:
             spec.pop("values", None)

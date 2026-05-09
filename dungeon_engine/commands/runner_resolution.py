@@ -29,7 +29,9 @@ from dungeon_engine.commands.runner_value_utils import (
     resolve_any_in_collection_value,
     resolve_divide_value,
     resolve_find_in_collection_value,
+    resolve_boolean_not_value,
     resolve_join_text_value,
+    resolve_length_value,
     resolve_json_file_path,
     resolve_multiply_value,
     resolve_not_value,
@@ -68,6 +70,8 @@ _VALUE_SOURCE_NAMES = {
     "$and",
     "$or",
     "$not",
+    "$boolean_not",
+    "$length",
     "$random_int",
     "$random_choice",
     "$find_in_collection",
@@ -189,6 +193,12 @@ def resolve_runtime_value_source(
 
     if source_name == "$not":
         return resolve_not_value(resolved_source)
+
+    if source_name == "$boolean_not":
+        return resolve_boolean_not_value(resolved_source)
+
+    if source_name == "$length":
+        return resolve_length_value(resolved_source)
 
     if source_name == "$random_int":
         return resolve_random_int_value(context, resolved_source)

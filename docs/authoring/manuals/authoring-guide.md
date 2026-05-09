@@ -936,15 +936,17 @@ Example:
   },
   "commands": [
     {
-      "type": "set_entity_grid_position",
+      "type": "set_entity_position",
       "entity_id": "$self_id",
+      "space": "world_grid",
       "x": "$offset_x",
       "y": "$offset_y",
       "mode": "relative"
     },
     {
-      "type": "move_entity_world_position",
+      "type": "move_entity_position",
       "entity_id": "$self_id",
+      "space": "world_pixel",
       "x": {
         "$multiply": [
           "$offset_x",
@@ -1099,7 +1101,7 @@ Important nuance:
 - startup validation fails on unknown top-level keys for strict primitive commands
 - commands that intentionally accept caller-supplied runtime params include `run_project_command`, `run_entity_command`, `run_sequence`, `run_parallel`, `spawn_flow`, `run_commands_for_collection`, `if`, `step_in_direction`, `push_facing`, `interact_facing`, `open_dialogue_session`, `open_entity_dialogue`, `change_area`, and `new_game`
 
-So a typo like `"persitent": true` on `set_visible` is a startup validation failure, while a field like `"reward_item": "items/key"` on `run_sequence` is valid when child commands need to read `$reward_item`.
+So a typo like `"persitent": true` on `set_entity_field` is a startup validation failure, while a field like `"reward_item": "items/key"` on `run_sequence` is valid when child commands need to read `$reward_item`.
 
 ## Runtime References and Tokens
 
@@ -1144,7 +1146,7 @@ The command runner also resolves tokens such as:
 
 `$self...` and `$refs.<name>...` read entity `variables`, not built-in entity fields. Use explicit query/value-source helpers with `select` when you need built-in fields like `grid_x` or `pixel_y`.
 
-`$current_area...` reads the live current-area/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_current_area_var`, `add_current_area_var`, and generic `if` checks over current-area values operate on.
+`$current_area...` reads the live current-area/runtime variable store for the active play session. In normal play, this is the same authored state surface that commands like `set_current_area_var`, variable project-command presets, and generic `if` checks over current-area values operate on.
 
 `$area...` exposes the current area's `area_id`, `tile_size`, `width`, `height`, `pixel_width`, `pixel_height`, and `camera`.
 
@@ -1849,8 +1851,8 @@ These occupancy hooks run on the stationary entity, receive the moving entity as
 such as `$from_x`, `$from_y`, `$to_x`, and `$to_y`.
 
 Lower-level authored movement flows are still valid. You can still build custom
-movement manually with `$cell_flags_at`, `$entities_at`, `set_entity_grid_position`,
-`move_entity_world_position`, and your own puzzle-specific rules. The standard
+movement manually with `$cell_flags_at`, `$entities_at`, `set_entity_position`,
+`move_entity_position`, and your own puzzle-specific rules. The standard
 engine helpers are just the recommended default for ordinary grid movement.
 
 ### Standard Facing Interaction
@@ -1932,8 +1934,9 @@ For simple movement execution, prefer relative primitives over manually computin
 
 ```json
 {
-  "type": "set_entity_grid_position",
+  "type": "set_entity_position",
   "entity_id": "$self_id",
+  "space": "world_grid",
   "x": "$offset_x",
   "y": "$offset_y",
   "mode": "relative"
@@ -1942,8 +1945,9 @@ For simple movement execution, prefer relative primitives over manually computin
 
 ```json
 {
-  "type": "move_entity_world_position",
+  "type": "move_entity_position",
   "entity_id": "$self_id",
+  "space": "world_pixel",
   "x": {
     "$multiply": [
       "$offset_x",
@@ -2294,7 +2298,12 @@ Common examples:
 
 `set_current_area_var` is the current authored surface for live area/runtime state. Use it for room/session flags such as opened chests, current puzzle state, or temporary controller state that belongs to the current play session rather than one specific entity.
 
-A lever/gate puzzle typically uses both: `set_entity_var` or `toggle_entity_var` to remember whether the lever is toggled, and `set_entity_field` or `set_entity_fields` to update the gate's runtime presentation/state. You can still force persistence per command, but if the lever/gate entities already author the right `persistence` defaults, those commands can omit `persistent` cleanly.
+A lever/gate puzzle typically uses both: `set_entity_var` or a project command
+such as `commands/variables/toggle_entity_var` to remember whether the lever is
+toggled, and `set_entity_field` or `set_entity_fields` to update the gate's
+runtime presentation/state. You can still force persistence per command, but if
+the lever/gate entities already author the right `persistence` defaults, those
+commands can omit `persistent` cleanly.
 
 `set_entity_fields` is the structured bulk-mutation form. It lets one command update top-level entity fields, ordinary entity variables, and one or more visuals together:
 

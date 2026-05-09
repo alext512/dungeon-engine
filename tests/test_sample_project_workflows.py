@@ -347,6 +347,16 @@ class SampleProjectWorkflowTests(unittest.TestCase):
         new_game_command = title_menu["segments"][0]["options"][0]["commands"][0]
         self.assertEqual(new_game_command["camera_follow"]["entity_id"], "player_1")
 
+        project_manifest = load_json_data(project_root / "project.json")
+        global_tracker_command = (
+            project_manifest["global_entities"][0]["entity_commands"]["mark_start_entry"][0]
+        )
+        self.assertEqual(global_tracker_command["type"], "run_project_command")
+        self.assertEqual(
+            global_tracker_command["command_id"],
+            "commands/variables/add_entity_var",
+        )
+
         title_screen = load_json_data(project_root / "areas" / "title_screen.json")
         enter_camera_commands = [
             (command["type"], command.get("command_id"))
@@ -359,6 +369,12 @@ class SampleProjectWorkflowTests(unittest.TestCase):
                 ("run_project_command", "commands/camera/clear_camera_bounds"),
                 ("run_project_command", "commands/camera/clear_camera_deadzone"),
             ],
+        )
+        title_logo_move = title_screen.get("enter_commands", [])[3]["commands"][0]
+        self.assertEqual(title_logo_move["type"], "run_project_command")
+        self.assertEqual(
+            title_logo_move["command_id"],
+            "commands/entity/move_entity_screen_position",
         )
 
 

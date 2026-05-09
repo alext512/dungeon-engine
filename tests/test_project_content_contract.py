@@ -1409,8 +1409,9 @@ class ProjectContentContractTests(unittest.TestCase):
                     "params": [],
                     "commands": [
                         {
-                            "type": "move_entity_world_position",
+                            "type": "move_entity_position",
                             "entity_id": "self",
+                            "space": "world_pixel",
                             "x": 16,
                             "y": 0,
                             "mode": "relative",
@@ -1425,7 +1426,7 @@ class ProjectContentContractTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'self' with strict primitive 'move_entity_world_position'"
+                "must not use symbolic entity id 'self' with strict primitive 'move_entity_position'"
                 in issue
                 for issue in raised.exception.issues
             )
@@ -1516,16 +1517,16 @@ class ProjectContentContractTests(unittest.TestCase):
             )
         )
 
-    def test_area_validation_rejects_symbolic_entity_refs_for_strict_visual_primitives(self) -> None:
+    def test_area_validation_rejects_symbolic_entity_refs_for_strict_animation_primitives(self) -> None:
         _, project = self._make_project(
             areas={
                 "test_room.json": {
                     **_minimal_area(),
                     "enter_commands": [
                         {
-                            "type": "set_visual_frame",
+                            "type": "play_animation",
                             "entity_id": "self",
-                            "frame": 2,
+                            "animation": "idle",
                         }
                     ],
                 }
@@ -1537,7 +1538,7 @@ class ProjectContentContractTests(unittest.TestCase):
 
         self.assertTrue(
             any(
-                "must not use symbolic entity id 'self' with strict primitive 'set_visual_frame'"
+                "must not use symbolic entity id 'self' with strict primitive 'play_animation'"
                 in issue
                 for issue in raised.exception.issues
             )

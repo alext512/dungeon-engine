@@ -1,0 +1,34 @@
+/*
+  NOTES
+
+  Store the length of a supplied value in one entity variable.
+*/
+{
+  "inputs": {
+    "entity_id": {
+      "type": "entity_id"
+    },
+    "name": {
+      "type": "string"
+    },
+    "value": {
+      "type": "json",
+      "default": null
+    },
+    "persistent": {
+      "type": "bool",
+      "default": null
+    }
+  },
+  "commands": [
+    {
+      "type": "set_entity_var",
+      "entity_id": "$entity_id",
+      "name": "$name",
+      "value": {
+        "$length": "$value"
+      },
+      "persistent": "$persistent"
+    }
+  ]
+}
